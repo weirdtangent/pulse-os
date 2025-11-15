@@ -48,8 +48,10 @@ The repository ships with a template named:
 
 To configure your device, copy the template:
 
+```bash
 cp /opt/pulse-os/pulse.conf.sample /opt/pulse-os/pulse.conf
-nano /opt/pulse-os/pulse.conf
+vi /opt/pulse-os/pulse.conf
+```
 
 Every option in this file is optional; PulseOS has safe defaults for all behavior.
 But configuring it lets you customize how your Pulse boots, what it displays,
