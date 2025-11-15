@@ -10,6 +10,36 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 
 > TL;DR features: clean boot → autologin → X/Openbox → Chromium kiosk, no “half-screen black bar”, accurate touch, auto day/night brightness.
 
+## Hardware Guide
+<details>
+  <summary><strong>Supported hardware, recommended parts, and printable accessories</strong></summary>
+
+### Raspberry Pi 5 — 16GB
+* Specs: <https://www.raspberrypi.com/products/raspberry-pi-5/>
+* Retailer: <https://www.pishop.us/product/raspberry-pi-5-16gb/?src=raspberrypi>
+* Recommended add-ons:
+  * Pi Active Cooler: <https://www.pishop.us/product/raspberry-pi-active-cooler/?searchid=0&search_query=374-1>
+* Price (11/2025): $131 with active cooler
+
+### Pi Touch Display 2 — 7”
+* Specs: <https://www.raspberrypi.com/products/touch-display-2/>
+* Retailer: <https://www.pishop.us/product/raspberry-pi-touch-display-2/>
+* Price (11/2025): $82
+
+### ReSpeaker Mic Array 3.0 (XVF3000)
+* Specs: <https://wiki.seeedstudio.com/respeaker_mic_array_v3.0/>
+* Retailer: <https://www.seeedstudio.com/ReSpeaker-Mic-Array-v3-0.html>
+* Price (11/2025): $64
+
+### Desktop Case + Pi 5 Stand
+* MakerWorld: <https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2>  
+
+### ReSpeaker Mic Array Plate + Cover (3D printed)
+**Plate (PETG green)**  
+**Cover (PETG translucent)**  
+* both included in `models/`.
+
+</details>
 
 ---
 
