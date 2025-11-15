@@ -119,6 +119,12 @@ I encourage you to use this model, rate it, and boost it!
 
 Also, I'm including in /models the ReSpeaker case and cover that I figured out. At the moment I just glue the stands of that to the cover of the Pi case behind the display, so everything is fairly hidden. One day I'll include some pics.
 
+**Objective**
+
+This is buried down here because this is mostly jsut a fun hobby and not much more. But let me explain the direction I'm going.
+
+I have a Synology NAS when i run multiple docker containers, and the plan (already in place, actually) is to run wyoming-piper, wyoming-whisper, and wyoming-openwakeword as containers there, and then try to get my kiosks closer to a Google Nest Display or Amazon Echo Display. I am also a HomeAssitant nerd and amateur photographer, so that explains landing the Pulse kiosks on a PhoteFrame dashboard with a click-to-see basic house dashboard. I can post some of that if people want, but I imagine they can design whatever landing page they want their Pulse to open up. I would love a starting screen (rather than scrolling linux), an animation, some custom error screens etc. One step at a time .
+
 ## Troubleshooting checklist
 
 These are based on what I've found with the specific hardware setup and Raspberry Pi image I've used - this may or may not be helpful for you, but I welcome suggestions of more to add here!
