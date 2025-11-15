@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/graystorm-pulse_low.jpg" alt="Pulse OS social preview" width="100%" />
+  <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/graystorm-pulse_low.jpg" alt="Pulse OS social preview" width="640" />
 </p>
 
 # Pulse Kiosk — Complete Setup Guide
