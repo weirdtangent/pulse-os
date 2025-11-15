@@ -121,9 +121,15 @@ Also, I'm including in /models the ReSpeaker case and cover that I figured out. 
 
 **Objective**
 
-This is buried down here because this is mostly jsut a fun hobby and not much more. But let me explain the direction I'm going.
+This is buried down here because this is mostly just a fun hobby, and not more serious. But let me explain the direction I'm going.
 
-I have a Synology NAS when i run multiple docker containers, and the plan (already in place, actually) is to run wyoming-piper, wyoming-whisper, and wyoming-openwakeword as containers there, and then try to get my kiosks closer to a Google Nest Display or Amazon Echo Display. I am also a HomeAssitant nerd and amateur photographer, so that explains landing the Pulse kiosks on a PhoteFrame dashboard with a click-to-see basic house dashboard. I can post some of that if people want, but I imagine they can design whatever landing page they want their Pulse to open up. I would love a starting screen (rather than scrolling linux), an animation, some custom error screens etc. One step at a time .
+I have a Synology NAS when i run multiple docker containers, and the plan (already in place, actually) is to run wyoming-piper, wyoming-whisper, and wyoming-openwakeword as containers there, and then try to get my kiosks closer to becoming an interactive Google Nest Display or Amazon Echo Display - perhaps backed by some LLM - especially if there is one specifically great at short, kiosk-like interaction.
+
+I am also a HomeAssitant nerd and amateur photographer, so that explains landing the Pulse kiosks on a PhoteFrame dashboard with a click-to-see basic house dashboard. I can post some of that if people want, but I imagine they can design whatever landing page they want their Pulse to open up.
+
+I would love a start-up screen/animation (rather than scrolling linux), some custom error screens etc.
+
+One step at a time .
 
 ## Troubleshooting checklist
 
