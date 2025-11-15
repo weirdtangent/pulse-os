@@ -1,0 +1,112 @@
+set shell=/bin/zsh
+set nocompatible
+
+" ===================================================
+" Plugin Settings
+" ===================================================
+
+" Lightline
+"let g:lightline = { 'colorscheme': 'wombat' }
+"let g:lightline = { 'component_function': { 'filename': 'LightlineFilename', }, }
+let g:lightline = {
+      \ 'colorscheme': 'seoul256',
+      \ 'active': {
+      \   'left': [ [ 'mode', 'paste'],
+      \             [ 'readonly', 'filename', 'modified' ] ],
+      \   'right': [ [ 'lineinfo' ],
+      \              [ 'syntastic', 'percent' ],
+      \              [ 'fileformat', 'fileencoding', 'filetype' ] ],
+      \ },
+      \ 'component_function': {
+      \   'filename': 'LightlineFilename',
+      \ },
+\ }
+
+function! LightlineFilename()
+  return expand('%:t') !=# '' ? @% : '[No Name]'
+endfunction
+
+set laststatus=2
+
+" ===================================================
+" Editor settings
+" ===================================================
+
+filetype plugin indent on
+filetype plugin on
+
+set number
+augroup numbertoggle
+  autocmd!
+  autocmd BufEnter,FocusGained,InsertLeave,WinEnter * if &nu && mode() != "i" | set rnu   | endif
+  autocmd BufLeave,FocusLost,InsertEnter,WinLeave   * if &nu                  | set nornu | endif
+augroup END
+
+set hlsearch
+set incsearch
+set timeoutlen=300 " http://stackoverflow.com/questions/2158516/delay-before-o-opens-a-new-line
+set autoindent
+set smartindent
+set encoding=utf-8
+set scrolloff=2
+set noshowmode
+set nomodeline
+set hidden
+set nowrap
+set nojoinspaces
+set signcolumn=yes
+
+set splitright
+set splitbelow
+
+set shiftwidth=2
+set softtabstop=2
+set tabstop=2
+set expandtab
+
+set mouse=
+set path+=**
+set tags=./tags,tags
+
+" Proper search
+set incsearch
+set ignorecase
+set smartcase
+set gdefault
+
+set cmdheight=2
+
+" Permanent undo
+set undodir=~/.vimdid
+set undofile
+
+syntax on
+set background=dark
+colorscheme badwolf
+set termguicolors
+
+" ===================================================
+" Keyboad shortcuts
+" ===================================================
+
+" Remove all trailing whitespace by pressing F5
+nnoremap <F5> :let _s=@/<Bar>:%s/\s\+$//e<Bar>:let @/=_s<Bar><CR>
+
+nmap <silent> pm :set invpaste<CR>
+nmap <silent> ln :set invrnu<CR>
+
+" =============================================================================
+" Autocommands
+" =============================================================================
+
+" Leave paste mode when leaving insert mode
+autocmd InsertLeave * set nopaste
+
+" Jump to last edit position on opening file
+" https://stackoverflow.com/questions/31449496/vim-ignore-specifc-file-in-autocommand
+au BufReadPost * if expand('%:p') !~# '\m/\.git/' && line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
+
+" comment continuation
+set formatoptions+=r
+set formatoptions+=o
+

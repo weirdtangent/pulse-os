@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically run bt-autoconnect
+
+[Timer]
+OnBootSec=15
+OnUnitActiveSec=15
+
+[Install]
+WantedBy=default.target
+

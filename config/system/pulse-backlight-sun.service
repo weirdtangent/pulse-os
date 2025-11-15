@@ -1,0 +1,12 @@
+[Unit]
+Description=Pulse backlight controller (sunrise/sunset)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 /home/pulse/bin/pulse-backlight-sun.py
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

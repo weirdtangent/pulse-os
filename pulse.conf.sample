@@ -1,0 +1,26 @@
+# PulseOS configuration file (template)
+# Copy this to: /opt/pulse-os/pulse.conf
+
+# Kiosk landing page
+PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
+
+# Watchdog loop (cron) interval in minutes
+PULSE_REVIVE_INTERVAL=2
+
+# PulseOS user
+PULSE_USER="pulse"
+
+# Feature toggles
+PULSE_BACKLIGHT_SUN="true"
+PULSE_BLUETOOTH_AUTOCONNECT="true"
+PULSE_REMOTE_LOGGING="true"
+
+# Remote logging target
+PULSE_REMOTE_LOG_HOST="192.168.1.100"
+PULSE_REMOTE_LOG_PORT="5514"
+
+# Browser watchdog thresholds
+PULSE_WATCHDOG_URL="http://homeassistant.local:8123/static/icons/favicon.ico"
+PULSE_WATCHDOG_LIMIT=5
+PULSE_WATCHDOG_INTERVAL=60
+

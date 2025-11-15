@@ -1,0 +1,7 @@
+[Unit]
+Description=Daily reboot of Pulse kiosk
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/systemctl reboot

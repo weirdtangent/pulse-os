@@ -1,0 +1,7 @@
+[Unit]
+Description=Ensure BT speaker is connected and set as default sink
+
+[Service]
+Type=oneshot
+ExecStart=/home/pulse/bin/bt-autoconnect.sh
+

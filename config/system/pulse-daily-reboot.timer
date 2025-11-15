@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily 3 AM reboot for Pulse kiosk
+
+[Timer]
+OnCalendar=*-*-* 03:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

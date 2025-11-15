@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# ~/.xinitrc for Pulse kiosk environment
+# Starts Openbox (lightweight window manager) and hands control to the kiosk launcher.
+# When kiosk-wrap.sh exits, X will exit cleanly.
+
+set -euo pipefail
+
+openbox-session &
+
+exec "$HOME/bin/kiosk-wrap.sh"
+
