@@ -1,0 +1,9 @@
+[Plymouth Theme]
+Name=Pulse Splash
+Description=Static Pulse splash image
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/pulse
+ScriptFile=/usr/share/plymouth/themes/pulse/pulse.script
+

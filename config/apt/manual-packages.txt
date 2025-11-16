@@ -186,6 +186,8 @@ perl-base
 pipewire
 pipewire-audio-client-libraries
 pipewire-pulse
+plymouth
+plymouth-themes
 pkg-config
 procps
 psmisc

@@ -155,6 +155,14 @@ I encourage you to use this model, rate it, and boost it!
 
 Also, I'm including in /models the ReSpeaker case and cover that I figured out. At the moment I just glue the stands of that to the cover of the Pi case behind the display, so everything is fairly hidden. One day I'll include some pics.
 
+**Boot splash**
+`setup.sh` deploys the splash assets automatically:
+* `assets/graystorm-pulse_splash.png` is installed as the Plymouth theme so Linux boot output stays hidden until X starts.
+* `assets/boot-splash.rgb` (RGB565, 1280×720) is copied to `/boot/firmware/splash.rgb` for the firmware-stage splash.
+* Kernel args such as `quiet splash loglevel=3 vt.global_cursor_default=0` are enforced so messages and cursors stay out of sight.
+
+Update either asset and rerun `./setup.sh <location>` to refresh the splash on an existing kiosk.
+
 **Objective**
 
 This is buried down here because this is mostly just a fun hobby, and not more serious. But let me explain the direction I'm going.

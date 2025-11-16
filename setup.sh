@@ -4,6 +4,13 @@ set -euo pipefail
 # setup config
 REPO_DIR="/opt/pulse-os"
 CONFIG_FILE="$REPO_DIR/pulse.conf"
+BOOT_MOUNT="/boot"
+if [ -d /boot/firmware ]; then
+    BOOT_MOUNT="/boot/firmware"
+fi
+BOOT_CONFIG="$BOOT_MOUNT/config.txt"
+BOOT_CMDLINE="$BOOT_MOUNT/cmdline.txt"
+BOOT_SPLASH="$BOOT_MOUNT/splash.rgb"
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
     source "$CONFIG_FILE"
@@ -41,6 +48,46 @@ ensure_symlink() {
 
     ln -sf "$target" "$link"
     log "Linked $link → $target"
+}
+
+ensure_boot_config_kv() {
+    local key="$1"
+    local value="$2"
+    local file="$BOOT_CONFIG"
+
+    if [ ! -f "$file" ]; then
+        log "Warning: boot config $file not found (skipping $key)"
+        return
+    fi
+
+    if sudo grep -q "^${key}=" "$file"; then
+        if ! sudo grep -q "^${key}=${value}$" "$file"; then
+            sudo sed -i "s/^${key}=.*/${key}=${value}/" "$file"
+            log "Updated ${key}=${value} in $(basename "$file")"
+        fi
+    else
+        echo "${key}=${value}" | sudo tee -a "$file" >/dev/null
+        log "Added ${key}=${value} to $(basename "$file")"
+    fi
+}
+
+ensure_cmdline_arg() {
+    local arg="$1"
+    local file="$BOOT_CMDLINE"
+
+    if [ ! -f "$file" ]; then
+        log "Warning: boot cmdline $file not found (skipping $arg)"
+        return
+    fi
+
+    local current
+    current=$(sudo cat "$file")
+    if [[ " $current " == *" $arg "* ]]; then
+        return
+    fi
+
+    sudo sed -i "1s|$| $arg|" "$file"
+    log "Added kernel arg: $arg"
 }
 
 configure_device_identity() {
@@ -156,6 +203,68 @@ link_system_files() {
         /etc/systemd/user/bt-autoconnect.timer
 }
 
+install_boot_splash() {
+    local firmware_src="$REPO_DIR/assets/boot-splash.rgb"
+
+    if [ -f "$firmware_src" ] && [ -n "$BOOT_SPLASH" ]; then
+        if ! sudo cmp -s "$firmware_src" "$BOOT_SPLASH" 2>/dev/null; then
+            sudo install -m 0644 "$firmware_src" "$BOOT_SPLASH"
+            log "Installed firmware splash → $BOOT_SPLASH"
+        else
+            log "Firmware splash already up to date"
+        fi
+    else
+        log "Warning: firmware splash source missing ($firmware_src)"
+    fi
+
+    local theme_src_dir="$REPO_DIR/config/plymouth/pulse"
+    local theme_dst_dir="/usr/share/plymouth/themes/pulse"
+    local theme_updated=0
+
+    if [ -d "$theme_src_dir" ]; then
+        if ! sudo cmp -s "$theme_src_dir/pulse.plymouth" "$theme_dst_dir/pulse.plymouth" 2>/dev/null; then
+            sudo install -Dm0644 "$theme_src_dir/pulse.plymouth" "$theme_dst_dir/pulse.plymouth"
+            theme_updated=1
+        fi
+        if ! sudo cmp -s "$theme_src_dir/pulse.script" "$theme_dst_dir/pulse.script" 2>/dev/null; then
+            sudo install -Dm0644 "$theme_src_dir/pulse.script" "$theme_dst_dir/pulse.script"
+            theme_updated=1
+        fi
+        if [ -f "$REPO_DIR/assets/graystorm-pulse_splash.png" ]; then
+            if ! sudo cmp -s "$REPO_DIR/assets/graystorm-pulse_splash.png" "$theme_dst_dir/splash.png" 2>/dev/null; then
+                sudo install -Dm0644 "$REPO_DIR/assets/graystorm-pulse_splash.png" "$theme_dst_dir/splash.png"
+                theme_updated=1
+            fi
+        else
+            log "Warning: splash PNG missing (assets/graystorm-pulse_splash.png)"
+        fi
+
+        sudo update-alternatives --install \
+            /usr/share/plymouth/themes/default.plymouth default.plymouth \
+            "$theme_dst_dir/pulse.plymouth" 200 >/dev/null
+        sudo update-alternatives --set default.plymouth "$theme_dst_dir/pulse.plymouth" >/dev/null 2>&1 \
+            || true
+
+        if [ "$theme_updated" -eq 1 ]; then
+            sudo update-initramfs -u
+            log "Regenerated initramfs with Pulse splash"
+        else
+            log "Plymouth splash already current"
+        fi
+    else
+        log "Warning: Plymouth theme sources missing at $theme_src_dir"
+    fi
+
+    ensure_boot_config_kv "disable_splash" "1"
+    ensure_boot_config_kv "disable_overscan" "1"
+
+    ensure_cmdline_arg "quiet"
+    ensure_cmdline_arg "splash"
+    ensure_cmdline_arg "loglevel=3"
+    ensure_cmdline_arg "vt.global_cursor_default=0"
+    ensure_cmdline_arg "plymouth.ignore-serial-consoles"
+}
+
 enable_services() {
     log "Reloading systemd…"
     sudo systemctl daemon-reload
@@ -266,6 +375,7 @@ install_packages
 setup_user_dirs
 link_home_files
 link_system_files
+install_boot_splash
 enable_services
 setup_crontab
 install_bluetooth_audio
