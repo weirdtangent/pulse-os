@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/weirdtangent/pulse-os/compare/v0.5.0...v0.6.0) (2025-11-16)
+
+
+### Features
+
+* add reboot button since Update is only available with new Version on github ([42f34f7](https://github.com/weirdtangent/pulse-os/commit/42f34f76b91af2b1ef7769d943209e440b2e3821))
+
 # [0.5.0](https://github.com/weirdtangent/pulse-os/compare/v0.4.0...v0.5.0) (2025-11-16)
 
 
