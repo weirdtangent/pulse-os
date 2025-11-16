@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import paho.mqtt.client as mqtt
 import psutil
@@ -46,7 +46,7 @@ class EnvConfig:
     friendly_name: str
     manufacturer: str
     model: str
-    sw_version: Optional[str]
+    sw_version: str | None
     topics: Topics
     devtools: DevToolsConfig
     version_source_url: str
@@ -58,11 +58,11 @@ class EnvConfig:
 class TelemetryDescriptor:
     key: str
     name: str
-    unit: Optional[str]
-    device_class: Optional[str]
-    state_class: Optional[str]
-    icon: Optional[str]
-    precision: Optional[int] = None
+    unit: str | None
+    device_class: str | None
+    state_class: str | None
+    icon: str | None
+    precision: int | None = None
 
 
 DEFAULT_VERSION_SOURCE_URL = "https://raw.githubusercontent.com/weirdtangent/pulse-os/main/VERSION"
@@ -70,7 +70,7 @@ DEFAULT_VERSION_CHECKS_PER_DAY = 12
 ALLOWED_VERSION_CHECK_COUNTS = {2, 4, 6, 8, 12, 24}
 DEFAULT_TELEMETRY_INTERVAL_SECONDS = 15
 MIN_TELEMETRY_INTERVAL_SECONDS = 5
-TELEMETRY_SENSORS: List[TelemetryDescriptor] = [
+TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
     TelemetryDescriptor(
         key="uptime_seconds",
         name="Uptime",
@@ -208,11 +208,11 @@ def load_config() -> EnvConfig:
     )
 
 
-def _is_valid_ip(ip: Optional[str]) -> bool:
+def _is_valid_ip(ip: str | None) -> bool:
     return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0"
 
 
-def detect_ip_address(hostname: str) -> Optional[str]:
+def detect_ip_address(hostname: str) -> str | None:
     ip_env = os.environ.get("PULSE_IP_ADDRESS")
     if _is_valid_ip(ip_env):
         return ip_env
@@ -237,7 +237,7 @@ def detect_ip_address(hostname: str) -> Optional[str]:
     return None
 
 
-def detect_mac_address() -> Optional[str]:
+def detect_mac_address() -> str | None:
     mac_env = os.environ.get("PULSE_MAC_ADDRESS")
     if mac_env:
         return mac_env
@@ -247,8 +247,8 @@ def detect_mac_address() -> Optional[str]:
     return ":".join(f"{(node >> ele) & 0xFF:02X}" for ele in range(40, -1, -8))
 
 
-def build_device_info(config: EnvConfig) -> Dict[str, Any]:
-    info: Dict[str, Any] = {
+def build_device_info(config: EnvConfig) -> dict[str, Any]:
+    info: dict[str, Any] = {
         "identifiers": [f"pulse:{config.hostname}"],
         "name": config.friendly_name,
         "manufacturer": config.manufacturer,
@@ -258,7 +258,7 @@ def build_device_info(config: EnvConfig) -> Dict[str, Any]:
     if config.sw_version:
         info["sw_version"] = config.sw_version
 
-    connections: List[List[str]] = [["host", config.hostname]]
+    connections: list[list[str]] = [["host", config.hostname]]
 
     ip_address = detect_ip_address(config.hostname)
     if ip_address:
@@ -274,7 +274,7 @@ def build_device_info(config: EnvConfig) -> Dict[str, Any]:
     return info
 
 
-def normalize_url(raw: Union[str, bytes]) -> Optional[str]:
+def normalize_url(raw: str | bytes) -> str | None:
     if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="ignore")
     url = (raw or "").strip()
@@ -301,30 +301,31 @@ class KioskMqttListener:
         self._mqtt_publish_lock = threading.Lock()
         self.repo_dir = "/opt/pulse-os"
         self.local_version = self._detect_local_version()
-        self.latest_remote_version: Optional[str] = None
+        self.latest_remote_version: str | None = None
         self.update_available = False
         self._update_state_lock = threading.Lock()
         self._update_interval_seconds = self._calculate_update_interval_seconds(config.version_checks_per_day)
-        self._update_checker_thread: Optional[threading.Thread] = None
+        self._update_checker_thread: threading.Thread | None = None
         self._update_checker_lock = threading.Lock()
         self._update_checker_stop_event = threading.Event()
-        self._mqtt_client: Optional[mqtt.Client] = None
+        self._mqtt_client: mqtt.Client | None = None
         self._last_update_button_name = "Update"
         self._telemetry_lock = threading.Lock()
-        self._telemetry_thread: Optional[threading.Thread] = None
+        self._telemetry_thread: threading.Thread | None = None
         self._telemetry_stop_event = threading.Event()
 
     def log(self, message: str) -> None:
         log(message)
 
-    def _build_origin(self) -> Dict[str, Any]:
-        origin: Dict[str, Any] = {
+    def _build_origin(self) -> dict[str, Any]:
+        origin: dict[str, Any] = {
             "name": "PulseOS",
             "support_url": "https://github.com/weirdtangent/pulse-os",
         }
         if self.config.sw_version:
             origin["sw"] = self.config.sw_version
         return origin
+
     def start_telemetry(self) -> None:
         with self._telemetry_lock:
             if self._telemetry_thread and self._telemetry_thread.is_alive():
@@ -359,8 +360,8 @@ class KioskMqttListener:
             if self._telemetry_stop_event.wait(interval):
                 break
 
-    def _collect_telemetry_metrics(self) -> Dict[str, Union[int, float]]:
-        metrics: Dict[str, Union[int, float]] = {}
+    def _collect_telemetry_metrics(self) -> dict[str, int | float]:
+        metrics: dict[str, int | float] = {}
         now = time.time()
         uptime_seconds = max(0, int(now - psutil.boot_time()))
         metrics["uptime_seconds"] = uptime_seconds
@@ -386,7 +387,7 @@ class KioskMqttListener:
         return metrics
 
     @staticmethod
-    def _read_cpu_temperature() -> Optional[float]:
+    def _read_cpu_temperature() -> float | None:
         try:
             temps = psutil.sensors_temperatures()
         except (NotImplementedError, AttributeError):
@@ -407,7 +408,7 @@ class KioskMqttListener:
         ]
         for path in candidate_paths:
             try:
-                with open(path, "r", encoding="utf-8") as handle:
+                with open(path, encoding="utf-8") as handle:
                     raw = handle.read().strip()
                     value = float(raw) / (1000 if len(raw) > 3 else 1)
                     return value
@@ -415,7 +416,7 @@ class KioskMqttListener:
                 continue
         return None
 
-    def _publish_telemetry(self, metrics: Dict[str, Union[int, float]]) -> None:
+    def _publish_telemetry(self, metrics: dict[str, int | float]) -> None:
         base_topic = self.config.topics.telemetry
         for descriptor in TELEMETRY_SENSORS:
             value = metrics.get(descriptor.key)
@@ -426,12 +427,11 @@ class KioskMqttListener:
             self._safe_publish(None, topic, payload, qos=0, retain=True)
 
     @staticmethod
-    def _format_metric_value(value: Union[int, float], precision: Optional[int]) -> str:
+    def _format_metric_value(value: int | float, precision: int | None) -> str:
         if precision is None:
             return str(value)
         format_str = f"{{:.{precision}f}}"
         return format_str.format(value)
-
 
     @staticmethod
     def _calculate_update_interval_seconds(checks_per_day: int) -> float:
@@ -439,19 +439,19 @@ class KioskMqttListener:
         interval_hours = max(1.0, 24 / checks)
         return interval_hours * 3600
 
-    def _detect_local_version(self) -> Optional[str]:
+    def _detect_local_version(self) -> str | None:
         if self.config.sw_version:
             return self.config.sw_version
         version_path = os.path.join(self.repo_dir, "VERSION")
         try:
-            with open(version_path, "r", encoding="utf-8") as handle:
+            with open(version_path, encoding="utf-8") as handle:
                 value = handle.read().strip()
                 return value or None
         except OSError:
             return None
 
     @staticmethod
-    def _parse_version(value: Optional[str]) -> Optional[Version]:
+    def _parse_version(value: str | None) -> Version | None:
         if not value:
             return None
         try:
@@ -459,7 +459,7 @@ class KioskMqttListener:
         except (InvalidVersion, AttributeError):
             return None
 
-    def _remote_version_is_newer(self, remote: Optional[str], local: Optional[str]) -> bool:
+    def _remote_version_is_newer(self, remote: str | None, local: str | None) -> bool:
         remote_version = self._parse_version(remote)
         if remote_version is None:
             return False
@@ -468,7 +468,7 @@ class KioskMqttListener:
             return True
         return remote_version > local_version
 
-    def _fetch_remote_version(self) -> Optional[str]:
+    def _fetch_remote_version(self) -> str | None:
         url = self.config.version_source_url
         try:
             with urllib.request.urlopen(url, timeout=10) as resp:
@@ -483,7 +483,7 @@ class KioskMqttListener:
     def _format_version_label(self, version: str) -> str:
         return version if version.lower().startswith("v") else f"v{version}"
 
-    def _compute_update_button_name(self, *, available: Optional[bool] = None) -> str:
+    def _compute_update_button_name(self, *, available: bool | None = None) -> str:
         if available is None:
             available = self.is_update_available()
         if available and self.latest_remote_version:
@@ -513,7 +513,7 @@ class KioskMqttListener:
 
     def _safe_publish(
         self,
-        client: Optional[mqtt.Client],
+        client: mqtt.Client | None,
         topic: str,
         payload: str,
         *,
@@ -528,7 +528,7 @@ class KioskMqttListener:
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
             self.log(f"Failed to publish topic '{topic}' payload '{payload}' (rc={result.rc})")
 
-    def publish_update_button_availability(self, client: Optional[mqtt.Client], available: bool) -> None:
+    def publish_update_button_availability(self, client: mqtt.Client | None, available: bool) -> None:
         topic = self.config.topics.update_availability
         payload = "online" if available else "offline"
         self._safe_publish(client, topic, payload, qos=1, retain=True)
@@ -580,13 +580,13 @@ class KioskMqttListener:
         with self._update_state_lock:
             return self.update_available
 
-    def fetch_page_targets(self) -> List[Dict[str, Any]]:
+    def fetch_page_targets(self) -> list[dict[str, Any]]:
         with urllib.request.urlopen(self.config.devtools.discovery_url, timeout=self.config.devtools.timeout) as resp:
             payload = json.load(resp)
         return [item for item in payload if item.get("type") == "page"]
 
     @staticmethod
-    def pick_primary_target(pages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def pick_primary_target(pages: list[dict[str, Any]]) -> dict[str, Any] | None:
         for page in pages:
             url = page.get("url") or ""
             if url not in ("", "about:blank", "chrome://newtab/"):
@@ -653,7 +653,7 @@ class KioskMqttListener:
             return
         self.navigate(url)
 
-    def build_device_definition(self) -> Dict[str, Any]:
+    def build_device_definition(self) -> dict[str, Any]:
         availability = {
             "topic": self.config.topics.availability,
             "pl_avail": "online",
@@ -705,12 +705,12 @@ class KioskMqttListener:
             },
         }
 
-    def _build_telemetry_components(self) -> Dict[str, Dict[str, Any]]:
+    def _build_telemetry_components(self) -> dict[str, dict[str, Any]]:
         base_topic = self.config.topics.telemetry
         expire_after = max(self.config.telemetry_interval_seconds * 3, self.config.telemetry_interval_seconds + 5)
-        components: Dict[str, Dict[str, Any]] = {}
+        components: dict[str, dict[str, Any]] = {}
         for descriptor in TELEMETRY_SENSORS:
-            cmps_entry: Dict[str, Any] = {
+            cmps_entry: dict[str, Any] = {
                 "platform": "sensor",
                 "name": descriptor.name,
                 "unique_id": f"{self.config.hostname}_{descriptor.key}",
@@ -784,7 +784,7 @@ class KioskMqttListener:
         thread = threading.Thread(target=self._perform_reboot, name="pulse-reboot", daemon=True)
         thread.start()
 
-    def _run_step(self, description: str, command: List[str], cwd: Optional[str]) -> bool:
+    def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)
         self.log(f"update: running {description}: {display_cmd}")
         try:
@@ -798,7 +798,7 @@ class KioskMqttListener:
 
     def _perform_update(self) -> None:
         repo_dir = self.repo_dir
-        steps: List[Tuple[str, List[str], Optional[str]]] = [
+        steps: list[tuple[str, list[str], str | None]] = [
             ("git pull", ["git", "pull", "--ff-only"], repo_dir),
             ("setup.sh", ["./setup.sh"], repo_dir),
             ("reboot", ["sudo", "reboot", "now"], repo_dir),
