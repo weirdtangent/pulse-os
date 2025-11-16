@@ -263,8 +263,8 @@ class KioskMqttListener:
         }
         home_button = {
             "platform": "button",
-            "obj_id": "home",
             "name": "Home",
+            "default_entity_id": "button.home",
             "cmd_t": self.config.topics.home,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
