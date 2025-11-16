@@ -1,3 +1,10 @@
+## [0.3.5](https://github.com/weirdtangent/pulse-os/compare/v0.3.4...v0.3.5) (2025-11-16)
+
+
+### Bug Fixes
+
+* use stderr for logging in setup script ([cd9592f](https://github.com/weirdtangent/pulse-os/commit/cd9592fdfd43d5dd89841befe87eba7de40ace84))
+
 ## [0.3.4](https://github.com/weirdtangent/pulse-os/compare/v0.3.3...v0.3.4) (2025-11-16)
 
 
