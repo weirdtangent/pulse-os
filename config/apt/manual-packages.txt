@@ -195,9 +195,11 @@ pulseaudio-utils
 python3-astral
 python3-gpiozero
 python3-libgpiod
+python3-paho-mqtt
 python3-rpi-lgpio
 python3-smbus2
 python3-spidev
+python3-websocket
 python3-venv
 python3-xdg
 python-is-python3
