@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/weirdtangent/pulse-os/compare/v0.2.1...v0.2.2) (2025-11-16)
+
+
+### Bug Fixes
+
+* component does not need availability topic ([0732e4f](https://github.com/weirdtangent/pulse-os/commit/0732e4f4202d5146246da5fe701e2b9e383ffafa))
+
 ## [0.2.1](https://github.com/weirdtangent/pulse-os/compare/v0.2.0...v0.2.1) (2025-11-16)
 
 
