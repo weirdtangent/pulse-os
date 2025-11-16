@@ -1,6 +1,19 @@
 # PulseOS configuration file (template)
 # Copy this to: /opt/pulse-os/pulse.conf
 
+# PULSE_VERSION derived from VERSION file located next to this config.
+# Allows scripts that source this file to pick up the packaged version automatically.
+if [[ -z "${PULSE_VERSION:-}" ]]; then
+  _pulse_conf_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-${0}}")" && pwd)"
+  _pulse_version_file="${_pulse_conf_dir}/VERSION"
+  if [[ -f "${_pulse_version_file}" ]]; then
+    PULSE_VERSION="$(tr -d '\n\r ' < "${_pulse_version_file}")"
+  else
+    PULSE_VERSION="0.0.0"
+  fi
+  unset _pulse_conf_dir _pulse_version_file
+fi
+
 # Kiosk landing page
 PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
 
