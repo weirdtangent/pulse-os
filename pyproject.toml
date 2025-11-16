@@ -11,3 +11,36 @@ dependencies = [
     "psutil>=6.0.0",
     "websocket>=0.2.1",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.8.0",
+    "ruff>=0.6.5",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["bin"]
+extend-exclude = ["uv.lock"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "W",
+    "UP",
+]
+ignore = [
+    "E203",
+]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = false
+docstring-code-format = true

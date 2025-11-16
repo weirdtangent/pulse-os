@@ -1,113 +1,162 @@
 #!/usr/bin/env python3
-import os, time, math
-from datetime import datetime, timedelta, timezone
+"""Adjust Pulse kiosk backlight based on sunrise/sunset data."""
+
+from __future__ import annotations
+
+import math
+import os
+import time
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
 try:
     from zoneinfo import ZoneInfo
-except Exception:
-    ZoneInfo = None
+except ImportError:  # pragma: no cover - fallback for Python < 3.9
+    ZoneInfo = None  # type: ignore[assignment]
 
 from astral import LocationInfo
-from astral.sun import sun, dawn, dusk
+from astral.sun import dawn, dusk, sun
 
-CONF = "/etc/pulse-backlight.conf"
+CONF_PATH = Path("/etc/pulse-backlight.conf")
+DEFAULT_CONF: dict[str, str] = {
+    "LAT": "0",
+    "LON": "0",
+    "DAY": "85",
+    "NIGHT": "25",
+    "TWILIGHT": "OFFICIAL",
+    "BACKLIGHT": "/sys/class/backlight/11-0045",
+}
+VALID_TWILIGHT = {"OFFICIAL", "CIVIL", "NAUTICAL", "ASTRONOMICAL"}
 
-def read_conf(path):
-    cfg = {
-        "LAT": None, "LON": None,
-        "DAY": "85", "NIGHT": "25",
-        "TWILIGHT": "OFFICIAL",
-        "BACKLIGHT": "/sys/class/backlight/11-0045",
-    }
-    with open(path) as f:
-        for line in f:
-            line=line.strip()
-            if not line or line.startswith("#") or "=" not in line: continue
-            k,v = line.split("=",1)
-            cfg[k.strip().upper()] = v.strip()
-    lat = float(cfg["LAT"]); lon = float(cfg["LON"])
+
+def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
+    """Read the config file and return parsed values."""
+    cfg = DEFAULT_CONF.copy()
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                cfg[key.strip().upper()] = value.strip()
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"Backlight config not found at {path}") from exc
+
+    lat = float(cfg["LAT"])
+    lon = float(cfg["LON"])
     day = max(0, min(100, int(cfg["DAY"])))
     night = max(0, min(100, int(cfg["NIGHT"])))
-    tw = cfg["TWILIGHT"].upper()
-    if tw not in ("OFFICIAL","CIVIL","NAUTICAL","ASTRONOMICAL"): tw = "OFFICIAL"
-    bl = cfg["BACKLIGHT"]
-    return lat, lon, day, night, tw, bl
+    twilight = cfg["TWILIGHT"].upper()
+    if twilight not in VALID_TWILIGHT:
+        twilight = "OFFICIAL"
+    backlight = cfg["BACKLIGHT"]
+    return lat, lon, day, night, twilight, backlight
 
-def detect_tz():
-    # Prefer configured zone via /etc/timezone
-    tzname = None
-    for p in (os.environ.get("TZ"), "/etc/timezone"):
+
+def detect_tz() -> timezone | ZoneInfo:
+    """Detect the best timezone for the host device."""
+    tzname: str | None = None
+    tz_env = os.environ.get("TZ")
+    candidates = [tz_env] if tz_env else []
+    candidates.append("/etc/timezone")
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate_path = Path(candidate)
         try:
-            if p and os.path.isfile(p):
-                with open(p) as f: tzname = f.read().strip()
+            if candidate_path.is_file():
+                tzname = candidate_path.read_text(encoding="utf-8").strip()
                 break
-            elif p and p and p not in ("/etc/timezone",):
-                tzname = p
-                break
-        except Exception:
-            pass
-    # Try ZoneInfo if available
+            tzname = candidate
+            break
+        except OSError:
+            continue
+
     if tzname and ZoneInfo:
         try:
             return ZoneInfo(tzname)
-        except Exception:
+        except (LookupError, ValueError):
             pass
-    # Try system local tz
+
     try:
-        return datetime.now().astimezone().tzinfo or timezone.utc
-    except Exception:
-        return timezone.utc
+        return datetime.now().astimezone().tzinfo or datetime.UTC
+    except OSError:
+        return datetime.UTC
 
-def set_backlight(dev, pct):
-    maxp = int(open(os.path.join(dev, "max_brightness")).read().strip())
-    val  = max(0, min(maxp, math.floor(maxp * pct / 100)))
-    with open(os.path.join(dev, "brightness"), "w") as f:
-        f.write(str(val))
 
-def next_events(lat, lon, tz, twilight_mode, now=None):
-    if now is None: now = datetime.now(tz)
-    loc = LocationInfo(latitude=lat, longitude=lon)
-    date = now.date()
-    def boundaries(d):
-        if twilight_mode == "OFFICIAL":
-            s = sun(loc.observer, date=d, tzinfo=tz)
-            return s["sunrise"], s["sunset"]
-        dep = {"CIVIL":6, "NAUTICAL":12, "ASTRONOMICAL":18}[twilight_mode]
-        return dawn(loc.observer, date=d, tzinfo=tz, depression=dep), \
-               dusk(loc.observer, date=d, tzinfo=tz, depression=dep)
+def set_backlight(device_dir: str, percent: int) -> None:
+    """Write the scaled brightness value to the backlight device."""
+    device_path = Path(device_dir)
+    max_path = device_path / "max_brightness"
+    brightness_path = device_path / "brightness"
+    max_brightness = int(max_path.read_text(encoding="utf-8").strip())
+    scaled = max(0, min(max_brightness, math.floor(max_brightness * percent / 100)))
+    brightness_path.write_text(f"{scaled}\n", encoding="utf-8")
+
+
+def _twilight_boundaries(
+    location: LocationInfo,
+    tzinfo: timezone | ZoneInfo,
+    twilight_mode: str,
+    date_obj: date,
+) -> tuple[datetime, datetime]:
+    if twilight_mode == "OFFICIAL":
+        sun_data = sun(location.observer, date=date_obj, tzinfo=tzinfo)
+        return sun_data["sunrise"], sun_data["sunset"]
+    depression = {"CIVIL": 6, "NAUTICAL": 12, "ASTRONOMICAL": 18}[twilight_mode]
+    start = dawn(location.observer, date=date_obj, tzinfo=tzinfo, depression=depression)
+    end = dusk(location.observer, date=date_obj, tzinfo=tzinfo, depression=depression)
+    return start, end
+
+
+def next_events(
+    lat: float,
+    lon: float,
+    tzinfo: timezone | ZoneInfo,
+    twilight_mode: str,
+    now: datetime | None = None,
+) -> tuple[bool, datetime]:
+    """Return whether it is daytime and the datetime of the next transition."""
+    current = now or datetime.now(tzinfo)
+    location = LocationInfo(latitude=lat, longitude=lon)
     try:
-        sr, ss = boundaries(date)
-    except Exception:
-        # In extreme latitudes, pick safe times and retry soon
-        n1 = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        n2 = now.replace(hour=18, minute=0, second=0, microsecond=0)
-        return (n1 <= now < n2), (n2 if now < n2 else (n1 + timedelta(days=1)))
-    # Determine current state and next change
-    if sr <= now < ss:
-        return True, ss
-    if now < sr:
-        return False, sr
-    # After sunset -> next sunrise tomorrow
-    sr2, _ = boundaries(date + timedelta(days=1))
-    return False, sr2
+        sunrise, sunset = _twilight_boundaries(location, tzinfo, twilight_mode, current.date())
+    except Exception:  # noqa: BLE001 - Astral raises generic Exception on polar nights
+        morning = current.replace(hour=8, minute=0, second=0, microsecond=0)
+        evening = current.replace(hour=18, minute=0, second=0, microsecond=0)
+        next_transition = evening if current < evening else morning + timedelta(days=1)
+        return morning <= current < evening, next_transition
 
-def main():
-    lat, lon, day, night, twilight, bl = read_conf(CONF)
-    tz = detect_tz()
-    last_state = None
+    if sunrise <= current < sunset:
+        return True, sunset
+    if current < sunrise:
+        return False, sunrise
+
+    next_sunrise, _ = _twilight_boundaries(location, tzinfo, twilight_mode, current.date() + timedelta(days=1))
+    return False, next_sunrise
+
+
+def main() -> None:
+    lat, lon, day_pct, night_pct, twilight, backlight_device = read_conf(CONF_PATH)
+    tzinfo = detect_tz()
+    is_daytime: bool | None = None
+
     while True:
-        now = datetime.now(tz)
-        is_day, change = next_events(lat, lon, tz, twilight, now)
-        target = day if is_day else night
-        try:
-            if last_state != is_day:
-                set_backlight(bl, target)
-                last_state = is_day
-        except Exception:
-            # Backlight not ready? try again soon
-            pass
-        # Sleep until just after the next change (clamped)
-        sleep_s = max(30, min(24*3600, (change - now).total_seconds() + 2))
-        time.sleep(sleep_s)
+        now = datetime.now(tzinfo)
+        currently_daylight, next_transition = next_events(lat, lon, tzinfo, twilight, now)
+        target_percent = day_pct if currently_daylight else night_pct
+        if is_daytime != currently_daylight:
+            try:
+                set_backlight(backlight_device, target_percent)
+                is_daytime = currently_daylight
+            except OSError:
+                # Backlight not ready; retry soon.
+                pass
+        sleep_seconds = max(30, min(24 * 3600, int((next_transition - now).total_seconds()) + 2))
+        time.sleep(sleep_seconds)
+
 
 if __name__ == "__main__":
     main()
