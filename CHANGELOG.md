@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/weirdtangent/pulse-os/compare/v0.2.2...v0.2.3) (2025-11-16)
+
+
+### Bug Fixes
+
+* use default entity id for home button ([552fa8a](https://github.com/weirdtangent/pulse-os/commit/552fa8abf914c12fd5b96a515b4e97b8e49873e1))
+
 ## [0.2.2](https://github.com/weirdtangent/pulse-os/compare/v0.2.1...v0.2.2) (2025-11-16)
 
 
