@@ -21,6 +21,7 @@ class Topics:
     home: str
     goto: str
     update: str
+    reboot: str
     device: str
     availability: str
     update_availability: str
@@ -71,6 +72,7 @@ def load_config() -> EnvConfig:
         home=f"pulse/{hostname}/kiosk/home",
         goto=f"pulse/{hostname}/kiosk/url/set",
         update=f"pulse/{hostname}/kiosk/update",
+        reboot=f"pulse/{hostname}/kiosk/reboot",
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
@@ -197,6 +199,7 @@ class KioskMqttListener:
         self.device_info = build_device_info(config)
         self.origin = self._build_origin()
         self.update_lock = threading.Lock()
+        self.reboot_lock = threading.Lock()
         self.repo_dir = "/opt/pulse-os"
         self.local_version = self._detect_local_version()
         self.latest_remote_version: Optional[str] = None
@@ -424,6 +427,15 @@ class KioskMqttListener:
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
         }
+        reboot_button = {
+            "platform": "button",
+            "name": "Reboot",
+            "default_entity_id": "button.reboot",
+            "cmd_t": self.config.topics.reboot,
+            "pl_press": "press",
+            "unique_id": f"{self.config.hostname}_reboot",
+            "entity_category": "config",
+        }
         update_button = {
             "platform": "button",
             "name": "Update",
@@ -445,6 +457,7 @@ class KioskMqttListener:
             "availability": availability,
             "cmps": {
                 "Home": home_button,
+                "Reboot": reboot_button,
                 "Update": update_button,
             },
         }
@@ -465,6 +478,7 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.home)
         client.subscribe(self.config.topics.goto)
         client.subscribe(self.config.topics.update)
+        client.subscribe(self.config.topics.reboot)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self.publish_update_button_availability(client, self.is_update_available())
@@ -477,6 +491,8 @@ class KioskMqttListener:
             self.handle_goto(msg.payload)
         elif msg.topic == self.config.topics.update:
             self.handle_update()
+        elif msg.topic == self.config.topics.reboot:
+            self.handle_reboot()
         else:
             self.log(f"Received message on unexpected topic {msg.topic}")
 
@@ -489,6 +505,13 @@ class KioskMqttListener:
             return
         self._set_update_availability(False, force=True)
         thread = threading.Thread(target=self._perform_update, name="pulse-update", daemon=True)
+        thread.start()
+
+    def handle_reboot(self) -> None:
+        if not self.reboot_lock.acquire(blocking=False):
+            self.log("reboot: request ignored because another reboot is running")
+            return
+        thread = threading.Thread(target=self._perform_reboot, name="pulse-reboot", daemon=True)
         thread.start()
 
     def _run_step(self, description: str, command: List[str], cwd: Optional[str]) -> bool:
@@ -524,6 +547,17 @@ class KioskMqttListener:
                 self.refresh_update_availability()
             except Exception as exc:
                 self.log(f"update-check: failed to refresh availability after update: {exc}")
+
+    def _perform_reboot(self) -> None:
+        try:
+            self.log("reboot: issuing sudo reboot now")
+            subprocess.run(["sudo", "reboot", "now"], check=True)
+        except FileNotFoundError as exc:
+            self.log(f"reboot: command not found: {exc}")
+        except subprocess.CalledProcessError as exc:
+            self.log(f"reboot: command failed with exit code {exc.returncode}")
+        finally:
+            self.reboot_lock.release()
 
 
 def main():

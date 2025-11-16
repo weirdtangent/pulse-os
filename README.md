@@ -168,10 +168,11 @@ homeassistant:
 
 <details>
   <summary><strong>MQTT buttons (Home / Update)</strong></summary>
-`pulse-kiosk-mqtt.service` announces two Home Assistant buttons via MQTT discovery:
+`pulse-kiosk-mqtt.service` announces three Home Assistant buttons via MQTT discovery:
 
 * `Home` publishes to `pulse/<hostname>/kiosk/home` and simply reopens your configured `PULSE_URL`.
 * `Update` publishes to `pulse/<hostname>/kiosk/update` and makes the kiosk do a `git pull`, rerun `./setup.sh`, and then `sudo reboot now`.
+* `Reboot` publishes to `pulse/<hostname>/kiosk/reboot` and issues a plain `sudo reboot now` without pulling new code.
 
 Notes for the `Update` button:
 
