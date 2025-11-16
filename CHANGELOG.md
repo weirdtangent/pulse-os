@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/weirdtangent/pulse-os/compare/v0.7.0...v0.8.0) (2025-11-16)
+
+
+### Features
+
+* update update button name when available; more choices for version check cadence ([ad6acec](https://github.com/weirdtangent/pulse-os/commit/ad6acec1ec50acea28c0acb6503ad8a57528d086))
+
 # [0.7.0](https://github.com/weirdtangent/pulse-os/compare/v0.6.0...v0.7.0) (2025-11-16)
 
 
