@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+from re import M
 import socket
 import urllib.error
 import urllib.parse
@@ -22,7 +23,7 @@ HOSTNAME = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
 FRIENDLY_NAME = os.environ.get("PULSE_NAME") or HOSTNAME.replace("-", " ").title()
 HOME_TOPIC = f"pulse/{HOSTNAME}/kiosk/home"
 GOTO_TOPIC = f"pulse/{HOSTNAME}/kiosk/url/set"
-DEVICE_TOPIC = f"homeassistant/device/{HOSTNAME}"
+DEVICE_TOPIC = f"homeassistant/device/{HOSTNAME}/config"
 AVAILABILITY_TOPIC = f"{DEVICE_TOPIC}/availability"
 
 
@@ -216,9 +217,15 @@ def build_device_definition() -> Dict[str, Any]:
         "availability": [availability],
         "unique_id": f"{HOSTNAME}_home",
     }
+    origin = {
+        "name": "PulseOS",
+        "sw": _sw_version,
+        "support_url": "https://github.com/weirdtangent/pulse-os",
+    }
 
     return {
         "device": DEVICE_INFO,
+        "origin": origin,
         "availability": availability,
         "cmps": {"Home": [home_button]},
     }
