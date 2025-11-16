@@ -133,6 +133,23 @@ ensure_symlink() {
     log "Linked $link → $target"
 }
 
+ensure_boot_config_line() {
+    local line="$1"
+    local file="$BOOT_CONFIG"
+
+    if [ ! -f "$file" ]; then
+        log "Warning: boot config $file not found (skipping line $line)"
+        return
+    fi
+
+    if sudo grep -Fxq "$line" "$file"; then
+        return
+    fi
+
+    echo "$line" | sudo tee -a "$file" >/dev/null
+    log "Added $line to $(basename "$file")"
+}
+
 ensure_boot_config_kv() {
     local key="$1"
     local value="$2"
@@ -194,6 +211,14 @@ ensure_cmdline_kv() {
 
     printf '%s\n' "$current" | sudo tee "$file" >/dev/null
     log "Set kernel arg ${key}=${value}"
+}
+
+configure_display_stack() {
+    log "Configuring Touch Display boot parameters…"
+    ensure_boot_config_line "dtparam=i2c_arm=on"
+    ensure_boot_config_kv "display_auto_detect" "0"
+    ensure_boot_config_line "dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx"
+    ensure_cmdline_arg "video=DSI-2:720x1280M@60"
 }
 
 configure_device_identity() {
@@ -477,24 +502,6 @@ print_feature_summary() {
     echo
 }
 
-
-manual_notes() {
-    echo
-    echo "──────────────────────────────────────────────────────"
-    echo " MANUAL CONFIG NEEDED (once per device)"
-    echo "──────────────────────────────────────────────────────"
-    echo "Edit /boot/firmware/config.txt"
-    echo "  • uncomment dtparam=i2c_arm=on"
-    echo "  • set display_auto_detect=0"
-    echo "  • add Touch Display overlay:"
-    echo "      dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx"
-    echo
-    echo "Edit /boot/firmware/cmdline.txt"
-    echo "  • append: video=DSI-2:720x1280M@60"
-    echo
-    echo "Bluetooth BoomPod pairing instructions (optional)…"
-}
-
 main() {
     if [ "$#" -gt 1 ]; then
         usage
@@ -505,7 +512,7 @@ main() {
     location=$(resolve_location "${1:-}")
 
     configure_device_identity "$location"
-
+    configure_display_stack
     install_packages
     setup_user_dirs
     link_home_files
@@ -514,7 +521,6 @@ main() {
     enable_services
     setup_crontab
     install_bluetooth_audio
-    manual_notes
     print_feature_summary
 
     log "PulseOS setup complete!"

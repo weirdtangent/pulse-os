@@ -165,6 +165,12 @@ Also, I'm including in /models the ReSpeaker case and cover that I figured out. 
 
 Update either asset and rerun `./setup.sh <location>` to refresh the splash on an existing kiosk.
 
+**Touch Display boot config**
+`setup.sh` now also pins the Raspberry Pi Touch Display defaults so you don’t have to edit boot files by hand:
+* Adds `dtparam=i2c_arm=on` and `display_auto_detect=0` inside `/boot/firmware/config.txt`.
+* Ensures the overlay `dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx` is present.
+* Appends `video=DSI-2:720x1280M@60` to `/boot/firmware/cmdline.txt`.
+
 **Objective**
 
 This is buried down here because this is mostly just a fun hobby, and not more serious. But let me explain the direction I'm going.
