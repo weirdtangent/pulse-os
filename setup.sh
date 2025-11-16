@@ -11,6 +11,7 @@ fi
 BOOT_CONFIG="$BOOT_MOUNT/config.txt"
 BOOT_CMDLINE="$BOOT_MOUNT/cmdline.txt"
 BOOT_SPLASH="$BOOT_MOUNT/splash.rgb"
+FIRMWARE_LOGO="/lib/firmware/boot-splash.tga"
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
     source "$CONFIG_FILE"
@@ -88,6 +89,29 @@ ensure_cmdline_arg() {
 
     sudo sed -i "1s|$| $arg|" "$file"
     log "Added kernel arg: $arg"
+}
+
+ensure_cmdline_kv() {
+    local key="$1"
+    local value="$2"
+    local file="$BOOT_CMDLINE"
+
+    if [ ! -f "$file" ]; then
+        log "Warning: boot cmdline $file not found (skipping $key)"
+        return
+    fi
+
+    local current
+    current=$(sudo cat "$file")
+    local escaped="${value//\//\\/}"
+    if echo "$current" | grep -qE "(^|[[:space:]])${key}="; then
+        current=$(echo "$current" | sed -E "s/(^|[[:space:]])${key}=[^ ]*/\\1${key}=${escaped}/")
+    else
+        current="$current ${key}=${value}"
+    fi
+
+    printf '%s\n' "$current" | sudo tee "$file" >/dev/null
+    log "Set kernel arg ${key}=${value}"
 }
 
 configure_device_identity() {
@@ -205,6 +229,7 @@ link_system_files() {
 
 install_boot_splash() {
     local firmware_src="$REPO_DIR/assets/boot-splash.rgb"
+    local firmware_logo_src="$REPO_DIR/assets/boot-splash.tga"
 
     if [ -f "$firmware_src" ] && [ -n "$BOOT_SPLASH" ]; then
         if ! sudo cmp -s "$firmware_src" "$BOOT_SPLASH" 2>/dev/null; then
@@ -215,6 +240,17 @@ install_boot_splash() {
         fi
     else
         log "Warning: firmware splash source missing ($firmware_src)"
+    fi
+
+    if [ -f "$firmware_logo_src" ]; then
+        if ! sudo cmp -s "$firmware_logo_src" "$FIRMWARE_LOGO" 2>/dev/null; then
+            sudo install -m 0644 "$firmware_logo_src" "$FIRMWARE_LOGO"
+            log "Installed bootloader splash → $FIRMWARE_LOGO"
+        else
+            log "Bootloader splash already up to date"
+        fi
+    else
+        log "Warning: TGA splash source missing ($firmware_logo_src)"
     fi
 
     local theme_src_dir="$REPO_DIR/config/plymouth/pulse"
@@ -255,7 +291,7 @@ install_boot_splash() {
         log "Warning: Plymouth theme sources missing at $theme_src_dir"
     fi
 
-    ensure_boot_config_kv "disable_splash" "1"
+    ensure_boot_config_kv "disable_splash" "0"
     ensure_boot_config_kv "disable_overscan" "1"
 
     ensure_cmdline_arg "quiet"
@@ -263,6 +299,8 @@ install_boot_splash() {
     ensure_cmdline_arg "loglevel=3"
     ensure_cmdline_arg "vt.global_cursor_default=0"
     ensure_cmdline_arg "plymouth.ignore-serial-consoles"
+    ensure_cmdline_kv "fullscreen_logo" "1"
+    ensure_cmdline_kv "fullscreen_logo_name" "$(basename "$FIRMWARE_LOGO")"
 }
 
 enable_services() {

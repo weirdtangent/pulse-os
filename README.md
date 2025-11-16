@@ -158,8 +158,9 @@ Also, I'm including in /models the ReSpeaker case and cover that I figured out. 
 **Boot splash**
 `setup.sh` deploys the splash assets automatically:
 * `assets/graystorm-pulse_splash.png` is installed as the Plymouth theme so Linux boot output stays hidden until X starts.
-* `assets/boot-splash.rgb` (RGB565, 1280×720) is copied to `/boot/firmware/splash.rgb` for the firmware-stage splash.
-* Kernel args such as `quiet splash loglevel=3 vt.global_cursor_default=0` are enforced so messages and cursors stay out of sight.
+* `assets/boot-splash.tga` (24-bit, 1280×720) is copied to `/lib/firmware/boot-splash.tga`, and the bootloader is set to `fullscreen_logo=1 fullscreen_logo_name=boot-splash.tga`.
+* `assets/boot-splash.rgb` (RGB565, 1280×720) is copied to `/boot/firmware/splash.rgb` for firmware builds that still expect the raw framebuffer format.
+* Kernel args such as `quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles` are enforced so messages and cursors stay out of sight.
 
 Update either asset and rerun `./setup.sh <location>` to refresh the splash on an existing kiosk.
 
