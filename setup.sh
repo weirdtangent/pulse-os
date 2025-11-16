@@ -126,13 +126,22 @@ link_system_files() {
         sudo ln -sf "$REPO_DIR/config/system/syslog-ng.service" \
             /usr/lib/systemd/system/syslog-ng.service
 
-        ensure_symlink "$REPO_DIR/config/system/syslog-ng/remote-log.conf" \
-            /etc/syslog-ng/conf.d/remote-log.conf
+        sudo mkdir -p /etc/syslog-ng/conf.d
+
+        # Render remote-log.conf from template using Pulse config
+        sed \
+          -e "s/__REMOTE_LOG_HOST__/${PULSE_REMOTE_LOG_HOST}/g" \
+          -e "s/__REMOTE_LOG_PORT__/${PULSE_REMOTE_LOG_PORT}/g" \
+          "$REPO_DIR/config/system/syslog-ng/remote-log.conf.template" \
+          | sudo tee /etc/syslog-ng/conf.d/remote-log.conf >/dev/null
 
         sudo mkdir -p /etc/systemd/system/syslog-ng.service.d
         ensure_symlink "$REPO_DIR/config/system/syslog-ng.service.d/override.conf" \
           /etc/systemd/system/syslog-ng.service.d/override.conf
     fi
+
+    sudo ln -sf "$REPO_DIR/config/system/pulse-kiosk-mqtt.service" \
+        /etc/systemd/system/pulse-kiosk-mqtt.service
 
     sudo ln -sf "$REPO_DIR/config/system/pulse-backlight.conf" \
         /etc/pulse-backlight.conf
@@ -169,6 +178,8 @@ enable_services() {
         log "Disabling sun-driven backlight control..."
         sudo systemctl disable --now pulse-backlight-sun.service 2>/dev/null || true
     fi
+
+    sudo systemctl enable --now pulse-kiosk-mqtt.service
 
     log "Enabling user services (user-global)…"
     # These create symlinks in /etc/systemd/user/

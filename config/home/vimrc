@@ -82,7 +82,6 @@ set undofile
 
 syntax on
 set background=dark
-colorscheme badwolf
 set termguicolors
 
 " ===================================================

@@ -24,3 +24,6 @@ PULSE_WATCHDOG_URL="http://homeassistant.local:8123/static/icons/favicon.ico"
 PULSE_WATCHDOG_LIMIT=5
 PULSE_WATCHDOG_INTERVAL=60
 
+# Mqtt server
+MQTT_HOST="mosquitto.graystorm.com"
+MQTT_PORT="1883"

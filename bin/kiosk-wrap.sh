@@ -2,12 +2,14 @@
 exec >>"$HOME/kiosk.log" 2>&1
 
 # Be tolerant of hiccups (don't use -e)
-set -u
 set -x
+
+source /opt/pulse-os/pulse.conf
 
 echo "==== $(date) kiosk start (DISPLAY=${DISPLAY:-unset}) ===="
 
-URL="${PULSE_URL:-$URL}"
+DEFAULT_URL="https://github.com/weirdTangent/pulse-os"
+URL="${PULSE_URL:-$DEFAULT_URL}"
 
 # Isolate Chromium temp files away from /tmp (tmpfs)
 export TMPDIR="$HOME/.cache/chromium-tmp"
@@ -86,6 +88,7 @@ while true; do
   "$BROWSER" \
     --v=0 \
     --remote-debugging-port=9222 \
+    --remote-allow-origins=http://localhost:9222 \
     --disable-extensions-except="$HOME/cursorless" \
     --load-extension="$HOME/cursorless" \
     --user-data-dir=/tmp/kiosk-profile \
@@ -96,16 +99,18 @@ while true; do
     --noerrdialogs \
     --disable-infobars \
     --hide-scrollbars \
-    --disable-features=OptimizationHints,AutofillServerCommunication,PushMessaging \
+    --disable-gcm-service-worker \
+    --disable-cloud-import \
+    --disable-sync \
     --disable-logging \
+    --disable-features=RendererCodeIntegrity,PreconnectToSearch,OptimizationHints,AutofillServerCommunication,PushMessaging \
+    --disable-breakpad \
     --kiosk \
     --start-fullscreen \
     --window-position=0,0 \
     --force-device-scale-factor=1 \
     --high-dpi-support=1 \
-    --disable-sync \
-    --disable-breakpad \
-    --app="$URL" \
+    "$URL" \
     2>>"$HOME/kiosk-chrome-errors.log" \
   || true
   echo "$(date) chromium exited; restarting in 2s"

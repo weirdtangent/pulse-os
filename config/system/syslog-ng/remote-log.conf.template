@@ -5,7 +5,7 @@ template t_ietf {
 };
 
 destination d_remote {
-    tcp("192.168.1.244" port(55140)
+    tcp("__REMOTE_LOG_HOST__" port(__REMOTE_LOG_PORT__)
         template(t_ietf)
         log_fifo_size(10000)
         time-reopen(10)
