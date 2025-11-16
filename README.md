@@ -184,7 +184,8 @@ Notes for the `Update` button:
   ```
   If your sudo policy already allows `setup.sh` to complete unattended, you likely just need to add `reboot`.
 * There is no payload validation—the button assumes you control the MQTT broker. Keep it on a trusted network.
-* Availability is automatic: the button only appears when the `VERSION` file on GitHub is newer than the version running locally. The kiosk polls GitHub at most 2/4/6 times per day (default 4). Override with `PULSE_VERSION_CHECKS_PER_DAY=2|4|6` in `pulse.conf` if you need a different cadence.
+* Availability is automatic: the button only appears when the `VERSION` file on GitHub is newer than the version running locally. The kiosk polls GitHub at most 2/4/6/8/12/24 times per day (default 12). Override with `PULSE_VERSION_CHECKS_PER_DAY=2|4|6|8|12|24` in `pulse.conf` if you need a different cadence.
+* When an update is available, the button title automatically changes to `Update to vX.Y.Z`, so you can see which version will be applied before clicking.
 </details>
 
 <details>

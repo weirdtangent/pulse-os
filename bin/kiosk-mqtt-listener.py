@@ -51,8 +51,8 @@ class EnvConfig:
 
 
 DEFAULT_VERSION_SOURCE_URL = "https://raw.githubusercontent.com/weirdtangent/pulse-os/main/VERSION"
-DEFAULT_VERSION_CHECKS_PER_DAY = 4
-ALLOWED_VERSION_CHECK_COUNTS = {2, 4, 6}
+DEFAULT_VERSION_CHECKS_PER_DAY = 12
+ALLOWED_VERSION_CHECK_COUNTS = {2, 4, 6, 8, 12, 24}
 
 
 def log(message: str) -> None:
@@ -212,6 +212,7 @@ class KioskMqttListener:
         self._update_checker_lock = threading.Lock()
         self._update_checker_stop_event = threading.Event()
         self._mqtt_client: Optional[mqtt.Client] = None
+        self._last_update_button_name = "Update"
 
     def log(self, message: str) -> None:
         log(message)
@@ -272,6 +273,27 @@ class KioskMqttListener:
             self.log(f"update-check: unexpected error while fetching remote version: {exc}")
         return None
 
+    def _format_version_label(self, version: str) -> str:
+        return version if version.lower().startswith("v") else f"v{version}"
+
+    def _compute_update_button_name(self, *, available: Optional[bool] = None) -> str:
+        if available is None:
+            available = self.is_update_available()
+        if available and self.latest_remote_version:
+            label = self._format_version_label(self.latest_remote_version)
+            return f"Update to {label}"
+        return "Update"
+
+    def _maybe_publish_update_button_definition(self) -> None:
+        desired_name = self._compute_update_button_name()
+        if desired_name == self._last_update_button_name:
+            return
+        client = self._mqtt_client
+        if client:
+            self.publish_device_definition(client)
+        else:
+            self._last_update_button_name = desired_name
+
     def _set_update_availability(self, available: bool, *, force: bool = False) -> None:
         should_publish = force
         with self._update_state_lock:
@@ -280,6 +302,7 @@ class KioskMqttListener:
                 should_publish = True
         if should_publish:
             self.publish_update_button_availability(None, available)
+        self._maybe_publish_update_button_definition()
 
     def _safe_publish(
         self,
@@ -448,7 +471,7 @@ class KioskMqttListener:
         }
         update_button = {
             "platform": "button",
-            "name": "Update",
+            "name": self._compute_update_button_name(),
             "default_entity_id": "button.update",
             "cmd_t": self.config.topics.update,
             "pl_press": "press",
@@ -475,6 +498,7 @@ class KioskMqttListener:
     def publish_device_definition(self, client: mqtt.Client) -> None:
         payload = json.dumps(self.build_device_definition())
         self._safe_publish(client, self.config.topics.device, payload, qos=1, retain=True)
+        self._last_update_button_name = self._compute_update_button_name()
 
     def publish_availability(self, client: mqtt.Client, state: str) -> None:
         self._safe_publish(client, self.config.topics.availability, state, qos=1, retain=True)
