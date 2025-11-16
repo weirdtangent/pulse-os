@@ -189,6 +189,20 @@ Notes for the `Update` button:
 </details>
 
 <details>
+  <summary><strong>Diagnostic telemetry sensors</strong></summary>
+Each kiosk publishes a small set of MQTT `sensor` entities (retained, ~15 s cadence by default) so you can graph device health inside Home Assistant:
+
+* `sensor.pulse_uptime` — seconds since boot (total-increasing)
+* `sensor.pulse_cpu_usage` — CPU utilization %
+* `sensor.pulse_cpu_temperature` — SoC temperature in °C
+* `sensor.pulse_memory_usage` — RAM usage %
+* `sensor.pulse_disk_usage` — root disk usage %
+* `sensor.pulse_load_avg_1m|5m|15m` — Linux load averages
+
+All telemetry sensors are tagged as `diagnostic` entities and expire automatically if the kiosk stops reporting. Tune the cadence with `PULSE_TELEMETRY_INTERVAL_SECONDS` (minimum 5 s) in `pulse.conf` if you need faster or slower updates.
+</details>
+
+<details>
   <summary><strong>Cases & printable accessories</strong></summary>
 I am using a fantastic model I found for the Raspberry Pi Touch Display 2 - with attached Pi 5 case:
 https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2#profileId-1868464

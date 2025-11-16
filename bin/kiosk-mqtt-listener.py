@@ -5,6 +5,7 @@ import os
 import socket
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import paho.mqtt.client as mqtt
+import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
 
@@ -26,6 +28,7 @@ class Topics:
     device: str
     availability: str
     update_availability: str
+    telemetry: str
 
 
 @dataclass(frozen=True)
@@ -48,11 +51,98 @@ class EnvConfig:
     devtools: DevToolsConfig
     version_source_url: str
     version_checks_per_day: int
+    telemetry_interval_seconds: int
+
+
+@dataclass(frozen=True)
+class TelemetryDescriptor:
+    key: str
+    name: str
+    unit: Optional[str]
+    device_class: Optional[str]
+    state_class: Optional[str]
+    icon: Optional[str]
+    precision: Optional[int] = None
 
 
 DEFAULT_VERSION_SOURCE_URL = "https://raw.githubusercontent.com/weirdtangent/pulse-os/main/VERSION"
 DEFAULT_VERSION_CHECKS_PER_DAY = 12
 ALLOWED_VERSION_CHECK_COUNTS = {2, 4, 6, 8, 12, 24}
+DEFAULT_TELEMETRY_INTERVAL_SECONDS = 15
+MIN_TELEMETRY_INTERVAL_SECONDS = 5
+TELEMETRY_SENSORS: List[TelemetryDescriptor] = [
+    TelemetryDescriptor(
+        key="uptime_seconds",
+        name="Uptime",
+        unit="s",
+        device_class="duration",
+        state_class="total_increasing",
+        icon="mdi:timer",
+    ),
+    TelemetryDescriptor(
+        key="cpu_percent",
+        name="CPU Usage",
+        unit="%",
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:cpu-64-bit",
+        precision=1,
+    ),
+    TelemetryDescriptor(
+        key="cpu_temperature_c",
+        name="CPU Temperature",
+        unit="°C",
+        device_class="temperature",
+        state_class="measurement",
+        icon="mdi:thermometer",
+        precision=1,
+    ),
+    TelemetryDescriptor(
+        key="memory_percent",
+        name="Memory Usage",
+        unit="%",
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:memory",
+        precision=1,
+    ),
+    TelemetryDescriptor(
+        key="disk_percent",
+        name="Disk Usage",
+        unit="%",
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:harddisk",
+        precision=1,
+    ),
+    TelemetryDescriptor(
+        key="load_avg_1m",
+        name="Load Avg (1m)",
+        unit=None,
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:chart-line",
+        precision=2,
+    ),
+    TelemetryDescriptor(
+        key="load_avg_5m",
+        name="Load Avg (5m)",
+        unit=None,
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:chart-line",
+        precision=2,
+    ),
+    TelemetryDescriptor(
+        key="load_avg_15m",
+        name="Load Avg (15m)",
+        unit=None,
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:chart-line",
+        precision=2,
+    ),
+]
 
 
 def log(message: str) -> None:
@@ -77,6 +167,7 @@ def load_config() -> EnvConfig:
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
+        telemetry=f"pulse/{hostname}/telemetry",
     )
 
     devtools = DevToolsConfig(
@@ -95,6 +186,11 @@ def load_config() -> EnvConfig:
         if candidate in ALLOWED_VERSION_CHECK_COUNTS:
             version_checks_per_day = candidate
 
+    telemetry_interval_seconds = max(
+        MIN_TELEMETRY_INTERVAL_SECONDS,
+        int(os.environ.get("PULSE_TELEMETRY_INTERVAL_SECONDS", DEFAULT_TELEMETRY_INTERVAL_SECONDS)),
+    )
+
     return EnvConfig(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
@@ -108,6 +204,7 @@ def load_config() -> EnvConfig:
         devtools=devtools,
         version_source_url=version_source_url,
         version_checks_per_day=version_checks_per_day,
+        telemetry_interval_seconds=telemetry_interval_seconds,
     )
 
 
@@ -213,6 +310,9 @@ class KioskMqttListener:
         self._update_checker_stop_event = threading.Event()
         self._mqtt_client: Optional[mqtt.Client] = None
         self._last_update_button_name = "Update"
+        self._telemetry_lock = threading.Lock()
+        self._telemetry_thread: Optional[threading.Thread] = None
+        self._telemetry_stop_event = threading.Event()
 
     def log(self, message: str) -> None:
         log(message)
@@ -225,6 +325,113 @@ class KioskMqttListener:
         if self.config.sw_version:
             origin["sw"] = self.config.sw_version
         return origin
+    def start_telemetry(self) -> None:
+        with self._telemetry_lock:
+            if self._telemetry_thread and self._telemetry_thread.is_alive():
+                return
+            self._telemetry_stop_event.clear()
+            thread = threading.Thread(target=self._telemetry_loop, name="pulse-telemetry", daemon=True)
+            self._telemetry_thread = thread
+            thread.start()
+
+    def stop_telemetry(self) -> None:
+        with self._telemetry_lock:
+            if not self._telemetry_thread:
+                return
+            self._telemetry_stop_event.set()
+            self._telemetry_thread.join(timeout=self.config.telemetry_interval_seconds * 2)
+            self._telemetry_thread = None
+
+    def _telemetry_loop(self) -> None:
+        interval = self.config.telemetry_interval_seconds
+        # Prime CPU percent measurement
+        try:
+            psutil.cpu_percent(interval=None)
+        except Exception:
+            pass
+
+        while not self._telemetry_stop_event.is_set():
+            try:
+                metrics = self._collect_telemetry_metrics()
+                self._publish_telemetry(metrics)
+            except Exception as exc:  # pylint: disable=broad-except
+                self.log(f"telemetry: failed to publish metrics: {exc}")
+            if self._telemetry_stop_event.wait(interval):
+                break
+
+    def _collect_telemetry_metrics(self) -> Dict[str, Union[int, float]]:
+        metrics: Dict[str, Union[int, float]] = {}
+        now = time.time()
+        uptime_seconds = max(0, int(now - psutil.boot_time()))
+        metrics["uptime_seconds"] = uptime_seconds
+
+        cpu_percent = psutil.cpu_percent(interval=None)
+        metrics["cpu_percent"] = round(cpu_percent, 1)
+
+        mem = psutil.virtual_memory()
+        metrics["memory_percent"] = round(mem.percent, 1)
+
+        disk = psutil.disk_usage("/")
+        metrics["disk_percent"] = round(disk.percent, 1)
+
+        cpu_temp = self._read_cpu_temperature()
+        if cpu_temp is not None:
+            metrics["cpu_temperature_c"] = round(cpu_temp, 1)
+
+        load1, load5, load15 = os.getloadavg()
+        metrics["load_avg_1m"] = round(load1, 2)
+        metrics["load_avg_5m"] = round(load5, 2)
+        metrics["load_avg_15m"] = round(load15, 2)
+
+        return metrics
+
+    @staticmethod
+    def _read_cpu_temperature() -> Optional[float]:
+        try:
+            temps = psutil.sensors_temperatures()
+        except (NotImplementedError, AttributeError):
+            temps = {}
+        except Exception:
+            temps = {}
+
+        for key in ("cpu-thermal", "soc_thermal", "gpu", "coretemp", "arm"):
+            entries = temps.get(key)
+            if entries:
+                current = entries[0].current
+                if current is not None:
+                    return float(current)
+
+        candidate_paths = [
+            "/sys/class/thermal/thermal_zone0/temp",
+            "/sys/devices/virtual/thermal/thermal_zone0/temp",
+        ]
+        for path in candidate_paths:
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    raw = handle.read().strip()
+                    value = float(raw) / (1000 if len(raw) > 3 else 1)
+                    return value
+            except (OSError, ValueError):
+                continue
+        return None
+
+    def _publish_telemetry(self, metrics: Dict[str, Union[int, float]]) -> None:
+        base_topic = self.config.topics.telemetry
+        for descriptor in TELEMETRY_SENSORS:
+            value = metrics.get(descriptor.key)
+            if value is None:
+                continue
+            topic = f"{base_topic}/{descriptor.key}"
+            payload = self._format_metric_value(value, descriptor.precision)
+            self._safe_publish(None, topic, payload, qos=0, retain=True)
+
+    @staticmethod
+    def _format_metric_value(value: Union[int, float], precision: Optional[int]) -> str:
+        if precision is None:
+            return str(value)
+        format_str = f"{{:.{precision}f}}"
+        return format_str.format(value)
+
 
     @staticmethod
     def _calculate_update_interval_seconds(checks_per_day: int) -> float:
@@ -484,6 +691,8 @@ class KioskMqttListener:
             },
         }
 
+        telemetry_components = self._build_telemetry_components()
+
         return {
             "device": self.device_info,
             "origin": self.origin,
@@ -492,8 +701,33 @@ class KioskMqttListener:
                 "Home": home_button,
                 "Reboot": reboot_button,
                 "Update": update_button,
+                **telemetry_components,
             },
         }
+
+    def _build_telemetry_components(self) -> Dict[str, Dict[str, Any]]:
+        base_topic = self.config.topics.telemetry
+        expire_after = max(self.config.telemetry_interval_seconds * 3, self.config.telemetry_interval_seconds + 5)
+        components: Dict[str, Dict[str, Any]] = {}
+        for descriptor in TELEMETRY_SENSORS:
+            cmps_entry: Dict[str, Any] = {
+                "platform": "sensor",
+                "name": descriptor.name,
+                "unique_id": f"{self.config.hostname}_{descriptor.key}",
+                "stat_t": f"{base_topic}/{descriptor.key}",
+                "entity_category": "diagnostic",
+                "expire_after": expire_after,
+            }
+            if descriptor.unit:
+                cmps_entry["unit_of_meas"] = descriptor.unit
+            if descriptor.device_class:
+                cmps_entry["dev_cla"] = descriptor.device_class
+            if descriptor.state_class:
+                cmps_entry["stat_cla"] = descriptor.state_class
+            if descriptor.icon:
+                cmps_entry["ic"] = descriptor.icon
+            components[descriptor.name] = cmps_entry
+        return components
 
     def publish_device_definition(self, client: mqtt.Client) -> None:
         payload = json.dumps(self.build_device_definition())
@@ -518,6 +752,7 @@ class KioskMqttListener:
             self.log(f"update-check: initial refresh failed: {exc}")
         self.publish_update_button_availability(client, self.is_update_available())
         self.start_update_checker(client)
+        self.start_telemetry()
 
     def on_message(self, _client, _userdata, msg):
         if msg.topic == self.config.topics.home:
@@ -599,6 +834,7 @@ def main():
     config = load_config()
     listener = KioskMqttListener(config)
     atexit.register(listener.stop_update_checker)
+    atexit.register(listener.stop_telemetry)
 
     client = mqtt.Client()
     client.on_connect = listener.on_connect
