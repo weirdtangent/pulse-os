@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/weirdtangent/pulse-os/compare/v0.2.3...v0.3.0) (2025-11-16)
+
+
+### Features
+
+* install boot splash assets ([ef1be40](https://github.com/weirdtangent/pulse-os/commit/ef1be40c9377896b102587dd46a10c4d8c79c9bf))
+
 ## [0.2.3](https://github.com/weirdtangent/pulse-os/compare/v0.2.2...v0.2.3) (2025-11-16)
 
 
