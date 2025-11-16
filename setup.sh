@@ -12,6 +12,7 @@ BOOT_CONFIG="$BOOT_MOUNT/config.txt"
 BOOT_CMDLINE="$BOOT_MOUNT/cmdline.txt"
 BOOT_SPLASH="$BOOT_MOUNT/splash.rgb"
 FIRMWARE_LOGO="/lib/firmware/boot-splash.tga"
+LOCATION_FILE="/etc/pulse-location"
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
     source "$CONFIG_FILE"
@@ -29,6 +30,81 @@ export PULSE_REMOTE_LOG_PORT
 
 log() {
     echo "[PulseOS] $*"
+}
+
+usage() {
+    cat <<EOF
+Usage: $0 <location>
+
+Provide the physical location identifier (e.g. kitchen). After the first
+successful run, the script remembers the last location written to
+$LOCATION_FILE and you may omit the argument to reuse it.
+EOF
+}
+
+read_stored_location() {
+    if [ ! -f "$LOCATION_FILE" ]; then
+        return 1
+    fi
+
+    local contents=""
+    if [ -r "$LOCATION_FILE" ]; then
+        contents=$(<"$LOCATION_FILE")
+    elif contents=$(sudo cat "$LOCATION_FILE" 2>/dev/null); then
+        :
+    fi
+
+    contents=$(printf '%s' "$contents" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    if [ -z "$contents" ]; then
+        return 1
+    fi
+
+    printf '%s\n' "$contents"
+}
+
+sanitize_location() {
+    local raw="$1"
+    local lower sanitized
+
+    lower=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+    sanitized=$(printf '%s' "$lower" | sed -E 's/[^a-z0-9]+/-/g; s/-+/-/g; s/^-+//; s/-+$//')
+
+    if [ -z "$sanitized" ]; then
+        return 1
+    fi
+
+    printf '%s\n' "$sanitized"
+}
+
+resolve_location() {
+    local provided="${1:-}"
+    local raw=""
+
+    if [ -n "$provided" ]; then
+        raw="$provided"
+    else
+        local stored
+        if stored=$(read_stored_location); then
+            log "No location argument supplied; reusing stored location '${stored}' from $LOCATION_FILE"
+            raw="$stored"
+        else
+            usage
+            exit 1
+        fi
+    fi
+
+    local sanitized
+    if ! sanitized=$(sanitize_location "$raw"); then
+        echo "Invalid location '$raw'. Hostnames may only contain letters and numbers."
+        usage
+        exit 1
+    fi
+
+    if [ "$raw" != "$sanitized" ]; then
+        log "Normalized location '$raw' → '$sanitized'"
+    fi
+
+    printf '%s\n' "$sanitized"
 }
 
 ensure_dir() {
@@ -124,14 +200,14 @@ configure_device_identity() {
     local location="$1"
 
     if [ -z "$location" ]; then
-        echo "Usage: $0 <location>"
-        echo "Example: $0 bedroom"
+        usage
         exit 1
     fi
 
     HOSTNAME="pulse-$location"
 
     log "Configuring hostname…"
+    local current_host
     current_host=$(hostname)
     if [ "$current_host" != "$HOSTNAME" ]; then
         sudo raspi-config nonint do_hostname "$HOSTNAME"
@@ -151,7 +227,7 @@ configure_device_identity() {
     fi
 
     # Optional metadata file for the device
-    echo "$location" | sudo tee /etc/pulse-location >/dev/null
+    echo "$location" | sudo tee "$LOCATION_FILE" >/dev/null
 }
 
 install_packages() {
@@ -419,20 +495,30 @@ manual_notes() {
     echo "Bluetooth BoomPod pairing instructions (optional)…"
 }
 
-### Run steps
+main() {
+    if [ "$#" -gt 1 ]; then
+        usage
+        exit 1
+    fi
 
-configure_device_identity "$1"
+    local location
+    location=$(resolve_location "${1:-}")
 
-install_packages
-setup_user_dirs
-link_home_files
-link_system_files
-install_boot_splash
-enable_services
-setup_crontab
-install_bluetooth_audio
-manual_notes
-print_feature_summary
+    configure_device_identity "$location"
 
-log "PulseOS setup complete!"
+    install_packages
+    setup_user_dirs
+    link_home_files
+    link_system_files
+    install_boot_splash
+    enable_services
+    setup_crontab
+    install_bluetooth_audio
+    manual_notes
+    print_feature_summary
+
+    log "PulseOS setup complete!"
+}
+
+main "$@"
 
