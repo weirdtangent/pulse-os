@@ -2,12 +2,14 @@
 import json
 import os
 import socket
+import subprocess
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import paho.mqtt.client as mqtt
 import websocket
@@ -17,6 +19,7 @@ import websocket
 class Topics:
     home: str
     goto: str
+    update: str
     device: str
     availability: str
 
@@ -58,6 +61,7 @@ def load_config() -> EnvConfig:
     topics = Topics(
         home=f"pulse/{hostname}/kiosk/home",
         goto=f"pulse/{hostname}/kiosk/url/set",
+        update=f"pulse/{hostname}/kiosk/update",
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
     )
@@ -169,6 +173,8 @@ class KioskMqttListener:
         self.config = config
         self.device_info = build_device_info(config)
         self.origin = self._build_origin()
+        self.update_lock = threading.Lock()
+        self.repo_dir = "/opt/pulse-os"
 
     def log(self, message: str) -> None:
         log(message)
@@ -269,6 +275,15 @@ class KioskMqttListener:
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
         }
+        update_button = {
+            "platform": "button",
+            "name": "Update",
+            "default_entity_id": "button.update",
+            "cmd_t": self.config.topics.update,
+            "pl_press": "press",
+            "unique_id": f"{self.config.hostname}_update",
+            "entity_category": "config",
+        }
 
         return {
             "device": self.device_info,
@@ -276,6 +291,7 @@ class KioskMqttListener:
             "availability": availability,
             "cmps": {
                 "Home": home_button,
+                "Update": update_button,
             },
         }
 
@@ -294,6 +310,7 @@ class KioskMqttListener:
         self.log(f"Connected to MQTT (rc={rc}); subscribing to topics")
         client.subscribe(self.config.topics.home)
         client.subscribe(self.config.topics.goto)
+        client.subscribe(self.config.topics.update)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
 
@@ -302,8 +319,48 @@ class KioskMqttListener:
             self.handle_home()
         elif msg.topic == self.config.topics.goto:
             self.handle_goto(msg.payload)
+        elif msg.topic == self.config.topics.update:
+            self.handle_update()
         else:
             self.log(f"Received message on unexpected topic {msg.topic}")
+
+    def handle_update(self) -> None:
+        if not self.update_lock.acquire(blocking=False):
+            self.log("update: request ignored because another update is running")
+            return
+
+        thread = threading.Thread(target=self._perform_update, name="pulse-update", daemon=True)
+        thread.start()
+
+    def _run_step(self, description: str, command: List[str], cwd: Optional[str]) -> bool:
+        display_cmd = " ".join(command)
+        self.log(f"update: running {description}: {display_cmd}")
+        try:
+            subprocess.run(command, cwd=cwd, check=True)
+            return True
+        except FileNotFoundError as exc:
+            self.log(f"update: command for {description} not found: {exc}")
+        except subprocess.CalledProcessError as exc:
+            self.log(f"update: {description} failed with exit code {exc.returncode}")
+        return False
+
+    def _perform_update(self) -> None:
+        repo_dir = self.repo_dir
+        steps: List[Tuple[str, List[str], Optional[str]]] = [
+            ("git pull", ["git", "pull", "--ff-only"], repo_dir),
+            ("setup.sh", ["./setup.sh"], repo_dir),
+            ("reboot", ["sudo", "reboot", "now"], repo_dir),
+        ]
+
+        try:
+            self.log("update: starting full update cycle")
+            for description, command, cwd in steps:
+                if not self._run_step(description, command, cwd):
+                    self.log(f"update: aborted during {description}")
+                    return
+            self.log("update: finished successfully; reboot command issued")
+        finally:
+            self.update_lock.release()
 
 
 def main():

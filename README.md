@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/graystorm-pulse_low.jpg" alt="Pulse OS social preview" width="640" />
+  <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/graystorm-pulse_splash.png" alt="Pulse OS social preview" width="640" />
 </p>
 
 # Pulse Kiosk — Complete Setup Guide
@@ -9,6 +9,16 @@
 This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite (64‑bit, Bookworm)** system driving the **Raspberry Pi Touch Display 2** as a **portrait** Home Assistant kiosk. It includes correct rotation, touch alignment, Chromium kiosk, and sunrise/sunset backlight control.
 
 > TL;DR features: clean boot → autologin → X/Openbox → Chromium kiosk, no “half-screen black bar”, accurate touch, auto day/night brightness.
+
+---
+
+## Jump to…
+- [Hardware Guide](#hardware-guide)
+- [Prerequisites](#0-prerequisites)
+- [First-boot Basics](#1-firstboot-basics)
+- [PulseOS Configuration](#pulseos-configuration)
+- [Notes & Extras](#notes--extras)
+- [Troubleshooting](#troubleshooting-checklist)
 
 ## Hardware Guide
 <details>
@@ -65,7 +75,10 @@ cd /opt
 git clone git@github.com:weirdtangent/pulse-os.git
 cd pulse-os
 
-# Create pulse.conf (from pulse.conf.sample, see below for help) and then, when ready
+# Create pulse.conf (from pulse.conf.sample, see below for help)
+cp pulse.conf.sample pulse.conf
+vi pulse.conf
+# and then run the setup script, when ready
 ./setup.sh <location-name>
 ```
 
@@ -91,7 +104,8 @@ Every option in this file is optional; PulseOS has safe defaults for all behavio
 But configuring it lets you customize how your Pulse boots, what it displays,
 and what services it runs.
 
-## What's Inside pulse.conf
+<details>
+  <summary><strong>Explore pulse.conf options</strong></summary>
 
 ### Kiosk URL
 The web page the Pulse loads on boot:
@@ -123,13 +137,16 @@ Chromium’s live watchdog:
 
     PULSE_USER="pulse"
 
+</details>
 
 ---
 
-## Notes
+## Notes & Extras
 
-**HomeAssistant setup**
+<details>
+  <summary><strong>Home Assistant trusted-network example</strong></summary>
 I am choosing to land my Pulse kiosk on a Home Assistant dashboard. To make it easy, so there is no login involved (and long-lived-tokens are a bit tricky when chromium), I setup HA to just trust the kiosk based on internal IP. So in my configuration.yaml, I include this - and just duplicate the IP config for each kiosk you setup:
+
 ```yaml
 
 http:
@@ -147,15 +164,38 @@ homeassistant:
       allow_bypass_login: true
     - type: homeassistant
 ```
+</details>
 
-**Case**
+<details>
+  <summary><strong>MQTT buttons (Home / Update)</strong></summary>
+`pulse-kiosk-mqtt.service` announces two Home Assistant buttons via MQTT discovery:
+
+* `Home` publishes to `pulse/<hostname>/kiosk/home` and simply reopens your configured `PULSE_URL`.
+* `Update` publishes to `pulse/<hostname>/kiosk/update` and makes the kiosk do a `git pull`, rerun `./setup.sh`, and then `sudo reboot now`.
+
+Notes for the `Update` button:
+
+* The script runs inside `/opt/pulse-os`, so it relies on the stored location from a previous manual `./setup.sh <location>` run. Make sure the kiosk has been onboarded once before trusting the button.
+* The `pulse` user needs non-interactive sudo for everything `setup.sh` requires **and** for `reboot`. A minimal rule looks like:
+  ```
+  # /etc/sudoers.d/pulse-update
+  pulse ALL=(root) NOPASSWD: /usr/bin/reboot
+  ```
+  If your sudo policy already allows `setup.sh` to complete unattended, you likely just need to add `reboot`.
+* There is no payload validation—the button assumes you control the MQTT broker. Keep it on a trusted network.
+</details>
+
+<details>
+  <summary><strong>Cases & printable accessories</strong></summary>
 I am using a fantastic model I found for the Raspberry Pi Touch Display 2 - with attached Pi 5 case:
 https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2#profileId-1868464
 I encourage you to use this model, rate it, and boost it!
 
 Also, I'm including in /models the ReSpeaker case and cover that I figured out. At the moment I just glue the stands of that to the cover of the Pi case behind the display, so everything is fairly hidden. One day I'll include some pics.
+</details>
 
-**Boot splash**
+<details>
+  <summary><strong>Boot splash assets</strong></summary>
 `setup.sh` deploys the splash assets automatically:
 * `assets/graystorm-pulse_splash.png` is installed as the Plymouth theme so Linux boot output stays hidden until X starts.
 * `assets/boot-splash.tga` (24-bit, 1280×720) is copied to `/lib/firmware/boot-splash.tga`, and the bootloader is set to `fullscreen_logo=1 fullscreen_logo_name=boot-splash.tga`.
@@ -164,30 +204,35 @@ Also, I'm including in /models the ReSpeaker case and cover that I figured out. 
 * Plymouth quit units are delayed until `graphical.target`, so the splash stays up until X is ready.
 
 Update either asset and rerun `./setup.sh <location>` to refresh the splash on an existing kiosk.
+</details>
 
-**Touch Display boot config**
+<details>
+  <summary><strong>Touch Display boot config pins</strong></summary>
 `setup.sh` now also pins the Raspberry Pi Touch Display defaults so you don’t have to edit boot files by hand:
 * Adds `dtparam=i2c_arm=on` and `display_auto_detect=0` inside `/boot/firmware/config.txt`.
 * Ensures the overlay `dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx` is present.
 * Appends `video=DSI-2:720x1280M@60` to `/boot/firmware/cmdline.txt`.
+</details>
 
-**Objective**
+<details>
+  <summary><strong>Objective / future ideas</strong></summary>
+This is mostly just a fun hobby, but the direction I’m going includes:
 
-This is buried down here because this is mostly just a fun hobby, and not more serious. But let me explain the direction I'm going.
+* Running wyoming-piper / wyoming-whisper / wyoming-openwakeword containers on a Synology NAS to add more assistant-like skills.
+* Landing kiosks on a Home Assistant photo frame dashboard, with space for future interactive widgets.
+* Chasing a custom start-up animation and friendlier error screens when time allows.
 
-I have a Synology NAS when i run multiple docker containers, and the plan (already in place, actually) is to run wyoming-piper, wyoming-whisper, and wyoming-openwakeword as containers there, and then try to get my kiosks closer to becoming an interactive Google Nest Display or Amazon Echo Display - perhaps backed by some LLM - especially if there is one specifically great at short, kiosk-like interaction.
-
-I am also a HomeAssitant nerd and amateur photographer, so that explains landing the Pulse kiosks on a PhoteFrame dashboard with a click-to-see basic house dashboard. I can post some of that if people want, but I imagine they can design whatever landing page they want their Pulse to open up.
-
-I would love a start-up screen/animation (rather than scrolling linux), some custom error screens etc.
-
-One step at a time .
+One step at a time. 🙂
+</details>
 
 ## Troubleshooting checklist
 
 These are based on what I've found with the specific hardware setup and Raspberry Pi image I've used - this may or may not be helpful for you, but I welcome suggestions of more to add here!
 
-**Black vertical strip (half screen black):**
+<details>
+  <summary><strong>Click to expand the troubleshooting list</strong></summary>
+
+**Black vertical strip (half screen black):**  
 You must clear panning before setting fb/rotate:
 
 ```bash
@@ -199,16 +244,16 @@ DISPLAY=:0 xrandr --fb 720x1280
 DISPLAY=:0 xrandr --output DSI-2 --mode 720x1280 --rotate right
 ```
 
-**Touch inaccurate:**
+**Touch inaccurate:**  
 Flip kernel overlay flag: `invx` ↔ `invy` in `config.txt` overlay line. Reboot.
 
-**X not starting from SSH test:**
+**X not starting from SSH test:**  
 X needs a real TTY and a logged‑in user. Use the console autologin path; don’t `startx` over SSH.
 
-**“Can’t open display :0”:**
+**“Can’t open display :0”:**  
 Display server isn’t running yet or `$DISPLAY` unset. Wait for autologin to start X, or set `DISPLAY=:0` after X is up.
 
-**Chromium warnings (GCM/Vulkan):**
+**Chromium warnings (GCM/Vulkan):**  
 Harmless on minimal builds; ignored in kiosk mode.
 
 **Autologin lost after updates:**
@@ -223,4 +268,5 @@ sudo raspi-config nonint do_boot_behaviour B2
 ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
 ```
 
+</details>
 
