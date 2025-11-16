@@ -258,16 +258,18 @@ class KioskMqttListener:
     def build_device_definition(self) -> Dict[str, Any]:
         availability = {
             "topic": self.config.topics.availability,
-            "payload_available": "online",
-            "payload_not_available": "offline",
+            "pl_avail": "online",
+            "pl_not_avail": "offline",
         }
         home_button = {
             "platform": "button",
-            "object_id": "home",
+            "obj_id": "home",
             "name": "Home",
-            "command_topic": self.config.topics.home,
-            "payload_press": "",
-            "availability": [availability],
+            "cmd_t": self.config.topics.home,
+            "avty_t": self.config.topics.availability,
+            "pl_avail": "online",
+            "pl_not_avail": "offline",
+            "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
         }
 
@@ -275,7 +277,9 @@ class KioskMqttListener:
             "device": self.device_info,
             "origin": self.origin,
             "availability": availability,
-            "cmps": {"Home": [home_button]},
+            "cmps": {
+                "Home": home_button,
+            },
         }
 
     def publish_device_definition(self, client: mqtt.Client) -> None:
