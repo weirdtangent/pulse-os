@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/weirdtangent/pulse-os/compare/v0.6.0...v0.7.0) (2025-11-16)
+
+
+### Features
+
+* add semantic version checking; check version at startup; thread-safe MQTT publishing ([37b0740](https://github.com/weirdtangent/pulse-os/commit/37b0740b23191e145175cb552547492a81f1190d))
+
 # [0.6.0](https://github.com/weirdtangent/pulse-os/compare/v0.5.0...v0.6.0) (2025-11-16)
 
 
