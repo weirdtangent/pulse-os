@@ -1,3 +1,10 @@
+## [0.3.1](https://github.com/weirdtangent/pulse-os/compare/v0.3.0...v0.3.1) (2025-11-16)
+
+
+### Bug Fixes
+
+* install bootloader splash and enable splash in setup script ([b5f3864](https://github.com/weirdtangent/pulse-os/commit/b5f386451206b6fbd0433f4fbe496764669dfe50))
+
 # [0.3.0](https://github.com/weirdtangent/pulse-os/compare/v0.2.3...v0.3.0) (2025-11-16)
 
 
