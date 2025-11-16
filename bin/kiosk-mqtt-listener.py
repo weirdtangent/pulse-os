@@ -266,9 +266,6 @@ class KioskMqttListener:
             "obj_id": "home",
             "name": "Home",
             "cmd_t": self.config.topics.home,
-            "avty_t": self.config.topics.availability,
-            "pl_avail": "online",
-            "pl_not_avail": "offline",
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
         }
