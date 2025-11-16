@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/weirdtangent/pulse-os/compare/v0.4.0...v0.5.0) (2025-11-16)
+
+
+### Features
+
+* add update button availability based on version check on GitHub ([fd1eee7](https://github.com/weirdtangent/pulse-os/commit/fd1eee742b6b80997773987ae633f9c4a0283dbf))
+
 # [0.4.0](https://github.com/weirdtangent/pulse-os/compare/v0.3.5...v0.4.0) (2025-11-16)
 
 
