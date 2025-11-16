@@ -161,6 +161,7 @@ Also, I'm including in /models the ReSpeaker case and cover that I figured out. 
 * `assets/boot-splash.tga` (24-bit, 1280×720) is copied to `/lib/firmware/boot-splash.tga`, and the bootloader is set to `fullscreen_logo=1 fullscreen_logo_name=boot-splash.tga`.
 * `assets/boot-splash.rgb` (RGB565, 1280×720) is copied to `/boot/firmware/splash.rgb` for firmware builds that still expect the raw framebuffer format.
 * Kernel args such as `quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles` are enforced so messages and cursors stay out of sight.
+* Plymouth quit units are delayed until `graphical.target`, so the splash stays up until X is ready.
 
 Update either asset and rerun `./setup.sh <location>` to refresh the splash on an existing kiosk.
 

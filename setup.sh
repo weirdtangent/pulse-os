@@ -225,6 +225,14 @@ link_system_files() {
 
     sudo ln -sf "$REPO_DIR/config/system-user/bt-autoconnect.timer" \
         /etc/systemd/user/bt-autoconnect.timer
+
+    sudo mkdir -p /etc/systemd/system/plymouth-quit-wait.service.d
+    ensure_symlink "$REPO_DIR/config/system/plymouth-quit-wait.service.d/override.conf" \
+        /etc/systemd/system/plymouth-quit-wait.service.d/override.conf
+
+    sudo mkdir -p /etc/systemd/system/plymouth-quit.service.d
+    ensure_symlink "$REPO_DIR/config/system/plymouth-quit.service.d/override.conf" \
+        /etc/systemd/system/plymouth-quit.service.d/override.conf
 }
 
 install_boot_splash() {
