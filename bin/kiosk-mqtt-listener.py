@@ -1,37 +1,91 @@
 #!/usr/bin/env python3
 import json
 import os
-from re import M
 import socket
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 import paho.mqtt.client as mqtt
 import websocket
 
-MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
-MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-PULSE_URL = os.environ.get("PULSE_URL", "")
 
-DEVTOOLS_DISCOVERY_URL = os.environ.get("CHROMIUM_DEVTOOLS_URL", "http://localhost:9222/json")
-DEVTOOLS_TIMEOUT = float(os.environ.get("CHROMIUM_DEVTOOLS_TIMEOUT", "3"))
+@dataclass(frozen=True)
+class Topics:
+    home: str
+    goto: str
+    device: str
+    availability: str
 
-HOSTNAME = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
-FRIENDLY_NAME = os.environ.get("PULSE_NAME") or HOSTNAME.replace("-", " ").title()
-HOME_TOPIC = f"pulse/{HOSTNAME}/kiosk/home"
-GOTO_TOPIC = f"pulse/{HOSTNAME}/kiosk/url/set"
-DEVICE_TOPIC = f"homeassistant/device/{HOSTNAME}/config"
-AVAILABILITY_TOPIC = f"{DEVICE_TOPIC}/availability"
+
+@dataclass(frozen=True)
+class DevToolsConfig:
+    discovery_url: str
+    timeout: float
+
+
+@dataclass(frozen=True)
+class EnvConfig:
+    mqtt_host: str
+    mqtt_port: int
+    pulse_url: str
+    hostname: str
+    friendly_name: str
+    manufacturer: str
+    model: str
+    sw_version: Optional[str]
+    topics: Topics
+    devtools: DevToolsConfig
+
+
+def log(message: str) -> None:
+    print(f"[kiosk-mqtt] {message}", flush=True)
+
+
+def load_config() -> EnvConfig:
+    mqtt_host = os.environ.get("MQTT_HOST", "localhost")
+    mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+    pulse_url = os.environ.get("PULSE_URL", "")
+    hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
+    friendly_name = os.environ.get("PULSE_NAME") or hostname.replace("-", " ").title()
+    manufacturer = os.environ.get("PULSE_MANUFACTURER", "Pulse")
+    model = os.environ.get("PULSE_MODEL", "Pulse Kiosk")
+    sw_version = os.environ.get("PULSE_VERSION")
+
+    topics = Topics(
+        home=f"pulse/{hostname}/kiosk/home",
+        goto=f"pulse/{hostname}/kiosk/url/set",
+        device=f"homeassistant/device/{hostname}/config",
+        availability=f"homeassistant/device/{hostname}/availability",
+    )
+
+    devtools = DevToolsConfig(
+        discovery_url=os.environ.get("CHROMIUM_DEVTOOLS_URL", "http://localhost:9222/json"),
+        timeout=float(os.environ.get("CHROMIUM_DEVTOOLS_TIMEOUT", "3")),
+    )
+
+    return EnvConfig(
+        mqtt_host=mqtt_host,
+        mqtt_port=mqtt_port,
+        pulse_url=pulse_url,
+        hostname=hostname,
+        friendly_name=friendly_name,
+        manufacturer=manufacturer,
+        model=model,
+        sw_version=sw_version,
+        topics=topics,
+        devtools=devtools,
+    )
 
 
 def _is_valid_ip(ip: Optional[str]) -> bool:
     return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0"
 
 
-def detect_ip_address() -> Optional[str]:
+def detect_ip_address(hostname: str) -> Optional[str]:
     ip_env = os.environ.get("PULSE_IP_ADDRESS")
     if _is_valid_ip(ip_env):
         return ip_env
@@ -47,7 +101,7 @@ def detect_ip_address() -> Optional[str]:
         pass
 
     try:
-        candidate = socket.gethostbyname(HOSTNAME)
+        candidate = socket.gethostbyname(hostname)
         if _is_valid_ip(candidate):
             return candidate
     except socket.gaierror:
@@ -63,48 +117,34 @@ def detect_mac_address() -> Optional[str]:
     node = uuid.getnode()
     if (node >> 40) % 2:
         return None
-    mac = ":".join(f"{(node >> ele) & 0xFF:02X}" for ele in range(40, -1, -8))
-    return mac
-
-DEVICE_INFO: Dict[str, Any] = {
-    "identifiers": [f"pulse:{HOSTNAME}"],
-    "name": FRIENDLY_NAME,
-    "manufacturer": os.environ.get("PULSE_MANUFACTURER", "Pulse"),
-    "model": os.environ.get("PULSE_MODEL", "Pulse Kiosk"),
-}
-
-_sw_version = os.environ.get("PULSE_VERSION")
-if _sw_version:
-    DEVICE_INFO["sw_version"] = _sw_version
-
-connections: List[List[str]] = [["host", HOSTNAME]]
-_ip_address = detect_ip_address()
-if _ip_address:
-    connections.append(["ip address", _ip_address])
-_mac_address = detect_mac_address()
-if _mac_address:
-    connections.append(["mac address", _mac_address])
-
-if connections:
-    DEVICE_INFO["connections"] = connections
+    return ":".join(f"{(node >> ele) & 0xFF:02X}" for ele in range(40, -1, -8))
 
 
-def log(message: str) -> None:
-    print(f"[kiosk-mqtt] {message}", flush=True)
+def build_device_info(config: EnvConfig) -> Dict[str, Any]:
+    info: Dict[str, Any] = {
+        "identifiers": [f"pulse:{config.hostname}"],
+        "name": config.friendly_name,
+        "manufacturer": config.manufacturer,
+        "model": config.model,
+    }
 
+    if config.sw_version:
+        info["sw_version"] = config.sw_version
 
-def fetch_page_targets() -> List[Dict[str, Any]]:
-    with urllib.request.urlopen(DEVTOOLS_DISCOVERY_URL, timeout=DEVTOOLS_TIMEOUT) as resp:
-        payload = json.load(resp)
-    return [item for item in payload if item.get("type") == "page"]
+    connections: List[List[str]] = [["host", config.hostname]]
 
+    ip_address = detect_ip_address(config.hostname)
+    if ip_address:
+        connections.append(["ip address", ip_address])
 
-def pick_primary_target(pages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    for page in pages:
-        url = page.get("url") or ""
-        if url not in ("", "about:blank", "chrome://newtab/"):
-            return page
-    return pages[0] if pages else None
+    mac_address = detect_mac_address()
+    if mac_address:
+        connections.append(["mac address", mac_address])
+
+    if connections:
+        info["connections"] = connections
+
+    return info
 
 
 def normalize_url(raw: Union[str, bytes]) -> Optional[str]:
@@ -124,134 +164,163 @@ def normalize_url(raw: Union[str, bytes]) -> Optional[str]:
     return url
 
 
-def navigate(url: str) -> bool:
-    if not url:
-        log("navigate: empty url, ignoring request")
-        return False
+class KioskMqttListener:
+    def __init__(self, config: EnvConfig):
+        self.config = config
+        self.device_info = build_device_info(config)
+        self.origin = self._build_origin()
 
-    try:
-        pages = fetch_page_targets()
-    except urllib.error.URLError as exc:
-        log(f"navigate: cannot reach DevTools endpoint {DEVTOOLS_DISCOVERY_URL}: {exc}")
-        return False
-    except json.JSONDecodeError as exc:
-        log(f"navigate: invalid JSON from DevTools endpoint: {exc}")
-        return False
+    def log(self, message: str) -> None:
+        log(message)
 
-    target = pick_primary_target(pages)
-    if not target:
-        log("navigate: no Chromium page targets available")
-        return False
-
-    ws_url = target.get("webSocketDebuggerUrl")
-    if not ws_url:
-        log("navigate: selected target is missing webSocketDebuggerUrl")
-        return False
-
-    try:
-        ws = websocket.create_connection(ws_url, timeout=DEVTOOLS_TIMEOUT)
-    except Exception as exc:
-        log(f"navigate: failed to open DevTools websocket: {exc}")
-        return False
-
-    try:
-        msg = {
-            "id": 1,
-            "method": "Page.navigate",
-            "params": {"url": url},
+    def _build_origin(self) -> Dict[str, Any]:
+        origin: Dict[str, Any] = {
+            "name": "PulseOS",
+            "support_url": "https://github.com/weirdtangent/pulse-os",
         }
-        ws.send(json.dumps(msg))
-        log(f"navigate: directed tab {target.get('id')} -> {url}")
-        return True
-    except Exception as exc:
-        log(f"navigate: websocket send failed: {exc}")
-        return False
-    finally:
-        ws.close()
+        if self.config.sw_version:
+            origin["sw"] = self.config.sw_version
+        return origin
 
+    def fetch_page_targets(self) -> List[Dict[str, Any]]:
+        with urllib.request.urlopen(self.config.devtools.discovery_url, timeout=self.config.devtools.timeout) as resp:
+            payload = json.load(resp)
+        return [item for item in payload if item.get("type") == "page"]
 
-def on_connect(client, _userdata, _flags, rc):
-    log(f"Connected to MQTT (rc={rc}); subscribing to topics")
-    client.subscribe(HOME_TOPIC)
-    client.subscribe(GOTO_TOPIC)
-    publish_device_definition(client)
-    publish_availability(client, "online")
+    @staticmethod
+    def pick_primary_target(pages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        for page in pages:
+            url = page.get("url") or ""
+            if url not in ("", "about:blank", "chrome://newtab/"):
+                return page
+        return pages[0] if pages else None
 
+    def navigate(self, url: str) -> bool:
+        if not url:
+            self.log("navigate: empty url, ignoring request")
+            return False
 
-def handle_home():
-    if not PULSE_URL:
-        log("HOME command received but PULSE_URL is not set")
-        return
-    navigate(PULSE_URL)
+        try:
+            pages = self.fetch_page_targets()
+        except urllib.error.URLError as exc:
+            self.log(
+                f"navigate: cannot reach DevTools endpoint {self.config.devtools.discovery_url}: {exc}",
+            )
+            return False
+        except json.JSONDecodeError as exc:
+            self.log(f"navigate: invalid JSON from DevTools endpoint: {exc}")
+            return False
 
+        target = self.pick_primary_target(pages)
+        if not target:
+            self.log("navigate: no Chromium page targets available")
+            return False
 
-def handle_goto(payload: bytes):
-    url = normalize_url(payload)
-    if not url:
-        log("GOTO command ignored: empty payload")
-        return
-    navigate(url)
+        ws_url = target.get("webSocketDebuggerUrl")
+        if not ws_url:
+            self.log("navigate: selected target is missing webSocketDebuggerUrl")
+            return False
 
+        try:
+            ws = websocket.create_connection(ws_url, timeout=self.config.devtools.timeout)
+        except Exception as exc:
+            self.log(f"navigate: failed to open DevTools websocket: {exc}")
+            return False
 
-def on_message(_client, _userdata, msg):
-    if msg.topic == HOME_TOPIC:
-        handle_home()
-    elif msg.topic == GOTO_TOPIC:
-        handle_goto(msg.payload)
-    else:
-        log(f"Received message on unexpected topic {msg.topic}")
+        try:
+            msg = {
+                "id": 1,
+                "method": "Page.navigate",
+                "params": {"url": url},
+            }
+            ws.send(json.dumps(msg))
+            self.log(f"navigate: directed tab {target.get('id')} -> {url}")
+            return True
+        except Exception as exc:
+            self.log(f"navigate: websocket send failed: {exc}")
+            return False
+        finally:
+            ws.close()
 
+    def handle_home(self) -> None:
+        if not self.config.pulse_url:
+            self.log("HOME command received but PULSE_URL is not set")
+            return
+        self.navigate(self.config.pulse_url)
 
-def build_device_definition() -> Dict[str, Any]:
-    availability = {
-        "topic": AVAILABILITY_TOPIC,
-        "payload_available": "online",
-        "payload_not_available": "offline",
-    }
-    home_button = {
-        "platform": "button",
-        "object_id": "home",
-        "name": "Home",
-        "command_topic": HOME_TOPIC,
-        "payload_press": "",
-        "availability": [availability],
-        "unique_id": f"{HOSTNAME}_home",
-    }
-    origin = {
-        "name": "PulseOS",
-        "sw": _sw_version,
-        "support_url": "https://github.com/weirdtangent/pulse-os",
-    }
+    def handle_goto(self, payload: bytes) -> None:
+        url = normalize_url(payload)
+        if not url:
+            self.log("GOTO command ignored: empty payload")
+            return
+        self.navigate(url)
 
-    return {
-        "device": DEVICE_INFO,
-        "origin": origin,
-        "availability": availability,
-        "cmps": {"Home": [home_button]},
-    }
+    def build_device_definition(self) -> Dict[str, Any]:
+        availability = {
+            "topic": self.config.topics.availability,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        }
+        home_button = {
+            "platform": "button",
+            "object_id": "home",
+            "name": "Home",
+            "command_topic": self.config.topics.home,
+            "payload_press": "",
+            "availability": [availability],
+            "unique_id": f"{self.config.hostname}_home",
+        }
 
+        return {
+            "device": self.device_info,
+            "origin": self.origin,
+            "availability": availability,
+            "cmps": {"Home": [home_button]},
+        }
 
-def publish_device_definition(client: mqtt.Client) -> None:
-    payload = json.dumps(build_device_definition())
-    result = client.publish(DEVICE_TOPIC, payload=payload, qos=1, retain=True)
-    if result.rc != mqtt.MQTT_ERR_SUCCESS:
-        log(f"Failed to publish device definition (rc={result.rc})")
+    def publish_device_definition(self, client: mqtt.Client) -> None:
+        payload = json.dumps(self.build_device_definition())
+        result = client.publish(self.config.topics.device, payload=payload, qos=1, retain=True)
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            self.log(f"Failed to publish device definition (rc={result.rc})")
 
+    def publish_availability(self, client: mqtt.Client, state: str) -> None:
+        result = client.publish(self.config.topics.availability, payload=state, qos=1, retain=True)
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            self.log(f"Failed to publish availability '{state}' (rc={result.rc})")
 
-def publish_availability(client: mqtt.Client, state: str) -> None:
-    result = client.publish(AVAILABILITY_TOPIC, payload=state, qos=1, retain=True)
-    if result.rc != mqtt.MQTT_ERR_SUCCESS:
-        log(f"Failed to publish availability '{state}' (rc={result.rc})")
+    def on_connect(self, client, _userdata, _flags, rc):
+        self.log(f"Connected to MQTT (rc={rc}); subscribing to topics")
+        client.subscribe(self.config.topics.home)
+        client.subscribe(self.config.topics.goto)
+        self.publish_device_definition(client)
+        self.publish_availability(client, "online")
+
+    def on_message(self, _client, _userdata, msg):
+        if msg.topic == self.config.topics.home:
+            self.handle_home()
+        elif msg.topic == self.config.topics.goto:
+            self.handle_goto(msg.payload)
+        else:
+            self.log(f"Received message on unexpected topic {msg.topic}")
 
 
 def main():
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.will_set(AVAILABILITY_TOPIC, payload="offline", qos=1, retain=True)
+    config = load_config()
+    listener = KioskMqttListener(config)
 
-    log(f"Connecting to MQTT broker {MQTT_HOST}:{MQTT_PORT}")
-    client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+    client = mqtt.Client()
+    client.on_connect = listener.on_connect
+    client.on_message = listener.on_message
+    client.will_set(
+        config.topics.availability,
+        payload="offline",
+        qos=1,
+        retain=True,
+    )
+
+    listener.log(f"Connecting to MQTT broker {config.mqtt_host}:{config.mqtt_port}")
+    client.connect(config.mqtt_host, config.mqtt_port, keepalive=60)
     client.loop_forever()
 
 

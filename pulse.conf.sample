@@ -2,7 +2,6 @@
 # Copy this to: /opt/pulse-os/pulse.conf
 
 # PULSE_VERSION derived from VERSION file located next to this config.
-# Allows scripts that source this file to pick up the packaged version automatically.
 if [[ -z "${PULSE_VERSION:-}" ]]; then
   _pulse_conf_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-${0}}")" && pwd)"
   _pulse_version_file="${_pulse_conf_dir}/VERSION"
