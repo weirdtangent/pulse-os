@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/weirdtangent/pulse-os/compare/v0.3.5...v0.4.0) (2025-11-16)
+
+
+### Features
+
+* updated README; add Update button to MQTT listener ([8259679](https://github.com/weirdtangent/pulse-os/commit/825967979edf5f9971fc22e8c8b2bad3260f6aa8))
+
 ## [0.3.5](https://github.com/weirdtangent/pulse-os/compare/v0.3.4...v0.3.5) (2025-11-16)
 
 
