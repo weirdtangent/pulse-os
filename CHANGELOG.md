@@ -1,3 +1,10 @@
+## [0.3.2](https://github.com/weirdtangent/pulse-os/compare/v0.3.1...v0.3.2) (2025-11-16)
+
+
+### Bug Fixes
+
+* update README and splash assets and enable splash in setup script ([e920bd0](https://github.com/weirdtangent/pulse-os/commit/e920bd072d17799e158431bed73a1793458c8b8b))
+
 ## [0.3.1](https://github.com/weirdtangent/pulse-os/compare/v0.3.0...v0.3.1) (2025-11-16)
 
 
