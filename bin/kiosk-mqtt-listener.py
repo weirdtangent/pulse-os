@@ -16,9 +16,23 @@ PULSE_URL = os.environ.get("PULSE_URL", "")
 DEVTOOLS_DISCOVERY_URL = os.environ.get("CHROMIUM_DEVTOOLS_URL", "http://localhost:9222/json")
 DEVTOOLS_TIMEOUT = float(os.environ.get("CHROMIUM_DEVTOOLS_TIMEOUT", "3"))
 
-HOSTNAME = os.uname().nodename
+HOSTNAME = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
+FRIENDLY_NAME = os.environ.get("PULSE_NAME") or HOSTNAME.replace("-", " ").title()
 HOME_TOPIC = f"pulse/{HOSTNAME}/kiosk/home"
 GOTO_TOPIC = f"pulse/{HOSTNAME}/kiosk/url/set"
+DEVICE_TOPIC = f"homeassistant/devices/{HOSTNAME}"
+AVAILABILITY_TOPIC = f"{DEVICE_TOPIC}/availability"
+
+DEVICE_INFO: Dict[str, Any] = {
+    "identifiers": [f"pulse:{HOSTNAME}"],
+    "name": FRIENDLY_NAME,
+    "manufacturer": os.environ.get("PULSE_MANUFACTURER", "Pulse"),
+    "model": os.environ.get("PULSE_MODEL", "Pulse Kiosk"),
+}
+
+_sw_version = os.environ.get("PULSE_VERSION")
+if _sw_version:
+    DEVICE_INFO["sw_version"] = _sw_version
 
 
 def log(message: str) -> None:
@@ -106,6 +120,8 @@ def on_connect(client, _userdata, _flags, rc):
     log(f"Connected to MQTT (rc={rc}); subscribing to topics")
     client.subscribe(HOME_TOPIC)
     client.subscribe(GOTO_TOPIC)
+    publish_device_definition(client)
+    publish_availability(client, "online")
 
 
 def handle_home():
@@ -132,10 +148,47 @@ def on_message(_client, _userdata, msg):
         log(f"Received message on unexpected topic {msg.topic}")
 
 
+def build_device_definition() -> Dict[str, Any]:
+    availability = {
+        "topic": AVAILABILITY_TOPIC,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+    }
+    home_button = {
+        "domain": "button",
+        "object_id": "home",
+        "name": "Home",
+        "command_topic": HOME_TOPIC,
+        "payload_press": "",
+        "availability": [availability],
+        "unique_id": f"{HOSTNAME}_home",
+    }
+
+    return {
+        "device": DEVICE_INFO,
+        "availability": availability,
+        "components": {"button": [home_button]},
+    }
+
+
+def publish_device_definition(client: mqtt.Client) -> None:
+    payload = json.dumps(build_device_definition())
+    result = client.publish(DEVICE_TOPIC, payload=payload, qos=1, retain=True)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        log(f"Failed to publish device definition (rc={result.rc})")
+
+
+def publish_availability(client: mqtt.Client, state: str) -> None:
+    result = client.publish(AVAILABILITY_TOPIC, payload=state, qos=1, retain=True)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        log(f"Failed to publish availability '{state}' (rc={result.rc})")
+
+
 def main():
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
+    client.will_set(AVAILABILITY_TOPIC, payload="offline", qos=1, retain=True)
 
     log(f"Connecting to MQTT broker {MQTT_HOST}:{MQTT_PORT}")
     client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
