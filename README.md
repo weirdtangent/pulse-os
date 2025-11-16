@@ -291,10 +291,9 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
 
 <a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
 
----
-
 ### Build & Quality Status
 
-![Build & Release](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=build%20%26%20release&logo=githubactions)
+![Lint](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=lint&logo=python)
+![Build & Release](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=release&logo=githubactions)
 ![Release](https://img.shields.io/github/v/release/weirdtangent/pulse-os?sort=semver)
 ![License](https://img.shields.io/github/license/weirdtangent/pulse-os)
