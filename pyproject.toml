@@ -1,0 +1,11 @@
+[project]
+name = "pulse-os"
+version = "0.1.0"
+description = "Container project for PulseOS related python scripts"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "astral>=3.2",
+    "paho-mqtt>=2.1.0",
+    "websocket>=0.2.1",
+]

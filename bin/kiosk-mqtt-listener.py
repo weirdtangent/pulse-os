@@ -1,80 +1,146 @@
 #!/usr/bin/env python3
-import paho.mqtt.client as mqtt
-import subprocess
-import os
 import json
+import os
+import urllib.error
+import urllib.parse
 import urllib.request
-import websocket
+from typing import Any, Dict, List, Optional, Union
 
-print("ENV DEBUG:", dict(os.environ))
+import paho.mqtt.client as mqtt
+import websocket
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+PULSE_URL = os.environ.get("PULSE_URL", "")
 
-PULSE_URL = os.environ.get("PULSE_URL")
+DEVTOOLS_DISCOVERY_URL = os.environ.get("CHROMIUM_DEVTOOLS_URL", "http://localhost:9222/json")
+DEVTOOLS_TIMEOUT = float(os.environ.get("CHROMIUM_DEVTOOLS_TIMEOUT", "3"))
 
-# Use device-specific topic based on hostname
 HOSTNAME = os.uname().nodename
 HOME_TOPIC = f"pulse/{HOSTNAME}/kiosk/home"
 GOTO_TOPIC = f"pulse/{HOSTNAME}/kiosk/url/set"
 
-def navigate(url: str):
+
+def log(message: str) -> None:
+    print(f"[kiosk-mqtt] {message}", flush=True)
+
+
+def fetch_page_targets() -> List[Dict[str, Any]]:
+    with urllib.request.urlopen(DEVTOOLS_DISCOVERY_URL, timeout=DEVTOOLS_TIMEOUT) as resp:
+        payload = json.load(resp)
+    return [item for item in payload if item.get("type") == "page"]
+
+
+def pick_primary_target(pages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    for page in pages:
+        url = page.get("url") or ""
+        if url not in ("", "about:blank", "chrome://newtab/"):
+            return page
+    return pages[0] if pages else None
+
+
+def normalize_url(raw: Union[str, bytes]) -> Optional[str]:
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="ignore")
+    url = (raw or "").strip()
+    if not url:
+        return None
+
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme in ("http", "https"):
+        return url
+
+    if not parsed.scheme:
+        return f"http://{url}"
+
+    return url
+
+
+def navigate(url: str) -> bool:
+    if not url:
+        log("navigate: empty url, ignoring request")
+        return False
+
     try:
-        # 1. Fetch all DevTools pages
-        with urllib.request.urlopen("http://localhost:9222/json") as resp:
-            pages = json.load(resp)
+        pages = fetch_page_targets()
+    except urllib.error.URLError as exc:
+        log(f"navigate: cannot reach DevTools endpoint {DEVTOOLS_DISCOVERY_URL}: {exc}")
+        return False
+    except json.JSONDecodeError as exc:
+        log(f"navigate: invalid JSON from DevTools endpoint: {exc}")
+        return False
 
-        # 2. Pick the kiosk tab (the one that is not about:blank)
-        target = None
-        for p in pages:
-            if p.get("type") == "page" and p.get("url") not in (None, "", "about:blank"):
-                target = p
-                break
+    target = pick_primary_target(pages)
+    if not target:
+        log("navigate: no Chromium page targets available")
+        return False
 
-        # If no real tab found, fall back to first page-type entry
-        if not target:
-            for p in pages:
-                if p.get("type") == "page":
-                    target = p
-                    break
+    ws_url = target.get("webSocketDebuggerUrl")
+    if not ws_url:
+        log("navigate: selected target is missing webSocketDebuggerUrl")
+        return False
 
-        if not target:
-            print("No DevTools page target found, cannot navigate.")
-            return
+    try:
+        ws = websocket.create_connection(ws_url, timeout=DEVTOOLS_TIMEOUT)
+    except Exception as exc:
+        log(f"navigate: failed to open DevTools websocket: {exc}")
+        return False
 
-        ws_url = target["webSocketDebuggerUrl"]
-
-        # 3. Open WebSocket and issue Page.navigate
-        ws = websocket.create_connection(ws_url, timeout=2)
+    try:
         msg = {
             "id": 1,
             "method": "Page.navigate",
             "params": {"url": url},
         }
-
         ws.send(json.dumps(msg))
+        log(f"navigate: directed tab {target.get('id')} -> {url}")
+        return True
+    except Exception as exc:
+        log(f"navigate: websocket send failed: {exc}")
+        return False
+    finally:
         ws.close()
 
-        print(f"Navigated to {url}")
 
-    except Exception as e:
-        print(f"Navigation error: {e}")
-
-def on_connect(client, userdata, flags, rc):
-    print(f"Connected to MQTT rc={rc}")
+def on_connect(client, _userdata, _flags, rc):
+    log(f"Connected to MQTT (rc={rc}); subscribing to topics")
     client.subscribe(HOME_TOPIC)
     client.subscribe(GOTO_TOPIC)
 
-def on_message(client, userdata, msg):
-    if msg.topic.endswith("/home"):
-        navigate(PULSE_URL)
+
+def handle_home():
+    if not PULSE_URL:
+        log("HOME command received but PULSE_URL is not set")
+        return
+    navigate(PULSE_URL)
+
+
+def handle_goto(payload: bytes):
+    url = normalize_url(payload)
+    if not url:
+        log("GOTO command ignored: empty payload")
+        return
+    navigate(url)
+
+
+def on_message(_client, _userdata, msg):
+    if msg.topic == HOME_TOPIC:
+        handle_home()
+    elif msg.topic == GOTO_TOPIC:
+        handle_goto(msg.payload)
     else:
-        url = msg.payload.decode().strip()
-        navigate(url)
+        log(f"Received message on unexpected topic {msg.topic}")
 
-client = mqtt.Client()
-client.on_connect = on_connect
-client.on_message = on_message
 
-client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
-client.loop_forever()
+def main():
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    log(f"Connecting to MQTT broker {MQTT_HOST}:{MQTT_PORT}")
+    client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+    client.loop_forever()
+
+
+if __name__ == "__main__":
+    main()

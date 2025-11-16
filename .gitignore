@@ -1,5 +1,27 @@
-# local config
-pulse.conf
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
 
-# notes and hints for me
+# Distribution / packaging
+.Python
+.python-version
+build/
+dist/
+lib/
+include/
+node_modules/
+
+# Environments
+.env
+.venv
+venv/
+.vscode/
+
+# Apple
+.DS_Store
+
+#  dev work
+pulse.conf
 NOTES

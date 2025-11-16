@@ -3,7 +3,6 @@ set -euo pipefail
 
 # setup config
 REPO_DIR="/opt/pulse-os"
-
 CONFIG_FILE="$REPO_DIR/pulse.conf"
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
