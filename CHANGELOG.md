@@ -1,0 +1,16 @@
+# [0.2.0](https://github.com/weirdtangent/pulse-os/compare/v0.1.0...v0.2.0) (2025-11-16)
+
+
+### Bug Fixes
+
+* use 1.1.1.1 for ip address detection and validate ip address ([ebb6fba](https://github.com/weirdtangent/pulse-os/commit/ebb6fba805256261145a9f59ea9567074a7c4aab))
+* use config topic for device definition and add origin ([6f19a1c](https://github.com/weirdtangent/pulse-os/commit/6f19a1c8e98be17bccb24bbfb7b2e4e2ac7ff7c8))
+* use device topic instead of devices topic ([496eb0c](https://github.com/weirdtangent/pulse-os/commit/496eb0cecb8195f3172f4fe25b2ae8b69f58ffc4))
+* use platform instead of domain for button component ([59cc4d3](https://github.com/weirdtangent/pulse-os/commit/59cc4d36c47afa28979f85bb5df35c05e248d312))
+
+
+### Features
+
+* add build workflow and VERSION file ([90a217a](https://github.com/weirdtangent/pulse-os/commit/90a217a7eed43e2e33f19d40cd1d56be4ab36c9c))
+* add IP and MAC address to device info ([ede2e18](https://github.com/weirdtangent/pulse-os/commit/ede2e183687467213c1ee96be47eaa9af231e7f2))
+* add release configuration for semantic-release versioning ([101b86d](https://github.com/weirdtangent/pulse-os/commit/101b86d05b89764ddd21da0234a1f0c09021c598))
