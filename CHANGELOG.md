@@ -1,3 +1,10 @@
+## [0.3.4](https://github.com/weirdtangent/pulse-os/compare/v0.3.3...v0.3.4) (2025-11-16)
+
+
+### Bug Fixes
+
+* ensure bootloader splash is installed and configured ([350214d](https://github.com/weirdtangent/pulse-os/commit/350214d4b18dc191149e86cb1e0b7d8a3f7c635b))
+
 ## [0.3.3](https://github.com/weirdtangent/pulse-os/compare/v0.3.2...v0.3.3) (2025-11-16)
 
 
