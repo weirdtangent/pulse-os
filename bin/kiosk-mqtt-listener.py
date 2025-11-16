@@ -26,14 +26,33 @@ DEVICE_TOPIC = f"homeassistant/device/{HOSTNAME}"
 AVAILABILITY_TOPIC = f"{DEVICE_TOPIC}/availability"
 
 
+def _is_valid_ip(ip: Optional[str]) -> bool:
+    return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0"
+
+
 def detect_ip_address() -> Optional[str]:
     ip_env = os.environ.get("PULSE_IP_ADDRESS")
-    if ip_env:
+    if _is_valid_ip(ip_env):
         return ip_env
+
     try:
-        return socket.gethostbyname(HOSTNAME)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("1.1.1.1", 80))
+        candidate = sock.getsockname()[0]
+        sock.close()
+        if _is_valid_ip(candidate):
+            return candidate
+    except OSError:
+        pass
+
+    try:
+        candidate = socket.gethostbyname(HOSTNAME)
+        if _is_valid_ip(candidate):
+            return candidate
     except socket.gaierror:
-        return None
+        pass
+
+    return None
 
 
 def detect_mac_address() -> Optional[str]:
