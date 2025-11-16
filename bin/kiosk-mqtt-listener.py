@@ -208,7 +208,7 @@ def build_device_definition() -> Dict[str, Any]:
         "payload_not_available": "offline",
     }
     home_button = {
-        "domain": "button",
+        "platform": "button",
         "object_id": "home",
         "name": "Home",
         "command_topic": HOME_TOPIC,
@@ -220,7 +220,7 @@ def build_device_definition() -> Dict[str, Any]:
     return {
         "device": DEVICE_INFO,
         "availability": availability,
-        "components": {"button": [home_button]},
+        "cmps": {"Home": [home_button]},
     }
 
 
