@@ -85,7 +85,7 @@ resolve_location() {
     else
         local stored
         if stored=$(read_stored_location); then
-            log "No location argument supplied; reusing stored location '${stored}' from $LOCATION_FILE"
+            log "No location argument supplied; reusing stored location '${stored}' from $LOCATION_FILE" >&2
             raw="$stored"
         else
             usage
@@ -101,7 +101,7 @@ resolve_location() {
     fi
 
     if [ "$raw" != "$sanitized" ]; then
-        log "Normalized location '$raw' → '$sanitized'"
+        log "Normalized location '$raw' → '$sanitized'" >&2
     fi
 
     printf '%s\n' "$sanitized"
