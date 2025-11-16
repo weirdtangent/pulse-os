@@ -42,12 +42,18 @@ ensure_dir() {
 ensure_symlink() {
     local target="$1"
     local link="$2"
+    local parent
+    parent=$(dirname "$link")
 
     if [ -L "$link" ] && [ "$(readlink -f "$link")" = "$target" ]; then
         return
     fi
 
-    ln -sf "$target" "$link"
+    if [ ! -w "$parent" ]; then
+        sudo ln -sf "$target" "$link"
+    else
+        ln -sf "$target" "$link"
+    fi
     log "Linked $link → $target"
 }
 
