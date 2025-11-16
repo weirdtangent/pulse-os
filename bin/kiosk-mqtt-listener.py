@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
+import atexit
 import json
 import os
 import socket
 import subprocess
 import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import paho.mqtt.client as mqtt
 import websocket
+from packaging.version import InvalidVersion, Version
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,7 @@ class KioskMqttListener:
         self.origin = self._build_origin()
         self.update_lock = threading.Lock()
         self.reboot_lock = threading.Lock()
+        self._mqtt_publish_lock = threading.Lock()
         self.repo_dir = "/opt/pulse-os"
         self.local_version = self._detect_local_version()
         self.latest_remote_version: Optional[str] = None
@@ -208,6 +210,7 @@ class KioskMqttListener:
         self._update_interval_seconds = self._calculate_update_interval_seconds(config.version_checks_per_day)
         self._update_checker_thread: Optional[threading.Thread] = None
         self._update_checker_lock = threading.Lock()
+        self._update_checker_stop_event = threading.Event()
         self._mqtt_client: Optional[mqtt.Client] = None
 
     def log(self, message: str) -> None:
@@ -240,37 +243,22 @@ class KioskMqttListener:
             return None
 
     @staticmethod
-    def _normalize_version_parts(value: Optional[str]) -> Tuple[int, ...]:
+    def _parse_version(value: Optional[str]) -> Optional[Version]:
         if not value:
-            return ()
-        parts: List[int] = []
-        for chunk in value.replace("-", ".").split("."):
-            chunk = chunk.strip()
-            if not chunk:
-                continue
-            numeric = "".join(ch for ch in chunk if ch.isdigit())
-            if numeric:
-                parts.append(int(numeric))
-                continue
-            try:
-                parts.append(int(chunk))
-            except ValueError:
-                break
-        return tuple(parts)
+            return None
+        try:
+            return Version(value.strip())
+        except (InvalidVersion, AttributeError):
+            return None
 
     def _remote_version_is_newer(self, remote: Optional[str], local: Optional[str]) -> bool:
-        if remote is None:
+        remote_version = self._parse_version(remote)
+        if remote_version is None:
             return False
-        remote_parts = self._normalize_version_parts(remote)
-        if not remote_parts:
-            return False
-        local_parts = self._normalize_version_parts(local)
-        if not local_parts:
+        local_version = self._parse_version(local)
+        if local_version is None:
             return True
-        length = max(len(remote_parts), len(local_parts))
-        remote_seq = remote_parts + (0,) * (length - len(remote_parts))
-        local_seq = local_parts + (0,) * (length - len(local_parts))
-        return remote_seq > local_seq
+        return remote_version > local_version
 
     def _fetch_remote_version(self) -> Optional[str]:
         url = self.config.version_source_url
@@ -293,33 +281,55 @@ class KioskMqttListener:
         if should_publish:
             self.publish_update_button_availability(None, available)
 
-    def publish_update_button_availability(self, client: Optional[mqtt.Client], available: bool) -> None:
+    def _safe_publish(
+        self,
+        client: Optional[mqtt.Client],
+        topic: str,
+        payload: str,
+        *,
+        qos: int = 1,
+        retain: bool = True,
+    ) -> None:
         target_client = client or self._mqtt_client
         if not target_client:
             return
+        with self._mqtt_publish_lock:
+            result = target_client.publish(topic, payload=payload, qos=qos, retain=retain)
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            self.log(f"Failed to publish topic '{topic}' payload '{payload}' (rc={result.rc})")
+
+    def publish_update_button_availability(self, client: Optional[mqtt.Client], available: bool) -> None:
         topic = self.config.topics.update_availability
         payload = "online" if available else "offline"
-        result = target_client.publish(topic, payload=payload, qos=1, retain=True)
-        if result.rc != mqtt.MQTT_ERR_SUCCESS:
-            self.log(f"Failed to publish update availability '{payload}' (rc={result.rc})")
+        self._safe_publish(client, topic, payload, qos=1, retain=True)
 
     def start_update_checker(self, client: mqtt.Client) -> None:
         self._mqtt_client = client
         with self._update_checker_lock:
             if self._update_checker_thread and self._update_checker_thread.is_alive():
                 return
+            self._update_checker_stop_event.clear()
             thread = threading.Thread(target=self._update_checker_loop, name="pulse-version-check", daemon=True)
             self._update_checker_thread = thread
             thread.start()
 
+    def stop_update_checker(self) -> None:
+        with self._update_checker_lock:
+            if not self._update_checker_thread:
+                return
+            self._update_checker_stop_event.set()
+            self._update_checker_thread.join(timeout=self._update_interval_seconds)
+            self._update_checker_thread = None
+
     def _update_checker_loop(self) -> None:
         interval = self._update_interval_seconds
-        while True:
+        while not self._update_checker_stop_event.is_set():
             try:
                 self.refresh_update_availability()
             except Exception as exc:
                 self.log(f"update-check: unexpected error during cycle: {exc}")
-            time.sleep(interval)
+            if self._update_checker_stop_event.wait(interval):
+                break
 
     def refresh_update_availability(self) -> None:
         local_version = self._detect_local_version()
@@ -464,23 +474,24 @@ class KioskMqttListener:
 
     def publish_device_definition(self, client: mqtt.Client) -> None:
         payload = json.dumps(self.build_device_definition())
-        result = client.publish(self.config.topics.device, payload=payload, qos=1, retain=True)
-        if result.rc != mqtt.MQTT_ERR_SUCCESS:
-            self.log(f"Failed to publish device definition (rc={result.rc})")
+        self._safe_publish(client, self.config.topics.device, payload, qos=1, retain=True)
 
     def publish_availability(self, client: mqtt.Client, state: str) -> None:
-        result = client.publish(self.config.topics.availability, payload=state, qos=1, retain=True)
-        if result.rc != mqtt.MQTT_ERR_SUCCESS:
-            self.log(f"Failed to publish availability '{state}' (rc={result.rc})")
+        self._safe_publish(client, self.config.topics.availability, state, qos=1, retain=True)
 
     def on_connect(self, client, _userdata, _flags, rc):
         self.log(f"Connected to MQTT (rc={rc}); subscribing to topics")
+        self._mqtt_client = client
         client.subscribe(self.config.topics.home)
         client.subscribe(self.config.topics.goto)
         client.subscribe(self.config.topics.update)
         client.subscribe(self.config.topics.reboot)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
+        try:
+            self.refresh_update_availability()
+        except Exception as exc:  # pylint: disable=broad-except
+            self.log(f"update-check: initial refresh failed: {exc}")
         self.publish_update_button_availability(client, self.is_update_available())
         self.start_update_checker(client)
 
@@ -563,6 +574,7 @@ class KioskMqttListener:
 def main():
     config = load_config()
     listener = KioskMqttListener(config)
+    atexit.register(listener.stop_update_checker)
 
     client = mqtt.Client()
     client.on_connect = listener.on_connect
