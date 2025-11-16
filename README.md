@@ -42,11 +42,11 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 * Price (11/2025): $64
 
 ### Desktop Case + Pi 5 Stand
-* MakerWorld: <https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2>  
+* MakerWorld: <https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2>
 
 ### ReSpeaker Mic Array Plate + Cover (3D printed)
-**Plate (PETG green)**  
-**Cover (PETG translucent)**  
+**Plate (PETG green)**
+**Cover (PETG translucent)**
 * both included in `models/`.
 
 </details>
@@ -183,6 +183,7 @@ Notes for the `Update` button:
   ```
   If your sudo policy already allows `setup.sh` to complete unattended, you likely just need to add `reboot`.
 * There is no payload validation—the button assumes you control the MQTT broker. Keep it on a trusted network.
+* Availability is automatic: the button only appears when the `VERSION` file on GitHub is newer than the version running locally. The kiosk polls GitHub at most 2/4/6 times per day (default 4). Override with `PULSE_VERSION_CHECKS_PER_DAY=2|4|6` in `pulse.conf` if you need a different cadence.
 </details>
 
 <details>
@@ -232,7 +233,7 @@ These are based on what I've found with the specific hardware setup and Raspberr
 <details>
   <summary><strong>Click to expand the troubleshooting list</strong></summary>
 
-**Black vertical strip (half screen black):**  
+**Black vertical strip (half screen black):**
 You must clear panning before setting fb/rotate:
 
 ```bash
@@ -244,16 +245,16 @@ DISPLAY=:0 xrandr --fb 720x1280
 DISPLAY=:0 xrandr --output DSI-2 --mode 720x1280 --rotate right
 ```
 
-**Touch inaccurate:**  
+**Touch inaccurate:**
 Flip kernel overlay flag: `invx` ↔ `invy` in `config.txt` overlay line. Reboot.
 
-**X not starting from SSH test:**  
+**X not starting from SSH test:**
 X needs a real TTY and a logged‑in user. Use the console autologin path; don’t `startx` over SSH.
 
-**“Can’t open display :0”:**  
+**“Can’t open display :0”:**
 Display server isn’t running yet or `$DISPLAY` unset. Wait for autologin to start X, or set `DISPLAY=:0` after X is up.
 
-**Chromium warnings (GCM/Vulkan):**  
+**Chromium warnings (GCM/Vulkan):**
 Harmless on minimal builds; ignored in kiosk mode.
 
 **Autologin lost after updates:**

@@ -13,6 +13,9 @@ if [[ -z "${PULSE_VERSION:-}" ]]; then
   unset _pulse_conf_dir _pulse_version_file
 fi
 
+# Update availability polling cadence (valid: 2, 4, or 6 checks per day)
+PULSE_VERSION_CHECKS_PER_DAY=4
+
 # Kiosk landing page
 PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
 
