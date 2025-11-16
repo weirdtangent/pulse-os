@@ -1,31 +1,31 @@
-screen_width = Window.GetWidth ();
-screen_height = Window.GetHeight ();
+window = Window.GetDefault ();
+screen_width = window.GetWidth ();
+screen_height = window.GetHeight ();
 
-wallpaper = Image ("splash.png");
+window.SetBackgroundTopColor (0.0, 0.0, 0.0);
+window.SetBackgroundBottomColor (0.0, 0.0, 0.0);
 
-scale_x = screen_width / wallpaper.GetWidth ();
-scale_y = screen_height / wallpaper.GetHeight ();
+wallpaper_image = Image ("splash.png");
+wallpaper_sprite = Sprite ();
+wallpaper_sprite.SetImage (wallpaper_image);
 
+scale_x = screen_width / wallpaper_image.GetWidth ();
+scale_y = screen_height / wallpaper_image.GetHeight ();
 scale = scale_x;
 if (scale_y < scale) {
     scale = scale_y;
 }
 
-wallpaper.Scale (wallpaper.GetWidth () * scale, wallpaper.GetHeight () * scale);
+wallpaper_sprite.SetScale (scale, scale);
 
-image_width = wallpaper.GetWidth ();
-image_height = wallpaper.GetHeight ();
-
-offset_x = (screen_width - image_width) / 2;
-offset_y = (screen_height - image_height) / 2;
-
-Plymouth.SetBackgroundTopColor (0.0, 0.0, 0.0);
-Plymouth.SetBackgroundBottomColor (0.0, 0.0, 0.0);
+wallpaper_sprite.SetX ((screen_width - wallpaper_sprite.GetWidth ()) / 2);
+wallpaper_sprite.SetY ((screen_height - wallpaper_sprite.GetHeight ()) / 2);
 
 fun draw_splash () {
-    Plymouth.DrawImage (wallpaper, offset_x, offset_y);
+    wallpaper_sprite.Draw ();
 }
 
+Plymouth.SetRefreshFunction (draw_splash);
 Plymouth.SetBootProgressFunction (draw_splash);
 Plymouth.SetUpdateFunction (draw_splash);
 draw_splash ();
