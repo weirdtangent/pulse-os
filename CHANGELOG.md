@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/weirdtangent/pulse-os/compare/v0.2.0...v0.2.1) (2025-11-16)
+
+
+### Bug Fixes
+
+* use short-form keys for button component and fix device definition ([324d5c7](https://github.com/weirdtangent/pulse-os/commit/324d5c760262e214aa777d4fb92c898e60fe0c7b))
+
 # [0.2.0](https://github.com/weirdtangent/pulse-os/compare/v0.1.0...v0.2.0) (2025-11-16)
 
 
