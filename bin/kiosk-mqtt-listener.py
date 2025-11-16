@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import json
 import os
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any, Dict, List, Optional, Union
 
 import paho.mqtt.client as mqtt
@@ -23,6 +25,27 @@ GOTO_TOPIC = f"pulse/{HOSTNAME}/kiosk/url/set"
 DEVICE_TOPIC = f"homeassistant/device/{HOSTNAME}"
 AVAILABILITY_TOPIC = f"{DEVICE_TOPIC}/availability"
 
+
+def detect_ip_address() -> Optional[str]:
+    ip_env = os.environ.get("PULSE_IP_ADDRESS")
+    if ip_env:
+        return ip_env
+    try:
+        return socket.gethostbyname(HOSTNAME)
+    except socket.gaierror:
+        return None
+
+
+def detect_mac_address() -> Optional[str]:
+    mac_env = os.environ.get("PULSE_MAC_ADDRESS")
+    if mac_env:
+        return mac_env
+    node = uuid.getnode()
+    if (node >> 40) % 2:
+        return None
+    mac = ":".join(f"{(node >> ele) & 0xFF:02X}" for ele in range(40, -1, -8))
+    return mac
+
 DEVICE_INFO: Dict[str, Any] = {
     "identifiers": [f"pulse:{HOSTNAME}"],
     "name": FRIENDLY_NAME,
@@ -33,6 +56,17 @@ DEVICE_INFO: Dict[str, Any] = {
 _sw_version = os.environ.get("PULSE_VERSION")
 if _sw_version:
     DEVICE_INFO["sw_version"] = _sw_version
+
+connections: List[List[str]] = [["host", HOSTNAME]]
+_ip_address = detect_ip_address()
+if _ip_address:
+    connections.append(["ip address", _ip_address])
+_mac_address = detect_mac_address()
+if _mac_address:
+    connections.append(["mac address", _mac_address])
+
+if connections:
+    DEVICE_INFO["connections"] = connections
 
 
 def log(message: str) -> None:
