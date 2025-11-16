@@ -20,7 +20,7 @@ HOSTNAME = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
 FRIENDLY_NAME = os.environ.get("PULSE_NAME") or HOSTNAME.replace("-", " ").title()
 HOME_TOPIC = f"pulse/{HOSTNAME}/kiosk/home"
 GOTO_TOPIC = f"pulse/{HOSTNAME}/kiosk/url/set"
-DEVICE_TOPIC = f"homeassistant/devices/{HOSTNAME}"
+DEVICE_TOPIC = f"homeassistant/device/{HOSTNAME}"
 AVAILABILITY_TOPIC = f"{DEVICE_TOPIC}/availability"
 
 DEVICE_INFO: Dict[str, Any] = {
