@@ -1,3 +1,10 @@
+# [0.13.0](https://github.com/weirdtangent/pulse-os/compare/v0.12.0...v0.13.0) (2025-11-17)
+
+
+### Features
+
+* include better summary of config in setup.sh ([5e32374](https://github.com/weirdtangent/pulse-os/commit/5e32374edc608140ad04e36b4c1a8a94f6cfd5bd))
+
 # [0.12.0](https://github.com/weirdtangent/pulse-os/compare/v0.11.0...v0.12.0) (2025-11-17)
 
 
