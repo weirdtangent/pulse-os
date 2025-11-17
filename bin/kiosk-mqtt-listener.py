@@ -309,7 +309,6 @@ class KioskMqttListener:
         self._update_checker_lock = threading.Lock()
         self._update_checker_stop_event = threading.Event()
         self._mqtt_client: mqtt.Client | None = None
-        self._last_update_button_name = "Update"
         self._telemetry_lock = threading.Lock()
         self._telemetry_thread: threading.Thread | None = None
         self._telemetry_stop_event = threading.Event()
@@ -488,26 +487,11 @@ class KioskMqttListener:
             self.log(f"update-check: unexpected error while fetching remote version: {exc}")
         return None
 
-    def _format_version_label(self, version: str) -> str:
-        return version if version.lower().startswith("v") else f"v{version}"
-
-    def _compute_update_button_name(self, *, available: bool | None = None) -> str:
-        if available is None:
-            available = self.is_update_available()
-        if available and self.latest_remote_version:
-            label = self._format_version_label(self.latest_remote_version)
-            return f"Update to {label}"
-        return "Update"
-
-    def _maybe_publish_update_button_definition(self) -> None:
-        desired_name = self._compute_update_button_name()
-        if desired_name == self._last_update_button_name:
-            return
-        client = self._mqtt_client
-        if client:
-            self.publish_device_definition(client)
-        else:
-            self._last_update_button_name = desired_name
+    def _publish_latest_version(self, version: str | None) -> None:
+        """Publish the latest available version to the sensor topic."""
+        topic = f"{self.config.topics.telemetry}/latest_version"
+        payload = version if version else "unknown"
+        self._safe_publish(None, topic, payload, qos=0, retain=True)
 
     def _set_update_availability(self, available: bool, *, force: bool = False) -> None:
         should_publish = force
@@ -517,7 +501,6 @@ class KioskMqttListener:
                 should_publish = True
         if should_publish:
             self.publish_update_button_availability(None, available)
-        self._maybe_publish_update_button_definition()
 
     def _safe_publish(
         self,
@@ -574,11 +557,13 @@ class KioskMqttListener:
         remote_version = self._fetch_remote_version()
         if remote_version is None:
             self._set_update_availability(False)
+            self._publish_latest_version(None)
             return
         update_available = self._remote_version_is_newer(remote_version, local_version)
         self.local_version = local_version
         self.latest_remote_version = remote_version
         self._set_update_availability(update_available, force=True)
+        self._publish_latest_version(remote_version)
         state = "available" if update_available else "not available"
         self.log(
             f"update-check: remote={remote_version}, local={local_version or 'unknown'} -> update {state}",
@@ -687,7 +672,7 @@ class KioskMqttListener:
         }
         update_button = {
             "platform": "button",
-            "name": self._compute_update_button_name(),
+            "name": "Update",
             "default_entity_id": f"button.{sanitized_hostname}.update",
             "cmd_t": self.config.topics.update,
             "pl_press": "press",
@@ -700,6 +685,16 @@ class KioskMqttListener:
             },
         }
 
+        latest_version_sensor = {
+            "platform": "sensor",
+            "name": "Latest version",
+            "default_entity_id": f"sensor.{sanitized_hostname}_latest_version",
+            "unique_id": f"{self.config.hostname}_latest_version",
+            "stat_t": f"{self.config.topics.telemetry}/latest_version",
+            "entity_category": "diagnostic",
+            "icon": "mdi:package-up",
+        }
+
         telemetry_components = self._build_telemetry_components()
 
         return {
@@ -710,6 +705,7 @@ class KioskMqttListener:
                 "Home": home_button,
                 "Reboot": reboot_button,
                 "Update": update_button,
+                "Latest version": latest_version_sensor,
                 **telemetry_components,
             },
         }
@@ -743,7 +739,6 @@ class KioskMqttListener:
     def publish_device_definition(self, client: mqtt.Client) -> None:
         payload = json.dumps(self.build_device_definition())
         self._safe_publish(client, self.config.topics.device, payload, qos=1, retain=True)
-        self._last_update_button_name = self._compute_update_button_name()
 
     def publish_availability(self, client: mqtt.Client, state: str) -> None:
         self._safe_publish(client, self.config.topics.availability, state, qos=1, retain=True)
@@ -757,6 +752,9 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.reboot)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
+        # Publish cached latest version if available
+        if self.latest_remote_version:
+            self._publish_latest_version(self.latest_remote_version)
         try:
             self.refresh_update_availability()
         except Exception as exc:  # pylint: disable=broad-except
