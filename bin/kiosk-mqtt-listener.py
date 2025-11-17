@@ -643,16 +643,18 @@ class KioskMqttListener:
         # Parse URL to add/update cache-busting parameter
         parsed = urllib.parse.urlparse(url)
         query_params = urllib.parse.parse_qs(parsed.query)
-        query_params['_reload'] = [str(cache_buster)]
+        query_params["_reload"] = [str(cache_buster)]
         new_query = urllib.parse.urlencode(query_params, doseq=True)
-        new_url = urllib.parse.urlunparse((
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            new_query,
-            parsed.fragment,
-        ))
+        new_url = urllib.parse.urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment,
+            )
+        )
         self.navigate(new_url)
 
     def handle_goto(self, payload: bytes) -> None:
