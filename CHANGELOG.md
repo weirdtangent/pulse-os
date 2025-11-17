@@ -1,3 +1,10 @@
+# [0.12.0](https://github.com/weirdtangent/pulse-os/compare/v0.11.0...v0.12.0) (2025-11-17)
+
+
+### Features
+
+* add global tap handler to pulse-photo-card; force hard load of Home ([ca67ce8](https://github.com/weirdtangent/pulse-os/commit/ca67ce86581395be444e0e6f3f0f15011c7b97a2))
+
 # [0.11.0](https://github.com/weirdtangent/pulse-os/compare/v0.10.0...v0.11.0) (2025-11-17)
 
 
