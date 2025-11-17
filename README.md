@@ -20,6 +20,11 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 - [Notes & Extras](#notes--extras)
 - [Troubleshooting](#troubleshooting-checklist)
 
+### Reference Docs
+- `docs/home-assistant-photo-frame.md` — Nest-style Lovelace photo frame + custom card
+- `docs/mqtt-and-telemetry.md` — MQTT buttons (Home/Update/Reboot) & diagnostic sensors
+- `docs/troubleshooting.md` — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
+
 ## Hardware Guide
 <details>
   <summary><strong>Supported hardware, recommended parts, and printable accessories</strong></summary>
@@ -167,39 +172,19 @@ homeassistant:
 </details>
 
 <details>
-  <summary><strong>MQTT buttons (Home / Update)</strong></summary>
-`pulse-kiosk-mqtt.service` announces three Home Assistant buttons via MQTT discovery:
+  <summary><strong>Home Assistant photo frame dashboard</strong></summary>
+  Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in `docs/home-assistant-photo-frame.md`:
 
-* `Home` publishes to `pulse/<hostname>/kiosk/home` and simply reopens your configured `PULSE_URL`.
-* `Update` publishes to `pulse/<hostname>/kiosk/update` and makes the kiosk do a `git pull`, rerun `./setup.sh`, and then `sudo reboot now`.
-* `Reboot` publishes to `pulse/<hostname>/kiosk/reboot` and issues a plain `sudo reboot now` without pulling new code.
+  * random image helper sensors (command_line + template)
+  * installing the custom `pulse-photo-card` resource
+  * Lovelace YAML for a full-screen panel view with double-buffered crossfades
 
-Notes for the `Update` button:
-
-* The script runs inside `/opt/pulse-os`, so it relies on the stored location from a previous manual `./setup.sh <location>` run. Make sure the kiosk has been onboarded once before trusting the button.
-* The `pulse` user needs non-interactive sudo for everything `setup.sh` requires **and** for `reboot`. A minimal rule looks like:
-  ```
-  # /etc/sudoers.d/pulse-update
-  pulse ALL=(root) NOPASSWD: /usr/bin/reboot
-  ```
-  If your sudo policy already allows `setup.sh` to complete unattended, you likely just need to add `reboot`.
-* There is no payload validation—the button assumes you control the MQTT broker. Keep it on a trusted network.
-* Availability is automatic: the button only appears when the `VERSION` file on GitHub is newer than the version running locally. The kiosk polls GitHub at most 2/4/6/8/12/24 times per day (default 12). Override with `PULSE_VERSION_CHECKS_PER_DAY=2|4|6|8|12|24` in `pulse.conf` if you need a different cadence.
-* When an update is available, the button title automatically changes to `Update to vX.Y.Z`, so you can see which version will be applied before clicking.
+  The card never flashes white between photos, keeps the current time/date overlaid, and falls back cleanly if HA loses connection.
 </details>
 
 <details>
-  <summary><strong>Diagnostic telemetry sensors</strong></summary>
-Each kiosk publishes a small set of MQTT `sensor` entities (retained, ~15 s cadence by default) so you can graph device health inside Home Assistant:
-
-* `sensor.pulse_uptime` — seconds since boot (total-increasing)
-* `sensor.pulse_cpu_usage` — CPU utilization %
-* `sensor.pulse_cpu_temperature` — SoC temperature in °C
-* `sensor.pulse_memory_usage` — RAM usage %
-* `sensor.pulse_disk_usage` — root disk usage %
-* `sensor.pulse_load_avg_1m|5m|15m` — Linux load averages
-
-All telemetry sensors are tagged as `diagnostic` entities and expire automatically if the kiosk stops reporting. Tune the cadence with `PULSE_TELEMETRY_INTERVAL_SECONDS` (minimum 5 s) in `pulse.conf` if you need faster or slower updates.
+  <summary><strong>MQTT buttons & telemetry sensors</strong></summary>
+  PulseOS can optionally expose Home/Update/Reboot buttons and a full health sensor suite over MQTT discovery. The setup, sudo requirements, topics, and tuning tips now live in `docs/mqtt-and-telemetry.md` so you can keep the README short and still have all the detail when needed.
 </details>
 
 <details>
@@ -244,48 +229,7 @@ One step at a time. 🙂
 
 ## Troubleshooting checklist
 
-These are based on what I've found with the specific hardware setup and Raspberry Pi image I've used - this may or may not be helpful for you, but I welcome suggestions of more to add here!
-
-<details>
-  <summary><strong>Click to expand the troubleshooting list</strong></summary>
-
-**Black vertical strip (half screen black):**
-You must clear panning before setting fb/rotate:
-
-```bash
-
-DISPLAY=:0 xrandr --output DSI-2 --panning 0x0
-
-DISPLAY=:0 xrandr --fb 720x1280
-
-DISPLAY=:0 xrandr --output DSI-2 --mode 720x1280 --rotate right
-```
-
-**Touch inaccurate:**
-Flip kernel overlay flag: `invx` ↔ `invy` in `config.txt` overlay line. Reboot.
-
-**X not starting from SSH test:**
-X needs a real TTY and a logged‑in user. Use the console autologin path; don’t `startx` over SSH.
-
-**“Can’t open display :0”:**
-Display server isn’t running yet or `$DISPLAY` unset. Wait for autologin to start X, or set `DISPLAY=:0` after X is up.
-
-**Chromium warnings (GCM/Vulkan):**
-Harmless on minimal builds; ignored in kiosk mode.
-
-**Autologin lost after updates:**
-
-```bash
-sudo raspi-config nonint do_boot_behaviour B2
-```
-
-**Which connector am I actually using?**
-
-```bash
-ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
-```
-
-</details>
+Common fixes for this build now live in `docs/troubleshooting.md` (black-half-screen issues, touch alignment, autologin resets, etc.). Check that file first; send PRs with any new gotchas so we can keep the list growing without bloating the README.
 
 ---
 
