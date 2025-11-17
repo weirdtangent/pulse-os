@@ -73,7 +73,10 @@ views:
       - type: custom:pulse-photo-card
         entity: sensor.pulse_current_photo_url
         fade_ms: 1200          # optional, default 500
-        tap_action:
+        secondary_urls:        # optional, array of URLs to cycle through on tap
+          - /dashboard-pulse/0
+          - /dashboard-weather
+        tap_action:            # ignored if secondary_urls is set
           action: navigate
           navigation_path: /dashboard-pulse/0
         hold_action:
@@ -82,8 +85,11 @@ views:
 
 Options:
 - `fade_ms` sets the cross-fade length in milliseconds.
-- The overlay clock automatically follows HA’s locale/time zone (12h/24h).
+- `secondary_urls` (optional) is an array of navigation paths. When set, tapping anywhere on **any dashboard** (not just the photo frame) cycles through these URLs and back to the home screen. Each tap advances to the next URL in the array, wrapping back to home after the last one. This works globally across all dashboards, so you can tap on `/dashboard-pulse/0` to return to the photo frame, even if that dashboard doesn't have the pulse-photo-card.
+- The overlay clock automatically follows HA's locale/time zone (12h/24h).
 - Because the card double-buffers images, it never shows a white flash between photos—even on slow networks.
+
+**Note:** The global tap handler intelligently skips interactive elements (buttons, links, inputs, etc.) so it won't interfere with normal dashboard interactions. It only handles taps on empty areas of the dashboard.
 
 Hard-refresh the dashboard (Cmd/Ctrl + Shift + R) after saving to ensure the browser loads the latest card code.
 

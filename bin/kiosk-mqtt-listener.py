@@ -637,7 +637,23 @@ class KioskMqttListener:
         if not self.config.pulse_url:
             self.log("HOME command received but PULSE_URL is not set")
             return
-        self.navigate(self.config.pulse_url)
+        # Add cache-busting parameter to force hard reload
+        cache_buster = int(time.time() * 1000)  # milliseconds timestamp
+        url = self.config.pulse_url
+        # Parse URL to add/update cache-busting parameter
+        parsed = urllib.parse.urlparse(url)
+        query_params = urllib.parse.parse_qs(parsed.query)
+        query_params['_reload'] = [str(cache_buster)]
+        new_query = urllib.parse.urlencode(query_params, doseq=True)
+        new_url = urllib.parse.urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment,
+        ))
+        self.navigate(new_url)
 
     def handle_goto(self, payload: bytes) -> None:
         url = normalize_url(payload)
