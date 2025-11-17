@@ -43,19 +43,24 @@ Reload Template Entities (Developer Tools → YAML) or restart HA to register th
 
 ## 3. Install the custom Pulse photo card
 
-1. Copy `config/www/pulse-photo-card.js` from this repo into your HA config:
+### Option A: Install via HACS (Recommended)
 
-   ```bash
-   # On your workstation
-   scp /opt/pulse-os/config/www/pulse-photo-card.js homeassistant:/config/www/
-   ```
+1. In Home Assistant, go to **HACS → Frontend** → **+ Explore & Download Repositories**
+2. Search for "Pulse Photo Card" or add this repository as a custom repository:
+   - Repository: `https://github.com/weirdtangent/pulse-photo-card`
+   - Category: `Plugin` (Lovelace card)
+3. Click **Download** and restart Home Assistant
+4. The card will be automatically registered as a resource
 
-2. In Home Assistant, go to **Settings → Dashboards → ⋮ → Resources → + Add Resource**:
+### Option B: Manual Installation
+
+1. Download `dist/pulse-photo-card.js` from the [pulse-photo-card repository](https://github.com/weirdtangent/pulse-photo-card)
+2. Copy it to your Home Assistant `config/www/` directory
+3. In Home Assistant, go to **Settings → Dashboards → ⋮ → Resources → + Add Resource**:
    - URL: `/local/pulse-photo-card.js?v=1`
    - Resource type: `JavaScript Module`
-
-3. Enable Advanced Mode in your HA profile (needed for the Resources menu if it’s hidden).
-4. When you update the card in the future, bump the `?v=` query or click “Reload resources” to bust the cache.
+4. Enable Advanced Mode in your HA profile (needed for the Resources menu if it's hidden).
+5. When you update the card in the future, bump the `?v=` query or click "Reload resources" to bust the cache.
 
 ---
 
@@ -100,5 +105,5 @@ Hard-refresh the dashboard (Cmd/Ctrl + Shift + R) after saving to ensure
 - **Black screen** → the helper returned a path HA can’t serve. Verify `sensor.pulse_current_photo_url` looks like `media-source://media_source/local/...`.
 - **401 Unauthorized in console** → you’re hitting `/local/...` or added your own query parameters. Let the card resolve the media-source path; don’t append cache busters, the signed `authSig` already handles caching.
 - **Still using old JS** → bump the resource version (`/local/pulse-photo-card.js?v=2`) or use Advanced Mode → Resources → Reload.
-- **Want even more flair?** The card CSS lives at the top of `pulse-photo-card.js`. Tweak fonts, overlay gradients, or add weather widgets there.
+- **Want even more flair?** The card CSS lives at the top of `pulse-photo-card.js`. Tweak fonts, overlay gradients, or add weather widgets there. See the [pulse-photo-card repository](https://github.com/weirdtangent/pulse-photo-card) for the source code.
 
