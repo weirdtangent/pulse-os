@@ -485,18 +485,18 @@ publish_summary_to_mqtt() {
     local summary_text="$1"
     local mqtt_host="${MQTT_HOST:-}"
     local mqtt_port="${MQTT_PORT:-1883}"
-    
+
     if [ -z "$mqtt_host" ] || [ "$mqtt_host" = "<not set>" ]; then
         return 0  # MQTT not configured, skip silently
     fi
-    
+
     local hostname
     hostname=$(hostname 2>/dev/null || echo "pulse-unknown")
     local topic="pulse/${hostname}/setup/summary"
-    
+
     # mosquitto-clients is installed via manual-packages.txt
-    # Use -m to send the entire message as a single payload (not -l which sends each line separately)
-    if echo "$summary_text" | mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -r 2>/dev/null; then
+    # Use -s so mosquitto_pub reads the full summary from stdin as a single payload
+    if echo "$summary_text" | mosquitto_pub -s -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -r 2>/dev/null; then
         log "Published setup summary to MQTT topic: $topic"
     fi
 }
@@ -506,7 +506,7 @@ write_summary_to_log() {
     local log_file="/var/log/pulse-setup-summary.log"
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
+
     {
         echo "────────────────────────────────────────────────────────────────────────"
         echo " PulseOS Setup Summary - $timestamp"
@@ -519,7 +519,7 @@ write_summary_to_log() {
 print_feature_summary() {
     local location
     location=$(read_stored_location 2>/dev/null || echo "<not set>")
-    
+
     # Set defaults for variables that might not be set
     local pulse_user="${PULSE_USER:-pulse}"
     local pulse_url="${PULSE_URL:-<not set>}"
@@ -537,7 +537,7 @@ print_feature_summary() {
     local mqtt_port="${MQTT_PORT:-1883}"
     local pulse_version_checks_per_day="${PULSE_VERSION_CHECKS_PER_DAY:-12}"
     local pulse_telemetry_interval_seconds="${PULSE_TELEMETRY_INTERVAL_SECONDS:-15}"
-    
+
     # Build summary output by capturing printf statements
     local summary_output
     summary_output=$(
@@ -593,10 +593,10 @@ print_feature_summary() {
         printf "    %-33s   %s\n" "" "MQTT telemetry publishing interval (min 5), default: 15"
         echo "────────────────────────────────────────────────────────────────────────"
     )
-    
+
     # Print to stdout (for normal interactive use)
     echo "$summary_output"
-    
+
     # Also write to log file and publish to MQTT (for background runs)
     write_summary_to_log "$summary_output"
     publish_summary_to_mqtt "$summary_output"
