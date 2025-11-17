@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/weirdtangent/pulse-os/compare/v0.13.0...v0.14.0) (2025-11-17)
+
+
+### Features
+
+* add summary to MQTT (if using) and log ([339f58c](https://github.com/weirdtangent/pulse-os/commit/339f58cb46d36c140da473200cc8e6cb5b23f350))
+
 # [0.13.0](https://github.com/weirdtangent/pulse-os/compare/v0.12.0...v0.13.0) (2025-11-17)
 
 
