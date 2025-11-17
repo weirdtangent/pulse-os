@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/weirdtangent/pulse-os/compare/v0.9.0...v0.10.0) (2025-11-17)
+
+
+### Features
+
+* add reference docs for Home Assistant photo frame, MQTT buttons, and troubleshooting ([64b7ed1](https://github.com/weirdtangent/pulse-os/commit/64b7ed1b6c920e1805d95de55d8d3f6774237788))
+
 # [0.9.0](https://github.com/weirdtangent/pulse-os/compare/v0.8.0...v0.9.0) (2025-11-16)
 
 
