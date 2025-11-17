@@ -495,7 +495,8 @@ publish_summary_to_mqtt() {
     local topic="pulse/${hostname}/setup/summary"
     
     # mosquitto-clients is installed via manual-packages.txt
-    if echo "$summary_text" | mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -l -r 2>/dev/null; then
+    # Use -m to send the entire message as a single payload (not -l which sends each line separately)
+    if echo "$summary_text" | mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -r 2>/dev/null; then
         log "Published setup summary to MQTT topic: $topic"
     fi
 }
