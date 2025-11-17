@@ -1,3 +1,10 @@
+## [0.14.2](https://github.com/weirdtangent/pulse-os/compare/v0.14.1...v0.14.2) (2025-11-17)
+
+
+### Bug Fixes
+
+* use -s to send the entire summary as a single payload ([ac6130c](https://github.com/weirdtangent/pulse-os/commit/ac6130ced6397607f6f5acf01d47d13acf35d139))
+
 ## [0.14.1](https://github.com/weirdtangent/pulse-os/compare/v0.14.0...v0.14.1) (2025-11-17)
 
 
