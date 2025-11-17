@@ -328,7 +328,7 @@ class KioskMqttListener:
 
     def _sanitize_hostname_for_entity_id(self, hostname: str) -> str:
         """Convert hostname to a format suitable for Home Assistant entity IDs.
-        
+
         Converts to lowercase and replaces hyphens/dots with underscores.
         Example: 'pulse-office' -> 'pulse_office'
         """
