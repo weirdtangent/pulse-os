@@ -164,6 +164,7 @@ man-db
 manpages-dev
 mawk
 mkvtoolnix
+mosquitto-clients
 mount
 nano
 ncdu

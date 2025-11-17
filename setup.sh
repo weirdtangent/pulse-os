@@ -481,6 +481,40 @@ install_bluetooth_audio() {
     fi
 }
 
+publish_summary_to_mqtt() {
+    local summary_text="$1"
+    local mqtt_host="${MQTT_HOST:-}"
+    local mqtt_port="${MQTT_PORT:-1883}"
+    
+    if [ -z "$mqtt_host" ] || [ "$mqtt_host" = "<not set>" ]; then
+        return 0  # MQTT not configured, skip silently
+    fi
+    
+    local hostname
+    hostname=$(hostname 2>/dev/null || echo "pulse-unknown")
+    local topic="pulse/${hostname}/setup/summary"
+    
+    # mosquitto-clients is installed via manual-packages.txt
+    if echo "$summary_text" | mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -l -r 2>/dev/null; then
+        log "Published setup summary to MQTT topic: $topic"
+    fi
+}
+
+write_summary_to_log() {
+    local summary_text="$1"
+    local log_file="/var/log/pulse-setup-summary.log"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    {
+        echo "────────────────────────────────────────────────────────────────────────"
+        echo " PulseOS Setup Summary - $timestamp"
+        echo "────────────────────────────────────────────────────────────────────────"
+        echo "$summary_text"
+        echo ""
+    } | sudo tee -a "$log_file" >/dev/null
+}
+
 print_feature_summary() {
     local location
     location=$(read_stored_location 2>/dev/null || echo "<not set>")
@@ -503,77 +537,68 @@ print_feature_summary() {
     local pulse_version_checks_per_day="${PULSE_VERSION_CHECKS_PER_DAY:-12}"
     local pulse_telemetry_interval_seconds="${PULSE_TELEMETRY_INTERVAL_SECONDS:-15}"
     
-    echo
-    echo "────────────────────────────────────────────────────────────────────────"
-    echo " PulseOS Configuration Summary"
-    echo "────────────────────────────────────────────────────────────────────────"
+    # Build summary output by capturing printf statements
+    local summary_output
+    summary_output=$(
+        echo "────────────────────────────────────────────────────────────────────────"
+        echo " PulseOS Configuration Summary"
+        echo "────────────────────────────────────────────────────────────────────────"
+        echo
+        printf "  %-35s : %s\n" "Location" "$location"
+        printf "    %-33s   %s\n" "" "Physical location identifier (stored in /etc/pulse-location)"
+        echo
+        printf "  %-35s : %s\n" "System User (PULSE_USER)" "$pulse_user"
+        printf "    %-33s   %s\n" "" "Linux user with auto-login, default: pulse"
+        echo
+        printf "  %-35s : %s\n" "Kiosk URL (PULSE_URL)" "$pulse_url"
+        printf "    %-33s   %s\n" "" "Web page loaded on boot and Home button target"
+        echo
+        printf "  %-35s : %s\n" "Version (PULSE_VERSION)" "$pulse_version"
+        printf "    %-33s   %s\n" "" "PulseOS version from VERSION file"
+        echo
+        printf "  %-35s : %s minutes\n" "Revive Interval (PULSE_REVIVE_INTERVAL)" "$pulse_revive_interval"
+        printf "    %-33s   %s\n" "" "Cron interval to check and restart if needed, default: 2"
+        echo
+        printf "  %-35s : %s seconds\n" "Watchdog Interval (PULSE_WATCHDOG_INTERVAL)" "$pulse_watchdog_interval"
+        printf "    %-33s   %s\n" "" "Chromium watchdog check interval, default: 60"
+        printf "  %-35s : %s failures\n" "Watchdog Limit (PULSE_WATCHDOG_LIMIT)" "$pulse_watchdog_limit"
+        printf "    %-33s   %s\n" "" "Failures before restarting browser, default: 5"
+        printf "  %-35s : %s\n" "Watchdog URL (PULSE_WATCHDOG_URL)" "$pulse_watchdog_url"
+        printf "    %-33s   %s\n" "" "URL to check for browser health"
+        echo
+        printf "  %-35s : %s\n" "Sun Backlight (PULSE_BACKLIGHT_SUN)" \
+            "$( [ "$pulse_backlight_sun" = "true" ] && echo "enabled" || echo "disabled" )"
+        printf "    %-33s   %s\n" "" "Auto-dimming based on sunrise/sunset, default: true"
+        printf "  %-35s : %s\n" "Bluetooth Autoconnect (PULSE_BLUETOOTH_AUTOCONNECT)" \
+            "$( [ "$pulse_bluetooth_autoconnect" = "true" ] && echo "enabled" || echo "disabled" )"
+        printf "    %-33s   %s\n" "" "Auto-connect to previously paired devices, default: true"
+        printf "  %-35s : %s\n" "Remote Logging (PULSE_REMOTE_LOGGING)" \
+            "$( [ "$pulse_remote_logging" = "true" ] && echo "enabled" || echo "disabled" )"
+        printf "    %-33s   %s\n" "" "Send syslogs to remote server, default: true"
+        if [ "$pulse_remote_logging" = "true" ]; then
+            printf "  %-35s : %s\n" "Remote Log Host (PULSE_REMOTE_LOG_HOST)" "$pulse_remote_log_host"
+            printf "    %-33s   %s\n" "" "Remote syslog server hostname/IP"
+            printf "  %-35s : %s\n" "Remote Log Port (PULSE_REMOTE_LOG_PORT)" "$pulse_remote_log_port"
+            printf "    %-33s   %s\n" "" "Remote syslog server port"
+        fi
+        echo
+        printf "  %-35s : %s\n" "MQTT Host (MQTT_HOST)" "$mqtt_host"
+        printf "    %-33s   %s\n" "" "MQTT broker hostname for Home Assistant integration"
+        printf "  %-35s : %s\n" "MQTT Port (MQTT_PORT)" "$mqtt_port"
+        printf "    %-33s   %s\n" "" "MQTT broker port, default: 1883"
+        printf "  %-35s : %s checks/day\n" "Version Checks (PULSE_VERSION_CHECKS_PER_DAY)" "$pulse_version_checks_per_day"
+        printf "    %-33s   %s\n" "" "Update availability polling (2,4,6,8,12,24), default: 12"
+        printf "  %-35s : %s seconds\n" "Telemetry Interval (PULSE_TELEMETRY_INTERVAL_SECONDS)" "$pulse_telemetry_interval_seconds"
+        printf "    %-33s   %s\n" "" "MQTT telemetry publishing interval (min 5), default: 15"
+        echo "────────────────────────────────────────────────────────────────────────"
+    )
     
-    # Location (first, as requested)
-    printf "  %-35s : %s\n" "Location" "$location"
-    printf "    %-33s   %s\n" "" "Physical location identifier (stored in /etc/pulse-location)"
+    # Print to stdout (for normal interactive use)
+    echo "$summary_output"
     
-    echo
-    printf "  %-35s : %s\n" "System User (PULSE_USER)" "$pulse_user"
-    printf "    %-33s   %s\n" "" "Linux user with auto-login, default: pulse"
-    
-    echo
-    printf "  %-35s : %s\n" "Kiosk URL (PULSE_URL)" "$pulse_url"
-    printf "    %-33s   %s\n" "" "Web page loaded on boot and Home button target"
-    
-    echo
-    printf "  %-35s : %s\n" "Version (PULSE_VERSION)" "$pulse_version"
-    printf "    %-33s   %s\n" "" "PulseOS version from VERSION file"
-    
-    echo
-    printf "  %-35s : %s minutes\n" "Revive Interval (PULSE_REVIVE_INTERVAL)" "$pulse_revive_interval"
-    printf "    %-33s   %s\n" "" "Cron interval to check and restart if needed, default: 2"
-    
-    echo
-    printf "  %-35s : %s seconds\n" "Watchdog Interval (PULSE_WATCHDOG_INTERVAL)" "$pulse_watchdog_interval"
-    printf "    %-33s   %s\n" "" "Chromium watchdog check interval, default: 60"
-    
-    printf "  %-35s : %s failures\n" "Watchdog Limit (PULSE_WATCHDOG_LIMIT)" "$pulse_watchdog_limit"
-    printf "    %-33s   %s\n" "" "Failures before restarting browser, default: 5"
-    
-    printf "  %-35s : %s\n" "Watchdog URL (PULSE_WATCHDOG_URL)" "$pulse_watchdog_url"
-    printf "    %-33s   %s\n" "" "URL to check for browser health"
-    
-    echo
-    printf "  %-35s : %s\n" "Sun Backlight (PULSE_BACKLIGHT_SUN)" \
-        "$( [ "$pulse_backlight_sun" = "true" ] && echo "enabled" || echo "disabled" )"
-    printf "    %-33s   %s\n" "" "Auto-dimming based on sunrise/sunset, default: true"
-    
-    printf "  %-35s : %s\n" "Bluetooth Autoconnect (PULSE_BLUETOOTH_AUTOCONNECT)" \
-        "$( [ "$pulse_bluetooth_autoconnect" = "true" ] && echo "enabled" || echo "disabled" )"
-    printf "    %-33s   %s\n" "" "Auto-connect to previously paired devices, default: true"
-    
-    printf "  %-35s : %s\n" "Remote Logging (PULSE_REMOTE_LOGGING)" \
-        "$( [ "$pulse_remote_logging" = "true" ] && echo "enabled" || echo "disabled" )"
-    printf "    %-33s   %s\n" "" "Send syslogs to remote server, default: true"
-    
-    if [ "$pulse_remote_logging" = "true" ]; then
-        printf "  %-35s : %s\n" "Remote Log Host (PULSE_REMOTE_LOG_HOST)" "$pulse_remote_log_host"
-        printf "    %-33s   %s\n" "" "Remote syslog server hostname/IP"
-        
-        printf "  %-35s : %s\n" "Remote Log Port (PULSE_REMOTE_LOG_PORT)" "$pulse_remote_log_port"
-        printf "    %-33s   %s\n" "" "Remote syslog server port"
-    fi
-    
-    echo
-    printf "  %-35s : %s\n" "MQTT Host (MQTT_HOST)" "$mqtt_host"
-    printf "    %-33s   %s\n" "" "MQTT broker hostname for Home Assistant integration"
-    
-    printf "  %-35s : %s\n" "MQTT Port (MQTT_PORT)" "$mqtt_port"
-    printf "    %-33s   %s\n" "" "MQTT broker port, default: 1883"
-    
-    printf "  %-35s : %s checks/day\n" "Version Checks (PULSE_VERSION_CHECKS_PER_DAY)" "$pulse_version_checks_per_day"
-    printf "    %-33s   %s\n" "" "Update availability polling (2,4,6,8,12,24), default: 12"
-    
-    printf "  %-35s : %s seconds\n" "Telemetry Interval (PULSE_TELEMETRY_INTERVAL_SECONDS)" "$pulse_telemetry_interval_seconds"
-    printf "    %-33s   %s\n" "" "MQTT telemetry publishing interval (min 5), default: 15"
-    
-    echo "────────────────────────────────────────────────────────────────────────"
-    echo
+    # Also write to log file and publish to MQTT (for background runs)
+    write_summary_to_log "$summary_output"
+    publish_summary_to_mqtt "$summary_output"
 }
 
 main() {
