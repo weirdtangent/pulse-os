@@ -215,8 +215,10 @@ homeassistant:
 
 <details>
   <summary><strong>Home Assistant photo frame dashboard</strong></summary>
-  Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in [home-assistant-phot-frame](docs/home-assistant-photo-frame.md):
-
+  Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in
+  
+  [host-assistant-photo-frame](docs/home-assistant-photo-frame.md)
+  
   * random image helper sensors (command_line + template)
   * installing the custom `pulse-photo-card` resource
   * Lovelace YAML for a full-screen panel view with double-buffered crossfades
