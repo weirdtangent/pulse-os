@@ -21,9 +21,9 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 - [Troubleshooting](#troubleshooting-checklist)
 
 ### Reference Docs
-- `docs/home-assistant-photo-frame.md` — Nest-style Lovelace photo frame + custom card
-- `docs/mqtt-and-telemetry.md` — MQTT buttons (Home/Update/Reboot) & diagnostic sensors
-- `docs/troubleshooting.md` — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
+- [home-assistant-photo-frame](docs/home-assistant-photo-frame.md) — Nest-style Lovelace photo frame + custom card
+- [mqtt-and-telemetry](docs/mqtt-and-telemetry.md) — MQTT buttons (Home/Update/Reboot) & diagnostic sensors
+- [troubleshooting](docs/troubleshooting.md) — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
 
 ## Hardware Guide
 <details>
@@ -215,7 +215,7 @@ homeassistant:
 
 <details>
   <summary><strong>Home Assistant photo frame dashboard</strong></summary>
-  Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in `docs/home-assistant-photo-frame.md`:
+  Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in [home-assistant-phot-frame](docs/home-assistant-photo-frame.md):
 
   * random image helper sensors (command_line + template)
   * installing the custom `pulse-photo-card` resource
@@ -226,7 +226,7 @@ homeassistant:
 
 <details>
   <summary><strong>MQTT buttons & telemetry sensors</strong></summary>
-  PulseOS can optionally expose Home/Update/Reboot buttons and a full health sensor suite over MQTT discovery. The setup, sudo requirements, topics, and tuning tips now live in `docs/mqtt-and-telemetry.md` so you can keep the README short and still have all the detail when needed.
+  PulseOS can optionally expose Home/Update/Reboot buttons and a full health sensor suite over MQTT discovery. The setup, sudo requirements, topics, and tuning tips now live in [mqtt-and-telemetry](docs/mqtt-and-telemetry.md) so you can keep the README short and still have all the detail when needed.
 </details>
 
 <details>
@@ -271,7 +271,7 @@ One step at a time. 🙂
 
 ## Troubleshooting checklist
 
-Common fixes for this build now live in `docs/troubleshooting.md` (black-half-screen issues, touch alignment, autologin resets, etc.). Check that file first; send PRs with any new gotchas so we can keep the list growing without bloating the README.
+Common fixes for this build now live in [troubleshooting](docs/troubleshooting.md) (black-half-screen issues, touch alignment, autologin resets, etc.). Check that file first; send PRs with any new gotchas so we can keep the list growing without bloating the README.
 
 ---
 
