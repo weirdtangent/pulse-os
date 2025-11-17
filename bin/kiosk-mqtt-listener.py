@@ -671,7 +671,7 @@ class KioskMqttListener:
         home_button = {
             "platform": "button",
             "name": "Home",
-            "default_entity_id": f"button.pulse_{sanitized_hostname}.home",
+            "default_entity_id": f"button.{sanitized_hostname}.home",
             "cmd_t": self.config.topics.home,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
@@ -679,7 +679,7 @@ class KioskMqttListener:
         reboot_button = {
             "platform": "button",
             "name": "Reboot",
-            "default_entity_id": f"button.pulse_{sanitized_hostname}.reboot",
+            "default_entity_id": f"button.{sanitized_hostname}.reboot",
             "cmd_t": self.config.topics.reboot,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_reboot",
@@ -688,7 +688,7 @@ class KioskMqttListener:
         update_button = {
             "platform": "button",
             "name": self._compute_update_button_name(),
-            "default_entity_id": f"button.pulse_{sanitized_hostname}.update",
+            "default_entity_id": f"button.{sanitized_hostname}.update",
             "cmd_t": self.config.topics.update,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_update",
@@ -723,7 +723,7 @@ class KioskMqttListener:
             cmps_entry: dict[str, Any] = {
                 "platform": "sensor",
                 "name": descriptor.name,
-                "default_entity_id": f"sensor.pulse_{sanitized_hostname}_{descriptor.key}",
+                "default_entity_id": f"sensor.{sanitized_hostname}_{descriptor.key}",
                 "unique_id": f"{self.config.hostname}_{descriptor.key}",
                 "stat_t": f"{base_topic}/{descriptor.key}",
                 "entity_category": "diagnostic",
