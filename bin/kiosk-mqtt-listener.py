@@ -326,6 +326,14 @@ class KioskMqttListener:
             origin["sw"] = self.config.sw_version
         return origin
 
+    def _sanitize_hostname_for_entity_id(self, hostname: str) -> str:
+        """Convert hostname to a format suitable for Home Assistant entity IDs.
+        
+        Converts to lowercase and replaces hyphens/dots with underscores.
+        Example: 'pulse-office' -> 'pulse_office'
+        """
+        return hostname.lower().replace("-", "_").replace(".", "_")
+
     def start_telemetry(self) -> None:
         with self._telemetry_lock:
             if self._telemetry_thread and self._telemetry_thread.is_alive():
@@ -659,10 +667,11 @@ class KioskMqttListener:
             "pl_avail": "online",
             "pl_not_avail": "offline",
         }
+        sanitized_hostname = self._sanitize_hostname_for_entity_id(self.config.hostname)
         home_button = {
             "platform": "button",
             "name": "Home",
-            "default_entity_id": "button.home",
+            "default_entity_id": f"button.pulse_{sanitized_hostname}.home",
             "cmd_t": self.config.topics.home,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_home",
@@ -670,7 +679,7 @@ class KioskMqttListener:
         reboot_button = {
             "platform": "button",
             "name": "Reboot",
-            "default_entity_id": "button.reboot",
+            "default_entity_id": f"button.pulse_{sanitized_hostname}.reboot",
             "cmd_t": self.config.topics.reboot,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_reboot",
@@ -679,7 +688,7 @@ class KioskMqttListener:
         update_button = {
             "platform": "button",
             "name": self._compute_update_button_name(),
-            "default_entity_id": "button.update",
+            "default_entity_id": f"button.pulse_{sanitized_hostname}.update",
             "cmd_t": self.config.topics.update,
             "pl_press": "press",
             "unique_id": f"{self.config.hostname}_update",
@@ -708,11 +717,13 @@ class KioskMqttListener:
     def _build_telemetry_components(self) -> dict[str, dict[str, Any]]:
         base_topic = self.config.topics.telemetry
         expire_after = max(self.config.telemetry_interval_seconds * 3, self.config.telemetry_interval_seconds + 5)
+        sanitized_hostname = self._sanitize_hostname_for_entity_id(self.config.hostname)
         components: dict[str, dict[str, Any]] = {}
         for descriptor in TELEMETRY_SENSORS:
             cmps_entry: dict[str, Any] = {
                 "platform": "sensor",
                 "name": descriptor.name,
+                "default_entity_id": f"sensor.pulse_{sanitized_hostname}_{descriptor.key}",
                 "unique_id": f"{self.config.hostname}_{descriptor.key}",
                 "stat_t": f"{base_topic}/{descriptor.key}",
                 "entity_category": "diagnostic",
