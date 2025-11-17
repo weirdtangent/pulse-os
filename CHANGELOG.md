@@ -1,3 +1,16 @@
+# [0.11.0](https://github.com/weirdtangent/pulse-os/compare/v0.10.0...v0.11.0) (2025-11-17)
+
+
+### Bug Fixes
+
+* don't prefix entity IDs with "pulse_" ([5e68d30](https://github.com/weirdtangent/pulse-os/commit/5e68d30ec69e54ae2cf467426bedfa0539b84912))
+* include hostname in entity IDs (duh) ([e323ba4](https://github.com/weirdtangent/pulse-os/commit/e323ba4c6c809c773d8ecfb92efb8fc1c2e21fe0))
+
+
+### Features
+
+* add latest version to Mqtt ([d22e069](https://github.com/weirdtangent/pulse-os/commit/d22e069f03adba203f8cb7e530d3ac4dd874b40b))
+
 # [0.10.0](https://github.com/weirdtangent/pulse-os/compare/v0.9.0...v0.10.0) (2025-11-17)
 
 
