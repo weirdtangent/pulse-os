@@ -1,3 +1,10 @@
+## [0.14.1](https://github.com/weirdtangent/pulse-os/compare/v0.14.0...v0.14.1) (2025-11-17)
+
+
+### Bug Fixes
+
+* use -m to send the entire message as a single payload ([0924c92](https://github.com/weirdtangent/pulse-os/commit/0924c92739967998aa7c6231157a7b7e6de9e733))
+
 # [0.14.0](https://github.com/weirdtangent/pulse-os/compare/v0.13.0...v0.14.0) (2025-11-17)
 
 
