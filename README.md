@@ -60,8 +60,10 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 
 ## 0) Prerequisites
 
-* Raspberry Pi 5/CM4/CM5 with **Raspberry Pi Touch Display 2** (DSI ribbon in the “other” socket; overlay uses `dsi1`, DRM connector shows up as `DSI-2`).
-* Fresh **Raspberry Pi OS Lite (64-bit)** (Trixie, at the moment) written to microSD.
+* Raspberry Pi 5/CM4/CM5 with **Raspberry Pi Touch Display 2** (DSI ribbon in the “closer” socket).
+* Fresh **Raspberry Pi OS Lite (64-bit)** (Trixie, at the moment) written to microSD - I'm using 128GB but it's only 20% full.
+  * Setup user "pulse" when imaging OS
+  * Can also pre-setup networking, make sure SSH is on, enable auto-login
 * Network connectivity (Ethernet or Wi‑Fi).
 * SSH access (run `sudo raspi-config nonint do_ssh 0` or enable via imager advanced options).
 
@@ -71,6 +73,7 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 
 ```bash
 # Get to the starting line
+# login/ssh into your Pulse as "pulse" user
 sudo apt update && sudo apt full-upgrade -y
 sudo apt install git gh neovim -y
 sudo chown pulse:pulse /opt
@@ -83,7 +86,10 @@ cd pulse-os
 # Create pulse.conf (from pulse.conf.sample, see below for help)
 cp pulse.conf.sample pulse.conf
 vi pulse.conf
-# and then run the setup script, when ready
+# run the setup script, when ready
+#   setup.sh should be also run each time you update or
+#   if you change conf file - you don't need <location> on re-runs
+#   the Mqtt "Update" button upgrades and re-runs setup for you
 ./setup.sh <location-name>
 ```
 
@@ -112,12 +118,27 @@ and what services it runs.
 <details>
   <summary><strong>Explore pulse.conf options</strong></summary>
 
+### Pulse version
+This lets system tools know what version of Pulse you are on, keep this
+in your pulse.conf so system things will work correctly
+
+  PULSE_VERSION=<from VERSION file in repo>
+
+### System user
+The linux user with auto-login turned on and is running all of the Pulse
+system. Simplier to just to keep this as "pulse"
+
+    PULSE_USER="pulse"
+
 ### Kiosk URL
-The web page the Pulse loads on boot:
+The web page the Pulse loads on boot. This is also what the "Home" Mqtt button
+will always return your pulse to.
 
     PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
 
 ### Watchdog / self-repair timing
+Cron schedule to watch for a broken network, crashed X11, or dead chormium (Aw, Snap)
+and restart if needed (minutes)
 
     PULSE_REVIVE_INTERVAL=2
 
@@ -128,19 +149,40 @@ Chromium’s live watchdog:
     PULSE_WATCHDOG_LIMIT=5       # failures before restarting browser
 
 ### Hardware feature toggles
+Dim the screen automatically based on the sunrise/sunset
 
     PULSE_BACKLIGHT_SUN="true"
+
+Autoconnect to previously-setup Bluetooth (typically for audio)
+
     PULSE_BLUETOOTH_AUTOCONNECT="true"
+
+Send remote syslogs to remote server
+  
     PULSE_REMOTE_LOGGING="true"
 
 ### Remote logging target
+For remote systlog monitoring, only needed if TRUE set for PULSE_REMOTE_LOGGING
 
     PULSE_REMOTE_LOG_HOST="192.168.1.100"
     PULSE_REMOTE_LOG_PORT="5514"
 
-### System user
+### Mqtt
+Optional, for Pulse to connect to Mqtt server (for HomeAssistant integration)
 
-    PULSE_USER="pulse"
+    MQTT_HOST="mosquitto.local"
+    MQTT_PORT="1883"
+
+### Pulse Version Checks
+For Mqtt version checks - to enable the "Upgrade" button when a new version is available
+2,4,6,8,12, or 24 checks per day
+
+    PULSE_VERSION_CHECKS_PER_DAY=12
+
+### Pulse Telemetry Reporting
+For Mqtt telemetry - how often Pulse should send stats to Mqtt for HomeAssistant (seconds)
+
+    PULSE_TELEMETRY_INTERVAL_SECONDS=15
 
 </details>
 
