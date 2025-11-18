@@ -1,3 +1,10 @@
+## [0.17.2](https://github.com/weirdtangent/pulse-os/compare/v0.17.1...v0.17.2) (2025-11-18)
+
+
+### Bug Fixes
+
+* filter out syslog-ng stats from remote logging ([3beb501](https://github.com/weirdtangent/pulse-os/commit/3beb501aa493058c2d024ea0d150a1877644490d))
+
 ## [0.17.1](https://github.com/weirdtangent/pulse-os/compare/v0.17.0...v0.17.1) (2025-11-18)
 
 
