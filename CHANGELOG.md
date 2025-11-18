@@ -1,3 +1,10 @@
+## [0.21.1](https://github.com/weirdtangent/pulse-os/compare/v0.21.0...v0.21.1) (2025-11-18)
+
+
+### Bug Fixes
+
+* wait longer for volume restoration to avoid "Connected" announcement ([11c1bc2](https://github.com/weirdtangent/pulse-os/commit/11c1bc23bdc1eefca0082d20477c3d0b87aa3a45))
+
 # [0.21.0](https://github.com/weirdtangent/pulse-os/compare/v0.20.0...v0.21.0) (2025-11-18)
 
 
