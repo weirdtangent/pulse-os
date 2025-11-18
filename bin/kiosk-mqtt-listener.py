@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -27,6 +28,7 @@ class Topics:
     update: str
     reboot: str
     volume: str
+    brightness: str
     device: str
     availability: str
     update_availability: str
@@ -167,6 +169,7 @@ def load_config() -> EnvConfig:
         update=f"pulse/{hostname}/kiosk/update",
         reboot=f"pulse/{hostname}/kiosk/reboot",
         volume=f"pulse/{hostname}/audio/volume/set",
+        brightness=f"pulse/{hostname}/display/brightness/set",
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
@@ -399,6 +402,11 @@ class KioskMqttListener:
         if volume is not None:
             metrics["volume"] = volume
 
+        # Get current screen brightness
+        brightness = self._get_current_brightness()
+        if brightness is not None:
+            metrics["brightness"] = brightness
+
         return metrics
 
     def _get_current_volume(self) -> int | None:
@@ -442,6 +450,50 @@ class KioskMqttListener:
                         break
             except (subprocess.CalledProcessError, FileNotFoundError):
                 pass
+        return None
+
+    def _get_current_brightness(self) -> int | None:
+        """Get current screen brightness percentage."""
+        device_path = self._find_backlight_device()
+        if not device_path:
+            return None
+
+        try:
+            # Try brightnessctl first
+            result = subprocess.run(
+                ["brightnessctl", "get"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                # brightnessctl get returns raw value, need max to calculate %
+                max_result = subprocess.run(
+                    ["brightnessctl", "max"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if max_result.returncode == 0:
+                    current = int(result.stdout.strip())
+                    max_val = int(max_result.stdout.strip())
+                    if max_val > 0:
+                        return int((current * 100) / max_val)
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            pass
+
+        # Fallback: read from sysfs
+        try:
+            device = Path(device_path)
+            max_path = device / "max_brightness"
+            brightness_path = device / "brightness"
+            if max_path.exists() and brightness_path.exists():
+                max_brightness = int(max_path.read_text(encoding="utf-8").strip())
+                current_brightness = int(brightness_path.read_text(encoding="utf-8").strip())
+                if max_brightness > 0:
+                    return int((current_brightness * 100) / max_brightness)
+        except (OSError, ValueError):
+            pass
         return None
 
     @staticmethod
@@ -769,6 +821,21 @@ class KioskMqttListener:
             "entity_category": "config",
         }
 
+        brightness_control = {
+            "platform": "number",
+            "name": "Screen Brightness",
+            "default_entity_id": f"number.{sanitized_hostname}_brightness",
+            "cmd_t": self.config.topics.brightness,
+            "stat_t": f"{self.config.topics.telemetry}/brightness",
+            "unique_id": f"{self.config.hostname}_brightness",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit_of_meas": "%",
+            "icon": "mdi:brightness-6",
+            "entity_category": "config",
+        }
+
         latest_version_sensor = {
             "platform": "sensor",
             "name": "Latest version",
@@ -790,6 +857,7 @@ class KioskMqttListener:
                 "Reboot": reboot_button,
                 "Update": update_button,
                 "Audio Volume": volume_control,
+                "Screen Brightness": brightness_control,
                 "Latest version": latest_version_sensor,
                 **telemetry_components,
             },
@@ -836,6 +904,7 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.update)
         client.subscribe(self.config.topics.reboot)
         client.subscribe(self.config.topics.volume)
+        client.subscribe(self.config.topics.brightness)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         # Publish cached latest version if available
@@ -860,6 +929,8 @@ class KioskMqttListener:
             self.handle_reboot()
         elif msg.topic == self.config.topics.volume:
             self.handle_volume(msg.payload)
+        elif msg.topic == self.config.topics.brightness:
+            self.handle_brightness(msg.payload)
         else:
             self.log(f"Received message on unexpected topic {msg.topic}")
 
@@ -965,6 +1036,79 @@ class KioskMqttListener:
             self.log(f"volume: failed to set volume: {exc}")
         except FileNotFoundError:
             self.log("volume: pactl command not found")
+
+    @staticmethod
+    def _find_backlight_device() -> str | None:
+        """Find the backlight device path."""
+        # Try reading from config file first
+        try:
+            with open("/etc/pulse-backlight.conf", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if line.startswith("BACKLIGHT="):
+                        device_path = line.split("=", 1)[1].strip()
+                        if Path(device_path).exists():
+                            return device_path
+        except (OSError, IndexError):
+            pass
+
+        # Fallback: find any backlight device
+        backlight_dir = Path("/sys/class/backlight")
+        if backlight_dir.exists():
+            for device in backlight_dir.iterdir():
+                if (device / "brightness").exists() and (device / "max_brightness").exists():
+                    return str(device)
+        return None
+
+    def handle_brightness(self, payload: bytes) -> None:
+        """Handle brightness control command from MQTT."""
+        try:
+            brightness_str = payload.decode("utf-8", errors="ignore").strip()
+            brightness = int(float(brightness_str))
+            # Clamp to valid range
+            brightness = max(0, min(100, brightness))
+        except (ValueError, TypeError):
+            self.log(f"brightness: invalid payload '{payload}', expected 0-100")
+            return
+
+        device_path = self._find_backlight_device()
+        if not device_path:
+            self.log("brightness: no backlight device found")
+            return
+
+        try:
+            # Try brightnessctl first (easier and more portable)
+            result = subprocess.run(
+                ["brightnessctl", "set", f"{brightness}%"],
+                check=False,
+                capture_output=True,
+            )
+            if result.returncode == 0:
+                self.log(f"brightness: set to {brightness}% using brightnessctl")
+            else:
+                # Fallback: write directly to sysfs
+                device = Path(device_path)
+                max_path = device / "max_brightness"
+                brightness_path = device / "brightness"
+                if max_path.exists() and brightness_path.exists():
+                    max_brightness = int(max_path.read_text(encoding="utf-8").strip())
+                    scaled = max(0, min(max_brightness, int(max_brightness * brightness / 100)))
+                    brightness_path.write_text(f"{scaled}\n", encoding="utf-8")
+                    self.log(f"brightness: set to {brightness}% via sysfs")
+                else:
+                    self.log("brightness: failed to set - device files not found")
+                    return
+
+            # Publish current brightness state
+            self._safe_publish(
+                None,
+                f"{self.config.topics.telemetry}/brightness",
+                str(brightness),
+                qos=0,
+                retain=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as exc:
+            self.log(f"brightness: failed to set brightness: {exc}")
 
     def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)
