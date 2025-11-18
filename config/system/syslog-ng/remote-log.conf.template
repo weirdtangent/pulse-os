@@ -4,6 +4,13 @@ template t_ietf {
     template("<${PRI}>1 ${ISODATE} ${HOST} ${PROGRAM} ${PID} - - ${MSGHDR}${MSG}\n");
 };
 
+filter f_pulse_drop_syslogng_stats {
+    not (
+        program("syslog-ng")
+        and match("Log statistics", value("MESSAGE"))
+    );
+}
+
 destination d_remote {
     tcp("__REMOTE_LOG_HOST__" port(__REMOTE_LOG_PORT__)
         template(t_ietf)
@@ -12,5 +19,9 @@ destination d_remote {
     );
 };
 
-log { source(s_src); destination(d_remote); };
+log {
+    source(s_src);
+    filter(f_pulse_drop_syslogng_stats);
+    destination(d_remote);
+};
 
