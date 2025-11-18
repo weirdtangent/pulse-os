@@ -258,7 +258,20 @@ configure_device_identity() {
 
 install_packages() {
     log "Installing APT packages…"
-    sudo xargs apt install -y < "$REPO_DIR/config/apt/manual-packages.txt"
+    local missing_packages=()
+    while IFS= read -r pkg; do
+        [[ -z "$pkg" || "$pkg" == \#* ]] && continue
+        if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+            missing_packages+=("$pkg")
+        fi
+    done < "$REPO_DIR/config/apt/manual-packages.txt"
+
+    if (( ${#missing_packages[@]} > 0 )); then
+        log "Installing missing packages: ${missing_packages[*]}"
+        sudo apt install -y "${missing_packages[@]}"
+    else
+        log "All manual packages already installed."
+    fi
     sudo apt autoremove -y
 }
 
@@ -707,6 +720,11 @@ main() {
 
     local location
     location=$(resolve_location "${1:-}")
+    if [ -z "$location" ]; then
+        log "Error: location is required on first run (e.g. ./setup.sh kitchen)."
+        usage
+        exit 1
+    fi
 
     configure_device_identity "$location"
     configure_display_stack
@@ -723,5 +741,7 @@ main() {
     log "PulseOS setup complete!"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
 

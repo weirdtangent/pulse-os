@@ -90,6 +90,7 @@ vi pulse.conf
 #   setup.sh should be also run each time you update or
 #   if you change conf file - you don't need <location> on re-runs
 #   the Mqtt "Update" button upgrades and re-runs setup for you
+#   first run requires a location slug (e.g. ./setup.sh kitchen)
 ./setup.sh <location-name>
 ```
 
