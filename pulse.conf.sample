@@ -45,3 +45,22 @@ PULSE_WATCHDOG_INTERVAL=60
 # Mqtt server
 MQTT_HOST="mosquitto.graystorm.com"
 MQTT_PORT="1883"
+
+# Voice Assistant (Wyoming Protocol)
+# Enable voice assistant features (wake word detection, speech-to-text, text-to-speech)
+PULSE_VOICE_ASSISTANT="false"
+
+# Wyoming Whisper (Speech-to-Text) server
+# Hostname or IP address of the wyoming-whisper server (typically running in Docker)
+WYOMING_WHISPER_HOST=""
+WYOMING_WHISPER_PORT="10300"
+
+# Wyoming Piper (Text-to-Speech) server
+# Hostname or IP address of the wyoming-piper server (typically running in Docker)
+WYOMING_PIPER_HOST=""
+WYOMING_PIPER_PORT="10300"
+
+# Wyoming OpenWakeWord (Wake Word Detection) server
+# Hostname or IP address of the wyoming-openwakeword server (typically running in Docker)
+WYOMING_OPENWAKEWORD_HOST=""
+WYOMING_OPENWAKEWORD_PORT="10300"

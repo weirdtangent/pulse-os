@@ -10,6 +10,7 @@ dependencies = [
     "paho-mqtt>=2.1.0",
     "psutil>=6.0.0",
     "websocket>=0.2.1",
+    "wyoming>=1.0.0",
 ]
 
 [project.optional-dependencies]

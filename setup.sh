@@ -549,7 +549,13 @@ print_feature_summary() {
     local mqtt_port="${MQTT_PORT:-1883}"
     local pulse_version_checks_per_day="${PULSE_VERSION_CHECKS_PER_DAY:-12}"
     local pulse_telemetry_interval_seconds="${PULSE_TELEMETRY_INTERVAL_SECONDS:-15}"
-
+    local pulse_voice_assistant="${PULSE_VOICE_ASSISTANT:-false}"
+    local wyoming_whisper_host="${WYOMING_WHISPER_HOST:-<not set>}"
+    local wyoming_whisper_port="${WYOMING_WHISPER_PORT:-10300}"
+    local wyoming_piper_host="${WYOMING_PIPER_HOST:-<not set>}"
+    local wyoming_piper_port="${WYOMING_PIPER_PORT:-10300}"
+    local wyoming_openwakeword_host="${WYOMING_OPENWAKEWORD_HOST:-<not set>}"
+    local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10300}"
     # Build summary output by capturing printf statements
     local summary_output
     summary_output=$(
@@ -627,6 +633,24 @@ print_feature_summary() {
             "Telemetry Interval (PULSE_TELEMETRY_INTERVAL_SECONDS)" \
             "$pulse_telemetry_interval_seconds seconds" \
             "MQTT telemetry publishing interval (min 5), default: 15"
+        kv_block \
+            "Voice Assistant (PULSE_VOICE_ASSISTANT)" \
+            "$( [ "$pulse_voice_assistant" = "true" ] && echo "enabled" || echo "disabled" )" \
+            "Enable voice assistant features (wake word, STT, TTS), default: false"
+        if [ "$pulse_voice_assistant" = "true" ]; then
+            kv_block \
+                "Wyoming Whisper (STT)" \
+                "$wyoming_whisper_host:$wyoming_whisper_port" \
+                "Speech-to-text server (wyoming-whisper)"
+            kv_block \
+                "Wyoming Piper (TTS)" \
+                "$wyoming_piper_host:$wyoming_piper_port" \
+                "Text-to-speech server (wyoming-piper)"
+            kv_block \
+                "Wyoming OpenWakeWord" \
+                "$wyoming_openwakeword_host:$wyoming_openwakeword_port" \
+                "Wake word detection server (wyoming-openwakeword)"
+        fi
         echo "──────────────────────────────"
     )
 

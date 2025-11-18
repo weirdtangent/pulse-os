@@ -184,6 +184,27 @@ For Mqtt telemetry - how often Pulse should send stats to Mqtt for HomeAssistant
 
     PULSE_TELEMETRY_INTERVAL_SECONDS=15
 
+### Voice Assistant (Wyoming Protocol)
+Enable voice assistant features including wake word detection, speech-to-text, and text-to-speech.
+Requires Wyoming protocol servers (typically running as Docker containers on a NAS or server).
+
+    PULSE_VOICE_ASSISTANT="false"
+
+Wyoming Whisper (Speech-to-Text) server configuration:
+
+    WYOMING_WHISPER_HOST=""
+    WYOMING_WHISPER_PORT="10300"
+
+Wyoming Piper (Text-to-Speech) server configuration:
+
+    WYOMING_PIPER_HOST=""
+    WYOMING_PIPER_PORT="10300"
+
+Wyoming OpenWakeWord (Wake Word Detection) server configuration:
+
+    WYOMING_OPENWAKEWORD_HOST=""
+    WYOMING_OPENWAKEWORD_PORT="10300"
+
 </details>
 
 ---
