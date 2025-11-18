@@ -1,3 +1,10 @@
+# [0.18.0](https://github.com/weirdtangent/pulse-os/compare/v0.17.3...v0.18.0) (2025-11-18)
+
+
+### Features
+
+* add voice assistant configuration, first steps ([fbe5ff9](https://github.com/weirdtangent/pulse-os/commit/fbe5ff98c049ec25fec7dd17ab6771d5262987e5))
+
 ## [0.17.3](https://github.com/weirdtangent/pulse-os/compare/v0.17.2...v0.17.3) (2025-11-18)
 
 
