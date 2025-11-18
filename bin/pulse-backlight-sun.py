@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Adjust Pulse kiosk backlight based on sunrise/sunset data."""
+"""Adjust Pulse kiosk screen brightness and audio volume based on sunrise/sunset."""
 
 from __future__ import annotations
 
 import math
 import os
+import subprocess
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -21,15 +22,17 @@ CONF_PATH = Path("/etc/pulse-backlight.conf")
 DEFAULT_CONF: dict[str, str] = {
     "LAT": "0",
     "LON": "0",
-    "DAY": "85",
-    "NIGHT": "25",
+    "DAY_BRIGHTNESS": "85",
+    "NIGHT_BRIGHTNESS": "25",
+    "DAY_VOLUME": "70",
+    "NIGHT_VOLUME": "30",
     "TWILIGHT": "OFFICIAL",
     "BACKLIGHT": "/sys/class/backlight/11-0045",
 }
 VALID_TWILIGHT = {"OFFICIAL", "CIVIL", "NAUTICAL", "ASTRONOMICAL"}
 
 
-def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
+def read_conf(path: Path) -> tuple[float, float, int, int, int, int, str, str]:
     """Read the config file and return parsed values."""
     cfg = DEFAULT_CONF.copy()
     try:
@@ -45,13 +48,16 @@ def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
 
     lat = float(cfg["LAT"])
     lon = float(cfg["LON"])
-    day = max(0, min(100, int(cfg["DAY"])))
-    night = max(0, min(100, int(cfg["NIGHT"])))
+    # Support legacy DAY/NIGHT for backward compatibility
+    day_brightness = max(0, min(100, int(cfg.get("DAY_BRIGHTNESS", cfg.get("DAY", "85")))))
+    night_brightness = max(0, min(100, int(cfg.get("NIGHT_BRIGHTNESS", cfg.get("NIGHT", "25")))))
+    day_volume = max(0, min(100, int(cfg.get("DAY_VOLUME", "70"))))
+    night_volume = max(0, min(100, int(cfg.get("NIGHT_VOLUME", "30"))))
     twilight = cfg["TWILIGHT"].upper()
     if twilight not in VALID_TWILIGHT:
         twilight = "OFFICIAL"
     backlight = cfg["BACKLIGHT"]
-    return lat, lon, day, night, twilight, backlight
+    return lat, lon, day_brightness, night_brightness, day_volume, night_volume, twilight, backlight
 
 
 def detect_tz() -> timezone | ZoneInfo:
@@ -94,6 +100,50 @@ def set_backlight(device_dir: str, percent: int) -> None:
     max_brightness = int(max_path.read_text(encoding="utf-8").strip())
     scaled = max(0, min(max_brightness, math.floor(max_brightness * percent / 100)))
     brightness_path.write_text(f"{scaled}\n", encoding="utf-8")
+
+
+def set_volume(percent: int) -> None:
+    """Set audio volume using pactl."""
+    # Find the audio sink (works with Bluetooth, USB, analog, etc.)
+    try:
+        result = subprocess.run(
+            ["pactl", "get-default-sink"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        sink = result.stdout.strip()
+        if not sink:
+            # Fallback: get first available sink
+            result = subprocess.run(
+                ["pactl", "list", "sinks", "short"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            for line in result.stdout.split("\n"):
+                if line.strip():
+                    parts = line.split()
+                    if len(parts) > 1:
+                        candidate = parts[1]
+                        if not candidate.endswith(".monitor"):
+                            sink = candidate
+                            break
+        if sink:
+            subprocess.run(
+                ["pactl", "set-sink-volume", sink, f"{percent}%"],
+                check=False,
+                capture_output=True,
+            )
+            # Unmute if volume > 0
+            if percent > 0:
+                subprocess.run(
+                    ["pactl", "set-sink-mute", sink, "0"],
+                    check=False,
+                    capture_output=True,
+                )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass  # Audio not available, skip silently
 
 
 def _twilight_boundaries(
@@ -139,21 +189,26 @@ def next_events(
 
 
 def main() -> None:
-    lat, lon, day_pct, night_pct, twilight, backlight_device = read_conf(CONF_PATH)
+    lat, lon, day_brightness, night_brightness, day_volume, night_volume, twilight, backlight_device = read_conf(
+        CONF_PATH
+    )
     tzinfo = detect_tz()
     is_daytime: bool | None = None
 
     while True:
         now = datetime.now(tzinfo)
         currently_daylight, next_transition = next_events(lat, lon, tzinfo, twilight, now)
-        target_percent = day_pct if currently_daylight else night_pct
+        target_brightness = day_brightness if currently_daylight else night_brightness
+        target_volume = day_volume if currently_daylight else night_volume
         if is_daytime != currently_daylight:
             try:
-                set_backlight(backlight_device, target_percent)
-                is_daytime = currently_daylight
+                set_backlight(backlight_device, target_brightness)
             except OSError:
                 # Backlight not ready; retry soon.
                 pass
+            # Set volume (fails silently if audio not available)
+            set_volume(target_volume)
+            is_daytime = currently_daylight
         sleep_seconds = max(30, min(24 * 3600, int((next_transition - now).total_seconds()) + 2))
         time.sleep(sleep_seconds)
 

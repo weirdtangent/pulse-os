@@ -1,5 +1,5 @@
 [Unit]
-Description=Pulse backlight controller (sunrise/sunset)
+Description=Pulse day/night auto-adjustment (screen brightness and audio volume)
 After=multi-user.target
 
 [Service]

@@ -21,7 +21,8 @@ else
 fi
 
 PULSE_REMOTE_LOGGING="${PULSE_REMOTE_LOGGING:-true}"
-PULSE_BACKLIGHT_SUN="${PULSE_BACKLIGHT_SUN:-true}"
+# Support both new and legacy variable names for backward compatibility
+PULSE_DAY_NIGHT_AUTO="${PULSE_DAY_NIGHT_AUTO:-${PULSE_BACKLIGHT_SUN:-true}}"
 PULSE_BLUETOOTH_AUTOCONNECT="${PULSE_BLUETOOTH_AUTOCONNECT:-true}"
 
 export PULSE_REMOTE_LOG_HOST
@@ -436,11 +437,11 @@ enable_services() {
     fi
     sudo systemctl enable --now pulse-daily-reboot.timer
 
-    if [ "$PULSE_BACKLIGHT_SUN" = "true" ]; then
-        log "Enabling sun-driven backlight control..."
+    if [ "$PULSE_DAY_NIGHT_AUTO" = "true" ]; then
+        log "Enabling day/night auto-adjustment (screen brightness and audio volume)..."
         sudo systemctl enable --now pulse-backlight-sun.service
     else
-        log "Disabling sun-driven backlight control..."
+        log "Disabling day/night auto-adjustment..."
         sudo systemctl disable --now pulse-backlight-sun.service 2>/dev/null || true
     fi
 
@@ -547,7 +548,7 @@ print_feature_summary() {
     local pulse_watchdog_interval="${PULSE_WATCHDOG_INTERVAL:-60}"
     local pulse_watchdog_limit="${PULSE_WATCHDOG_LIMIT:-5}"
     local pulse_watchdog_url="${PULSE_WATCHDOG_URL:-<not set>}"
-    local pulse_backlight_sun="${PULSE_BACKLIGHT_SUN:-true}"
+    local pulse_day_night_auto="${PULSE_DAY_NIGHT_AUTO:-${PULSE_BACKLIGHT_SUN:-true}}"
     local pulse_bluetooth_autoconnect="${PULSE_BLUETOOTH_AUTOCONNECT:-true}"
     local pulse_remote_logging="${PULSE_REMOTE_LOGGING:-true}"
     local pulse_remote_log_host="${PULSE_REMOTE_LOG_HOST:-<not set>}"
@@ -603,9 +604,9 @@ print_feature_summary() {
             "$pulse_watchdog_url" \
             "URL to check for browser health"
         kv_block \
-            "Sun Backlight (PULSE_BACKLIGHT_SUN)" \
-            "$( [ "$pulse_backlight_sun" = "true" ] && echo "enabled" || echo "disabled" )" \
-            "Auto-dimming based on sunrise/sunset, default: true"
+            "Day/Night Auto (PULSE_DAY_NIGHT_AUTO)" \
+            "$( [ "$pulse_day_night_auto" = "true" ] && echo "enabled" || echo "disabled" )" \
+            "Auto-adjust screen brightness and audio volume based on sunrise/sunset, default: true"
         kv_block \
             "Bluetooth Autoconnect (PULSE_BLUETOOTH_AUTOCONNECT)" \
             "$( [ "$pulse_bluetooth_autoconnect" = "true" ] && echo "enabled" || echo "disabled" )" \

@@ -149,9 +149,9 @@ Chromium’s live watchdog:
     PULSE_WATCHDOG_LIMIT=5       # failures before restarting browser
 
 ### Hardware feature toggles
-Dim the screen automatically based on the sunrise/sunset
+Automatically adjust screen brightness and audio volume based on sunrise/sunset. When enabled, the screen and speaker adjust to day/night levels automatically. When disabled, you can control brightness and volume manually (via MQTT or system controls).
 
-    PULSE_BACKLIGHT_SUN="true"
+    PULSE_DAY_NIGHT_AUTO="true"
 
 Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, PulseOS automatically connects to your Bluetooth speaker and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off.
 

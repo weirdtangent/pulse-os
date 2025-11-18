@@ -29,7 +29,10 @@ PULSE_REVIVE_INTERVAL=2
 PULSE_USER="pulse"
 
 # Feature toggles
-PULSE_BACKLIGHT_SUN="true"
+# Automatically adjust screen brightness and audio volume based on sunrise/sunset
+# When enabled, screen and speaker adjust to day/night levels automatically
+# When disabled, you can control brightness and volume manually (via MQTT or system controls)
+PULSE_DAY_NIGHT_AUTO="true"
 PULSE_BLUETOOTH_AUTOCONNECT="true"
 PULSE_REMOTE_LOGGING="true"
 
