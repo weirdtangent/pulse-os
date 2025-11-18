@@ -1,3 +1,10 @@
+# [0.19.0](https://github.com/weirdtangent/pulse-os/compare/v0.18.1...v0.19.0) (2025-11-18)
+
+
+### Features
+
+* add keepalive to bt-autoconnect and improve troubleshooting docs ([a771a34](https://github.com/weirdtangent/pulse-os/commit/a771a349913999a70a3deff0ddc733fc0caa5554))
+
 ## [0.18.1](https://github.com/weirdtangent/pulse-os/compare/v0.18.0...v0.18.1) (2025-11-18)
 
 
