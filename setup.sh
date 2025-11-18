@@ -520,6 +520,18 @@ print_feature_summary() {
     local location
     location=$(read_stored_location 2>/dev/null || echo "<not set>")
 
+    kv_block() {
+        local header="$1"
+        local value="$2"
+        local description="${3:-}"
+        printf "  %s\n" "$header"
+        printf "    %s\n" "$value"
+        if [ -n "$description" ]; then
+            printf "    %s\n" "$description"
+        fi
+        echo
+    }
+
     # Set defaults for variables that might not be set
     local pulse_user="${PULSE_USER:-pulse}"
     local pulse_url="${PULSE_URL:-<not set>}"
@@ -545,52 +557,76 @@ print_feature_summary() {
         echo " PulseOS Configuration Summary"
         echo "────────────────────────────────────────────────────────────────────────"
         echo
-        printf "  %-35s : %s\n" "Location" "$location"
-        printf "    %-33s   %s\n" "" "Physical location identifier (stored in /etc/pulse-location)"
-        echo
-        printf "  %-35s : %s\n" "System User (PULSE_USER)" "$pulse_user"
-        printf "    %-33s   %s\n" "" "Linux user with auto-login, default: pulse"
-        echo
-        printf "  %-35s : %s\n" "Kiosk URL (PULSE_URL)" "$pulse_url"
-        printf "    %-33s   %s\n" "" "Web page loaded on boot and Home button target"
-        echo
-        printf "  %-35s : %s\n" "Version (PULSE_VERSION)" "$pulse_version"
-        printf "    %-33s   %s\n" "" "PulseOS version from VERSION file"
-        echo
-        printf "  %-35s : %s minutes\n" "Revive Interval (PULSE_REVIVE_INTERVAL)" "$pulse_revive_interval"
-        printf "    %-33s   %s\n" "" "Cron interval to check and restart if needed, default: 2"
-        echo
-        printf "  %-35s : %s seconds\n" "Watchdog Interval (PULSE_WATCHDOG_INTERVAL)" "$pulse_watchdog_interval"
-        printf "    %-33s   %s\n" "" "Chromium watchdog check interval, default: 60"
-        printf "  %-35s : %s failures\n" "Watchdog Limit (PULSE_WATCHDOG_LIMIT)" "$pulse_watchdog_limit"
-        printf "    %-33s   %s\n" "" "Failures before restarting browser, default: 5"
-        printf "  %-35s : %s\n" "Watchdog URL (PULSE_WATCHDOG_URL)" "$pulse_watchdog_url"
-        printf "    %-33s   %s\n" "" "URL to check for browser health"
-        echo
-        printf "  %-35s : %s\n" "Sun Backlight (PULSE_BACKLIGHT_SUN)" \
-            "$( [ "$pulse_backlight_sun" = "true" ] && echo "enabled" || echo "disabled" )"
-        printf "    %-33s   %s\n" "" "Auto-dimming based on sunrise/sunset, default: true"
-        printf "  %-35s : %s\n" "Bluetooth Autoconnect (PULSE_BLUETOOTH_AUTOCONNECT)" \
-            "$( [ "$pulse_bluetooth_autoconnect" = "true" ] && echo "enabled" || echo "disabled" )"
-        printf "    %-33s   %s\n" "" "Auto-connect to previously paired devices, default: true"
-        printf "  %-35s : %s\n" "Remote Logging (PULSE_REMOTE_LOGGING)" \
-            "$( [ "$pulse_remote_logging" = "true" ] && echo "enabled" || echo "disabled" )"
-        printf "    %-33s   %s\n" "" "Send syslogs to remote server, default: true"
+        kv_block \
+            "Location" \
+            "$location" \
+            "Physical location identifier (stored in /etc/pulse-location)"
+        kv_block \
+            "System User (PULSE_USER)" \
+            "$pulse_user" \
+            "Linux user with auto-login, default: pulse"
+        kv_block \
+            "Kiosk URL (PULSE_URL)" \
+            "$pulse_url" \
+            "Web page loaded on boot and Home button target"
+        kv_block \
+            "Version (PULSE_VERSION)" \
+            "$pulse_version" \
+            "PulseOS version from VERSION file"
+        kv_block \
+            "Revive Interval (PULSE_REVIVE_INTERVAL)" \
+            "$pulse_revive_interval minutes" \
+            "Cron interval to check and restart if needed, default: 2"
+        kv_block \
+            "Watchdog Interval (PULSE_WATCHDOG_INTERVAL)" \
+            "$pulse_watchdog_interval seconds" \
+            "Chromium watchdog check interval, default: 60"
+        kv_block \
+            "Watchdog Limit (PULSE_WATCHDOG_LIMIT)" \
+            "$pulse_watchdog_limit failures" \
+            "Failures before restarting browser, default: 5"
+        kv_block \
+            "Watchdog URL (PULSE_WATCHDOG_URL)" \
+            "$pulse_watchdog_url" \
+            "URL to check for browser health"
+        kv_block \
+            "Sun Backlight (PULSE_BACKLIGHT_SUN)" \
+            "$( [ "$pulse_backlight_sun" = "true" ] && echo "enabled" || echo "disabled" )" \
+            "Auto-dimming based on sunrise/sunset, default: true"
+        kv_block \
+            "Bluetooth Autoconnect (PULSE_BLUETOOTH_AUTOCONNECT)" \
+            "$( [ "$pulse_bluetooth_autoconnect" = "true" ] && echo "enabled" || echo "disabled" )" \
+            "Auto-connect to previously paired devices, default: true"
+        kv_block \
+            "Remote Logging (PULSE_REMOTE_LOGGING)" \
+            "$( [ "$pulse_remote_logging" = "true" ] && echo "enabled" || echo "disabled" )" \
+            "Send syslogs to remote server, default: true"
         if [ "$pulse_remote_logging" = "true" ]; then
-            printf "  %-35s : %s\n" "Remote Log Host (PULSE_REMOTE_LOG_HOST)" "$pulse_remote_log_host"
-            printf "    %-33s   %s\n" "" "Remote syslog server hostname/IP"
-            printf "  %-35s : %s\n" "Remote Log Port (PULSE_REMOTE_LOG_PORT)" "$pulse_remote_log_port"
-            printf "    %-33s   %s\n" "" "Remote syslog server port"
+            kv_block \
+                "Remote Log Host (PULSE_REMOTE_LOG_HOST)" \
+                "$pulse_remote_log_host" \
+                "Remote syslog server hostname/IP"
+            kv_block \
+                "Remote Log Port (PULSE_REMOTE_LOG_PORT)" \
+                "$pulse_remote_log_port" \
+                "Remote syslog server port"
         fi
-        echo
-        printf "  %-35s : %s\n" "MQTT Host (MQTT_HOST)" "$mqtt_host"
-        printf "    %-33s   %s\n" "" "MQTT broker hostname for Home Assistant integration"
-        printf "  %-35s : %s\n" "MQTT Port (MQTT_PORT)" "$mqtt_port"
-        printf "    %-33s   %s\n" "" "MQTT broker port, default: 1883"
-        printf "  %-35s : %s checks/day\n" "Version Checks (PULSE_VERSION_CHECKS_PER_DAY)" "$pulse_version_checks_per_day"
-        printf "    %-33s   %s\n" "" "Update availability polling (2,4,6,8,12,24), default: 12"
-        printf "  %-35s : %s seconds\n" "Telemetry Interval (PULSE_TELEMETRY_INTERVAL_SECONDS)" "$pulse_telemetry_interval_seconds"
-        printf "    %-33s   %s\n" "" "MQTT telemetry publishing interval (min 5), default: 15"
+        kv_block \
+            "MQTT Host (MQTT_HOST)" \
+            "$mqtt_host" \
+            "MQTT broker hostname for Home Assistant integration"
+        kv_block \
+            "MQTT Port (MQTT_PORT)" \
+            "$mqtt_port" \
+            "MQTT broker port, default: 1883"
+        kv_block \
+            "Version Checks (PULSE_VERSION_CHECKS_PER_DAY)" \
+            "$pulse_version_checks_per_day checks/day" \
+            "Update availability polling (2,4,6,8,12,24), default: 12"
+        kv_block \
+            "Telemetry Interval (PULSE_TELEMETRY_INTERVAL_SECONDS)" \
+            "$pulse_telemetry_interval_seconds seconds" \
+            "MQTT telemetry publishing interval (min 5), default: 15"
         echo "────────────────────────────────────────────────────────────────────────"
     )
 
