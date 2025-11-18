@@ -1,3 +1,10 @@
+## [0.18.1](https://github.com/weirdtangent/pulse-os/compare/v0.18.0...v0.18.1) (2025-11-18)
+
+
+### Bug Fixes
+
+* update to use correct default Wyoming server ports ([ad41f30](https://github.com/weirdtangent/pulse-os/commit/ad41f30129e8e28597b3b00e83f12eeaf33b7750))
+
 # [0.18.0](https://github.com/weirdtangent/pulse-os/compare/v0.17.3...v0.18.0) (2025-11-18)
 
 
