@@ -1,3 +1,10 @@
+# [0.21.0](https://github.com/weirdtangent/pulse-os/compare/v0.20.0...v0.21.0) (2025-11-18)
+
+
+### Features
+
+* improve bluetooth speaker connection stability and volume management ([b08cf0c](https://github.com/weirdtangent/pulse-os/commit/b08cf0c3822a4f8dba70fb7a0d94cbdd90aa2983))
+
 # [0.20.0](https://github.com/weirdtangent/pulse-os/compare/v0.19.1...v0.20.0) (2025-11-18)
 
 
