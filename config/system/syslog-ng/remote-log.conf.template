@@ -9,7 +9,7 @@ filter f_pulse_drop_syslogng_stats {
         program("syslog-ng")
         and match("Log statistics", value("MESSAGE"))
     );
-}
+};
 
 destination d_remote {
     tcp("__REMOTE_LOG_HOST__" port(__REMOTE_LOG_PORT__)
