@@ -135,6 +135,13 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
     bash_block_var = ""
     bash_block_comment: list[str] = []
 
+    def is_separator(line: str) -> bool:
+        stripped = line.strip()
+        if not stripped.startswith("#"):
+            return False
+        body = stripped.lstrip("#").strip()
+        return bool(body) and set(body) == {"="}
+
     with sample_path.open(encoding="utf-8") as handle:
         lines = handle.readlines()
         i = 0
@@ -143,25 +150,32 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
             stripped = line.strip()
             original_line = line.rstrip()
 
-            # Check for section header
-            if stripped.startswith("#") and "===" in stripped:
-                # Save previous section if exists
-                if current_section is not None:
-                    sections.append(current_section)
-
-                # Start new section
-                header = stripped.replace("#", "").strip()
-                current_section = {
-                    "header": header,
-                    "comment": "\n".join(current_comment) if current_comment else "",
-                    "vars": [],
-                }
-                current_comment = []
-                i += 1
-                continue
+            # Detect section header pattern:
+            #   # =========
+            #   # Section Name
+            #   # =========
+            if is_separator(line):
+                if (
+                    i + 2 < len(lines)
+                    and lines[i + 1].strip().startswith("#")
+                    and not is_separator(lines[i + 1])
+                    and is_separator(lines[i + 2])
+                ):
+                    header_text = lines[i + 1].strip().lstrip("#").strip()
+                    if header_text:
+                        if current_section is not None:
+                            sections.append(current_section)
+                        current_section = {
+                            "header": header_text,
+                            "comment": "\n".join(current_comment) if current_comment else "",
+                            "vars": [],
+                        }
+                        current_comment = []
+                        i += 3
+                        continue
 
             # Check if we're entering a bash code block (PULSE_VERSION)
-            if "if [[ -z" in stripped or (in_bash_block and "fi" not in stripped):
+            if "if [[ -z" in stripped or in_bash_block:
                 if not in_bash_block:
                     bash_block_var = "PULSE_VERSION"  # Known case
                     bash_block_lines = [original_line]
