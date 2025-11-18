@@ -553,9 +553,9 @@ print_feature_summary() {
     # Build summary output by capturing printf statements
     local summary_output
     summary_output=$(
-        echo "────────────────────────────────────────────────────────────────────────"
+        echo "──────────────────────────────"
         echo " PulseOS Configuration Summary"
-        echo "────────────────────────────────────────────────────────────────────────"
+        echo "──────────────────────────────"
         echo
         kv_block \
             "Location" \
@@ -627,7 +627,7 @@ print_feature_summary() {
             "Telemetry Interval (PULSE_TELEMETRY_INTERVAL_SECONDS)" \
             "$pulse_telemetry_interval_seconds seconds" \
             "MQTT telemetry publishing interval (min 5), default: 15"
-        echo "────────────────────────────────────────────────────────────────────────"
+        echo "──────────────────────────────"
     )
 
     # Print to stdout (for normal interactive use)
