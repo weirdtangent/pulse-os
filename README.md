@@ -211,6 +211,16 @@ Wyoming OpenWakeWord (Wake Word Detection) server configuration:
 
 ## Notes & Extras
 
+### Voice Assistant (Preview)
+
+Pulse can now behave like a hands-free desk assistant by chaining three Wyoming servers with the new `pulse-assistant` daemon:
+
+1. `wyoming-openwakeword` listens for the wake phrase (default: “Okay Pulse”) and pauses the kiosk while you speak.
+2. `wyoming-whisper` converts that captured audio into text and ships it to the LLM provider you configure (OpenAI by default).
+3. The assistant runs automations (MQTT actions) and streams the reply through `wyoming-piper`, while a lightweight Tk overlay shows the text response on-screen.
+
+All of the knobs (`PULSE_ASSISTANT_*`, `OPENAI_*`, `WYOMING_*`) live in `pulse.conf`. See [`docs/voice-assistant.md`](docs/voice-assistant.md) for setup diagrams, container examples, and manual test steps.
+
 <details>
   <summary><strong>Home Assistant trusted-network example</strong></summary>
 I am choosing to land my Pulse kiosk on a Home Assistant dashboard. To make it easy, so there is no login involved (and long-lived-tokens are a bit tricky when chromium), I setup HA to just trust the kiosk based on internal IP. So in my configuration.yaml, I include this - and just duplicate the IP config for each kiosk you setup:

@@ -100,3 +100,41 @@ WYOMING_PIPER_PORT="10200"
 # Hostname or IP address of the wyoming-openwakeword server
 WYOMING_OPENWAKEWORD_HOST=""
 WYOMING_OPENWAKEWORD_PORT="10400"
+
+# Assistant wake word models (comma separated, matches wyoming-openwakeword)
+PULSE_ASSISTANT_WAKE_WORDS="okay_pulse"
+
+# Optional assistant language hint for STT/LLM
+PULSE_ASSISTANT_LANGUAGE="en"
+
+# Microphone capture command (16 kHz mono PCM)
+PULSE_ASSISTANT_MIC_CMD="arecord -q -t raw -f S16_LE -c 1 -r 16000 -"
+
+# Voice activity detection tuning
+PULSE_ASSISTANT_MIN_PHRASE_SECONDS=1.5
+PULSE_ASSISTANT_MAX_PHRASE_SECONDS=8
+PULSE_ASSISTANT_SILENCE_MS=1200
+PULSE_ASSISTANT_RMS_THRESHOLD=120
+
+# LLM provider configuration
+PULSE_ASSISTANT_PROVIDER="openai"
+OPENAI_API_KEY=""
+OPENAI_MODEL="gpt-4o-mini"
+OPENAI_BASE_URL="https://api.openai.com/v1"
+
+# Optional system prompt override (inline or via file)
+# PULSE_ASSISTANT_SYSTEM_PROMPT="You are a friendly desk assistant..."
+# PULSE_ASSISTANT_SYSTEM_PROMPT_FILE="/opt/pulse-os/prompt.txt"
+
+# Text-to-speech voice name (leave blank for server default)
+PULSE_ASSISTANT_TTS_VOICE=""
+
+# Optional JSON action definitions for device control
+# File path or inline JSON string. Each action must include:
+#   slug, description, topic, payload (string or JSON)
+PULSE_ASSISTANT_ACTIONS_FILE="/opt/pulse-os/pulse-assistant-actions.json"
+# PULSE_ASSISTANT_ACTIONS='[{"slug":"desk_lights_on","description":"Turn on desk lights","topic":"home/desk/lights/set","payload":{"state":"ON"}}]'
+
+# Display overlay tuning
+PULSE_ASSISTANT_DISPLAY_SECONDS=8
+PULSE_ASSISTANT_FONT_SIZE=28

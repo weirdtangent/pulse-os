@@ -323,6 +323,9 @@ link_system_files() {
     sudo ln -sf "$REPO_DIR/config/system/pulse-kiosk-mqtt.service" \
         /etc/systemd/system/pulse-kiosk-mqtt.service
 
+    sudo ln -sf "$REPO_DIR/config/system/pulse-assistant.service" \
+        /etc/systemd/system/pulse-assistant.service
+
     sudo ln -sf "$REPO_DIR/config/system/pulse-bt-mute.service" \
         /etc/systemd/system/pulse-bt-mute.service
 
@@ -338,6 +341,9 @@ link_system_files() {
 
     sudo ln -sf "$REPO_DIR/config/system-user/bt-autoconnect.timer" \
         /etc/systemd/user/bt-autoconnect.timer
+
+    sudo ln -sf "$REPO_DIR/config/system-user/pulse-assistant-display.service" \
+        /etc/systemd/user/pulse-assistant-display.service
 
     sudo mkdir -p /etc/systemd/system/plymouth-quit-wait.service.d
     ensure_symlink "$REPO_DIR/config/system/plymouth-quit-wait.service.d/override.conf" \
@@ -447,6 +453,16 @@ enable_services() {
     fi
 
     sudo systemctl enable --now pulse-kiosk-mqtt.service
+
+    if [ "$PULSE_VOICE_ASSISTANT" = "true" ]; then
+        log "Enabling voice assistant services..."
+        sudo systemctl enable --now pulse-assistant.service
+        sudo systemctl --global enable pulse-assistant-display.service
+    else
+        log "Voice assistant disabled; stopping services..."
+        sudo systemctl disable --now pulse-assistant.service 2>/dev/null || true
+        sudo systemctl --global disable pulse-assistant-display.service 2>/dev/null || true
+    fi
 
     log "Enabling user services (user-global)…"
     # These create symlinks in /etc/systemd/user/
@@ -565,6 +581,9 @@ print_feature_summary() {
     local wyoming_piper_port="${WYOMING_PIPER_PORT:-10200}"
     local wyoming_openwakeword_host="${WYOMING_OPENWAKEWORD_HOST:-<not set>}"
     local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10400}"
+    local pulse_assistant_provider="${PULSE_ASSISTANT_PROVIDER:-openai}"
+    local pulse_assistant_wake_words="${PULSE_ASSISTANT_WAKE_WORDS:-okay_pulse}"
+    local openai_model="${OPENAI_MODEL:-gpt-4o-mini}"
     # Build summary output by capturing printf statements
     local summary_output
     summary_output=$(
@@ -659,6 +678,14 @@ print_feature_summary() {
                 "Wyoming OpenWakeWord" \
                 "$wyoming_openwakeword_host:$wyoming_openwakeword_port" \
                 "Wake word detection server (wyoming-openwakeword)"
+            kv_block \
+                "Assistant Wake Words" \
+                "$pulse_assistant_wake_words" \
+                "Comma-separated list of wake word models"
+            kv_block \
+                "LLM Provider" \
+                "$pulse_assistant_provider (model: $openai_model)" \
+                "Large language model used for responses"
         fi
         echo "──────────────────────────────"
     )

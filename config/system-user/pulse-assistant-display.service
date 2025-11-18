@@ -1,0 +1,14 @@
+[Unit]
+Description=Pulse Assistant On-screen Overlay
+After=graphical-session.target
+BindsTo=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/opt/pulse-os/bin/pulse-assistant-display-wrapper.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+

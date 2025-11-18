@@ -1,0 +1,18 @@
+[Unit]
+Description=Pulse Voice Assistant
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pulse
+WorkingDirectory=/opt/pulse-os
+ExecStart=/opt/pulse-os/bin/pulse-assistant-wrapper.sh
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

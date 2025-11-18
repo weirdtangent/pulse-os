@@ -1,4 +1,5 @@
 adduser
+alsa-utils
 apt
 apt-listchanges
 apt-utils
@@ -199,6 +200,7 @@ python3-libgpiod
 python3-packaging
 python3-paho-mqtt
 python3-psutil
+python3-tk
 python3-rpi-lgpio
 python3-smbus2
 python3-spidev

@@ -40,7 +40,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
             original_line = line.rstrip()
 
             # Check if we're entering a bash code block (PULSE_VERSION)
-            if "if [[ -z" in stripped or (in_bash_block and "fi" not in stripped):
+            if "if [[ -z" in stripped or in_bash_block:
                 if not in_bash_block:
                     # Starting a bash block - find the variable name before it
                     # Look backwards for the variable assignment

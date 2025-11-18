@@ -245,6 +245,7 @@ dependencies = [
     { name = "paho-mqtt" },
     { name = "psutil" },
     { name = "websocket" },
+    { name = "wyoming" },
 ]
 
 [package.optional-dependencies]
@@ -268,6 +269,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=6.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.5" },
     { name = "websocket", specifier = ">=0.2.1" },
+    { name = "wyoming", specifier = ">=1.0.0" },
 ]
 provides-extras = ["dev"]
 
@@ -339,6 +341,15 @@ dependencies = [
     { name = "greenlet" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f2/6d/a60d620ea575c885510c574909d2e3ed62129b121fa2df00ca1c81024c87/websocket-0.2.1.tar.gz", hash = "sha256:42b506fae914ac5ed654e23ba9742e6a342b1a1c3eb92632b6166c65256469a4", size = 195339, upload-time = "2010-12-03T11:51:30.867Z" }
+
+[[package]]
+name = "wyoming"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/ab/8984e755731fac96405b3ecc2236887855120afb9760f829291bd618c26d/wyoming-1.8.0.tar.gz", hash = "sha256:90c16c9fb7e90cbce277032806b7816e6c631812393206a73298f4ad4ffcdb76", size = 37388, upload-time = "2025-10-10T20:49:43.151Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/b3/8fbcbd8b6587cb33a7deafc5f20a1ec96ee40e8f7a9c2eccc1982a4e0f06/wyoming-1.8.0-py3-none-any.whl", hash = "sha256:1bbd9fb2af1fcc7dc8d397821438ff89173d2aed33f1092c62aae0b3ce6d168d", size = 39282, upload-time = "2025-10-10T20:49:41.911Z" },
+]
 
 [[package]]
 name = "zope-event"
