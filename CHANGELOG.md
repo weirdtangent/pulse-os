@@ -1,3 +1,16 @@
+# [0.22.0](https://github.com/weirdtangent/pulse-os/compare/v0.21.1...v0.22.0) (2025-11-18)
+
+
+### Bug Fixes
+
+* drop to more reasonable volume restoration time ([7fde61d](https://github.com/weirdtangent/pulse-os/commit/7fde61dace8418df2f2170416a79adaebf998305))
+
+
+### Features
+
+* add audio volume control in MQTT ([eb4df59](https://github.com/weirdtangent/pulse-os/commit/eb4df59df5ecc16c1c4082f7d0bfc868e9de06b9))
+* add screen brightness control to kiosk-mqtt-listener ([cd63d44](https://github.com/weirdtangent/pulse-os/commit/cd63d44365856fcda84a2032dd312eb9b4e122a6))
+
 ## [0.21.1](https://github.com/weirdtangent/pulse-os/compare/v0.21.0...v0.21.1) (2025-11-18)
 
 
