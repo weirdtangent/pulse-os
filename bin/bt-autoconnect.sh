@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MAC="7A:5A:99:6E:50:4D"
-SINK="bluez_output.7A_5A_99_6E_50_4D.1"
+# Bluetooth device MAC address (can be set via PULSE_BT_MAC env var or pulse.conf)
+# If not set, script will attempt to find the first connected Bluetooth audio device
+MAC="${PULSE_BT_MAC:-}"
 BOOT_SOUND="/opt/pulse-os/sounds/pulse-revived.wav"
 FLAG="/run/user/$(id -u)/pulse-boot-sound-played"
 KEEPALIVE_SOUND="/tmp/pulse-bt-keepalive.wav"
@@ -38,11 +39,30 @@ if ! pw-cli info &>/dev/null; then
   exit 0
 fi
 
+# If MAC is not set, try to find the first connected Bluetooth device
+if [ -z "$MAC" ]; then
+  # Get list of connected devices and find first one that looks like a MAC address
+  MAC=$(bluetoothctl devices Connected 2>/dev/null | grep -m1 -oE "([0-9A-F]{2}:){5}[0-9A-F]{2}" | head -1 || true)
+  if [ -z "$MAC" ]; then
+    # No connected device found, try to get first paired device
+    MAC=$(bluetoothctl devices Paired 2>/dev/null | grep -m1 -oE "([0-9A-F]{2}:){5}[0-9A-F]{2}" | head -1 || true)
+  fi
+fi
+
+# If still no MAC, we can't proceed
+if [ -z "$MAC" ]; then
+  exit 0
+fi
+
 # Try to connect (harmless if already connected)
 bluetoothctl connect "$MAC" >/dev/null 2>&1 || true
 
+# Find the Bluetooth sink dynamically (works with any Bluetooth device)
+# Sink name format: bluez_output.XX_XX_XX_XX_XX_XX.1
+SINK=$(pactl list sinks short 2>/dev/null | grep -m1 "bluez_output" | awk '{print $2}' || true)
+
 # Check if the BT sink exists
-if pactl list sinks short | grep -q "$SINK"; then
+if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
   # Make it default sink
   pactl set-default-sink "$SINK" >/dev/null 2>&1 || true
 

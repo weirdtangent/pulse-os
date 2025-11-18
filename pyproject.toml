@@ -26,7 +26,7 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["bin"]
+src = ["bin", "pulse"]
 extend-exclude = ["uv.lock"]
 
 [tool.ruff.lint]

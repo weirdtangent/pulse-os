@@ -1,6 +1,10 @@
 # PulseOS configuration file (template)
 # Copy this to: /opt/pulse-os/pulse.conf
 
+# ============================================================================
+# Core Configuration
+# ============================================================================
+
 # PULSE_VERSION derived from VERSION file located next to this config.
 if [[ -z "${PULSE_VERSION:-}" ]]; then
   _pulse_conf_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-${0}}")" && pwd)"
@@ -13,11 +17,12 @@ if [[ -z "${PULSE_VERSION:-}" ]]; then
   unset _pulse_conf_dir _pulse_version_file
 fi
 
-# Update availability polling cadence (valid: 2, 4, 6, 8, 12, or 24 checks per day)
-PULSE_VERSION_CHECKS_PER_DAY=12
+# PulseOS user
+PULSE_USER="pulse"
 
-# Telemetry publishing interval in seconds (minimum 5)
-PULSE_TELEMETRY_INTERVAL_SECONDS=15
+# ============================================================================
+# Kiosk Configuration
+# ============================================================================
 
 # Kiosk landing page
 PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
@@ -25,31 +30,59 @@ PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
 # Watchdog loop (cron) interval in minutes
 PULSE_REVIVE_INTERVAL=2
 
-# PulseOS user
-PULSE_USER="pulse"
-
-# Feature toggles
-# Automatically adjust screen brightness and audio volume based on sunrise/sunset
-# When enabled, screen and speaker adjust to day/night levels automatically
-# When disabled, you can control brightness and volume manually (via MQTT or system controls)
-PULSE_DAY_NIGHT_AUTO="true"
-PULSE_BLUETOOTH_AUTOCONNECT="true"
-PULSE_REMOTE_LOGGING="true"
-
-# Remote logging target
-PULSE_REMOTE_LOG_HOST="192.168.1.100"
-PULSE_REMOTE_LOG_PORT="5514"
-
 # Browser watchdog thresholds
 PULSE_WATCHDOG_URL="http://homeassistant.local:8123/static/icons/favicon.ico"
 PULSE_WATCHDOG_LIMIT=5
 PULSE_WATCHDOG_INTERVAL=60
 
-# Mqtt server
+# ============================================================================
+# MQTT Configuration
+# ============================================================================
+
+# MQTT server
 MQTT_HOST="mosquitto.graystorm.com"
 MQTT_PORT="1883"
 
+# Update availability polling cadence (valid: 2, 4, 6, 8, 12, or 24 checks per day)
+PULSE_VERSION_CHECKS_PER_DAY=12
+
+# Telemetry publishing interval in seconds (minimum 5)
+PULSE_TELEMETRY_INTERVAL_SECONDS=15
+
+# ============================================================================
+# Feature Toggles
+# ============================================================================
+
+# Automatically adjust screen brightness and audio volume based on sunrise/sunset
+# When enabled, screen and speaker adjust to day/night levels automatically
+# When disabled, you can control brightness and volume manually (via MQTT or system controls)
+PULSE_DAY_NIGHT_AUTO="true"
+
+# Autoconnect to previously-setup Bluetooth (typically for audio)
+# When enabled, PulseOS automatically connects to your Bluetooth speaker
+# and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off
+PULSE_BLUETOOTH_AUTOCONNECT="true"
+
+# Bluetooth device MAC address (optional)
+# If not set, the script will automatically find the first connected/paired Bluetooth device
+# Format: "XX:XX:XX:XX:XX:XX" (e.g., "7A:5A:99:6E:50:4D")
+# PULSE_BT_MAC=""
+
+# Send remote syslogs to remote server
+PULSE_REMOTE_LOGGING="true"
+
+# ============================================================================
+# Remote Logging Configuration
+# ============================================================================
+
+# Remote logging target
+PULSE_REMOTE_LOG_HOST="192.168.1.100"
+PULSE_REMOTE_LOG_PORT="5514"
+
+# ============================================================================
 # Voice Assistant (Wyoming Protocol)
+# ============================================================================
+
 # Enable voice assistant features (wake word detection, speech-to-text, text-to-speech)
 PULSE_VOICE_ASSISTANT="false"
 

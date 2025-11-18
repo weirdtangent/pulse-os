@@ -20,6 +20,9 @@ import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
 
+from pulse import audio, display
+from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_sensor_entity
+
 
 @dataclass(frozen=True)
 class Topics:
@@ -411,90 +414,11 @@ class KioskMqttListener:
 
     def _get_current_volume(self) -> int | None:
         """Get current volume percentage from audio sink."""
-        sink = self._find_audio_sink()
-        if not sink:
-            return None
-
-        try:
-            # Use get-sink-volume for more reliable parsing
-            result = subprocess.run(
-                ["pactl", "get-sink-volume", sink],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            # Output format: "Volume: front-left: 32768 /  50% / -18.06 dB,   front-right: 32768 /  50% / -18.06 dB"
-            # or simpler: "Volume: 0:  50%  1:  50%"
-            match = re.search(r"(\d+)%", result.stdout)
-            if match:
-                return int(match.group(1))
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            # Fallback: try list sinks if get-sink-volume fails
-            try:
-                result = subprocess.run(
-                    ["pactl", "list", "sinks"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                lines = result.stdout.split("\n")
-                in_sink = False
-                for line in lines:
-                    if f"Name: {sink}" in line:
-                        in_sink = True
-                    if in_sink and "Volume:" in line:
-                        match = re.search(r"(\d+)%", line)
-                        if match:
-                            return int(match.group(1))
-                    if in_sink and line.strip() == "" and "Volume:" in result.stdout[: result.stdout.find(line)]:
-                        break
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                pass
-        return None
+        return audio.get_current_volume()
 
     def _get_current_brightness(self) -> int | None:
         """Get current screen brightness percentage."""
-        device_path = self._find_backlight_device()
-        if not device_path:
-            return None
-
-        try:
-            # Try brightnessctl first
-            result = subprocess.run(
-                ["brightnessctl", "get"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if result.returncode == 0:
-                # brightnessctl get returns raw value, need max to calculate %
-                max_result = subprocess.run(
-                    ["brightnessctl", "max"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if max_result.returncode == 0:
-                    current = int(result.stdout.strip())
-                    max_val = int(max_result.stdout.strip())
-                    if max_val > 0:
-                        return int((current * 100) / max_val)
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
-            pass
-
-        # Fallback: read from sysfs
-        try:
-            device = Path(device_path)
-            max_path = device / "max_brightness"
-            brightness_path = device / "brightness"
-            if max_path.exists() and brightness_path.exists():
-                max_brightness = int(max_path.read_text(encoding="utf-8").strip())
-                current_brightness = int(brightness_path.read_text(encoding="utf-8").strip())
-                if max_brightness > 0:
-                    return int((current_brightness * 100) / max_brightness)
-        except (OSError, ValueError):
-            pass
-        return None
+        return display.get_current_brightness()
 
     @staticmethod
     def _read_cpu_temperature() -> float | None:
@@ -774,67 +698,59 @@ class KioskMqttListener:
             "pl_not_avail": "offline",
         }
         sanitized_hostname = self._sanitize_hostname_for_entity_id(self.config.hostname)
-        home_button = {
-            "platform": "button",
-            "name": "Home",
-            "default_entity_id": f"button.{sanitized_hostname}.home",
-            "cmd_t": self.config.topics.home,
-            "pl_press": "press",
-            "unique_id": f"{self.config.hostname}_home",
-        }
-        reboot_button = {
-            "platform": "button",
-            "name": "Reboot",
-            "default_entity_id": f"button.{sanitized_hostname}.reboot",
-            "cmd_t": self.config.topics.reboot,
-            "pl_press": "press",
-            "unique_id": f"{self.config.hostname}_reboot",
-            "entity_category": "config",
-        }
-        update_button = {
-            "platform": "button",
-            "name": "Update",
-            "default_entity_id": f"button.{sanitized_hostname}.update",
-            "cmd_t": self.config.topics.update,
-            "pl_press": "press",
-            "unique_id": f"{self.config.hostname}_update",
-            "entity_category": "config",
-            "availability": {
+        home_button = build_button_entity(
+            "Home",
+            f"{self.config.hostname}_home",
+            self.config.topics.home,
+            sanitized_hostname,
+        )
+        reboot_button = build_button_entity(
+            "Reboot",
+            f"{self.config.hostname}_reboot",
+            self.config.topics.reboot,
+            sanitized_hostname,
+            entity_category="config",
+        )
+        update_button = build_button_entity(
+            "Update",
+            f"{self.config.hostname}_update",
+            self.config.topics.update,
+            sanitized_hostname,
+            entity_category="config",
+            availability={
                 "topic": self.config.topics.update_availability,
                 "pl_avail": "online",
                 "pl_not_avail": "offline",
             },
-        }
+        )
 
-        volume_control = {
-            "platform": "number",
-            "name": "Audio Volume",
-            "default_entity_id": f"number.{sanitized_hostname}_volume",
-            "cmd_t": self.config.topics.volume,
-            "stat_t": f"{self.config.topics.telemetry}/volume",
-            "unique_id": f"{self.config.hostname}_volume",
-            "min": 0,
-            "max": 100,
-            "step": 1,
-            "unit_of_meas": "%",
-            "icon": "mdi:volume-high",
-            "entity_category": "config",
-        }
+        volume_control = build_number_entity(
+            "Audio Volume",
+            f"{self.config.hostname}_volume",
+            self.config.topics.volume,
+            f"{self.config.topics.telemetry}/volume",
+            sanitized_hostname,
+            min_value=0,
+            max_value=100,
+            step=1,
+            unit_of_measurement="%",
+            icon="mdi:volume-high",
+            entity_category="config",
+        )
 
-        brightness_control = {
-            "platform": "number",
-            "name": "Screen Brightness",
-            "default_entity_id": f"number.{sanitized_hostname}_brightness",
-            "cmd_t": self.config.topics.brightness,
-            "stat_t": f"{self.config.topics.telemetry}/brightness",
-            "unique_id": f"{self.config.hostname}_brightness",
-            "min": 0,
-            "max": 100,
-            "step": 1,
-            "unit_of_meas": "%",
-            "icon": "mdi:brightness-6",
-            "entity_category": "config",
-        }
+        brightness_control = build_number_entity(
+            "Screen Brightness",
+            f"{self.config.hostname}_brightness",
+            self.config.topics.brightness,
+            f"{self.config.topics.telemetry}/brightness",
+            sanitized_hostname,
+            min_value=0,
+            max_value=100,
+            step=1,
+            unit_of_measurement="%",
+            icon="mdi:brightness-6",
+            entity_category="config",
+        )
 
         latest_version_sensor = {
             "platform": "sensor",
@@ -952,78 +868,19 @@ class KioskMqttListener:
         thread = threading.Thread(target=self._perform_reboot, name="pulse-reboot", daemon=True)
         thread.start()
 
-    @staticmethod
-    def _find_audio_sink() -> str | None:
-        """Find the audio sink to use for volume control.
-        
-        Works with any audio output: Bluetooth, USB, analog (ReSpeaker), etc.
-        Prefers the default sink, falls back to any available sink.
-        """
-        try:
-            # First, try to get the default sink (works for any audio type)
-            result = subprocess.run(
-                ["pactl", "get-default-sink"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            default_sink = result.stdout.strip()
-            if default_sink:
-                return default_sink
-
-            # Fallback: get the first available sink if no default is set
-            result = subprocess.run(
-                ["pactl", "list", "sinks", "short"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            for line in result.stdout.split("\n"):
-                if line.strip():
-                    # Format: "<index> <name> <description>"
-                    # Extract sink name (second field, index 1)
-                    parts = line.split()
-                    if len(parts) > 1:
-                        sink_name = parts[1]
-                        # Skip monitor sinks (they're for recording, not playback)
-                        if not sink_name.endswith(".monitor"):
-                            return sink_name
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
-        return None
 
     def handle_volume(self, payload: bytes) -> None:
         """Handle volume control command from MQTT."""
         try:
             volume_str = payload.decode("utf-8", errors="ignore").strip()
             volume = int(float(volume_str))
-            # Clamp to valid range
-            volume = max(0, min(100, volume))
         except (ValueError, TypeError):
             self.log(f"volume: invalid payload '{payload}', expected 0-100")
             return
 
-        # Find audio sink dynamically (works with Bluetooth, USB, analog, etc.)
-        sink = self._find_audio_sink()
-        if not sink:
-            self.log("volume: no audio sink found")
-            return
-
-        try:
-            # Set volume using pactl
-            subprocess.run(
-                ["pactl", "set-sink-volume", sink, f"{volume}%"],
-                check=True,
-                capture_output=True,
-            )
-            # Unmute if volume > 0
-            if volume > 0:
-                subprocess.run(
-                    ["pactl", "set-sink-mute", sink, "0"],
-                    check=False,
-                    capture_output=True,
-                )
-            self.log(f"volume: set to {volume}% on {sink}")
+        if audio.set_volume(volume):
+            sink = audio.find_audio_sink()
+            self.log(f"volume: set to {volume}% on {sink or 'default sink'}")
             # Publish current volume state
             self._safe_publish(
                 None,
@@ -1032,73 +889,21 @@ class KioskMqttListener:
                 qos=0,
                 retain=True,
             )
-        except subprocess.CalledProcessError as exc:
-            self.log(f"volume: failed to set volume: {exc}")
-        except FileNotFoundError:
-            self.log("volume: pactl command not found")
-
-    @staticmethod
-    def _find_backlight_device() -> str | None:
-        """Find the backlight device path."""
-        # Try reading from config file first
-        try:
-            with open("/etc/pulse-backlight.conf", encoding="utf-8") as handle:
-                for line in handle:
-                    line = line.strip()
-                    if line.startswith("BACKLIGHT="):
-                        device_path = line.split("=", 1)[1].strip()
-                        if Path(device_path).exists():
-                            return device_path
-        except (OSError, IndexError):
-            pass
-
-        # Fallback: find any backlight device
-        backlight_dir = Path("/sys/class/backlight")
-        if backlight_dir.exists():
-            for device in backlight_dir.iterdir():
-                if (device / "brightness").exists() and (device / "max_brightness").exists():
-                    return str(device)
-        return None
+        else:
+            self.log("volume: failed to set volume - no audio sink found")
 
     def handle_brightness(self, payload: bytes) -> None:
         """Handle brightness control command from MQTT."""
         try:
             brightness_str = payload.decode("utf-8", errors="ignore").strip()
             brightness = int(float(brightness_str))
-            # Clamp to valid range
-            brightness = max(0, min(100, brightness))
         except (ValueError, TypeError):
             self.log(f"brightness: invalid payload '{payload}', expected 0-100")
             return
 
-        device_path = self._find_backlight_device()
-        if not device_path:
-            self.log("brightness: no backlight device found")
-            return
-
-        try:
-            # Try brightnessctl first (easier and more portable)
-            result = subprocess.run(
-                ["brightnessctl", "set", f"{brightness}%"],
-                check=False,
-                capture_output=True,
-            )
-            if result.returncode == 0:
-                self.log(f"brightness: set to {brightness}% using brightnessctl")
-            else:
-                # Fallback: write directly to sysfs
-                device = Path(device_path)
-                max_path = device / "max_brightness"
-                brightness_path = device / "brightness"
-                if max_path.exists() and brightness_path.exists():
-                    max_brightness = int(max_path.read_text(encoding="utf-8").strip())
-                    scaled = max(0, min(max_brightness, int(max_brightness * brightness / 100)))
-                    brightness_path.write_text(f"{scaled}\n", encoding="utf-8")
-                    self.log(f"brightness: set to {brightness}% via sysfs")
-                else:
-                    self.log("brightness: failed to set - device files not found")
-                    return
-
+        if display.set_brightness(brightness):
+            device_path = display.find_backlight_device()
+            self.log(f"brightness: set to {brightness}% on {device_path or 'default device'}")
             # Publish current brightness state
             self._safe_publish(
                 None,
@@ -1107,8 +912,8 @@ class KioskMqttListener:
                 qos=0,
                 retain=True,
             )
-        except (subprocess.CalledProcessError, OSError) as exc:
-            self.log(f"brightness: failed to set brightness: {exc}")
+        else:
+            self.log("brightness: failed to set brightness - no backlight device found")
 
     def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)

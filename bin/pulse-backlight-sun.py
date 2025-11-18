@@ -18,6 +18,8 @@ except ImportError:  # pragma: no cover - fallback for Python < 3.9
 from astral import LocationInfo
 from astral.sun import dawn, dusk, sun
 
+from pulse import audio, display
+
 CONF_PATH = Path("/etc/pulse-backlight.conf")
 DEFAULT_CONF: dict[str, str] = {
     "LAT": "0",
@@ -94,56 +96,12 @@ def detect_tz() -> timezone | ZoneInfo:
 
 def set_backlight(device_dir: str, percent: int) -> None:
     """Write the scaled brightness value to the backlight device."""
-    device_path = Path(device_dir)
-    max_path = device_path / "max_brightness"
-    brightness_path = device_path / "brightness"
-    max_brightness = int(max_path.read_text(encoding="utf-8").strip())
-    scaled = max(0, min(max_brightness, math.floor(max_brightness * percent / 100)))
-    brightness_path.write_text(f"{scaled}\n", encoding="utf-8")
+    display.set_brightness(percent, device_path=device_dir)
 
 
 def set_volume(percent: int) -> None:
     """Set audio volume using pactl."""
-    # Find the audio sink (works with Bluetooth, USB, analog, etc.)
-    try:
-        result = subprocess.run(
-            ["pactl", "get-default-sink"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        sink = result.stdout.strip()
-        if not sink:
-            # Fallback: get first available sink
-            result = subprocess.run(
-                ["pactl", "list", "sinks", "short"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            for line in result.stdout.split("\n"):
-                if line.strip():
-                    parts = line.split()
-                    if len(parts) > 1:
-                        candidate = parts[1]
-                        if not candidate.endswith(".monitor"):
-                            sink = candidate
-                            break
-        if sink:
-            subprocess.run(
-                ["pactl", "set-sink-volume", sink, f"{percent}%"],
-                check=False,
-                capture_output=True,
-            )
-            # Unmute if volume > 0
-            if percent > 0:
-                subprocess.run(
-                    ["pactl", "set-sink-mute", sink, "0"],
-                    check=False,
-                    capture_output=True,
-                )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass  # Audio not available, skip silently
+    audio.set_volume(percent)  # Fails silently if audio not available
 
 
 def _twilight_boundaries(
