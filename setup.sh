@@ -279,6 +279,7 @@ link_home_files() {
     ensure_symlink "$REPO_DIR/bin/revive-pulse.sh" "/home/$PULSE_USER/bin/revive-pulse.sh"
     ensure_symlink "$REPO_DIR/bin/pulse-backlight-sun.py" "/home/$PULSE_USER/bin/pulse-backlight-sun.py"
     ensure_symlink "$REPO_DIR/bin/sync-pulse-conf.py" "/home/$PULSE_USER/bin/sync-pulse-conf.py"
+    ensure_symlink "$REPO_DIR/bin/safe-reboot.sh" "/home/$PULSE_USER/bin/safe-reboot.sh"
     ensure_symlink "$REPO_DIR/bin/bt-mute.sh" "/home/$PULSE_USER/bin/bt-mute.sh"
 
     ensure_symlink "$REPO_DIR/config/x/xinitrc" "/home/$PULSE_USER/.xinitrc"

@@ -161,6 +161,12 @@ Send remote syslogs to remote server
   
     PULSE_REMOTE_LOGGING="true"
 
+Safe reboot guard (prevents infinite reboot loops if multiple watchdogs fire back-to-back). Leave the defaults unless you have very slow boots:
+
+    PULSE_REBOOT_MIN_UPTIME_SECONDS="300"
+    PULSE_REBOOT_WINDOW_SECONDS="900"
+    PULSE_REBOOT_MAX_COUNT="3"
+
 ### Remote logging target
 For remote systlog monitoring, only needed if TRUE set for PULSE_REMOTE_LOGGING
 

@@ -4,4 +4,4 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/systemctl reboot
+ExecStart=/opt/pulse-os/bin/safe-reboot.sh "daily-reboot"

@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -928,7 +929,7 @@ class KioskMqttListener:
         steps: list[tuple[str, list[str], str | None]] = [
             ("git pull", ["git", "pull", "--ff-only"], repo_dir),
             ("setup.sh", ["./setup.sh"], repo_dir),
-            ("reboot", ["sudo", "reboot", "now"], repo_dir),
+            ("reboot", self._safe_reboot_command("update: reboot"), repo_dir),
         ]
 
         try:
@@ -947,14 +948,21 @@ class KioskMqttListener:
 
     def _perform_reboot(self) -> None:
         try:
-            self.log("reboot: issuing sudo reboot now")
-            subprocess.run(["sudo", "reboot", "now"], check=True)
+            self.log("reboot: requesting safe reboot")
+            subprocess.run(self._safe_reboot_command("mqtt: manual reboot"), check=True)
         except FileNotFoundError as exc:
             self.log(f"reboot: command not found: {exc}")
         except subprocess.CalledProcessError as exc:
             self.log(f"reboot: command failed with exit code {exc.returncode}")
         finally:
             self.reboot_lock.release()
+
+    @staticmethod
+    def _safe_reboot_command(reason: str) -> list[str]:
+        script = "/opt/pulse-os/bin/safe-reboot.sh"
+        if Path(script).exists():
+            return ["sudo", script, reason]
+        return ["sudo", "reboot", "now"]
 
 
 def main():

@@ -5,6 +5,7 @@ exec >>"$HOME/kiosk.log" 2>&1
 set -x
 
 source /opt/pulse-os/pulse.conf
+SAFE_REBOOT="/opt/pulse-os/bin/safe-reboot.sh"
 
 echo "==== $(date) kiosk start (DISPLAY=${DISPLAY:-unset}) ===="
 
@@ -73,7 +74,11 @@ watchdog_loop() {
       fi
       if (( WATCHDOG_FAILS >= PULSE_WATCHDOG_LIMIT * 3 ));  then
         echo "$(date) Watchdog: hard reboot"
-        sudo reboot
+        if command -v "$SAFE_REBOOT" >/dev/null 2>&1; then
+          sudo "$SAFE_REBOOT" "kiosk-watchdog: failures"
+        else
+          sudo reboot
+        fi
       fi
     fi
     sleep "$PULSE_WATCHDOG_INTERVAL"

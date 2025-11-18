@@ -71,6 +71,14 @@ PULSE_BLUETOOTH_AUTOCONNECT="true"
 # Send remote syslogs to remote server
 PULSE_REMOTE_LOGGING="true"
 
+# Safe reboot guard configuration
+# Minimum uptime (in seconds) before an automatic reboot is allowed
+PULSE_REBOOT_MIN_UPTIME_SECONDS="300"
+# Rolling window (in seconds) for counting automatic reboots
+PULSE_REBOOT_WINDOW_SECONDS="900"
+# Maximum automatic reboot attempts inside the rolling window
+PULSE_REBOOT_MAX_COUNT="3"
+
 # ============================================================================
 # Remote Logging Configuration
 # ============================================================================

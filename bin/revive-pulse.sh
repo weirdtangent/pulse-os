@@ -7,6 +7,7 @@ CONFIG_FILE="/opt/pulse-os/pulse.conf"
 export DISPLAY=:0
 export XAUTHORITY=/home/$PULSE_USER/.Xauthority
 
+SAFE_REBOOT="/opt/pulse-os/bin/safe-reboot.sh"
 LOG="/home/$PULSE_USER/revive.log"
 
 # quick ping to see if HA itself is reachable
@@ -48,7 +49,15 @@ if [ -n "$PID" ]; then
     chromium --kiosk "$PULSE_URL" &
   fi
 else
-  echo "$(date): Chromium not running — rebooting" >> "$LOG"
-  /sbin/reboot
+  echo "$(date): Chromium not running — requesting reboot" >> "$LOG"
+  if command -v "$SAFE_REBOOT" >/dev/null 2>&1; then
+    if [[ $EUID -eq 0 ]]; then
+      "$SAFE_REBOOT" "revive-pulse: chromium missing"
+    else
+      sudo "$SAFE_REBOOT" "revive-pulse: chromium missing"
+    fi
+  else
+    /sbin/reboot
+  fi
 fi
 

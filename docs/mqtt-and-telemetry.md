@@ -11,8 +11,8 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 | Button | Topic | Action |
 | ------ | ----- | ------ |
 | `Home` | `pulse/<hostname>/kiosk/home` | Reopens the configured `PULSE_URL` in Chromium. |
-| `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, reruns `./setup.sh`, then issues `sudo reboot now`. |
-| `Reboot` | `pulse/<hostname>/kiosk/reboot` | Plain `sudo reboot now` with no code pull. |
+| `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, reruns `./setup.sh`, then calls the safe reboot guard. |
+| `Reboot` | `pulse/<hostname>/kiosk/reboot` | Requests a safe reboot (respecting the guard thresholds). |
 
 ### Update button requirements
 
@@ -21,12 +21,12 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 
   ```
   # /etc/sudoers.d/pulse-update
-  pulse ALL=(root) NOPASSWD: /usr/bin/reboot
+  pulse ALL=(root) NOPASSWD: /opt/pulse-os/bin/safe-reboot.sh, /usr/bin/systemctl, /usr/bin/reboot
   ```
 
   If `setup.sh` already runs unattended via sudo, you typically just need to add `reboot`.
 
-- There is no payload validation; only expose the buttons on a broker you control.
+- There is no payload validation; only expose the buttons on a broker you control. The safe reboot wrapper prevents repeated reboots when multiple watchers fire inside a short window.
 - Button availability is dynamic: the `Update` button only appears when GitHub’s `VERSION` file is newer than the kiosk’s local version. The kiosk checks 12×/day by default (2/4/6/8/12/24 options via `PULSE_VERSION_CHECKS_PER_DAY`).
 - The Update button title automatically changes to `Update to vX.Y.Z` so you know which release will be applied before clicking.
 
