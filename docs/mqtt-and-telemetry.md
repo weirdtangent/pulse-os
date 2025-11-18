@@ -72,7 +72,7 @@ actions:
       summary: "{{ trigger.payload | default('PulseOS setup summary unavailable.') }}"
   - action: persistent_notification.create
     data:
-      title: "\"PulseOS setup summary ({{ device_name }})\""
+      title: "PulseOS: {{ device_name }}"
       message: "{{ summary }}"
 mode: single
 ```
