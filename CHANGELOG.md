@@ -1,3 +1,10 @@
+# [0.20.0](https://github.com/weirdtangent/pulse-os/compare/v0.19.1...v0.20.0) (2025-11-18)
+
+
+### Features
+
+* add bluetooth mute on shutdown (and restore volume after connection) ([a9ae5ef](https://github.com/weirdtangent/pulse-os/commit/a9ae5ef81954f3e1e54371b4c209e13da89d3f97))
+
 ## [0.19.1](https://github.com/weirdtangent/pulse-os/compare/v0.19.0...v0.19.1) (2025-11-18)
 
 
