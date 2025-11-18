@@ -2,6 +2,7 @@
 import atexit
 import json
 import os
+import re
 import socket
 import subprocess
 import threading
@@ -25,6 +26,7 @@ class Topics:
     goto: str
     update: str
     reboot: str
+    volume: str
     device: str
     availability: str
     update_availability: str
@@ -164,6 +166,7 @@ def load_config() -> EnvConfig:
         goto=f"pulse/{hostname}/kiosk/url/set",
         update=f"pulse/{hostname}/kiosk/update",
         reboot=f"pulse/{hostname}/kiosk/reboot",
+        volume=f"pulse/{hostname}/audio/volume/set",
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
@@ -391,7 +394,55 @@ class KioskMqttListener:
         metrics["load_avg_5m"] = round(load5, 2)
         metrics["load_avg_15m"] = round(load15, 2)
 
+        # Get current audio volume
+        volume = self._get_current_volume()
+        if volume is not None:
+            metrics["volume"] = volume
+
         return metrics
+
+    def _get_current_volume(self) -> int | None:
+        """Get current volume percentage from audio sink."""
+        sink = self._find_audio_sink()
+        if not sink:
+            return None
+
+        try:
+            # Use get-sink-volume for more reliable parsing
+            result = subprocess.run(
+                ["pactl", "get-sink-volume", sink],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            # Output format: "Volume: front-left: 32768 /  50% / -18.06 dB,   front-right: 32768 /  50% / -18.06 dB"
+            # or simpler: "Volume: 0:  50%  1:  50%"
+            match = re.search(r"(\d+)%", result.stdout)
+            if match:
+                return int(match.group(1))
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Fallback: try list sinks if get-sink-volume fails
+            try:
+                result = subprocess.run(
+                    ["pactl", "list", "sinks"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                lines = result.stdout.split("\n")
+                in_sink = False
+                for line in lines:
+                    if f"Name: {sink}" in line:
+                        in_sink = True
+                    if in_sink and "Volume:" in line:
+                        match = re.search(r"(\d+)%", line)
+                        if match:
+                            return int(match.group(1))
+                    if in_sink and line.strip() == "" and "Volume:" in result.stdout[: result.stdout.find(line)]:
+                        break
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+        return None
 
     @staticmethod
     def _read_cpu_temperature() -> float | None:
@@ -703,6 +754,21 @@ class KioskMqttListener:
             },
         }
 
+        volume_control = {
+            "platform": "number",
+            "name": "Audio Volume",
+            "default_entity_id": f"number.{sanitized_hostname}_volume",
+            "cmd_t": self.config.topics.volume,
+            "stat_t": f"{self.config.topics.telemetry}/volume",
+            "unique_id": f"{self.config.hostname}_volume",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit_of_meas": "%",
+            "icon": "mdi:volume-high",
+            "entity_category": "config",
+        }
+
         latest_version_sensor = {
             "platform": "sensor",
             "name": "Latest version",
@@ -723,6 +789,7 @@ class KioskMqttListener:
                 "Home": home_button,
                 "Reboot": reboot_button,
                 "Update": update_button,
+                "Audio Volume": volume_control,
                 "Latest version": latest_version_sensor,
                 **telemetry_components,
             },
@@ -768,6 +835,7 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.goto)
         client.subscribe(self.config.topics.update)
         client.subscribe(self.config.topics.reboot)
+        client.subscribe(self.config.topics.volume)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         # Publish cached latest version if available
@@ -790,6 +858,8 @@ class KioskMqttListener:
             self.handle_update()
         elif msg.topic == self.config.topics.reboot:
             self.handle_reboot()
+        elif msg.topic == self.config.topics.volume:
+            self.handle_volume(msg.payload)
         else:
             self.log(f"Received message on unexpected topic {msg.topic}")
 
@@ -810,6 +880,91 @@ class KioskMqttListener:
             return
         thread = threading.Thread(target=self._perform_reboot, name="pulse-reboot", daemon=True)
         thread.start()
+
+    @staticmethod
+    def _find_audio_sink() -> str | None:
+        """Find the audio sink to use for volume control.
+        
+        Works with any audio output: Bluetooth, USB, analog (ReSpeaker), etc.
+        Prefers the default sink, falls back to any available sink.
+        """
+        try:
+            # First, try to get the default sink (works for any audio type)
+            result = subprocess.run(
+                ["pactl", "get-default-sink"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            default_sink = result.stdout.strip()
+            if default_sink:
+                return default_sink
+
+            # Fallback: get the first available sink if no default is set
+            result = subprocess.run(
+                ["pactl", "list", "sinks", "short"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            for line in result.stdout.split("\n"):
+                if line.strip():
+                    # Format: "<index> <name> <description>"
+                    # Extract sink name (second field, index 1)
+                    parts = line.split()
+                    if len(parts) > 1:
+                        sink_name = parts[1]
+                        # Skip monitor sinks (they're for recording, not playback)
+                        if not sink_name.endswith(".monitor"):
+                            return sink_name
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        return None
+
+    def handle_volume(self, payload: bytes) -> None:
+        """Handle volume control command from MQTT."""
+        try:
+            volume_str = payload.decode("utf-8", errors="ignore").strip()
+            volume = int(float(volume_str))
+            # Clamp to valid range
+            volume = max(0, min(100, volume))
+        except (ValueError, TypeError):
+            self.log(f"volume: invalid payload '{payload}', expected 0-100")
+            return
+
+        # Find audio sink dynamically (works with Bluetooth, USB, analog, etc.)
+        sink = self._find_audio_sink()
+        if not sink:
+            self.log("volume: no audio sink found")
+            return
+
+        try:
+            # Set volume using pactl
+            subprocess.run(
+                ["pactl", "set-sink-volume", sink, f"{volume}%"],
+                check=True,
+                capture_output=True,
+            )
+            # Unmute if volume > 0
+            if volume > 0:
+                subprocess.run(
+                    ["pactl", "set-sink-mute", sink, "0"],
+                    check=False,
+                    capture_output=True,
+                )
+            self.log(f"volume: set to {volume}% on {sink}")
+            # Publish current volume state
+            self._safe_publish(
+                None,
+                f"{self.config.topics.telemetry}/volume",
+                str(volume),
+                qos=0,
+                retain=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            self.log(f"volume: failed to set volume: {exc}")
+        except FileNotFoundError:
+            self.log("volume: pactl command not found")
 
     def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)
