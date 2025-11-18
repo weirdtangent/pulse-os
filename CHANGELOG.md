@@ -1,3 +1,10 @@
+## [0.19.1](https://github.com/weirdtangent/pulse-os/compare/v0.19.0...v0.19.1) (2025-11-18)
+
+
+### Bug Fixes
+
+* ignore generated remote-log.conf file ([3c24fa0](https://github.com/weirdtangent/pulse-os/commit/3c24fa07ace62fb9d12286d04bcca2eb617d83f5))
+
 # [0.19.0](https://github.com/weirdtangent/pulse-os/compare/v0.18.1...v0.19.0) (2025-11-18)
 
 
