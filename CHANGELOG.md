@@ -1,3 +1,10 @@
+## [0.17.3](https://github.com/weirdtangent/pulse-os/compare/v0.17.2...v0.17.3) (2025-11-18)
+
+
+### Bug Fixes
+
+* add missing semicolon to remote-log.conf.template ([2dcc684](https://github.com/weirdtangent/pulse-os/commit/2dcc684c359620ed25974355d546aac01be42a36))
+
 ## [0.17.2](https://github.com/weirdtangent/pulse-os/compare/v0.17.1...v0.17.2) (2025-11-18)
 
 
