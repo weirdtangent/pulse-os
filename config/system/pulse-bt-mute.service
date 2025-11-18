@@ -1,7 +1,7 @@
 [Unit]
 Description=Mute Bluetooth speaker before shutdown
 DefaultDependencies=no
-Before=shutdown.target reboot.target halt.target
+Before=shutdown.target reboot.target halt.target systemd-shutdown.service
 Conflicts=reboot.target halt.target
 
 [Service]
