@@ -153,7 +153,7 @@ Dim the screen automatically based on the sunrise/sunset
 
     PULSE_BACKLIGHT_SUN="true"
 
-Autoconnect to previously-setup Bluetooth (typically for audio)
+Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, PulseOS automatically connects to your Bluetooth speaker and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off.
 
     PULSE_BLUETOOTH_AUTOCONNECT="true"
 
