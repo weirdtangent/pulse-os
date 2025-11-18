@@ -51,3 +51,31 @@ At ~15‑second intervals (configurable), each kiosk publishes retained MQTT sen
 
 Use these metrics to build health dashboards, automations (e.g., alert when CPU temp > 80 °C), or long-term statistics in the recorder of your choice.
 
+---
+
+## Setup Summary Snapshot
+
+Every time `setup.sh` completes it renders the configuration summary block that you see in the terminal and publishes the exact same text to a retained MQTT topic: `pulse/<hostname>/setup/summary`. This makes it easy to surface the latest “how is this kiosk configured?” snapshot right inside Home Assistant.
+
+To mirror the persistent-notification workflow shown in the screenshot, create a new automation in the UI, switch to YAML mode, and paste the following template (replace `<hostname>` with your device’s hostname as written to `/etc/pulse-location`):
+
+```
+alias: Pulse <location> Setup Summary
+description: ""
+triggers:
+  - trigger: mqtt
+    topic: pulse/<hostname>/setup/summary
+conditions: []
+actions:
+  - variables:
+      device_name: "{{ trigger.topic.split('/')[1] | default('pulse') }}"
+      summary: "{{ trigger.payload | default('PulseOS setup summary unavailable.') }}"
+  - action: persistent_notification.create
+    data:
+      title: "\"PulseOS setup summary ({{ device_name }})\""
+      message: "{{ summary }}"
+mode: single
+```
+
+Because the MQTT message is retained, Home Assistant will immediately show the most recent summary after every restart, plus whenever a kiosk reruns `setup.sh`. Feel free to swap the action for markdown cards, mobile push, or whatever flow fits your deployment.
+
