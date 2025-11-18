@@ -1,3 +1,10 @@
+# [0.17.0](https://github.com/weirdtangent/pulse-os/compare/v0.16.0...v0.17.0) (2025-11-18)
+
+
+### Features
+
+* simplify summary formatting ([8aefe97](https://github.com/weirdtangent/pulse-os/commit/8aefe970a2f46ca8f9cfbb995f142f5511d083e4))
+
 # [0.16.0](https://github.com/weirdtangent/pulse-os/compare/v0.15.0...v0.16.0) (2025-11-18)
 
 
