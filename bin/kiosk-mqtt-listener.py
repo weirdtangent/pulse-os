@@ -2,7 +2,6 @@
 import atexit
 import json
 import os
-import re
 import socket
 import subprocess
 import threading
@@ -12,16 +11,14 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
 import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
-
 from pulse import audio, display
-from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_sensor_entity
+from pulse.mqtt_discovery import build_button_entity, build_number_entity
 
 
 @dataclass(frozen=True)
@@ -867,7 +864,6 @@ class KioskMqttListener:
             return
         thread = threading.Thread(target=self._perform_reboot, name="pulse-reboot", daemon=True)
         thread.start()
-
 
     def handle_volume(self, payload: bytes) -> None:
         """Handle volume control command from MQTT."""

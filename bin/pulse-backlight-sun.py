@@ -3,9 +3,7 @@
 
 from __future__ import annotations
 
-import math
 import os
-import subprocess
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +15,6 @@ except ImportError:  # pragma: no cover - fallback for Python < 3.9
 
 from astral import LocationInfo
 from astral.sun import dawn, dusk, sun
-
 from pulse import audio, display
 
 CONF_PATH = Path("/etc/pulse-backlight.conf")

@@ -10,10 +10,10 @@ CONF_PATH = Path("/etc/pulse-backlight.conf")
 
 def find_backlight_device() -> str | None:
     """Find the backlight device path.
-    
+
     First tries reading from /etc/pulse-backlight.conf, then falls back
     to auto-detecting any backlight device in /sys/class/backlight.
-    
+
     Returns:
         The backlight device path (e.g., "/sys/class/backlight/11-0045") or None if not found.
     """
@@ -40,10 +40,10 @@ def find_backlight_device() -> str | None:
 
 def get_current_brightness(device_path: str | None = None) -> int | None:
     """Get current screen brightness percentage.
-    
+
     Args:
         device_path: Optional backlight device path. If None, will find it automatically.
-    
+
     Returns:
         Brightness percentage (0-100) or None if unavailable.
     """
@@ -93,11 +93,11 @@ def get_current_brightness(device_path: str | None = None) -> int | None:
 
 def set_brightness(percent: int, device_path: str | None = None) -> bool:
     """Set screen brightness.
-    
+
     Args:
         percent: Brightness percentage (0-100), will be clamped to valid range.
         device_path: Optional backlight device path. If None, will find it automatically.
-    
+
     Returns:
         True if successful, False otherwise.
     """
@@ -131,4 +131,3 @@ def set_brightness(percent: int, device_path: str | None = None) -> bool:
     except (subprocess.CalledProcessError, OSError):
         pass
     return False
-

@@ -15,7 +15,7 @@ def build_button_entity(
     availability: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a Home Assistant button entity definition.
-    
+
     Args:
         name: Display name of the button.
         unique_id: Unique identifier for the entity.
@@ -24,7 +24,7 @@ def build_button_entity(
         payload_press: Payload to send when button is pressed.
         entity_category: Optional entity category (e.g., "config").
         availability: Optional availability configuration.
-    
+
     Returns:
         Button entity definition dictionary.
     """
@@ -57,7 +57,7 @@ def build_number_entity(
     entity_category: str | None = None,
 ) -> dict[str, Any]:
     """Build a Home Assistant number entity definition.
-    
+
     Args:
         name: Display name of the number control.
         unique_id: Unique identifier for the entity.
@@ -70,7 +70,7 @@ def build_number_entity(
         unit_of_measurement: Optional unit of measurement (e.g., "%").
         icon: Optional icon (e.g., "mdi:volume-high").
         entity_category: Optional entity category (e.g., "config").
-    
+
     Returns:
         Number entity definition dictionary.
     """
@@ -106,7 +106,7 @@ def build_sensor_entity(
     expire_after: int | None = None,
 ) -> dict[str, Any]:
     """Build a Home Assistant sensor entity definition.
-    
+
     Args:
         name: Display name of the sensor.
         unique_id: Unique identifier for the entity.
@@ -117,7 +117,7 @@ def build_sensor_entity(
         state_class: Optional state class.
         icon: Optional icon.
         expire_after: Optional expiration time in seconds.
-    
+
     Returns:
         Sensor entity definition dictionary.
     """
@@ -139,4 +139,3 @@ def build_sensor_entity(
     if expire_after:
         entity["exp_aft"] = expire_after
     return entity
-
