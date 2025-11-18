@@ -1,3 +1,10 @@
+# [0.15.0](https://github.com/weirdtangent/pulse-os/compare/v0.14.2...v0.15.0) (2025-11-18)
+
+
+### Features
+
+* add kv_block function to print_feature_summary ([6a39e14](https://github.com/weirdtangent/pulse-os/commit/6a39e147a0718243107969d731e3bf2670086d1d))
+
 ## [0.14.2](https://github.com/weirdtangent/pulse-os/compare/v0.14.1...v0.14.2) (2025-11-17)
 
 
