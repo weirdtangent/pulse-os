@@ -57,12 +57,13 @@ if pactl list sinks short | grep -q "$SINK"; then
     pactl set-sink-mute "$SINK" 1 >/dev/null 2>&1 || true
     # Start volume restoration in background to avoid blocking autoconnect script
     (
-      # Wait longer - the speaker may announce "Connected" well after connection
-      # Wait up to 40 seconds, checking every 5 seconds if X is up
-      # Once X is up, wait an additional 10 seconds before restoring volume
+      # Wait much longer - the speaker waits for volume to be set before announcing "Connected"
+      # Wait up to 60 seconds, checking every 5 seconds if X is up
+      # Once X is up, wait an additional 30 seconds before restoring volume
+      # This ensures the "Connected" announcement happens while muted
       X_UP=false
       i=0
-      while [ $i -lt 8 ]; do
+      while [ $i -lt 12 ]; do
         sleep 5
         i=$((i + 1))
         if [ -n "${DISPLAY:-}" ] || [ -S "/tmp/.X11-unix/X0" ] 2>/dev/null; then
@@ -71,12 +72,12 @@ if pactl list sinks short | grep -q "$SINK"; then
         fi
       done
       
-      # If X is up, wait additional time. If not, wait anyway (max 40 seconds total)
+      # If X is up, wait additional 30 seconds. If not, wait anyway (max 60 seconds total)
       if [ "$X_UP" = true ]; then
-        sleep 10  # Additional 10 seconds after X is detected
+        sleep 30  # Additional 30 seconds after X is detected
       else
         # X not detected, wait a bit more anyway
-        sleep 5
+        sleep 10
       fi
       
       # Restore to 50% volume and unmute (adjust volume as needed)
