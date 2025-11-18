@@ -553,9 +553,9 @@ print_feature_summary() {
     local wyoming_whisper_host="${WYOMING_WHISPER_HOST:-<not set>}"
     local wyoming_whisper_port="${WYOMING_WHISPER_PORT:-10300}"
     local wyoming_piper_host="${WYOMING_PIPER_HOST:-<not set>}"
-    local wyoming_piper_port="${WYOMING_PIPER_PORT:-10300}"
+    local wyoming_piper_port="${WYOMING_PIPER_PORT:-10200}"
     local wyoming_openwakeword_host="${WYOMING_OPENWAKEWORD_HOST:-<not set>}"
-    local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10300}"
+    local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10400}"
     # Build summary output by capturing printf statements
     local summary_output
     summary_output=$(

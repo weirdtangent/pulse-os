@@ -51,16 +51,16 @@ MQTT_PORT="1883"
 PULSE_VOICE_ASSISTANT="false"
 
 # Wyoming Whisper (Speech-to-Text) server
-# Hostname or IP address of the wyoming-whisper server (typically running in Docker)
+# Hostname or IP address of the wyoming-whisper server
 WYOMING_WHISPER_HOST=""
 WYOMING_WHISPER_PORT="10300"
 
 # Wyoming Piper (Text-to-Speech) server
-# Hostname or IP address of the wyoming-piper server (typically running in Docker)
+# Hostname or IP address of the wyoming-piper server
 WYOMING_PIPER_HOST=""
-WYOMING_PIPER_PORT="10300"
+WYOMING_PIPER_PORT="10200"
 
 # Wyoming OpenWakeWord (Wake Word Detection) server
-# Hostname or IP address of the wyoming-openwakeword server (typically running in Docker)
+# Hostname or IP address of the wyoming-openwakeword server
 WYOMING_OPENWAKEWORD_HOST=""
-WYOMING_OPENWAKEWORD_PORT="10300"
+WYOMING_OPENWAKEWORD_PORT="10400"

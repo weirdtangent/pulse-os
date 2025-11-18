@@ -198,12 +198,12 @@ Wyoming Whisper (Speech-to-Text) server configuration:
 Wyoming Piper (Text-to-Speech) server configuration:
 
     WYOMING_PIPER_HOST=""
-    WYOMING_PIPER_PORT="10300"
+    WYOMING_PIPER_PORT="10200"
 
 Wyoming OpenWakeWord (Wake Word Detection) server configuration:
 
     WYOMING_OPENWAKEWORD_HOST=""
-    WYOMING_OPENWAKEWORD_PORT="10300"
+    WYOMING_OPENWAKEWORD_PORT="10400"
 
 </details>
 
