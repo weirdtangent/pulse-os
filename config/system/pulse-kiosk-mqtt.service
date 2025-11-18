@@ -10,6 +10,7 @@ Restart=always
 RestartSec=3
 User=pulse
 WorkingDirectory=/opt/pulse-os
+Environment=PYTHONPATH=/opt/pulse-os
 PassEnvironment=MQTT_HOST MQTT_PORT PULSE_URL
 StandardOutput=journal
 StandardError=journal

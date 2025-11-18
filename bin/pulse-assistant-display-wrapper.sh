@@ -6,6 +6,12 @@ if [ -f /opt/pulse-os/pulse.conf ]; then
   source /opt/pulse-os/pulse.conf
 fi
 
+if [[ -z "${MQTT_HOST:-}" ]]; then
+  echo "pulse-assistant-display-wrapper: MQTT_HOST not set; exiting."
+  exit 0
+fi
+
+export PYTHONPATH="/opt/pulse-os${PYTHONPATH:+:$PYTHONPATH}"
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="${XAUTHORITY:-/home/${PULSE_USER:-pulse}/.Xauthority}"
 
