@@ -80,7 +80,7 @@ sudo chown pulse:pulse /opt
 
 # Clone and install PulseOS
 cd /opt
-git clone git@github.com:weirdtangent/pulse-os.git
+git clone https://github.com/weirdtangent/pulse-os.git
 cd pulse-os
 
 # Create pulse.conf (from pulse.conf.sample, see below for help)
