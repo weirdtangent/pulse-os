@@ -1,3 +1,10 @@
+# [0.16.0](https://github.com/weirdtangent/pulse-os/compare/v0.15.0...v0.16.0) (2025-11-18)
+
+
+### Features
+
+* add sample HA automation for setup summary ([9b167d2](https://github.com/weirdtangent/pulse-os/commit/9b167d2597774ef14e30ff9609992ec3416d650f))
+
 # [0.15.0](https://github.com/weirdtangent/pulse-os/compare/v0.14.2...v0.15.0) (2025-11-18)
 
 
