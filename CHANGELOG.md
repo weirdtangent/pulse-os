@@ -1,3 +1,10 @@
+## [0.17.1](https://github.com/weirdtangent/pulse-os/compare/v0.17.0...v0.17.1) (2025-11-18)
+
+
+### Bug Fixes
+
+* use simpler title for setup summary notification ([51b3e85](https://github.com/weirdtangent/pulse-os/commit/51b3e85769630c1ab207fd95f7b73176d6c34894))
+
 # [0.17.0](https://github.com/weirdtangent/pulse-os/compare/v0.16.0...v0.17.0) (2025-11-18)
 
 
