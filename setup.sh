@@ -277,6 +277,7 @@ link_home_files() {
     ensure_symlink "$REPO_DIR/bin/kiosk-wrap.sh" "/home/$PULSE_USER/bin/kiosk-wrap.sh"
     ensure_symlink "$REPO_DIR/bin/revive-pulse.sh" "/home/$PULSE_USER/bin/revive-pulse.sh"
     ensure_symlink "$REPO_DIR/bin/pulse-backlight-sun.py" "/home/$PULSE_USER/bin/pulse-backlight-sun.py"
+    ensure_symlink "$REPO_DIR/bin/bt-mute.sh" "/home/$PULSE_USER/bin/bt-mute.sh"
 
     ensure_symlink "$REPO_DIR/config/x/xinitrc" "/home/$PULSE_USER/.xinitrc"
     ensure_symlink "$REPO_DIR/config/x/profile" "/home/$PULSE_USER/.profile"
@@ -319,6 +320,9 @@ link_system_files() {
 
     sudo ln -sf "$REPO_DIR/config/system/pulse-kiosk-mqtt.service" \
         /etc/systemd/system/pulse-kiosk-mqtt.service
+
+    sudo ln -sf "$REPO_DIR/config/system/pulse-bt-mute.service" \
+        /etc/systemd/system/pulse-bt-mute.service
 
     sudo ln -sf "$REPO_DIR/config/system/pulse-backlight.conf" \
         /etc/pulse-backlight.conf
@@ -449,10 +453,13 @@ enable_services() {
         log "Enabling Bluetooth auto-connect..."
         sudo systemctl --global enable bt-autoconnect.service
         sudo systemctl --global enable bt-autoconnect.timer
+        log "Enabling Bluetooth mute on shutdown..."
+        sudo systemctl enable pulse-bt-mute.service
     else
         log "Disabling Bluetooth auto-connect..."
         sudo systemctl --global disable bt-autoconnect.service 2>/dev/null || true
         sudo systemctl --global disable bt-autoconnect.timer 2>/dev/null || true
+        sudo systemctl disable pulse-bt-mute.service 2>/dev/null || true
     fi
 }
 

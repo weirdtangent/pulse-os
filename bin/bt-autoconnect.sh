@@ -46,6 +46,18 @@ if pactl list sinks short | grep -q "$SINK"; then
   # Make it default sink
   pactl set-default-sink "$SINK" >/dev/null 2>&1 || true
 
+  # Restore volume after connection (muted during shutdown to avoid "Disconnected" announcement)
+  # Wait a moment for connection to stabilize, then restore to a reasonable volume
+  # This prevents the "Connected" announcement from being audible
+  VOLUME_RESTORED_FLAG="/run/user/$(id -u)/pulse-bt-volume-restored"
+  if [ ! -e "$VOLUME_RESTORED_FLAG" ]; then
+    # Wait 2 seconds for connection to stabilize and avoid "Connected" announcement
+    sleep 2
+    # Restore to 50% volume (adjust as needed)
+    pactl set-sink-volume "$SINK" 50% >/dev/null 2>&1 || true
+    touch "$VOLUME_RESTORED_FLAG"
+  fi
+
   # Play boot sound exactly once per boot, through BT sink
   if [ -f "$BOOT_SOUND" ] && [ ! -e "$FLAG" ]; then
     aplay -D "$SINK" "$BOOT_SOUND" >/dev/null 2>&1 || true

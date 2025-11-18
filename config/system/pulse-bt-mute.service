@@ -1,0 +1,15 @@
+[Unit]
+Description=Mute Bluetooth speaker before shutdown
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+Conflicts=reboot.target halt.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/su - pulse -c "/opt/pulse-os/bin/bt-mute.sh"
+RemainAfterExit=yes
+TimeoutSec=5
+
+[Install]
+WantedBy=shutdown.target reboot.target halt.target
+
