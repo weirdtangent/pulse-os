@@ -4,7 +4,7 @@
 
 # Pulse Kiosk — Complete Setup Guide
 
-### Raspberry Pi 5 + Pi 7" Touch Display 2 
+### Raspberry Pi 5 + Pi 7" Touch Display 2
 
 A lightweight Raspberry Pi–based kiosk OS for Home Assistant dashboards and voice attendant.
 Includes auto-repair watchdog, backlight control, Bluetooth audio support, remote logging, mqtt support, and a simple pulse.conf config system for each device.
@@ -115,6 +115,21 @@ Every option in this file is optional; PulseOS has safe defaults for all behavio
 But configuring it lets you customize how your Pulse boots, what it displays,
 and what services it runs.
 
+### Quick config verification
+
+After editing `pulse.conf`, run the new connectivity smoke test to confirm the networking pieces are reachable:
+
+```bash
+bin/verify_conf.py --config /opt/pulse-os/pulse.conf
+```
+
+The script automatically sources the config (or uses the `--config` path you pass in), then:
+- Connects to your MQTT broker with the configured credentials.
+- Sends a one-line RFC5424 syslog message to the remote logging target (only if `PULSE_REMOTE_LOGGING="true"`).
+- Opens TCP sessions to all three Wyoming endpoints (openWakeWord, Whisper, and Piper) to ensure their ports are up.
+
+Failures are reported with actionable text, and the process exits non-zero if any check fails so you can wire it into CI or deploy hooks.
+
 <details>
   <summary><strong>Explore pulse.conf options</strong></summary>
 
@@ -164,7 +179,7 @@ Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, P
 See `docs/bluetooth-speakers.md` for a narrated walkthrough of pairing a speaker via `bluetoothctl`.
 
 Send remote syslogs to remote server
-  
+
     PULSE_REMOTE_LOGGING="true"
 
 Safe reboot guard (prevents infinite reboot loops if multiple watchdogs fire back-to-back). Leave the defaults unless you have very slow boots:
@@ -264,9 +279,9 @@ homeassistant:
 <details>
   <summary><strong>Home Assistant photo frame dashboard</strong></summary>
   Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in
-  
+
   [host-assistant-photo-frame](docs/home-assistant-photo-frame.md)
-  
+
   * random image helper sensors (command_line + template)
   * installing the custom `pulse-photo-card` resource
   * Lovelace YAML for a full-screen panel view with double-buffered crossfades
