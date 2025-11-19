@@ -8,7 +8,7 @@ import socket
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 def _as_bool(value: str | None, default: bool = False) -> bool:
@@ -39,6 +39,59 @@ def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+DEFAULT_WAKE_MODEL = "okay_pulse"
+WAKE_PIPELINES = {"pulse", "home_assistant"}
+
+
+def _parse_wake_route_string(value: str | None) -> dict[str, str]:
+    if not value:
+        return {}
+    routes: dict[str, str] = {}
+    for raw in value.split(","):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if "=" in stripped:
+            name, pipeline = stripped.split("=", 1)
+        elif ":" in stripped:
+            name, pipeline = stripped.split(":", 1)
+        else:
+            continue
+        name = name.strip()
+        pipeline = pipeline.strip().lower()
+        if not name or pipeline not in WAKE_PIPELINES:
+            continue
+        routes[name] = pipeline
+    return routes
+
+
+def _parse_wake_profiles(source: dict[str, str]) -> tuple[list[str], dict[str, str]]:
+    routes: dict[str, str] = {}
+
+    pulse_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE"))
+    if not pulse_words:
+        legacy = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS"))
+        pulse_words = legacy or [DEFAULT_WAKE_MODEL]
+
+    ha_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_HA"))
+    manual_routes = _parse_wake_route_string(source.get("PULSE_ASSISTANT_WAKE_ROUTES"))
+
+    for model in pulse_words:
+        if model:
+            routes.setdefault(model, "pulse")
+    for model in ha_words:
+        if model:
+            routes[model] = "home_assistant"
+    for model, pipeline in manual_routes.items():
+        routes[model] = pipeline
+
+    if not routes:
+        routes[DEFAULT_WAKE_MODEL] = "pulse"
+
+    wake_models = sorted(routes)
+    return wake_models, routes
 
 
 @dataclass(frozen=True)
@@ -90,11 +143,25 @@ class MqttConfig:
 
 
 @dataclass(frozen=True)
+class HomeAssistantConfig:
+    base_url: str | None
+    token: str | None
+    verify_ssl: bool
+    assist_pipeline: str | None
+    wake_endpoint: WyomingEndpoint | None
+    stt_endpoint: WyomingEndpoint | None
+    tts_endpoint: WyomingEndpoint | None
+    timer_entity: str | None
+    reminder_service: str | None
+
+
+@dataclass(frozen=True)
 class AssistantConfig:
     hostname: str
     device_name: str
     language: str | None
     wake_models: list[str]
+    wake_routes: dict[str, Literal["pulse", "home_assistant"]]
     mic: MicConfig
     phrase: PhraseConfig
     wake_endpoint: WyomingEndpoint
@@ -109,6 +176,7 @@ class AssistantConfig:
     response_topic: str
     state_topic: str
     action_topic: str
+    home_assistant: HomeAssistantConfig
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -116,7 +184,7 @@ class AssistantConfig:
         hostname = source.get("PULSE_HOSTNAME") or socket.gethostname()
         device_name = source.get("PULSE_NAME") or hostname.replace("-", " ").title()
 
-        wake_models = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS")) or ["okay_pulse"]
+        wake_models, wake_routes = _parse_wake_profiles(source)
 
         mic_cmd = shlex.split(
             source.get(
@@ -191,6 +259,44 @@ class AssistantConfig:
 
         inline_actions = source.get("PULSE_ASSISTANT_ACTIONS")
 
+        ha_base_url = source.get("HOME_ASSISTANT_BASE_URL")
+        if ha_base_url:
+            ha_base_url = ha_base_url.rstrip("/")
+        ha_token = source.get("HOME_ASSISTANT_TOKEN") or source.get("HOME_ASSISTANT_LONG_LIVED_TOKEN")
+        ha_verify_ssl = _as_bool(source.get("HOME_ASSISTANT_VERIFY_SSL"), True)
+        ha_assist_pipeline = source.get("HOME_ASSISTANT_ASSIST_PIPELINE")
+        ha_timer_entity = source.get("HOME_ASSISTANT_TIMER_ENTITY")
+        ha_reminder_service = source.get("HOME_ASSISTANT_REMINDER_SERVICE")
+
+        ha_wake_endpoint = _optional_wyoming_endpoint(
+            source,
+            host_key="HOME_ASSISTANT_OPENWAKEWORD_HOST",
+            port_key="HOME_ASSISTANT_OPENWAKEWORD_PORT",
+        )
+        ha_stt_endpoint = _optional_wyoming_endpoint(
+            source,
+            host_key="HOME_ASSISTANT_WHISPER_HOST",
+            port_key="HOME_ASSISTANT_WHISPER_PORT",
+            model_key="HOME_ASSISTANT_STT_MODEL",
+        )
+        ha_tts_endpoint = _optional_wyoming_endpoint(
+            source,
+            host_key="HOME_ASSISTANT_PIPER_HOST",
+            port_key="HOME_ASSISTANT_PIPER_PORT",
+        )
+
+        home_assistant = HomeAssistantConfig(
+            base_url=ha_base_url,
+            token=ha_token,
+            verify_ssl=ha_verify_ssl,
+            assist_pipeline=ha_assist_pipeline,
+            wake_endpoint=ha_wake_endpoint,
+            stt_endpoint=ha_stt_endpoint,
+            tts_endpoint=ha_tts_endpoint,
+            timer_entity=ha_timer_entity,
+            reminder_service=ha_reminder_service,
+        )
+
         transcript_topic = f"{mqtt.topic_base}/transcript"
         response_topic = f"{mqtt.topic_base}/response"
         state_topic = f"{mqtt.topic_base}/state"
@@ -201,6 +307,7 @@ class AssistantConfig:
             device_name=device_name,
             language=source.get("PULSE_ASSISTANT_LANGUAGE"),
             wake_models=wake_models,
+            wake_routes=wake_routes,
             mic=mic,
             phrase=phrase,
             wake_endpoint=wake_endpoint,
@@ -215,6 +322,7 @@ class AssistantConfig:
             response_topic=response_topic,
             state_topic=state_topic,
             action_topic=action_topic,
+            home_assistant=home_assistant,
         )
 
 
@@ -237,3 +345,20 @@ def render_actions_for_prompt(actions: Iterable[dict[str, Any]]) -> str:
         desc = action.get("description") or ""
         lines.append(f"- {slug}: {desc}".strip())
     return "\n".join(lines)
+
+
+def _optional_wyoming_endpoint(
+    source: dict[str, str],
+    *,
+    host_key: str,
+    port_key: str,
+    model_key: str | None = None,
+) -> WyomingEndpoint | None:
+    host = source.get(host_key)
+    if not host:
+        return None
+    port = _as_int(source.get(port_key), 0)
+    if not port:
+        return None
+    model = source.get(model_key) if model_key else None
+    return WyomingEndpoint(host=host, port=port, model=model)

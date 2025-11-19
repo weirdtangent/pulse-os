@@ -113,8 +113,19 @@ WYOMING_PIPER_PORT="10200"
 WYOMING_OPENWAKEWORD_HOST=""
 WYOMING_OPENWAKEWORD_PORT="10400"
 
-# Assistant wake word models (comma separated, matches wyoming-openwakeword)
+# Assistant wake word models (legacy single pipeline). Equivalent to PULSE_ASSISTANT_WAKE_WORDS_PULSE.
 PULSE_ASSISTANT_WAKE_WORDS="okay_pulse"
+
+# Pulse pipeline wake words (comma separated). Each entry should match a wyoming-openwakeword model name.
+PULSE_ASSISTANT_WAKE_WORDS_PULSE="okay_pulse"
+
+# Home Assistant pipeline wake words (comma separated). Defaults to empty unless you want
+# phrases like "hey house" to route audio through Home Assistant's Assist stack.
+PULSE_ASSISTANT_WAKE_WORDS_HA="hey house"
+
+# Optional explicit wake routing map. Format: model=pipeline (pipelines: pulse, home_assistant)
+# Multiple entries can be separated by commas.
+# PULSE_ASSISTANT_WAKE_ROUTES="okay_pulse=pulse,hey_house=home_assistant"
 
 # Optional assistant language hint for STT/LLM
 PULSE_ASSISTANT_LANGUAGE="en"
@@ -150,3 +161,30 @@ PULSE_ASSISTANT_ACTIONS_FILE="/opt/pulse-os/pulse-assistant-actions.json"
 # Display overlay tuning
 PULSE_ASSISTANT_DISPLAY_SECONDS=8
 PULSE_ASSISTANT_FONT_SIZE=28
+
+# ============================================================================
+# Home Assistant Integration (optional)
+# ============================================================================
+
+# Base URL and long-lived access token for the local Home Assistant instance.
+# When set, the assistant can call HA services, timers, and Assist pipelines.
+HOME_ASSISTANT_BASE_URL="http://homeassistant.local:8123"
+HOME_ASSISTANT_TOKEN=""
+HOME_ASSISTANT_VERIFY_SSL="true"
+
+# Optional Assist pipeline ID to target (falls back to HA default if blank)
+# HOME_ASSISTANT_ASSIST_PIPELINE="Pulse Pipeline"
+
+# Optional Home Assistant-managed Wyoming endpoints (leave blank to keep using direct servers)
+# HOME_ASSISTANT_OPENWAKEWORD_HOST="homeassistant.local"
+# HOME_ASSISTANT_OPENWAKEWORD_PORT="12101"
+# HOME_ASSISTANT_WHISPER_HOST="homeassistant.local"
+# HOME_ASSISTANT_WHISPER_PORT="12102"
+# HOME_ASSISTANT_STT_MODEL="faster-whisper-medium"
+# HOME_ASSISTANT_PIPER_HOST="homeassistant.local"
+# HOME_ASSISTANT_PIPER_PORT="12103"
+
+# Timer/reminder helpers (when set, the assistant will call these HA services; otherwise it falls
+# back to local timers/reminders with on-device notifications).
+# HOME_ASSISTANT_TIMER_ENTITY="timer.kitchen"
+# HOME_ASSISTANT_REMINDER_SERVICE="notify.mobile_app_phone"

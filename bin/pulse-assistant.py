@@ -17,8 +17,10 @@ from collections.abc import Iterable
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig
+from pulse.assistant.home_assistant import HomeAssistantClient
 from pulse.assistant.llm import LLMProvider, OpenAIProvider
 from pulse.assistant.mqtt import AssistantMqtt
+from pulse.assistant.scheduler import AssistantScheduler
 from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.client import AsyncTcpClient
@@ -61,6 +63,15 @@ class PulseAssistant:
         action_defs = load_action_definitions(config.action_file, config.inline_actions)
         self.actions = ActionEngine(action_defs)
         self.llm: LLMProvider = OpenAIProvider(config.llm, LOGGER)
+        self.home_assistant: HomeAssistantClient | None = None
+        if config.home_assistant.base_url and config.home_assistant.token:
+            try:
+                self.home_assistant = HomeAssistantClient(config.home_assistant)
+            except ValueError as exc:
+                LOGGER.warning("Home Assistant config invalid: %s", exc)
+        self.scheduler = AssistantScheduler(
+            self.home_assistant, config.home_assistant, self._handle_scheduler_notification
+        )
         self._shutdown = asyncio.Event()
 
     async def run(self) -> None:
@@ -72,42 +83,25 @@ class PulseAssistant:
             wake_word = await self._wait_for_wake_word()
             if wake_word is None:
                 continue
-            self._publish_state("listening", {"wake_word": wake_word})
-            audio_bytes = await self._record_phrase()
-            if not audio_bytes:
-                LOGGER.debug("No speech captured, returning to idle")
+            pipeline = self._pipeline_for_wake_word(wake_word)
+            try:
+                if pipeline == "home_assistant":
+                    await self._run_home_assistant_pipeline(wake_word)
+                else:
+                    await self._run_pulse_pipeline(wake_word)
+            except Exception as exc:  # pylint: disable=broad-except
+                LOGGER.exception("Pipeline %s failed for wake word %s: %s", pipeline, wake_word, exc)
+                self._publish_state("error", {"wake_word": wake_word, "pipeline": pipeline})
+            finally:
                 self._publish_state("idle")
-                continue
-            self._publish_state("thinking")
-            transcript = await self._transcribe(audio_bytes)
-            if not transcript:
-                self._publish_state("idle")
-                continue
-            LOGGER.info("Transcript: %s", transcript)
-            self._publish_message(self.config.transcript_topic, json.dumps({"text": transcript}))
-            prompt_actions = self.actions.describe_for_prompt()
-            llm_result = await self.llm.generate(transcript, prompt_actions)
-            LOGGER.debug("LLM response: %s", llm_result)
-            executed_actions = self.actions.execute(llm_result.actions, self.mqtt if llm_result.actions else None)
-            if executed_actions:
-                self._publish_message(
-                    self.config.action_topic,
-                    json.dumps({"executed": executed_actions}),
-                )
-            if llm_result.response:
-                self._publish_state("speaking")
-                self._publish_message(
-                    self.config.response_topic,
-                    json.dumps({"text": llm_result.response}),
-                )
-                await self._speak(llm_result.response)
-            self._publish_state("idle")
 
     async def shutdown(self) -> None:
         self._shutdown.set()
         await self.mic.stop()
         self.mqtt.disconnect()
         await self.player.stop()
+        if self.home_assistant:
+            await self.home_assistant.close()
 
     async def _wait_for_wake_word(self) -> str | None:
         client = AsyncTcpClient(self.config.wake_endpoint.host, self.config.wake_endpoint.port)
@@ -258,6 +252,93 @@ class PulseAssistant:
 
     def _publish_message(self, topic: str, payload: str) -> None:
         self.mqtt.publish(topic, payload=payload, retain=False)
+
+    def _pipeline_for_wake_word(self, wake_word: str) -> str:
+        return self.config.wake_routes.get(wake_word, "pulse")
+
+    async def _run_pulse_pipeline(self, wake_word: str) -> None:
+        self._publish_state("listening", {"wake_word": wake_word, "pipeline": "pulse"})
+        audio_bytes = await self._record_phrase()
+        if not audio_bytes:
+            LOGGER.debug("No speech captured for wake word %s", wake_word)
+            return
+        self._publish_state("thinking", {"wake_word": wake_word, "pipeline": "pulse"})
+        transcript = await self._transcribe(audio_bytes)
+        if not transcript:
+            return
+        LOGGER.info("Transcript (%s): %s", wake_word, transcript)
+        self._publish_message(self.config.transcript_topic, json.dumps({"text": transcript, "wake_word": wake_word}))
+        prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
+        llm_result = await self.llm.generate(transcript, prompt_actions)
+        LOGGER.debug("LLM response: %s", llm_result)
+        executed_actions = await self.actions.execute(
+            llm_result.actions,
+            self.mqtt if llm_result.actions else None,
+            self.home_assistant,
+            self.scheduler,
+        )
+        if executed_actions:
+            self._publish_message(
+                self.config.action_topic,
+                json.dumps({"executed": executed_actions, "wake_word": wake_word}),
+            )
+        if llm_result.response:
+            self._publish_state("speaking", {"wake_word": wake_word, "pipeline": "pulse"})
+            self._publish_message(
+                self.config.response_topic,
+                json.dumps({"text": llm_result.response, "wake_word": wake_word}),
+            )
+            await self._speak(llm_result.response)
+
+    async def _run_home_assistant_pipeline(self, wake_word: str) -> None:
+        self._publish_state("listening", {"wake_word": wake_word, "pipeline": "home_assistant"})
+        ha_config = self.config.home_assistant
+        ha_client = self.home_assistant
+        if not ha_config.base_url or not ha_config.token:
+            LOGGER.warning(
+                "Home Assistant pipeline invoked for wake word '%s' but base URL/token are missing",
+                wake_word,
+            )
+            return
+        if not ha_client:
+            LOGGER.warning("Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
+            return
+        LOGGER.info(
+            "Wake word '%s' mapped to Home Assistant pipeline at %s (implementation pending)",
+            wake_word,
+            ha_config.base_url,
+        )
+
+    def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
+        if not self.home_assistant:
+            return []
+        return [
+            {
+                "slug": "ha.turn_on:entity_id",
+                "description": "Turn on a Home Assistant entity (replace entity_id with light.kitchen etc.)",
+            },
+            {
+                "slug": "ha.turn_off:entity_id",
+                "description": "Turn off a Home Assistant entity (replace entity_id with switch.projector)",
+            },
+            {
+                "slug": "timer.start:duration=10m,label=cookies",
+                "description": "Start a timer (duration supports seconds/minutes/hours or ISO like PT5M).",
+            },
+            {
+                "slug": "reminder.create:when=2025-01-01T09:00,message=Example",
+                "description": "Schedule a reminder at a specific time or use 'in 10m' format.",
+            },
+        ]
+
+    async def _handle_scheduler_notification(self, message: str) -> None:
+        LOGGER.info("Scheduler notification: %s", message)
+        payload = json.dumps({"text": message, "source": "scheduler", "device": self.config.hostname})
+        self._publish_message(self.config.response_topic, payload)
+        try:
+            await self._speak(message)
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.warning("Failed to speak scheduler message: %s", exc)
 
 
 def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:

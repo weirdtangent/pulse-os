@@ -127,6 +127,7 @@ The script automatically sources the config (or uses the `--config` path you pas
 - Connects to your MQTT broker with the configured credentials.
 - Sends a one-line RFC5424 syslog message to the remote logging target (only if `PULSE_REMOTE_LOGGING="true"`).
 - Issues a Wyoming `Describe` request to each openWakeWord/Whisper/Piper endpoint (falling back to raw TCP if the client library is missing) so you can confirm the right service replies with model metadata, and—when the `wyoming` Python client is available—runs a tiny functional probe (silence transcript, short TTS clip, wake-word NotDetected) to prove each daemon is actually doing work.
+- If `HOME_ASSISTANT_BASE_URL`/`HOME_ASSISTANT_TOKEN` are set, hits `/api/` to confirm the token works before you rely on Assist or HA service calls.
 
 Failures are reported with actionable text, and the process exits non-zero if any check fails so you can wire it into CI or deploy hooks.
 
@@ -252,6 +253,23 @@ Pulse can now behave like a hands-free desk assistant by chaining three Wyoming 
 3. The assistant runs automations (MQTT actions) and streams the reply through `wyoming-piper`, while a lightweight Tk overlay shows the text response on-screen.
 
 All of the knobs (`PULSE_ASSISTANT_*`, `OPENAI_*`, `WYOMING_*`) live in `pulse.conf`. See [`docs/voice-assistant.md`](docs/voice-assistant.md) for setup diagrams, container examples, and manual test steps.
+
+#### Dual wake-word pipelines
+
+You now have two wake-word lists:
+
+- `PULSE_ASSISTANT_WAKE_WORDS_PULSE` → routes to the existing “Pulse” pipeline (Wyoming → OpenAI or another LLM).
+- `PULSE_ASSISTANT_WAKE_WORDS_HA` → routes to the Home Assistant pipeline (Wyoming/Assist managed by HA).
+- Optional overrides can be declared via `PULSE_ASSISTANT_WAKE_ROUTES="okay_pulse=pulse,hey_house=home_assistant"`.
+
+For example, “Hey House, turn off the bedroom light” can be handled entirely by HA while “Hey Pulse, what’s the forecast?” still flows through OpenAI (or whichever provider you configure).
+
+#### Home Assistant actions, timers, and reminders
+
+Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` if you have them) and the assistant can:
+
+- Call HA services directly via the new action slugs: `ha.turn_on:light.kitchen`, `ha.turn_off:switch.projector`, etc. Just mention those slugs in your prompt instructions and the daemon will translate them into REST calls.
+- Start timers or reminders using `timer.start:duration=10m,label=Tea` and `reminder.create:when=2025-01-01T09:00,message=Turn off the hose`. When HA timer/reminder services are configured they’re used first; otherwise a lightweight on-device scheduler fires and speaks the reminder.
 
 <details>
   <summary><strong>Home Assistant trusted-network example</strong></summary>

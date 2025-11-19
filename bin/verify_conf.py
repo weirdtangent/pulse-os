@@ -24,12 +24,22 @@ except ModuleNotFoundError:  # pragma: no cover - aids bootstrap
     mqtt = None  # type: ignore[assignment]
 
 try:
-    from pulse.assistant.config import AssistantConfig, MicConfig, WyomingEndpoint
+    from pulse.assistant.config import AssistantConfig, HomeAssistantConfig, MicConfig, WyomingEndpoint
+    from pulse.assistant.home_assistant import (
+        HomeAssistantAuthError,
+        HomeAssistantError,
+        verify_home_assistant_access,
+    )
 except ModuleNotFoundError:
     repo_dir = Path(__file__).resolve().parents[1]
     if str(repo_dir) not in sys.path:
         sys.path.insert(0, str(repo_dir))
-    from pulse.assistant.config import AssistantConfig, MicConfig, WyomingEndpoint
+    from pulse.assistant.config import AssistantConfig, HomeAssistantConfig, MicConfig, WyomingEndpoint
+    from pulse.assistant.home_assistant import (
+        HomeAssistantAuthError,
+        HomeAssistantError,
+        verify_home_assistant_access,
+    )
 
 try:
     from wyoming.asr import Transcribe, Transcript
@@ -251,6 +261,24 @@ def check_remote_logging(env: dict[str, str], hostname: str, timeout: float) -> 
 
     elapsed = time.perf_counter() - start
     return CheckResult("Remote logging", "ok", f"Sent test syslog to {host}:{port} in {elapsed:.2f}s.")
+
+
+def check_home_assistant(config: HomeAssistantConfig, timeout: float) -> CheckResult:
+    if not config.base_url:
+        return CheckResult("Home Assistant", "skip", "HOME_ASSISTANT_BASE_URL not set.")
+    if not config.token:
+        return CheckResult("Home Assistant", "fail", "HOME_ASSISTANT_TOKEN is missing.")
+    try:
+        info = asyncio.run(verify_home_assistant_access(config, timeout=timeout))
+    except HomeAssistantAuthError as exc:
+        return CheckResult("Home Assistant", "fail", f"Token rejected: {exc}")
+    except HomeAssistantError as exc:
+        return CheckResult("Home Assistant", "fail", str(exc))
+    except Exception as exc:  # pylint: disable=broad-except
+        return CheckResult("Home Assistant", "fail", f"Failed to query /api/: {exc}")
+    location = info.get("location_name") or info.get("message") or "Home Assistant"
+    version = info.get("version") or "unknown version"
+    return CheckResult("Home Assistant", "ok", f"{location} responded (version {version}).")
 
 
 def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeout: float) -> list[CheckResult]:
@@ -626,6 +654,7 @@ def main() -> int:
     results: list[CheckResult] = []
     results.append(check_mqtt(config, args.timeout))
     results.append(check_remote_logging(env, config.hostname, args.timeout))
+    results.append(check_home_assistant(config.home_assistant, args.timeout))
     results.extend(check_wyoming_endpoints(config, env, args.timeout))
 
     print_summary(results, config_path)

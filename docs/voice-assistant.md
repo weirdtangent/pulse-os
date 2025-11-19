@@ -65,6 +65,37 @@ You can swap in any Wyoming-compatible servers (vosk, porcupine, etc.) and adjus
 
 ---
 
+## Dual Wake Words & Home Assistant Pipelines
+
+Pulse now supports two wake-word profiles:
+
+| Variable | Purpose |
+| --- | --- |
+| `PULSE_ASSISTANT_WAKE_WORDS_PULSE` | “Pulse” pipeline (local LLM + direct Wyoming endpoints) |
+| `PULSE_ASSISTANT_WAKE_WORDS_HA` | “Home Assistant” pipeline (routes audio through HA’s Assist stack) |
+| `PULSE_ASSISTANT_WAKE_ROUTES` | Optional explicit map (`model=pipeline`) if you want per-model overrides |
+
+Example:
+
+```
+PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey pulse,okay_pulse"
+PULSE_ASSISTANT_WAKE_WORDS_HA="hey house,hey nabu"
+```
+
+When `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` are set, “Hey House …” streams through HA while “Hey Pulse …” keeps using your configured LLM provider.
+
+Optional helpers:
+
+```
+HOME_ASSISTANT_ASSIST_PIPELINE="Pulse Desk"
+HOME_ASSISTANT_TIMER_ENTITY="timer.kitchen"
+HOME_ASSISTANT_REMINDER_SERVICE="notify.mobile_app_pixel"
+```
+
+If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. Leave them blank to keep using your original servers.
+
+---
+
 ## LLM and Automations
 
 `pulse-assistant` injects your options into the LLM system prompt. At minimum set:
@@ -106,6 +137,24 @@ Point `PULSE_ASSISTANT_ACTIONS_FILE` at the JSON above (or set `PULSE_ASSISTANT_
 ```
 
 The daemon publishes executed actions to `pulse/<hostname>/assistant/actions`.
+
+### Home Assistant actions & timers
+
+With HA credentials configured you get two built-in slugs:
+
+```
+ha.turn_on:light.kitchen
+ha.turn_off:switch.projector
+```
+
+Timers and reminders are exposed in the same lightweight format:
+
+```
+timer.start:duration=10m,label=Tea
+reminder.create:when=2025-01-01T09:00,message=Turn off humidifier
+```
+
+If you provide `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` the assistant calls those services; otherwise it falls back to a local scheduler that publishes a response MQTT payload and speaks the reminder aloud.
 
 ---
 
