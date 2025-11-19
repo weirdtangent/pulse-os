@@ -2,8 +2,10 @@
 set -euo pipefail
 
 if [ -f /opt/pulse-os/pulse.conf ]; then
+  set -a
   # shellcheck disable=SC1091
   source /opt/pulse-os/pulse.conf
+  set +a
 fi
 
 if [[ -z "${MQTT_HOST:-}" ]]; then
