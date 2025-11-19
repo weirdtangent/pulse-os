@@ -158,6 +158,29 @@ If you provide `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE`
 
 ---
 
+## Using HA Assist audio end-to-end
+
+When a wake word mapped to the HA pipeline fires:
+
+1. The assistant records PCM audio using the same mic settings as the Pulse pipeline.
+2. The raw bytes are base64-encoded and POSTed to `/api/assist_pipeline/run` with `start_stage=stt` / `end_stage=tts`.
+3. Home Assistant runs its configured Assist pipeline (STT, intent, TTS) and responds with:
+   - `stt_output.text` (the transcript),
+   - `response.speech.plain.speech` (friendly text),
+   - `tts_output` (optional base64 audio plus sample rate/width/channels).
+4. If `tts_output` is present we play it directly via ALSA; otherwise we fall back to your configured Wyoming TTS endpoint.
+
+### Assist checklist
+
+| Problem | Fix |
+| --- | --- |
+| 401/403 errors | Run `bin/verify_conf.py` to confirm the token, or reissue a HA long-lived token. |
+| Silence after Assist | Check if `tts_output` is included; if not, ensure your HA pipeline ends with a TTS stage or provide `HOME_ASSISTANT_PIPER_HOST` so the fallback path works. |
+| SSL errors | Set `HOME_ASSISTANT_VERIFY_SSL="false"` for self-signed certs or install your CA bundle and point `REQUESTS_CA_BUNDLE` to it. |
+| Wrong pipeline triggered | Confirm the wake-word list contains the exact model name exposed by `wyoming-openwakeword`. |
+
+---
+
 ## Display Overlay
 
 `pulse-assistant-display.py` runs as a user-level service whenever `PULSE_VOICE_ASSISTANT="true"`. It subscribes to `pulse/<hostname>/assistant/response`, renders the text in a borderless Tk window, and auto-hides after `PULSE_ASSISTANT_DISPLAY_SECONDS` (default 8s). Tweak the font via `PULSE_ASSISTANT_FONT_SIZE`.

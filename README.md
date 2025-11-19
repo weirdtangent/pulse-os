@@ -256,13 +256,15 @@ All of the knobs (`PULSE_ASSISTANT_*`, `OPENAI_*`, `WYOMING_*`) live in `pulse.c
 
 #### Dual wake-word pipelines
 
-You now have two wake-word lists:
+Each detected wake word can map to either the local “Pulse” pipeline or the “Home Assistant” pipeline:
 
-- `PULSE_ASSISTANT_WAKE_WORDS_PULSE` → routes to the existing “Pulse” pipeline (Wyoming → OpenAI or another LLM).
-- `PULSE_ASSISTANT_WAKE_WORDS_HA` → routes to the Home Assistant pipeline (Wyoming/Assist managed by HA).
-- Optional overrides can be declared via `PULSE_ASSISTANT_WAKE_ROUTES="okay_pulse=pulse,hey_house=home_assistant"`.
+| Variable | Description |
+| --- | --- |
+| `PULSE_ASSISTANT_WAKE_WORDS_PULSE` | Comma-separated list for local LLM flow (e.g., `hey pulse,okay_pulse`). |
+| `PULSE_ASSISTANT_WAKE_WORDS_HA` | List for HA Assist (e.g., `hey house,hey nabu`). |
+| `PULSE_ASSISTANT_WAKE_ROUTES` | Optional explicit mapping (`okay_pulse=pulse,hey_house=home_assistant`). |
 
-For example, “Hey House, turn off the bedroom light” can be handled entirely by HA while “Hey Pulse, what’s the forecast?” still flows through OpenAI (or whichever provider you configure).
+The assistant automatically reports the active pipeline inside the MQTT state topic so dashboards can display the current mode. Use this to reserve “Hey House …” for home automation phrases while keeping “Hey Pulse …” for general questions answered by your preferred LLM provider.
 
 #### Home Assistant actions, timers, and reminders
 
@@ -270,6 +272,12 @@ Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIM
 
 - Call HA services directly via the new action slugs: `ha.turn_on:light.kitchen`, `ha.turn_off:switch.projector`, etc. Just mention those slugs in your prompt instructions and the daemon will translate them into REST calls.
 - Start timers or reminders using `timer.start:duration=10m,label=Tea` and `reminder.create:when=2025-01-01T09:00,message=Turn off the hose`. When HA timer/reminder services are configured they’re used first; otherwise a lightweight on-device scheduler fires and speaks the reminder.
+- Stream audio directly through HA Assist when those wake words fire. The captured PCM is sent to `/api/assist_pipeline/run`, meaning Home Assistant picks the STT/TTS engines and returns both the transcript and the synthesized speech (fallback to your configured Wyoming TTS if HA doesn’t supply audio).
+
+##### Troubleshooting tips
+- `bin/verify_conf.py` now checks your HA token; run it whenever Assist requests fail silently.
+- If HA is using self-signed TLS, set `HOME_ASSISTANT_VERIFY_SSL="false"` or point `REQUESTS_CA_BUNDLE` at your CA certificate before launching the assistant.
+- The `journalctl -u pulse-assistant.service -f` log shows the detected pipeline (`pipeline=pulse|home_assistant`) for each request, so you can confirm wake-word routing quickly.
 
 <details>
   <summary><strong>Home Assistant trusted-network example</strong></summary>
