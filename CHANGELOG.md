@@ -1,3 +1,10 @@
+## [0.23.1](https://github.com/weirdtangent/pulse-os/compare/v0.23.0...v0.23.1) (2025-11-19)
+
+
+### Bug Fixes
+
+* remove XDG_RUNTIME_DIR from pulse-kiosk-mqtt.service ([ead61fd](https://github.com/weirdtangent/pulse-os/commit/ead61fd66421e8ddaafb1ecb4d199ed7d78c36ac))
+
 # [0.23.0](https://github.com/weirdtangent/pulse-os/compare/v0.22.2...v0.23.0) (2025-11-19)
 
 
