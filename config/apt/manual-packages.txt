@@ -200,6 +200,7 @@ python3-gpiozero
 python3-libgpiod
 python3-packaging
 python3-paho-mqtt
+python3-pip
 python3-psutil
 python3-tk
 python3-rpi-lgpio

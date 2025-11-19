@@ -158,6 +158,8 @@ Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, P
 
     PULSE_BLUETOOTH_AUTOCONNECT="true"
 
+See `docs/bluetooth-speakers.md` for a narrated walkthrough of pairing a speaker via `bluetoothctl`.
+
 Send remote syslogs to remote server
   
     PULSE_REMOTE_LOGGING="true"
@@ -194,6 +196,11 @@ For Mqtt telemetry - how often Pulse should send stats to Mqtt for HomeAssistant
 ### Voice Assistant (Wyoming Protocol)
 Enable voice assistant features including wake word detection, speech-to-text, and text-to-speech.
 Requires Wyoming protocol servers (typically running as Docker containers on a NAS or server).
+When `PULSE_VOICE_ASSISTANT="true"`, `setup.sh` installs the Python `wyoming` client (via `pip --break-system-packages`) so the assistant service can talk to your remote models. If you install manually, run:
+
+```bash
+sudo -u pulse python3 -m pip install --user --break-system-packages wyoming
+```
 
     PULSE_VOICE_ASSISTANT="false"
 

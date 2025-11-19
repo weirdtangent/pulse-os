@@ -275,6 +275,24 @@ install_packages() {
     sudo apt autoremove -y
 }
 
+install_voice_assistant_python_deps() {
+    if [ "${PULSE_VOICE_ASSISTANT:-false}" != "true" ]; then
+        log "Voice assistant disabled; skipping Python dependency install."
+        return
+    fi
+
+    if ! python3 -m pip --version >/dev/null 2>&1; then
+        log "python3-pip not detected; installing so we can fetch Wyoming client…"
+        sudo apt install -y python3-pip
+    fi
+
+    log "Ensuring Wyoming Python package is installed for the pulse user…"
+    if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
+        --user --upgrade --disable-pip-version-check --break-system-packages wyoming; then
+        log "Warning: failed to install wyoming via pip (voice assistant may not start)."
+    fi
+}
+
 setup_user_dirs() {
     log "Ensuring user config dirs…"
     ensure_dir "/home/$PULSE_USER/.config"
@@ -729,6 +747,7 @@ main() {
     configure_device_identity "$location"
     configure_display_stack
     install_packages
+    install_voice_assistant_python_deps
     setup_user_dirs
     link_home_files
     link_system_files

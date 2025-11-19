@@ -14,6 +14,7 @@ if [[ -z "${MQTT_HOST:-}" ]]; then
 fi
 
 export PYTHONPATH="/opt/pulse-os${PYTHONPATH:+:$PYTHONPATH}"
+export PIP_USER_CONFIG=/home/${PULSE_USER:-pulse}/.config/pip/pip.conf
 
 exec /usr/bin/python3 -u /opt/pulse-os/bin/pulse-assistant.py "$@"
 
