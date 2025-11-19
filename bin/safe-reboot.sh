@@ -31,7 +31,7 @@ uptime_seconds=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
 if (( uptime_seconds < MIN_UPTIME )); then
   log_msg "Skipping reboot (uptime ${uptime_seconds}s < ${MIN_UPTIME}s). Reason: ${REASON}"
   exit 0
-}
+fi
 
 now=$(date +%s)
 cutoff=$((now - WINDOW))
