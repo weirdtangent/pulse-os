@@ -194,7 +194,7 @@ pkg-config
 procps
 psmisc
 pulseaudio-utils
-python3-audioop
+python3
 python3-astral
 python3-gpiozero
 python3-libgpiod
