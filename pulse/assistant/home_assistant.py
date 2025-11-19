@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from typing import Any
 
@@ -73,6 +74,35 @@ class HomeAssistantClient:
         if language:
             payload["language"] = language
         return await self._request("POST", "/api/conversation/process", json=payload)
+
+    async def assist_audio(
+        self,
+        audio_bytes: bytes,
+        *,
+        sample_rate: int,
+        sample_width: int,
+        channels: int,
+        pipeline_id: str | None = None,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+        payload: dict[str, Any] = {
+            "start_stage": "stt",
+            "end_stage": "tts",
+            "input": {
+                "sample_rate": sample_rate,
+                "sample_width": sample_width,
+                "channels": channels,
+                "audio": audio_b64,
+            },
+        }
+        pipeline = pipeline_id or self.config.assist_pipeline
+        if pipeline:
+            payload["pipeline"] = pipeline
+            payload["pipeline_id"] = pipeline
+        if language:
+            payload["language"] = language
+        return await self._request("POST", "/api/assist_pipeline/run", json=payload)
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         try:

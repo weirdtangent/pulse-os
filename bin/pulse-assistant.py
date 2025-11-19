@@ -324,18 +324,12 @@ class PulseAssistant:
             LOGGER.debug("No speech captured for Home Assistant wake word %s", wake_word)
             return
         self._publish_state("thinking", {"wake_word": wake_word, "pipeline": "home_assistant"})
-        transcript = await self._transcribe(audio_bytes, ha_config.stt_endpoint)
-        if not transcript:
-            LOGGER.info("No transcript available for Home Assistant pipeline")
-            return
-        LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
-        self._publish_message(
-            self.config.transcript_topic,
-            json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
-        )
         try:
-            ha_result = await ha_client.assist_text(
-                transcript,
+            ha_result = await ha_client.assist_audio(
+                audio_bytes,
+                sample_rate=self.config.mic.rate,
+                sample_width=self.config.mic.width,
+                channels=self.config.mic.channels,
                 pipeline_id=ha_config.assist_pipeline,
                 language=self.config.language,
             )
@@ -346,6 +340,13 @@ class PulseAssistant:
                 {"wake_word": wake_word, "pipeline": "home_assistant", "reason": str(exc)},
             )
             return
+        transcript = self._extract_ha_transcript(ha_result)
+        if transcript:
+            LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
+            self._publish_message(
+                self.config.transcript_topic,
+                json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
+            )
         speech_text = self._extract_ha_speech(ha_result) or "Okay."
         self._publish_state("speaking", {"wake_word": wake_word, "pipeline": "home_assistant"})
         self._publish_message(
@@ -405,6 +406,20 @@ class PulseAssistant:
                 speech_text = plain.get("speech")
                 if isinstance(speech_text, str):
                     return speech_text.strip()
+        return None
+
+    @staticmethod
+    def _extract_ha_transcript(result: dict) -> str | None:
+        stt_output = result.get("stt_output")
+        if isinstance(stt_output, dict):
+            text = stt_output.get("text")
+            if isinstance(text, str):
+                return text.strip()
+        intent_input = result.get("intent_input")
+        if isinstance(intent_input, dict):
+            text = intent_input.get("text")
+            if isinstance(text, str):
+                return text.strip()
         return None
 
 
