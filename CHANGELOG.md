@@ -1,3 +1,10 @@
+# [0.29.0](https://github.com/weirdtangent/pulse-os/compare/v0.28.0...v0.29.0) (2025-11-19)
+
+
+### Features
+
+* capture audio, transcribe it via the configured HA STT endpoint ([25f00a3](https://github.com/weirdtangent/pulse-os/commit/25f00a30a7e0d0ff0cfe6223664442bf98708d7f))
+
 # [0.28.0](https://github.com/weirdtangent/pulse-os/compare/v0.27.0...v0.28.0) (2025-11-19)
 
 
