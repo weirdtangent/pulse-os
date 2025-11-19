@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+
+
+def _runtime_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return env
 
 
 def find_audio_sink() -> str | None:
@@ -21,6 +28,7 @@ def find_audio_sink() -> str | None:
             capture_output=True,
             text=True,
             check=True,
+            env=_runtime_env(),
         )
         default_sink = result.stdout.strip()
         if default_sink:
@@ -32,6 +40,7 @@ def find_audio_sink() -> str | None:
             capture_output=True,
             text=True,
             check=True,
+            env=_runtime_env(),
         )
         for line in result.stdout.split("\n"):
             if line.strip():
@@ -69,6 +78,7 @@ def get_current_volume(sink: str | None = None) -> int | None:
             capture_output=True,
             text=True,
             check=True,
+            env=_runtime_env(),
         )
         # Output format: "Volume: front-left: 32768 /  50% / -18.06 dB,   front-right: 32768 /  50% / -18.06 dB"
         import re
@@ -84,6 +94,7 @@ def get_current_volume(sink: str | None = None) -> int | None:
                 capture_output=True,
                 text=True,
                 check=True,
+                env=_runtime_env(),
             )
             lines = result.stdout.split("\n")
             in_sink = False
@@ -127,6 +138,7 @@ def set_volume(percent: int, sink: str | None = None) -> bool:
             ["pactl", "set-sink-volume", sink, f"{percent}%"],
             check=True,
             capture_output=True,
+            env=_runtime_env(),
         )
         # Unmute if volume > 0
         if percent > 0:
@@ -134,6 +146,7 @@ def set_volume(percent: int, sink: str | None = None) -> bool:
                 ["pactl", "set-sink-mute", sink, "0"],
                 check=False,
                 capture_output=True,
+                env=_runtime_env(),
             )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
