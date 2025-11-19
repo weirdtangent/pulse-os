@@ -1,3 +1,18 @@
+# [0.24.0](https://github.com/weirdtangent/pulse-os/compare/v0.23.2...v0.24.0) (2025-11-19)
+
+
+### Bug Fixes
+
+* another shot at parsing bash blocks ([fe69bc2](https://github.com/weirdtangent/pulse-os/commit/fe69bc2f3ac1655903363ef2c676f5a8ce65483f))
+* ensure thump sample is copied to target path ([58b4d8c](https://github.com/weirdtangent/pulse-os/commit/58b4d8ce6e0d46dec7cef19a77300ce09ae1922d))
+* improve sync-pulse-conf.py to handle NEW markers and legacy replacements ([a30ff03](https://github.com/weirdtangent/pulse-os/commit/a30ff03acc27ff21a222af0e955bf6134691bc9b))
+
+
+### Features
+
+* add sync-pulse-conf.py to setup.sh, at the top of the run ([296940b](https://github.com/weirdtangent/pulse-os/commit/296940b40e3eeb8474df35744062dc7ce9d3ae5a))
+* add volume feedback thump-thump ([4408566](https://github.com/weirdtangent/pulse-os/commit/440856668b914e23bb196683820310946faae10a))
+
 ## [0.23.2](https://github.com/weirdtangent/pulse-os/compare/v0.23.1...v0.23.2) (2025-11-19)
 
 
