@@ -16,6 +16,8 @@ from typing import Any
 
 
 COMMENT_ASSIGNMENT_RE = re.compile(r"#\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)")
+BASH_IF_RE = re.compile(r"^if\b")
+BASH_FI_RE = re.compile(r"^fi\b")
 
 LEGACY_REPLACEMENTS: dict[str, str] = {
     "PULSE_BACKLIGHT_SUN": "PULSE_DAY_NIGHT_AUTO",
@@ -44,6 +46,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
     in_bash_block = False
     bash_block_lines: list[str] = []
     bash_block_var = ""
+    bash_block_depth = 0
 
     if not path.exists():
         return variables, comments, placeholder_vars
@@ -64,19 +67,25 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
                     bash_block_var = "PULSE_VERSION"  # Known case
                     bash_block_lines = [original_line]
                     in_bash_block = True
+                    bash_block_depth = 1
                     current_comment = []  # Comments before block belong to it
                     current_comment_has_new_marker = False
                 else:
                     bash_block_lines.append(original_line)
-                    if "fi" in stripped:
-                        # End of bash block
-                        variables[bash_block_var] = "\n".join(bash_block_lines)
-                        if current_comment:
-                            comments[bash_block_var] = "\n".join(current_comment)
-                        in_bash_block = False
-                        bash_block_lines = []
-                        current_comment = []
-                        current_comment_has_new_marker = False
+                    if BASH_IF_RE.match(stripped):
+                        bash_block_depth += 1
+                    if BASH_FI_RE.match(stripped):
+                        bash_block_depth -= 1
+                        if bash_block_depth <= 0:
+                            # End of bash block
+                            variables[bash_block_var] = "\n".join(bash_block_lines)
+                            if current_comment:
+                                comments[bash_block_var] = "\n".join(current_comment)
+                            in_bash_block = False
+                            bash_block_lines = []
+                            current_comment = []
+                            current_comment_has_new_marker = False
+                            bash_block_depth = 0
                 i += 1
                 continue
 
@@ -160,6 +169,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
     bash_block_lines: list[str] = []
     bash_block_var = ""
     bash_block_comment: list[str] = []
+    bash_block_depth = 0
 
     def is_separator(line: str) -> bool:
         stripped = line.strip()
@@ -208,24 +218,30 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                     bash_block_lines = [original_line]
                     bash_block_comment = current_comment.copy()
                     in_bash_block = True
+                    bash_block_depth = 1
                     current_comment = []
                     current_comment_has_new_marker = False
                 else:
                     bash_block_lines.append(original_line)
-                    if "fi" in stripped:
-                        # End of bash block
-                        if current_section:
-                            current_section["vars"].append(
-                                {
-                                    "name": bash_block_var,
-                                    "value": "\n".join(bash_block_lines),
-                                    "comment": "\n".join(bash_block_comment) if bash_block_comment else "",
-                                    "is_block": True,
-                                }
-                            )
-                        in_bash_block = False
-                        bash_block_lines = []
-                        bash_block_comment = []
+                    if BASH_IF_RE.match(stripped):
+                        bash_block_depth += 1
+                    if BASH_FI_RE.match(stripped):
+                        bash_block_depth -= 1
+                        if bash_block_depth <= 0:
+                            # End of bash block
+                            if current_section:
+                                current_section["vars"].append(
+                                    {
+                                        "name": bash_block_var,
+                                        "value": "\n".join(bash_block_lines),
+                                        "comment": "\n".join(bash_block_comment) if bash_block_comment else "",
+                                        "is_block": True,
+                                    }
+                                )
+                            in_bash_block = False
+                            bash_block_lines = []
+                            bash_block_comment = []
+                            bash_block_depth = 0
                 i += 1
                 continue
 
