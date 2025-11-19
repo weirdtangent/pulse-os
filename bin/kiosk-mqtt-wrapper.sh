@@ -14,6 +14,7 @@ if [[ -z "${MQTT_HOST:-}" ]]; then
 fi
 
 export PYTHONPATH="/opt/pulse-os${PYTHONPATH:+:$PYTHONPATH}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 echo "WRAPPER: launching python…"
 
