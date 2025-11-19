@@ -4,11 +4,10 @@
 
 # Pulse Kiosk — Complete Setup Guide
 
-### Raspberry Pi 5 + Pi Touch Display 2
+### Raspberry Pi 5 + Pi 7" Touch Display 2 
 
-This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite (64‑bit, Bookworm)** system driving the **Raspberry Pi Touch Display 2** as a **portrait** Home Assistant kiosk. It includes correct rotation, touch alignment, Chromium kiosk, and sunrise/sunset backlight control.
-
-> TL;DR features: clean boot → autologin → X/Openbox → Chromium kiosk, no “half-screen black bar”, accurate touch, auto day/night brightness.
+A lightweight Raspberry Pi–based kiosk OS for Home Assistant dashboards and voice attendant.
+Includes auto-repair watchdog, backlight control, Bluetooth audio support, remote logging, mqtt support, and a simple pulse.conf config system for each device.
 
 ---
 
@@ -61,8 +60,8 @@ This is the end-to-end recipe we validated together for a **Raspberry Pi OS Lite
 ## 0) Prerequisites
 
 * Raspberry Pi 5/CM4/CM5 with **Raspberry Pi Touch Display 2** (DSI ribbon in the “closer” socket).
-* Fresh **Raspberry Pi OS Lite (64-bit)** (Trixie, at the moment) written to microSD - I'm using 128GB but it's only 20% full.
-  * Setup user "pulse" when imaging OS
+* Fresh **Raspberry Pi OS Lite (64-bit)** (Trixie, at the moment) written to microSD - I'm using 128GB but it's only 20% full (so far).
+  * Setup "pulse-<location>" hostname and "pulse" user when imaging OS
   * Can also pre-setup networking, make sure SSH is on, enable auto-login
 * Network connectivity (Ethernet or Wi‑Fi).
 * SSH access (run `sudo raspi-config nonint do_ssh 0` or enable via imager advanced options).
