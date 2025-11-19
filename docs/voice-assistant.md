@@ -198,6 +198,7 @@ Pulse publishes assistant-specific topics alongside the existing kiosk telemetry
 | `pulse/<host>/preferences/wake_sound/set` | in | `on`/`off`; state mirrored at `/state`. |
 | `pulse/<host>/preferences/speaking_style/set` | in | `relaxed`, `normal`, `aggressive`. |
 | `pulse/<host>/preferences/wake_sensitivity/set` | in | `low`, `normal`, `high` (mapped to openWakeWord trigger levels 5/3/2). |
+| `pulse/<host>/preferences/ha_pipeline/set` | in | Free-form pipeline ID (leave blank to use HA’s default). |
 
 All preference states are retained so dashboards instantly reflect the last-known values after reboots. Async listeners can treat the `/set` topics as switches/selects in Home Assistant, while the `assistant/in_progress` topic mirrors the stock HA Voice binary sensor.
 
