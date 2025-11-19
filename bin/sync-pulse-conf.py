@@ -15,21 +15,38 @@ from pathlib import Path
 from typing import Any
 
 
-def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
+COMMENT_ASSIGNMENT_RE = re.compile(r"#\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)")
+
+LEGACY_REPLACEMENTS: dict[str, str] = {
+    "PULSE_BACKLIGHT_SUN": "PULSE_DAY_NIGHT_AUTO",
+}
+
+
+def _strip_quotes(value: str) -> str:
+    """Remove matching single or double quotes from a value."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[str]]:
     """Parse a config file and extract variables and comments.
 
     Returns:
-        Tuple of (variables dict, comments dict where key is variable name)
+        Tuple of (variables dict, comments dict, placeholder vars set)
     """
     variables: dict[str, str] = {}
     comments: dict[str, str] = {}
+    placeholder_vars: set[str] = set()
     current_comment: list[str] = []
+    current_comment_has_new_marker = False
     in_bash_block = False
     bash_block_lines: list[str] = []
     bash_block_var = ""
 
     if not path.exists():
-        return variables, comments
+        return variables, comments, placeholder_vars
 
     with path.open(encoding="utf-8") as handle:
         lines = handle.readlines()
@@ -48,6 +65,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
                     bash_block_lines = [original_line]
                     in_bash_block = True
                     current_comment = []  # Comments before block belong to it
+                    current_comment_has_new_marker = False
                 else:
                     bash_block_lines.append(original_line)
                     if "fi" in stripped:
@@ -58,6 +76,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
                         in_bash_block = False
                         bash_block_lines = []
                         current_comment = []
+                        current_comment_has_new_marker = False
                 i += 1
                 continue
 
@@ -65,27 +84,37 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
             if stripped.startswith("#"):
                 # Skip section headers (they start with # and have ===)
                 if "===" not in stripped:
-                    # Check for NEW marker with variable assignment
+                    # Check for NEW marker with variable assignment on the same line
                     if "NEW:" in stripped and "=" in stripped:
-                        # Extract variable name and value from "# NEW: VARNAME="value""
-                        match = re.search(r"NEW:\s*(\w+)=\"([^\"]*)\"", stripped)
+                        match = re.search(r"NEW:\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)", stripped)
                         if match:
                             var_name = match.group(1)
-                            var_value = match.group(2)
+                            var_value = _strip_quotes(match.group(2))
                             variables[var_name] = var_value
-                            # Store comment (without NEW marker)
-                            new_marker = f'{var_name}="{var_value}"'
-                            clean_comment = stripped.replace("NEW:", "").replace(new_marker, "").strip()
-                            if clean_comment and clean_comment != "#":
-                                current_comment.append(clean_comment)
+                            placeholder_vars.add(var_name)
+                            comment_lines = current_comment + [stripped] if current_comment else [stripped]
+                            comments[var_name] = "\n".join(comment_lines)
+                            current_comment = []
+                            current_comment_has_new_marker = False
+                            i += 1
+                            continue
+                    # Handle commented assignments that belong to a NEW block
+                    if current_comment_has_new_marker:
+                        match = COMMENT_ASSIGNMENT_RE.match(stripped)
+                        if match:
+                            var_name = match.group(1)
+                            var_value = _strip_quotes(match.group(2))
+                            variables[var_name] = var_value
+                            placeholder_vars.add(var_name)
                             if current_comment:
                                 comments[var_name] = "\n".join(current_comment)
-                                current_comment = []
-                        else:
-                            # Just a comment with NEW: in it, not a variable
-                            current_comment.append(stripped)
-                    else:
-                        current_comment.append(stripped)
+                            current_comment = []
+                            current_comment_has_new_marker = False
+                            i += 1
+                            continue
+                    current_comment.append(stripped)
+                    if "NEW:" in stripped:
+                        current_comment_has_new_marker = True
                 i += 1
                 continue
 
@@ -93,6 +122,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
             if not stripped:
                 if not in_bash_block:
                     current_comment = []
+                    current_comment_has_new_marker = False
                 i += 1
                 continue
 
@@ -101,13 +131,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
                 parts = stripped.split("=", 1)
                 if len(parts) == 2:
                     var_name = parts[0].strip()
-                    var_value = parts[1].strip()
-
-                    # Remove quotes if present
-                    if var_value.startswith('"') and var_value.endswith('"'):
-                        var_value = var_value[1:-1]
-                    elif var_value.startswith("'") and var_value.endswith("'"):
-                        var_value = var_value[1:-1]
+                    var_value = _strip_quotes(parts[1])
 
                     variables[var_name] = var_value
 
@@ -115,10 +139,11 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str]]:
                     if current_comment:
                         comments[var_name] = "\n".join(current_comment)
                         current_comment = []
+                        current_comment_has_new_marker = False
 
             i += 1
 
-    return variables, comments
+    return variables, comments, placeholder_vars
 
 
 def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
@@ -130,6 +155,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
     sections: list[dict[str, Any]] = []
     current_section: dict[str, Any] | None = None
     current_comment: list[str] = []
+    current_comment_has_new_marker = False
     in_bash_block = False
     bash_block_lines: list[str] = []
     bash_block_var = ""
@@ -171,6 +197,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                             "vars": [],
                         }
                         current_comment = []
+                        current_comment_has_new_marker = False
                         i += 3
                         continue
 
@@ -182,6 +209,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                     bash_block_comment = current_comment.copy()
                     in_bash_block = True
                     current_comment = []
+                    current_comment_has_new_marker = False
                 else:
                     bash_block_lines.append(original_line)
                     if "fi" in stripped:
@@ -203,7 +231,50 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
 
             # Collect comments
             if stripped.startswith("#"):
+                handled_special_case = False
+
+                if "NEW:" in stripped and "=" in stripped:
+                    match = re.search(r"NEW:\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)", stripped)
+                    if match and current_section:
+                        var_name = match.group(1)
+                        var_value = _strip_quotes(match.group(2))
+                        comment_lines = current_comment + [stripped] if current_comment else [stripped]
+                        current_section["vars"].append(
+                            {
+                                "name": var_name,
+                                "value": var_value,
+                                "comment": "\n".join(comment_lines),
+                                "is_block": False,
+                            }
+                        )
+                        current_comment = []
+                        current_comment_has_new_marker = False
+                        handled_special_case = True
+
+                if not handled_special_case and current_comment_has_new_marker:
+                    match = COMMENT_ASSIGNMENT_RE.match(stripped)
+                    if match and current_section:
+                        var_name = match.group(1)
+                        var_value = _strip_quotes(match.group(2))
+                        current_section["vars"].append(
+                            {
+                                "name": var_name,
+                                "value": var_value,
+                                "comment": "\n".join(current_comment),
+                                "is_block": False,
+                            }
+                        )
+                        current_comment = []
+                        current_comment_has_new_marker = False
+                        handled_special_case = True
+
+                if handled_special_case:
+                    i += 1
+                    continue
+
                 current_comment.append(stripped)
+                if "NEW:" in stripped:
+                    current_comment_has_new_marker = True
                 i += 1
                 continue
 
@@ -213,6 +284,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                     if current_section:
                         current_section["comment"] += "\n" + "\n".join(current_comment)
                     current_comment = []
+                    current_comment_has_new_marker = False
                 i += 1
                 continue
 
@@ -221,13 +293,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                 parts = stripped.split("=", 1)
                 if len(parts) == 2:
                     var_name = parts[0].strip()
-                    var_value = parts[1].strip()
-
-                    # Remove quotes
-                    if var_value.startswith('"') and var_value.endswith('"'):
-                        var_value = var_value[1:-1]
-                    elif var_value.startswith("'") and var_value.endswith("'"):
-                        var_value = var_value[1:-1]
+                    var_value = _strip_quotes(parts[1])
 
                     if current_section:
                         current_section["vars"].append(
@@ -239,6 +305,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                             }
                         )
                         current_comment = []
+                        current_comment_has_new_marker = False
 
             i += 1
 
@@ -348,6 +415,42 @@ def format_config_file(
     return "\n".join(lines)
 
 
+def apply_legacy_replacements(
+    user_vars: dict[str, str],
+    user_comments: dict[str, str],
+    placeholder_vars: set[str],
+    sample_vars: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Remove legacy variables that have known replacements."""
+    removed: list[dict[str, Any]] = []
+
+    for legacy_var, replacement_var in LEGACY_REPLACEMENTS.items():
+        if legacy_var not in user_vars:
+            continue
+        if replacement_var not in sample_vars:
+            continue
+
+        legacy_value = user_vars.pop(legacy_var)
+        placeholder_vars.discard(legacy_var)
+        user_comments.pop(legacy_var, None)
+
+        migrated = False
+        if replacement_var not in user_vars:
+            user_vars[replacement_var] = legacy_value
+            placeholder_vars.add(replacement_var)
+            migrated = True
+
+        removed.append(
+            {
+                "legacy": legacy_var,
+                "replacement": replacement_var,
+                "migrated": migrated,
+            }
+        )
+
+    return removed
+
+
 def main() -> int:
     """Main entry point."""
     repo_dir = Path("/opt/pulse-os")
@@ -365,10 +468,12 @@ def main() -> int:
 
     # Parse sample file
     sample_sections = extract_sections_from_sample(sample_path)
-    sample_vars, _ = parse_config_file(sample_path)
+    sample_vars, _, _ = parse_config_file(sample_path)
 
     # Parse user config file
-    user_vars, user_comments = parse_config_file(user_config_path)
+    user_vars, user_comments, user_placeholder_vars = parse_config_file(user_config_path)
+
+    legacy_actions = apply_legacy_replacements(user_vars, user_comments, user_placeholder_vars, sample_vars)
 
     # Determine which variables are new
     # A variable is "NEW" if it's in the sample but not in user config
@@ -376,7 +481,7 @@ def main() -> int:
 
     # Check for variables in sample that user doesn't have
     for var_name in sample_vars:
-        if var_name not in user_vars:
+        if var_name not in user_vars or var_name in user_placeholder_vars:
             new_vars.add(var_name)
 
     # Note: Variables that were previously marked as NEW but are now in user_vars
@@ -402,6 +507,16 @@ def main() -> int:
         print("\nReview and remove 'NEW:' markers once you've verified the values.")
     else:
         print("\nNo new variables added. Config file synced and reformatted.")
+
+    if legacy_actions:
+        print(f"\nRemoved {len(legacy_actions)} superseded variable(s):")
+        for action in legacy_actions:
+            legacy_var = action["legacy"]
+            replacement_var = action["replacement"]
+            if action["migrated"]:
+                print(f"  - {legacy_var} (migrated value to {replacement_var})")
+            else:
+                print(f"  - {legacy_var} (replacement already configured: {replacement_var})")
 
     return 0
 
