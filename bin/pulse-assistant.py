@@ -16,8 +16,8 @@ from collections.abc import Iterable
 
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
-from pulse.assistant.config import AssistantConfig
-from pulse.assistant.home_assistant import HomeAssistantClient
+from pulse.assistant.config import AssistantConfig, WyomingEndpoint
+from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.llm import LLMProvider, OpenAIProvider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.scheduler import AssistantScheduler
@@ -173,13 +173,17 @@ class PulseAssistant:
             chunks += 1
         return bytes(buffer) if buffer else None
 
-    async def _transcribe(self, audio_bytes: bytes) -> str | None:
-        client = AsyncTcpClient(self.config.stt_endpoint.host, self.config.stt_endpoint.port)
+    async def _transcribe(self, audio_bytes: bytes, endpoint: WyomingEndpoint | None = None) -> str | None:
+        target = endpoint or self.config.stt_endpoint
+        if not target:
+            LOGGER.warning("No STT endpoint configured")
+            return None
+        client = AsyncTcpClient(target.host, target.port)
         await client.connect()
         try:
             await client.write_event(
                 Transcribe(
-                    name=self.config.stt_endpoint.model,
+                    name=target.model,
                     language=self.config.language,
                 ).event()
             )
@@ -214,12 +218,24 @@ class PulseAssistant:
                 return transcript.text
 
     async def _speak(self, text: str) -> None:
-        client = AsyncTcpClient(self.config.tts_endpoint.host, self.config.tts_endpoint.port)
+        await self._speak_via_endpoint(text, self.config.tts_endpoint, self.config.tts_voice)
+
+    async def _speak_via_endpoint(
+        self,
+        text: str,
+        endpoint: WyomingEndpoint | None,
+        voice_name: str | None,
+    ) -> None:
+        target = endpoint or self.config.tts_endpoint
+        if not target:
+            LOGGER.warning("No TTS endpoint configured; cannot speak response")
+            return
+        client = AsyncTcpClient(target.host, target.port)
         await client.connect()
         try:
             voice = None
-            if self.config.tts_voice:
-                voice = SynthesizeVoice(name=self.config.tts_voice)
+            if voice_name:
+                voice = SynthesizeVoice(name=voice_name)
             await client.write_event(Synthesize(text=text, voice=voice).event())
             await self._consume_tts_audio(client)
         finally:
@@ -303,11 +319,48 @@ class PulseAssistant:
         if not ha_client:
             LOGGER.warning("Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
             return
-        LOGGER.info(
-            "Wake word '%s' mapped to Home Assistant pipeline at %s (implementation pending)",
-            wake_word,
-            ha_config.base_url,
+        audio_bytes = await self._record_phrase()
+        if not audio_bytes:
+            LOGGER.debug("No speech captured for Home Assistant wake word %s", wake_word)
+            return
+        self._publish_state("thinking", {"wake_word": wake_word, "pipeline": "home_assistant"})
+        transcript = await self._transcribe(audio_bytes, ha_config.stt_endpoint)
+        if not transcript:
+            LOGGER.info("No transcript available for Home Assistant pipeline")
+            return
+        LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
+        self._publish_message(
+            self.config.transcript_topic,
+            json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
         )
+        try:
+            ha_result = await ha_client.assist_text(
+                transcript,
+                pipeline_id=ha_config.assist_pipeline,
+                language=self.config.language,
+            )
+        except HomeAssistantError as exc:
+            LOGGER.warning("Home Assistant Assist call failed: %s", exc)
+            self._publish_state(
+                "error",
+                {"wake_word": wake_word, "pipeline": "home_assistant", "reason": str(exc)},
+            )
+            return
+        speech_text = self._extract_ha_speech(ha_result) or "Okay."
+        self._publish_state("speaking", {"wake_word": wake_word, "pipeline": "home_assistant"})
+        self._publish_message(
+            self.config.response_topic,
+            json.dumps(
+                {
+                    "text": speech_text,
+                    "wake_word": wake_word,
+                    "pipeline": "home_assistant",
+                    "conversation_id": ha_result.get("conversation_id"),
+                }
+            ),
+        )
+        tts_endpoint = ha_config.tts_endpoint or self.config.tts_endpoint
+        await self._speak_via_endpoint(speech_text, tts_endpoint, self.config.tts_voice)
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
@@ -339,6 +392,20 @@ class PulseAssistant:
             await self._speak(message)
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.warning("Failed to speak scheduler message: %s", exc)
+
+    @staticmethod
+    def _extract_ha_speech(result: dict) -> str | None:
+        response = result.get("response") if isinstance(result, dict) else None
+        if not isinstance(response, dict):
+            return None
+        speech_block = response.get("speech")
+        if isinstance(speech_block, dict):
+            plain = speech_block.get("plain")
+            if isinstance(plain, dict):
+                speech_text = plain.get("speech")
+                if isinstance(speech_text, str):
+                    return speech_text.strip()
+        return None
 
 
 def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:
