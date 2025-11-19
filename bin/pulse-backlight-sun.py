@@ -98,7 +98,7 @@ def set_backlight(device_dir: str, percent: int) -> None:
 
 def set_volume(percent: int) -> None:
     """Set audio volume using pactl."""
-    audio.set_volume(percent)  # Fails silently if audio not available
+    audio.set_volume(percent, play_feedback=False)  # Fails silently if audio not available
 
 
 def _twilight_boundaries(

@@ -154,9 +154,9 @@ Automatically adjust screen brightness and audio volume based on sunrise/sunset.
 
     PULSE_DAY_NIGHT_AUTO="true"
 
-Play a short confirmation thump after changing the MQTT volume slider. Helpful when the speaker is quiet or muted; set it to `false` to disable the feedback.
+Play a short heartbeat-style double thump after changing the MQTT volume slider. Enabled by default so you can immediately preview the new level; set it to `false` to disable the feedback.
 
-    PULSE_VOLUME_TEST_SOUND="false"
+    PULSE_VOLUME_TEST_SOUND="true"
 
 Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, PulseOS automatically connects to your Bluetooth speaker and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off.
 
@@ -278,6 +278,11 @@ homeassistant:
 <details>
   <summary><strong>MQTT buttons & telemetry sensors</strong></summary>
   PulseOS can optionally expose Home/Update/Reboot buttons and a full health sensor suite over MQTT discovery. The setup, sudo requirements, topics, and tuning tips now live in [mqtt-and-telemetry](docs/mqtt-and-telemetry.md) so you can keep the README short and still have all the detail when needed.
+</details>
+
+<details>
+  <summary><strong>Volume feedback thump sample</strong></summary>
+  The heartbeat-style `thump-thump` preview that plays after each volume change lives in `assets/pulse-volume-thump.wav`. Run `bin/generate-volume-thump.py` if you ever want to regenerate or remix the WAV (for example, to tweak durations or frequency). The script copies the result into `assets/`, and the runtime automatically stages the file under the active user's `XDG_RUNTIME_DIR` as needed.
 </details>
 
 <details>

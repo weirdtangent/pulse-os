@@ -205,7 +205,7 @@ def load_config() -> EnvConfig:
         int(os.environ.get("PULSE_TELEMETRY_INTERVAL_SECONDS", DEFAULT_TELEMETRY_INTERVAL_SECONDS)),
     )
 
-    volume_feedback_enabled = _as_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"))
+    volume_feedback_enabled = _as_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"), default=True)
 
     return EnvConfig(
         mqtt_host=mqtt_host,
@@ -885,11 +885,9 @@ class KioskMqttListener:
             self.log(f"volume: invalid payload '{payload}', expected 0-100")
             return
 
-        if audio.set_volume(volume):
+        if audio.set_volume(volume, play_feedback=self.config.volume_feedback_enabled):
             sink = audio.find_audio_sink()
             self.log(f"volume: set to {volume}% on {sink or 'default sink'}")
-            if self.config.volume_feedback_enabled:
-                audio.play_volume_feedback()
             # Publish current volume state
             self._safe_publish(
                 None,

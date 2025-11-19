@@ -12,8 +12,19 @@ from pathlib import Path
 
 _LOGGER = logging.getLogger("pulse.audio")
 _THUMP_FILENAME = "pulse-volume-thump.wav"
-_THUMP_DURATION_SECONDS = 0.4
+_THUMP_SAMPLE_RATE = 48_000
 _THUMP_FREQUENCY_HZ = 140
+_THUMP_MAX_AMPLITUDE = 28_000
+_THUMP_DECAY_RATE = 3.0
+_FIRST_THUMP_DURATION_SECONDS = 0.12
+_SECOND_THUMP_DURATION_SECONDS = 0.12
+_THUMP_GAP_SECONDS = 0.08
+_SECOND_THUMP_GAIN = 0.8
+_THUMP_SEQUENCE = (
+    ("pulse", _FIRST_THUMP_DURATION_SECONDS, 1.0),
+    ("gap", _THUMP_GAP_SECONDS, None),
+    ("pulse", _SECOND_THUMP_DURATION_SECONDS, _SECOND_THUMP_GAIN),
+)
 
 
 def _runtime_env() -> dict[str, str]:
@@ -42,27 +53,64 @@ def _thump_sample_path() -> Path:
     return runtime_dir / _THUMP_FILENAME
 
 
+def _bundled_thump_sample() -> Path | None:
+    candidate = Path(__file__).resolve().parent.parent / "assets" / _THUMP_FILENAME
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def render_thump_sample(destination: Path) -> Path | None:
+    """Render the double thump sample to the provided path."""
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(destination), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(_THUMP_SAMPLE_RATE)
+            _write_double_thump(wav_file)
+        return destination
+    except OSError as exc:
+        _LOGGER.debug("Unable to create thump sample at %s: %s", destination, exc)
+        return None
+
+
+def _write_double_thump(wav_file: wave.Wave_write) -> None:
+    for kind, duration, gain in _THUMP_SEQUENCE:
+        if kind == "gap":
+            _write_silence(wav_file, duration)
+        else:
+            assert gain is not None
+            _write_pulse(wav_file, duration, gain)
+
+
+def _write_silence(wav_file: wave.Wave_write, duration_seconds: float) -> None:
+    samples = int(_THUMP_SAMPLE_RATE * duration_seconds)
+    wav_file.writeframes(b"\x00\x00" * samples)
+
+
+def _write_pulse(wav_file: wave.Wave_write, duration_seconds: float, gain: float) -> None:
+    samples = max(1, int(_THUMP_SAMPLE_RATE * duration_seconds))
+    for i in range(samples):
+        envelope = math.exp(-_THUMP_DECAY_RATE * i / samples)
+        angle = 2 * math.pi * _THUMP_FREQUENCY_HZ * i / _THUMP_SAMPLE_RATE
+        value = int(gain * envelope * _THUMP_MAX_AMPLITUDE * math.sin(angle))
+        wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
+
+
 def _ensure_thump_sample() -> Path | None:
     path = _thump_sample_path()
     if path.exists():
         return path
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        sample_rate = 48000
-        samples = int(sample_rate * _THUMP_DURATION_SECONDS)
-        decay_rate = 3.0
-        with wave.open(path, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            for i in range(samples):
-                env = math.exp(-decay_rate * i / samples)
-                value = int(env * 28000 * math.sin(2 * math.pi * _THUMP_FREQUENCY_HZ * i / sample_rate))
-                wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
-        return path
-    except OSError as exc:
-        _LOGGER.debug("Unable to create thump sample: %s", exc)
-        return None
+    bundled = _bundled_thump_sample()
+    if bundled:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bundled, path)
+            return path
+        except OSError as exc:
+            _LOGGER.debug("Unable to copy bundled thump sample: %s", exc)
+    return render_thump_sample(path)
 
 
 def find_audio_sink() -> str | None:
@@ -147,12 +195,13 @@ def get_current_volume(sink: str | None = None) -> int | None:
     return None
 
 
-def set_volume(percent: int, sink: str | None = None) -> bool:
+def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = False) -> bool:
     """Set audio volume using pactl.
 
     Args:
         percent: Volume percentage (0-100), will be clamped to valid range.
         sink: Optional sink name. If None, will find the default sink.
+        play_feedback: When True, play the thump sample after a successful change.
 
     Returns:
         True if successful, False otherwise.
@@ -172,6 +221,8 @@ def set_volume(percent: int, sink: str | None = None) -> bool:
         # Unmute if volume > 0
         if percent > 0:
             _run_pactl(["set-sink-mute", sink, "0"])
+        if play_feedback:
+            play_volume_feedback()
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
