@@ -1,3 +1,10 @@
+## [0.26.2](https://github.com/weirdtangent/pulse-os/compare/v0.26.1...v0.26.2) (2025-11-19)
+
+
+### Bug Fixes
+
+* safe-reboot.sh: add missing fi ([0084676](https://github.com/weirdtangent/pulse-os/commit/0084676ac12fe97c2316b548eb2363b767bb9b06))
+
 ## [0.26.1](https://github.com/weirdtangent/pulse-os/compare/v0.26.0...v0.26.1) (2025-11-19)
 
 # [0.26.0](https://github.com/weirdtangent/pulse-os/compare/v0.25.0...v0.26.0) (2025-11-19)
