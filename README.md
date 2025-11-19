@@ -294,6 +294,8 @@ Every Pulse assistant publishes real-time status and accepts config commands und
 
 Use these topics in Home Assistant (MQTT select/switch sensors) to mirror the built-in Assist device capabilities, or just watch `assistant/metrics` to alert on slow responses. All preference topics are retained so dashboards will show the current value immediately after a reboot.
 
+Wake sensitivity currently maps to openWakeWord trigger levels (low → level 5, normal → 3, high → 2), so “low” requires a more confident detection before the assistant wakes up.
+
 <details>
   <summary><strong>Home Assistant trusted-network example</strong></summary>
 I am choosing to land my Pulse kiosk on a Home Assistant dashboard. To make it easy, so there is no login involved (and long-lived-tokens are a bit tricky with chromium), I setup HA to just trust the kiosk based on internal IP. So in my configuration.yaml, I include this - and just duplicate the IP config for each kiosk you setup:

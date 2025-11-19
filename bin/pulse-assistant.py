@@ -155,7 +155,9 @@ class PulseAssistant:
         timestamp = 0
         detection_task: asyncio.Task[str | None] | None = None
         try:
-            await client.write_event(Detect(names=self.config.wake_models).event())
+            detect_context = self._context_for_detect()
+            detect_message = Detect(names=self.config.wake_models, context=detect_context or None)
+            await client.write_event(detect_message.event())
             await client.write_event(
                 AudioStart(
                     rate=self.config.mic.rate,
@@ -614,6 +616,16 @@ class PulseAssistant:
                 }
             ),
         )
+
+    def _context_for_detect(self) -> dict[str, int] | None:
+        sensitivity = self.preferences.wake_sensitivity
+        trigger_level_map = {
+            "low": 5,
+            "normal": 3,
+            "high": 2,
+        }
+        trigger_level = trigger_level_map.get(sensitivity, 3)
+        return {"trigger_level": trigger_level}
         # Assist stage sensor
         self._publish_message(
             f"{prefix}/sensor/{hostname_safe}_assist_stage/config",
