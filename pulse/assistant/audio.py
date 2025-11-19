@@ -112,5 +112,3 @@ def _alsa_format(width: int) -> str:
         3: "S24_LE",
         4: "S32_LE",
     }.get(width, "S16_LE")
-
-

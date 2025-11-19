@@ -160,15 +160,9 @@ class PulseAssistant:
                 return None
 
     async def _record_phrase(self) -> bytes | None:
-        min_chunks = int(
-            max(1, (self.config.phrase.min_seconds * 1000) / self.config.mic.chunk_ms)
-        )
-        max_chunks = int(
-            max(1, (self.config.phrase.max_seconds * 1000) / self.config.mic.chunk_ms)
-        )
-        silence_chunks = int(
-            max(1, self.config.phrase.silence_ms / self.config.mic.chunk_ms)
-        )
+        min_chunks = int(max(1, (self.config.phrase.min_seconds * 1000) / self.config.mic.chunk_ms))
+        max_chunks = int(max(1, (self.config.phrase.max_seconds * 1000) / self.config.mic.chunk_ms))
+        silence_chunks = int(max(1, self.config.phrase.silence_ms / self.config.mic.chunk_ms))
         buffer = bytearray()
         silence_run = 0
         chunks = 0
@@ -304,5 +298,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
-
-

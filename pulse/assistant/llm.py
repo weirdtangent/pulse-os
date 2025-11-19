@@ -121,5 +121,3 @@ Always respond **only** with JSON in the form:
         if not content:
             raise RuntimeError("LLM response missing content")
         return str(content)
-
-

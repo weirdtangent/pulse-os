@@ -67,5 +67,3 @@ class AssistantMqtt:
 
         client.subscribe(topic)
         client.message_callback_add(topic, _callback)
-
-

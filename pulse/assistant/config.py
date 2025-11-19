@@ -237,4 +237,3 @@ def render_actions_for_prompt(actions: Iterable[dict[str, Any]]) -> str:
         desc = action.get("description") or ""
         lines.append(f"- {slug}: {desc}".strip())
     return "\n".join(lines)
-
