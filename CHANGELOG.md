@@ -1,3 +1,10 @@
+# [0.27.0](https://github.com/weirdtangent/pulse-os/compare/v0.26.2...v0.27.0) (2025-11-19)
+
+
+### Features
+
+* add Home Assistant support to Pulse assistant ([2f42a1f](https://github.com/weirdtangent/pulse-os/commit/2f42a1f81c6032f0a25bc5a513e25f003ee59504))
+
 ## [0.26.2](https://github.com/weirdtangent/pulse-os/compare/v0.26.1...v0.26.2) (2025-11-19)
 
 
