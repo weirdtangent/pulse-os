@@ -57,6 +57,7 @@ class EnvConfig:
     version_source_url: str
     version_checks_per_day: int
     telemetry_interval_seconds: int
+    volume_feedback_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,12 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
 ]
 
 
+def _as_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def log(message: str) -> None:
     print(f"[kiosk-mqtt] {message}", flush=True)
 
@@ -198,6 +205,8 @@ def load_config() -> EnvConfig:
         int(os.environ.get("PULSE_TELEMETRY_INTERVAL_SECONDS", DEFAULT_TELEMETRY_INTERVAL_SECONDS)),
     )
 
+    volume_feedback_enabled = _as_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"))
+
     return EnvConfig(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
@@ -212,6 +221,7 @@ def load_config() -> EnvConfig:
         version_source_url=version_source_url,
         version_checks_per_day=version_checks_per_day,
         telemetry_interval_seconds=telemetry_interval_seconds,
+        volume_feedback_enabled=volume_feedback_enabled,
     )
 
 
@@ -878,6 +888,8 @@ class KioskMqttListener:
         if audio.set_volume(volume):
             sink = audio.find_audio_sink()
             self.log(f"volume: set to {volume}% on {sink or 'default sink'}")
+            if self.config.volume_feedback_enabled:
+                audio.play_volume_feedback()
             # Publish current volume state
             self._safe_publish(
                 None,

@@ -192,6 +192,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                                     "name": bash_block_var,
                                     "value": "\n".join(bash_block_lines),
                                     "comment": "\n".join(bash_block_comment) if bash_block_comment else "",
+                                    "is_block": True,
                                 }
                             )
                         in_bash_block = False
@@ -234,6 +235,7 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
                                 "name": var_name,
                                 "value": var_value,
                                 "comment": "\n".join(current_comment) if current_comment else "",
+                                "is_block": False,
                             }
                         )
                         current_comment = []
@@ -245,6 +247,22 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
             sections.append(current_section)
 
     return sections
+
+
+def _annotate_new_comment(comment: str | None, var_name: str) -> str:
+    lines = comment.split("\n") if comment else []
+    for idx, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            prefix_len = len(line) - len(stripped)
+            prefix = line[:prefix_len]
+            body = stripped.lstrip("#").strip()
+            if not body.startswith("NEW:"):
+                body_text = body if body else var_name
+                lines[idx] = f"{prefix}# NEW: {body_text}"
+            return "\n".join(lines)
+    lines.insert(0, f"# NEW: {var_name}")
+    return "\n".join(lines)
 
 
 def format_config_file(
@@ -287,6 +305,8 @@ def format_config_file(
 
             # Get comment (prefer user's comment if exists, otherwise use sample's)
             comment = user_comments.get(var_name, var_info["comment"])
+            if is_new:
+                comment = _annotate_new_comment(comment, var_name)
 
             # Add comment
             if comment:
@@ -295,16 +315,13 @@ def format_config_file(
                         lines.append(comment_line)
 
             # Add variable with NEW marker if applicable
-            if is_new:
-                lines.append(f'# NEW: {var_name}="{var_value}"')
+            is_block = bool(var_info.get("is_block"))
+            if is_block:
+                block_source = user_vars.get(var_name) or var_info["value"]
+                for block_line in block_source.split("\n"):
+                    lines.append(block_line)
             else:
-                # Handle special case for PULSE_VERSION (bash code block)
-                if var_name == "PULSE_VERSION" and ("if [[ -z" in var_value or "\n" in var_value):
-                    # This is the bash code block, preserve it as-is (multi-line)
-                    for block_line in var_value.split("\n"):
-                        lines.append(block_line)
-                else:
-                    lines.append(f'{var_name}="{var_value}"')
+                lines.append(f'{var_name}="{var_value}"')
 
             lines.append("")
 

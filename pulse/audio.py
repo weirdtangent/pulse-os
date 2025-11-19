@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
+import shutil
 import subprocess
+import wave
+from pathlib import Path
 
 _LOGGER = logging.getLogger("pulse.audio")
+_THUMP_FILENAME = "pulse-volume-thump.wav"
+_THUMP_DURATION_SECONDS = 0.4
+_THUMP_FREQUENCY_HZ = 140
 
 
 def _runtime_env() -> dict[str, str]:
@@ -27,6 +34,34 @@ def _run_pactl(args: list[str]) -> subprocess.CompletedProcess[str] | None:
         return result
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         _LOGGER.debug("pactl %s failed: %s", " ".join(args), exc)
+        return None
+
+
+def _thump_sample_path() -> Path:
+    runtime_dir = Path(_runtime_env()["XDG_RUNTIME_DIR"])
+    return runtime_dir / _THUMP_FILENAME
+
+
+def _ensure_thump_sample() -> Path | None:
+    path = _thump_sample_path()
+    if path.exists():
+        return path
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sample_rate = 48000
+        samples = int(sample_rate * _THUMP_DURATION_SECONDS)
+        decay_rate = 3.0
+        with wave.open(path, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            for i in range(samples):
+                env = math.exp(-decay_rate * i / samples)
+                value = int(env * 28000 * math.sin(2 * math.pi * _THUMP_FREQUENCY_HZ * i / sample_rate))
+                wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
+        return path
+    except OSError as exc:
+        _LOGGER.debug("Unable to create thump sample: %s", exc)
         return None
 
 
@@ -140,3 +175,28 @@ def set_volume(percent: int, sink: str | None = None) -> bool:
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
+
+
+def play_volume_feedback() -> None:
+    """Play a short confirmation thump after adjusting volume."""
+    sample = _ensure_thump_sample()
+    if not sample:
+        return
+    player = None
+    for candidate in ("pw-play", "aplay"):
+        if shutil.which(candidate):
+            player = candidate
+            break
+    if not player:
+        _LOGGER.debug("No audio player available for volume feedback")
+        return
+    try:
+        subprocess.run(
+            [player, str(sample)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=_runtime_env(),
+        )
+    except OSError as exc:
+        _LOGGER.debug("Failed to play volume feedback: %s", exc)

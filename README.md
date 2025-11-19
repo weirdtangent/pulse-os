@@ -154,6 +154,10 @@ Automatically adjust screen brightness and audio volume based on sunrise/sunset.
 
     PULSE_DAY_NIGHT_AUTO="true"
 
+Play a short confirmation thump after changing the MQTT volume slider. Helpful when the speaker is quiet or muted; set it to `false` to disable the feedback.
+
+    PULSE_VOLUME_TEST_SOUND="false"
+
 Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, PulseOS automatically connects to your Bluetooth speaker and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off.
 
     PULSE_BLUETOOTH_AUTOCONNECT="true"

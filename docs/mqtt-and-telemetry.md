@@ -30,6 +30,15 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 - Button availability is dynamic: the `Update` button only appears when GitHub’s `VERSION` file is newer than the kiosk’s local version. The kiosk checks 12×/day by default (2/4/6/8/12/24 options via `PULSE_VERSION_CHECKS_PER_DAY`).
 - The Update button title automatically changes to `Update to vX.Y.Z` so you know which release will be applied before clicking.
 
+### MQTT Number Entities (volume & brightness)
+
+Home Assistant also discovers two `number` entities published by the same service:
+
+- `Audio Volume` → topic `pulse/<hostname>/audio/volume/set`
+- `Screen Brightness` → topic `pulse/<hostname>/display/brightness/set`
+
+Both sliders write a retained telemetry value so dashboards stay in sync. If you set `PULSE_VOLUME_TEST_SOUND="true"` in `pulse.conf`, the volume slider plays a short “thump” after each successful adjustment so you can hear the new level immediately.
+
 ---
 
 ## Diagnostic Telemetry Sensors
