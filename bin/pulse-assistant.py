@@ -314,8 +314,8 @@ class PulseAssistant:
         payload["device"] = self.config.hostname
         self._publish_message(self.config.state_topic, json.dumps(payload))
 
-    def _publish_message(self, topic: str, payload: str) -> None:
-        self.mqtt.publish(topic, payload=payload, retain=False)
+    def _publish_message(self, topic: str, payload: str, *, retain: bool = False) -> None:
+        self.mqtt.publish(topic, payload=payload, retain=retain)
 
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
@@ -559,21 +559,21 @@ class PulseAssistant:
 
     def _publish_preference_state(self, key: str, value: str) -> None:
         topic = f"{self._preferences_topic}/{key}/state"
-        self._publish_message(topic, value)
+        self._publish_message(topic, value, retain=True)
 
     def _set_assist_stage(self, pipeline: str, stage: str, extra: dict | None = None) -> None:
         self._assist_stage = stage
         self._assist_pipeline = pipeline
         in_progress = stage not in {"idle", "error"}
-        self._publish_message(self._assist_in_progress_topic, "ON" if in_progress else "OFF")
+        self._publish_message(self._assist_in_progress_topic, "ON" if in_progress else "OFF", retain=True)
         payload_extra = {"pipeline": pipeline, "stage": stage}
         if extra:
             payload_extra.update(extra)
         self._publish_state(stage, payload_extra)
-        self._publish_message(self._assist_stage_topic, stage)
-        self._publish_message(self._assist_pipeline_topic, pipeline)
+        self._publish_message(self._assist_stage_topic, stage, retain=True)
+        self._publish_message(self._assist_pipeline_topic, pipeline, retain=True)
         if extra and "wake_word" in extra:
-            self._publish_message(self._assist_wake_topic, str(extra["wake_word"]))
+            self._publish_message(self._assist_wake_topic, str(extra["wake_word"]), retain=True)
 
     def _finalize_assist_run(self, status: str) -> None:
         tracker = self._current_tracker
@@ -615,17 +615,8 @@ class PulseAssistant:
                     "entity_category": "diagnostic",
                 }
             ),
+            retain=True,
         )
-
-    def _context_for_detect(self) -> dict[str, int] | None:
-        sensitivity = self.preferences.wake_sensitivity
-        trigger_level_map = {
-            "low": 5,
-            "normal": 3,
-            "high": 2,
-        }
-        trigger_level = trigger_level_map.get(sensitivity, 3)
-        return {"trigger_level": trigger_level}
         # Assist stage sensor
         self._publish_message(
             f"{prefix}/sensor/{hostname_safe}_assist_stage/config",
@@ -639,6 +630,7 @@ class PulseAssistant:
                     "icon": "mdi:progress-clock",
                 }
             ),
+            retain=True,
         )
         # Last wake word sensor
         self._publish_message(
@@ -653,6 +645,7 @@ class PulseAssistant:
                     "icon": "mdi:account-voice",
                 }
             ),
+            retain=True,
         )
         # Speaking style select
         self._publish_message(
@@ -668,6 +661,7 @@ class PulseAssistant:
                     "entity_category": "config",
                 }
             ),
+            retain=True,
         )
         # Wake sensitivity select
         self._publish_message(
@@ -683,6 +677,7 @@ class PulseAssistant:
                     "entity_category": "config",
                 }
             ),
+            retain=True,
         )
         # Wake sound switch
         self._publish_message(
@@ -699,6 +694,7 @@ class PulseAssistant:
                     "entity_category": "config",
                 }
             ),
+            retain=True,
         )
         # HA pipeline text entity
         self._publish_message(
@@ -713,7 +709,18 @@ class PulseAssistant:
                     "entity_category": "config",
                 }
             ),
+            retain=True,
         )
+
+    def _context_for_detect(self) -> dict[str, int] | None:
+        sensitivity = self.preferences.wake_sensitivity
+        trigger_level_map = {
+            "low": 5,
+            "normal": 3,
+            "high": 2,
+        }
+        trigger_level = trigger_level_map.get(sensitivity, 3)
+        return {"trigger_level": trigger_level}
 
 
 def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:

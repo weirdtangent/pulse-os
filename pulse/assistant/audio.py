@@ -38,7 +38,16 @@ class ArecordStream:
         try:
             return await self._proc.stdout.readexactly(self.bytes_per_chunk)
         except asyncio.IncompleteReadError as exc:
-            raise RuntimeError("Microphone stream ended unexpectedly") from exc
+            stderr = ""
+            if self._proc.stderr:
+                try:
+                    stderr = (await self._proc.stderr.read()).decode("utf-8", errors="ignore").strip()
+                except Exception:  # pragma: no cover - best effort
+                    stderr = ""
+            message = "Microphone stream ended unexpectedly"
+            if stderr:
+                message = f"{message} ({stderr})"
+            raise RuntimeError(message) from exc
 
     async def stop(self) -> None:
         if not self._proc:
