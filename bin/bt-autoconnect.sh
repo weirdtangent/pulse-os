@@ -57,12 +57,25 @@ fi
 # Try to connect (harmless if already connected)
 bluetoothctl connect "$MAC" >/dev/null 2>&1 || true
 
+# Ensure we know our XDG_RUNTIME_DIR (needed for pactl/pw-cli)
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
 # Find the Bluetooth sink dynamically (works with any Bluetooth device)
 # Sink name format: bluez_output.XX_XX_XX_XX_XX_XX.1
 SINK=$(pactl list sinks short 2>/dev/null | grep -m1 "bluez_output" | awk '{print $2}' || true)
+CARD=$(pactl list cards short 2>/dev/null | grep -m1 "bluez_card" | awk '{print $2}' || true)
 
 # Check if the BT sink exists
 if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
+  # Prefer high-quality audio profile when available
+  if [ -n "$CARD" ]; then
+    if pactl list cards | grep -A10 "$CARD" | grep -q "Profiles:.*a2dp-sink"; then
+      pactl set-card-profile "$CARD" a2dp-sink >/dev/null 2>&1 || true
+    else
+      pactl set-card-profile "$CARD" headset-head-unit >/dev/null 2>&1 || true
+    fi
+  fi
+
   # Make it default sink
   pactl set-default-sink "$SINK" >/dev/null 2>&1 || true
 
