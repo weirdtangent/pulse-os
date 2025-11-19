@@ -7,6 +7,7 @@ Type=simple
 User=pulse
 WorkingDirectory=/opt/pulse-os
 Environment=PYTHONPATH=/opt/pulse-os
+Environment=XDG_RUNTIME_DIR=/run/user/%U
 ExecStart=/usr/bin/env python3 /home/pulse/bin/pulse-backlight-sun.py
 Restart=always
 RestartSec=10s
