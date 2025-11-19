@@ -1,3 +1,10 @@
+## [0.31.1](https://github.com/weirdtangent/pulse-os/compare/v0.31.0...v0.31.1) (2025-11-19)
+
+
+### Bug Fixes
+
+* sanitize location in setup.sh ([56aaf49](https://github.com/weirdtangent/pulse-os/commit/56aaf492f1568f20bf352b0055bbcf754f326ed1))
+
 # [0.31.0](https://github.com/weirdtangent/pulse-os/compare/v0.30.0...v0.31.0) (2025-11-19)
 
 
