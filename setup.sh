@@ -73,7 +73,17 @@ read_stored_location() {
         return 1
     fi
 
-    printf '%s\n' "$contents"
+    local sanitized
+    if ! sanitized=$(sanitize_location "$contents"); then
+        return 1
+    fi
+
+    if [ "$sanitized" != "$contents" ]; then
+        log "Stored location in $LOCATION_FILE appears invalid; rerun setup with a location argument." >&2
+        return 1
+    fi
+
+    printf '%s\n' "$sanitized"
 }
 
 sanitize_location() {
@@ -81,7 +91,14 @@ sanitize_location() {
     local lower sanitized
 
     lower=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+    lower=${lower//$'\r'/ }
+    lower=${lower//$'\n'/ }
     sanitized=$(printf '%s' "$lower" | sed -E 's/[^a-z0-9]+/-/g; s/-+/-/g; s/^-+//; s/-+$//')
+
+    if [ ${#sanitized} -gt 63 ]; then
+        sanitized=${sanitized:0:63}
+        sanitized=${sanitized%-}
+    fi
 
     if [ -z "$sanitized" ]; then
         return 1
