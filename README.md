@@ -126,7 +126,7 @@ bin/verify_conf.py --config /opt/pulse-os/pulse.conf
 The script automatically sources the config (or uses the `--config` path you pass in), then:
 - Connects to your MQTT broker with the configured credentials.
 - Sends a one-line RFC5424 syslog message to the remote logging target (only if `PULSE_REMOTE_LOGGING="true"`).
-- Issues a Wyoming `Describe` request to each openWakeWord/Whisper/Piper endpoint (falling back to raw TCP if the client library is missing) so you can confirm the right service replies with model metadata.
+- Issues a Wyoming `Describe` request to each openWakeWord/Whisper/Piper endpoint (falling back to raw TCP if the client library is missing) so you can confirm the right service replies with model metadata, and—when the `wyoming` Python client is available—runs a tiny functional probe (silence transcript, short TTS clip, wake-word NotDetected) to prove each daemon is actually doing work.
 
 Failures are reported with actionable text, and the process exits non-zero if any check fails so you can wire it into CI or deploy hooks.
 

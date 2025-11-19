@@ -24,22 +24,35 @@ except ModuleNotFoundError:  # pragma: no cover - aids bootstrap
     mqtt = None  # type: ignore[assignment]
 
 try:
-    from pulse.assistant.config import AssistantConfig, WyomingEndpoint
+    from pulse.assistant.config import AssistantConfig, MicConfig, WyomingEndpoint
 except ModuleNotFoundError:
     repo_dir = Path(__file__).resolve().parents[1]
     if str(repo_dir) not in sys.path:
         sys.path.insert(0, str(repo_dir))
-    from pulse.assistant.config import AssistantConfig, WyomingEndpoint
+    from pulse.assistant.config import AssistantConfig, MicConfig, WyomingEndpoint
 
 try:
+    from wyoming.asr import Transcribe, Transcript
+    from wyoming.audio import AudioChunk, AudioStart, AudioStop
     from wyoming.client import AsyncTcpClient
     from wyoming.info import Describe, Info
+    from wyoming.tts import Synthesize
+    from wyoming.wake import Detect, Detection, NotDetected
 
     WYOMING_PROTOCOL_AVAILABLE = True
 except ModuleNotFoundError:
     AsyncTcpClient = None  # type: ignore[assignment]
     Describe = None  # type: ignore[assignment]
     Info = None  # type: ignore[assignment]
+    Transcribe = None  # type: ignore[assignment]
+    Transcript = None  # type: ignore[assignment]
+    AudioChunk = None  # type: ignore[assignment]
+    AudioStart = None  # type: ignore[assignment]
+    AudioStop = None  # type: ignore[assignment]
+    Synthesize = None  # type: ignore[assignment]
+    Detect = None  # type: ignore[assignment]
+    Detection = None  # type: ignore[assignment]
+    NotDetected = None  # type: ignore[assignment]
     WYOMING_PROTOCOL_AVAILABLE = False
 
 Status = Literal["ok", "fail", "skip"]
@@ -49,6 +62,13 @@ EXPECTED_WYOMING_TYPES: dict[str, set[str]] = {
     "Wyoming Piper": {"tts"},
     "Wyoming OpenWakeWord": {"wake"},
 }
+
+
+def _silence_bytes(duration_ms: int, mic: MicConfig) -> bytes:
+    frames = int(mic.rate * (duration_ms / 1000))
+    frame_bytes = mic.width * mic.channels
+    total_bytes = max(1, frames * frame_bytes)
+    return bytes(total_bytes)
 
 
 @dataclass(slots=True)
@@ -241,10 +261,31 @@ def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeou
     ]
     results: list[CheckResult] = []
     for name, host_key, port_key, endpoint in checks:
-        if WYOMING_PROTOCOL_AVAILABLE:
-            results.append(_describe_wyoming_endpoint(name, host_key, port_key, endpoint, env, timeout))
-        else:
+        if not WYOMING_PROTOCOL_AVAILABLE:
             results.append(_check_wyoming_tcp(name, host_key, port_key, endpoint, env, timeout))
+            continue
+
+        describe_result, info, host, port = _describe_wyoming_endpoint(
+            name,
+            host_key,
+            port_key,
+            endpoint,
+            env,
+            timeout,
+        )
+        if describe_result.status != "ok":
+            results.append(describe_result)
+            continue
+
+        probe_result = _exercise_wyoming_service(name, host, port, timeout, config)
+
+        if probe_result is None:
+            results.append(describe_result)
+        elif probe_result.status != "ok":
+            results.append(probe_result)
+        else:
+            detail = f"{describe_result.detail} {probe_result.detail}".strip()
+            results.append(CheckResult(name, "ok", detail))
     return results
 
 
@@ -283,37 +324,58 @@ def _describe_wyoming_endpoint(
     endpoint: WyomingEndpoint,
     env: dict[str, str],
     timeout: float,
-) -> CheckResult:
+) -> tuple[CheckResult, Info | None, str | None, int | None]:
     host = (env.get(host_key) or endpoint.host or "").strip()
     if not host:
-        return CheckResult(label, "fail", f"{host_key} is not set.")
+        return CheckResult(label, "fail", f"{host_key} is not set."), None, None, None
 
     port = _int_or_default(env.get(port_key), endpoint.port)
     if not port:
-        return CheckResult(label, "fail", f"{port_key} is missing or invalid.")
+        return CheckResult(label, "fail", f"{port_key} is missing or invalid."), None, host, None
 
     if not WYOMING_PROTOCOL_AVAILABLE or AsyncTcpClient is None or Describe is None or Info is None:
-        return _check_wyoming_tcp(label, host_key, port_key, endpoint, env, timeout)
+        tcp_result = _check_wyoming_tcp(label, host_key, port_key, endpoint, env, timeout)
+        return tcp_result, None, host, port
 
     try:
         info = asyncio.run(_describe_endpoint_async(host, port, timeout))
     except TimeoutError:
-        return CheckResult(label, "fail", f"Describe request to {host}:{port} timed out after {timeout:.1f}s.")
+        return (
+            CheckResult(label, "fail", f"Describe request to {host}:{port} timed out after {timeout:.1f}s."),
+            None,
+            host,
+            port,
+        )
     except OSError as exc:
-        return CheckResult(label, "fail", f"Unable to communicate with {host}:{port} ({exc}).")
+        return (
+            CheckResult(label, "fail", f"Unable to communicate with {host}:{port} ({exc})."),
+            None,
+            host,
+            port,
+        )
 
     if info is None:
-        return CheckResult(label, "fail", f"{host}:{port} closed the connection before sending Describe info.")
+        return (
+            CheckResult(label, "fail", f"{host}:{port} closed the connection before sending Describe info."),
+            None,
+            host,
+            port,
+        )
 
     info_types = {t.lower() for t in getattr(info, "types", []) if t}
     expected = EXPECTED_WYOMING_TYPES.get(label)
     if expected and info_types and info_types.isdisjoint(expected):
         expected_display = ", ".join(sorted(expected))
         type_display = ", ".join(sorted(info_types)) or "<none>"
-        return CheckResult(
-            label,
-            "fail",
-            f"{host}:{port} responded but types {type_display} do not include expected {expected_display}.",
+        return (
+            CheckResult(
+                label,
+                "fail",
+                f"{host}:{port} responded but types {type_display} do not include expected {expected_display}.",
+            ),
+            info,
+            host,
+            port,
         )
 
     model_names = [
@@ -326,7 +388,196 @@ def _describe_wyoming_endpoint(
     service_name = getattr(info, "name", None) or "Service"
     type_display = ", ".join(sorted(info_types)) if info_types else "unknown"
     detail = f"{service_name} {version or ''} responded (types: {type_display}; models: {model_display})."
-    return CheckResult(label, "ok", detail.strip())
+    return CheckResult(label, "ok", detail.strip()), info, host, port
+
+
+def _exercise_wyoming_service(
+    label: str,
+    host: str | None,
+    port: int | None,
+    timeout: float,
+    config: AssistantConfig,
+) -> CheckResult | None:
+    if host is None or port is None:
+        return None
+    if not WYOMING_PROTOCOL_AVAILABLE or AsyncTcpClient is None:
+        return None
+
+    if label == "Wyoming Whisper":
+        return _exercise_whisper(host, port, config, timeout)
+    if label == "Wyoming Piper":
+        return _exercise_piper(host, port, timeout)
+    if label == "Wyoming OpenWakeWord":
+        return _exercise_openwakeword(host, port, config, timeout)
+    return None
+
+
+def _exercise_whisper(host: str, port: int, config: AssistantConfig, timeout: float) -> CheckResult:
+    if Transcribe is None or Transcript is None or AudioStart is None or AudioChunk is None or AudioStop is None:
+        return CheckResult("Wyoming Whisper", "fail", "Wyoming client libraries missing for whisper probe.")
+    try:
+        transcript = asyncio.run(_probe_whisper_async(host, port, config, timeout))
+    except TimeoutError:
+        return CheckResult("Wyoming Whisper", "fail", f"Whisper probe timed out after {timeout:.1f}s.")
+    except OSError as exc:
+        return CheckResult("Wyoming Whisper", "fail", f"Whisper probe failed: {exc}.")
+    if transcript is None:
+        return CheckResult("Wyoming Whisper", "fail", "Whisper probe returned no transcript event.")
+    snippet = transcript if transcript else "<empty>"
+    return CheckResult("Wyoming Whisper", "ok", f"Probe transcript: {snippet!r}.")
+
+
+def _exercise_piper(host: str, port: int, timeout: float) -> CheckResult:
+    if Synthesize is None or AudioStart is None or AudioChunk is None or AudioStop is None:
+        return CheckResult("Wyoming Piper", "fail", "Wyoming client libraries missing for piper probe.")
+    try:
+        started, chunks = asyncio.run(_probe_piper_async(host, port, timeout))
+    except TimeoutError:
+        return CheckResult("Wyoming Piper", "fail", f"Piper probe timed out after {timeout:.1f}s.")
+    except OSError as exc:
+        return CheckResult("Wyoming Piper", "fail", f"Piper probe failed: {exc}.")
+    if not started:
+        return CheckResult("Wyoming Piper", "fail", "Piper probe never received AudioStart.")
+    return CheckResult("Wyoming Piper", "ok", f"Probe synthesized {chunks} audio chunk(s).")
+
+
+def _exercise_openwakeword(host: str, port: int, config: AssistantConfig, timeout: float) -> CheckResult:
+    if Detect is None or AudioStart is None or AudioChunk is None or AudioStop is None:
+        return CheckResult("Wyoming OpenWakeWord", "fail", "Wyoming client libraries missing for wake-word probe.")
+    try:
+        detection = asyncio.run(_probe_openwakeword_async(host, port, config, timeout))
+    except TimeoutError:
+        return CheckResult("Wyoming OpenWakeWord", "fail", f"Wake-word probe timed out after {timeout:.1f}s.")
+    except OSError as exc:
+        return CheckResult("Wyoming OpenWakeWord", "fail", f"Wake-word probe failed: {exc}.")
+    if detection:
+        return CheckResult("Wyoming OpenWakeWord", "ok", f"Probe detected wake word '{detection}'.")
+    return CheckResult("Wyoming OpenWakeWord", "ok", "Probe returned NotDetected (expected for silence sample).")
+
+
+async def _probe_whisper_async(host: str, port: int, config: AssistantConfig, timeout: float) -> str | None:
+    assert AsyncTcpClient is not None
+    assert Transcribe is not None
+    assert Transcript is not None
+    assert AudioStart is not None
+    assert AudioChunk is not None
+    assert AudioStop is not None
+
+    client = AsyncTcpClient(host, port)
+    await asyncio.wait_for(client.connect(), timeout=timeout)
+    try:
+        await asyncio.wait_for(
+            client.write_event(
+                Transcribe(
+                    name=config.stt_endpoint.model,
+                    language=config.language,
+                ).event()
+            ),
+            timeout=timeout,
+        )
+        await asyncio.wait_for(
+            client.write_event(
+                AudioStart(
+                    rate=config.mic.rate,
+                    width=config.mic.width,
+                    channels=config.mic.channels,
+                ).event()
+            ),
+            timeout=timeout,
+        )
+        chunk = AudioChunk(
+            rate=config.mic.rate,
+            width=config.mic.width,
+            channels=config.mic.channels,
+            audio=_silence_bytes(400, config.mic),
+        )
+        await asyncio.wait_for(client.write_event(chunk.event()), timeout=timeout)
+        await asyncio.wait_for(client.write_event(AudioStop().event()), timeout=timeout)
+        while True:
+            event = await asyncio.wait_for(client.read_event(), timeout=timeout)
+            if event is None:
+                return None
+            if Transcript.is_type(event.type):
+                return Transcript.from_event(event).text
+    finally:
+        await client.disconnect()
+
+
+async def _probe_piper_async(host: str, port: int, timeout: float) -> tuple[bool, int]:
+    assert AsyncTcpClient is not None
+    assert Synthesize is not None
+    assert AudioStart is not None
+    assert AudioChunk is not None
+    assert AudioStop is not None
+
+    client = AsyncTcpClient(host, port)
+    await asyncio.wait_for(client.connect(), timeout=timeout)
+    started = False
+    chunks = 0
+    try:
+        await asyncio.wait_for(client.write_event(Synthesize(text="Pulse verification ping").event()), timeout=timeout)
+        while True:
+            event = await asyncio.wait_for(client.read_event(), timeout=timeout)
+            if event is None:
+                break
+            if AudioStart.is_type(event.type):
+                started = True
+            elif AudioChunk.is_type(event.type):
+                chunks += 1
+            elif AudioStop.is_type(event.type):
+                break
+    finally:
+        await client.disconnect()
+    return started, chunks
+
+
+async def _probe_openwakeword_async(host: str, port: int, config: AssistantConfig, timeout: float) -> str | None:
+    assert AsyncTcpClient is not None
+    assert Detect is not None
+    assert AudioStart is not None
+    assert AudioChunk is not None
+    assert AudioStop is not None
+    assert Detection is not None
+    assert NotDetected is not None
+
+    client = AsyncTcpClient(host, port)
+    await asyncio.wait_for(client.connect(), timeout=timeout)
+    models = config.wake_models or ["okay_pulse"]
+    timestamp = 0
+    try:
+        await asyncio.wait_for(client.write_event(Detect(names=models).event()), timeout=timeout)
+        await asyncio.wait_for(
+            client.write_event(
+                AudioStart(
+                    rate=config.mic.rate,
+                    width=config.mic.width,
+                    channels=config.mic.channels,
+                    timestamp=timestamp,
+                ).event()
+            ),
+            timeout=timeout,
+        )
+        chunk = AudioChunk(
+            rate=config.mic.rate,
+            width=config.mic.width,
+            channels=config.mic.channels,
+            audio=_silence_bytes(config.mic.chunk_ms, config.mic),
+            timestamp=timestamp,
+        )
+        await asyncio.wait_for(client.write_event(chunk.event()), timeout=timeout)
+        timestamp += config.mic.chunk_ms
+        await asyncio.wait_for(client.write_event(AudioStop(timestamp=timestamp).event()), timeout=timeout)
+        while True:
+            event = await asyncio.wait_for(client.read_event(), timeout=timeout)
+            if event is None:
+                return None
+            if Detection.is_type(event.type):
+                detection = Detection.from_event(event)
+                return detection.name or models[0]
+            if NotDetected.is_type(event.type):
+                return None
+    finally:
+        await client.disconnect()
 
 
 async def _describe_endpoint_async(host: str, port: int, timeout: float) -> Info | None:
