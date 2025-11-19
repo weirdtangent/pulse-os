@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import audioop
 import contextlib
 import json
 import logging
+import math
 import signal
+import sys
+from array import array
 from collections.abc import Iterable
 
 from pulse.assistant.actions import ActionEngine, load_action_definitions
@@ -24,6 +26,29 @@ from wyoming.tts import Synthesize, SynthesizeVoice
 from wyoming.wake import Detect, Detection, NotDetected
 
 LOGGER = logging.getLogger("pulse-assistant")
+
+
+def _compute_rms(chunk: bytes, sample_width: int) -> int:
+    if not chunk or sample_width <= 0:
+        return 0
+    frames = len(chunk) // sample_width
+    if frames <= 0:
+        return 0
+    trimmed = chunk[: frames * sample_width]
+    typecode = {1: "b", 2: "h", 4: "i"}.get(sample_width)
+    if typecode:
+        samples = array(typecode)
+        samples.frombytes(trimmed)
+        if sample_width > 1 and sys.byteorder != "little":
+            samples.byteswap()
+        total = math.fsum(value * value for value in samples)
+    else:
+        total = 0.0
+        for i in range(0, len(trimmed), sample_width):
+            sample = int.from_bytes(trimmed[i : i + sample_width], "little", signed=True)
+            total += sample * sample
+    mean = total / frames
+    return int(math.sqrt(mean))
 
 
 class PulseAssistant:
@@ -150,7 +175,7 @@ class PulseAssistant:
         while chunks < max_chunks:
             chunk = await self.mic.read_chunk()
             buffer.extend(chunk)
-            rms = audioop.rms(chunk, self.config.mic.width)
+            rms = _compute_rms(chunk, self.config.mic.width)
             if rms < self.config.phrase.rms_floor and chunks >= min_chunks:
                 silence_run += 1
                 if silence_run >= silence_chunks:
