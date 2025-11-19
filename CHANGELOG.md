@@ -1,3 +1,10 @@
+# [0.31.0](https://github.com/weirdtangent/pulse-os/compare/v0.30.0...v0.31.0) (2025-11-19)
+
+
+### Features
+
+* add MQTT telemetry and preference topics to pulse-assistant ([09b09db](https://github.com/weirdtangent/pulse-os/commit/09b09dbb9ce8f8d5d46921e14ac5a67e5fac7f6a))
+
 # [0.30.0](https://github.com/weirdtangent/pulse-os/compare/v0.29.0...v0.30.0) (2025-11-19)
 
 
