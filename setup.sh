@@ -316,10 +316,10 @@ install_voice_assistant_python_deps() {
         sudo apt install -y python3-pip
     fi
 
-    log "Ensuring Wyoming Python package is installed for the pulse user…"
+    log "Ensuring Python packages for the voice assistant are installed for the pulse user…"
     if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
-        --user --upgrade --disable-pip-version-check --break-system-packages wyoming; then
-        log "Warning: failed to install wyoming via pip (voice assistant may not start)."
+        --user --upgrade --disable-pip-version-check --break-system-packages wyoming httpx; then
+        log "Warning: failed to install wyoming/httpx via pip (voice assistant may not start)."
     fi
 }
 
