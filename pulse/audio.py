@@ -110,6 +110,7 @@ def _ensure_thump_sample() -> Path | None:
             return path
         except OSError as exc:
             _LOGGER.debug("Unable to copy bundled thump sample: %s", exc)
+            return bundled
     return render_thump_sample(path)
 
 
