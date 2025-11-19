@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 COMMENT_ASSIGNMENT_RE = re.compile(r"#\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)")
 BASH_IF_RE = re.compile(r"^if\b")
 BASH_FI_RE = re.compile(r"^fi\b")
