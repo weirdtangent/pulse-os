@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -360,8 +361,12 @@ class PulseAssistant:
                 }
             ),
         )
-        tts_endpoint = ha_config.tts_endpoint or self.config.tts_endpoint
-        await self._speak_via_endpoint(speech_text, tts_endpoint, self.config.tts_voice)
+        tts_audio = self._extract_ha_tts_audio(ha_result)
+        if tts_audio:
+            await self._play_pcm_audio(tts_audio["audio"], tts_audio["rate"], tts_audio["width"], tts_audio["channels"])
+        else:
+            tts_endpoint = ha_config.tts_endpoint or self.config.tts_endpoint
+            await self._speak_via_endpoint(speech_text, tts_endpoint, self.config.tts_voice)
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
@@ -421,6 +426,32 @@ class PulseAssistant:
             if isinstance(text, str):
                 return text.strip()
         return None
+
+    @staticmethod
+    def _extract_ha_tts_audio(result: dict) -> dict | None:
+        tts_output = result.get("tts_output")
+        if not isinstance(tts_output, dict):
+            return None
+        audio_b64 = tts_output.get("audio")
+        if not isinstance(audio_b64, str):
+            return None
+        try:
+            audio_bytes = base64.b64decode(audio_b64)
+        except (ValueError, TypeError):
+            return None
+        rate = int(tts_output.get("sample_rate") or 0)
+        width = int(tts_output.get("sample_width") or 0)
+        channels = int(tts_output.get("channels") or 0)
+        if not rate or not width or not channels:
+            return None
+        return {"audio": audio_bytes, "rate": rate, "width": width, "channels": channels}
+
+    async def _play_pcm_audio(self, audio_bytes: bytes, rate: int, width: int, channels: int) -> None:
+        await self.player.start(rate, width, channels)
+        try:
+            await self.player.write(audio_bytes)
+        finally:
+            await self.player.stop()
 
 
 def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:
