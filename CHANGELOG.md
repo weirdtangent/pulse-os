@@ -1,3 +1,28 @@
+# [0.23.0](https://github.com/weirdtangent/pulse-os/compare/v0.22.2...v0.23.0) (2025-11-19)
+
+
+### Bug Fixes
+
+* (or undo fix) for expanding the UID ([ef694d6](https://github.com/weirdtangent/pulse-os/commit/ef694d69bbb4a03d3188eeaadcbbf42ed4bc520e))
+* add bt-autoconnect.sh to setup script ([c0528a3](https://github.com/weirdtangent/pulse-os/commit/c0528a3a71404e56f77d7915c4908276232a0390))
+* add logging to pulse.audio for easier debugging ([e5d8c48](https://github.com/weirdtangent/pulse-os/commit/e5d8c48236877ded9f32397e78f0e5db676df2a0))
+* add missing set -a and set +a to pulse.conf in wrappers ([9e765bd](https://github.com/weirdtangent/pulse-os/commit/9e765bd7db4d356971c9c6df5a1d489487766473))
+* add voice assistant Python dependencies to setup script ([524cdc2](https://github.com/weirdtangent/pulse-os/commit/524cdc26819f99c2b445b0746187e8e1d1e6ecb3))
+* ensure XDG_RUNTIME_DIR is set in pulse.audio ([1efbf1a](https://github.com/weirdtangent/pulse-os/commit/1efbf1ad468ec56418c87db2e416fe2b7d4d739b))
+* fix pulse-assistant.py import problems with our own audioop module ([b5a6590](https://github.com/weirdtangent/pulse-os/commit/b5a6590d1f0fe479c4c868984baef08dc6586c9f))
+* fix SemVer config ([412d3a9](https://github.com/weirdtangent/pulse-os/commit/412d3a98576a2cbde813dd7c7ce29a0ad1a53a51))
+* python3-audioop does not exist in Debian, use python3 meta-package instead ([15aa838](https://github.com/weirdtangent/pulse-os/commit/15aa8387f66d23e8ffd2493c72a3129e3b25ea27))
+* reformatting happiness ([67d6fcd](https://github.com/weirdtangent/pulse-os/commit/67d6fcd47f62982c517d9df173c8d8215299f164))
+* set XDG_RUNTIME_DIR in kiosk-mqtt-wrapper.sh ([615d166](https://github.com/weirdtangent/pulse-os/commit/615d16689927e4fd06f71a99cc0d015f5c3f28a8))
+* XDG_RUNTIME_DIR in bt-autoconnect.sh and pulse-backlight-sun.service ([b3ef445](https://github.com/weirdtangent/pulse-os/commit/b3ef4455397cd87155f1abeb73e948cffe2274eb))
+
+
+### Features
+
+* add bluetooth-speakers.md and improve setup script ([d4a6f63](https://github.com/weirdtangent/pulse-os/commit/d4a6f6366473cf593058e51dc93e0fdc55d8547a))
+* add safe reboot guard to prevent infinite reboot loops ([4245a59](https://github.com/weirdtangent/pulse-os/commit/4245a5951c50e0aa4132578d40b72df1e9d96b14))
+* add voice assistant support, attempt 1 ([5560f95](https://github.com/weirdtangent/pulse-os/commit/5560f95c77b96fe179e99f615cefc1318e25c957))
+
 ## [0.22.2](https://github.com/weirdtangent/pulse-os/compare/v0.22.1...v0.22.2) (2025-11-18)
 
 
