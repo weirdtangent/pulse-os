@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import os
 import shlex
@@ -30,7 +31,24 @@ except ModuleNotFoundError:
         sys.path.insert(0, str(repo_dir))
     from pulse.assistant.config import AssistantConfig, WyomingEndpoint
 
+try:
+    from wyoming.client import AsyncTcpClient
+    from wyoming.info import Describe, Info
+
+    WYOMING_PROTOCOL_AVAILABLE = True
+except ModuleNotFoundError:
+    AsyncTcpClient = None  # type: ignore[assignment]
+    Describe = None  # type: ignore[assignment]
+    Info = None  # type: ignore[assignment]
+    WYOMING_PROTOCOL_AVAILABLE = False
+
 Status = Literal["ok", "fail", "skip"]
+
+EXPECTED_WYOMING_TYPES: dict[str, set[str]] = {
+    "Wyoming Whisper": {"stt", "asr"},
+    "Wyoming Piper": {"tts"},
+    "Wyoming OpenWakeWord": {"wake"},
+}
 
 
 @dataclass(slots=True)
@@ -223,11 +241,14 @@ def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeou
     ]
     results: list[CheckResult] = []
     for name, host_key, port_key, endpoint in checks:
-        results.append(_check_wyoming_endpoint(name, host_key, port_key, endpoint, env, timeout))
+        if WYOMING_PROTOCOL_AVAILABLE:
+            results.append(_describe_wyoming_endpoint(name, host_key, port_key, endpoint, env, timeout))
+        else:
+            results.append(_check_wyoming_tcp(name, host_key, port_key, endpoint, env, timeout))
     return results
 
 
-def _check_wyoming_endpoint(
+def _check_wyoming_tcp(
     label: str,
     host_key: str,
     port_key: str,
@@ -253,6 +274,78 @@ def _check_wyoming_endpoint(
     elapsed = time.perf_counter() - start
     suffix = f" (model hint: {endpoint.model})" if endpoint.model else ""
     return CheckResult(label, "ok", f"TCP handshake succeeded with {host}:{port} in {elapsed:.2f}s{suffix}.")
+
+
+def _describe_wyoming_endpoint(
+    label: str,
+    host_key: str,
+    port_key: str,
+    endpoint: WyomingEndpoint,
+    env: dict[str, str],
+    timeout: float,
+) -> CheckResult:
+    host = (env.get(host_key) or endpoint.host or "").strip()
+    if not host:
+        return CheckResult(label, "fail", f"{host_key} is not set.")
+
+    port = _int_or_default(env.get(port_key), endpoint.port)
+    if not port:
+        return CheckResult(label, "fail", f"{port_key} is missing or invalid.")
+
+    if not WYOMING_PROTOCOL_AVAILABLE or AsyncTcpClient is None or Describe is None or Info is None:
+        return _check_wyoming_tcp(label, host_key, port_key, endpoint, env, timeout)
+
+    try:
+        info = asyncio.run(_describe_endpoint_async(host, port, timeout))
+    except TimeoutError:
+        return CheckResult(label, "fail", f"Describe request to {host}:{port} timed out after {timeout:.1f}s.")
+    except OSError as exc:
+        return CheckResult(label, "fail", f"Unable to communicate with {host}:{port} ({exc}).")
+
+    if info is None:
+        return CheckResult(label, "fail", f"{host}:{port} closed the connection before sending Describe info.")
+
+    info_types = {t.lower() for t in getattr(info, "types", []) if t}
+    expected = EXPECTED_WYOMING_TYPES.get(label)
+    if expected and info_types and info_types.isdisjoint(expected):
+        expected_display = ", ".join(sorted(expected))
+        type_display = ", ".join(sorted(info_types)) or "<none>"
+        return CheckResult(
+            label,
+            "fail",
+            f"{host}:{port} responded but types {type_display} do not include expected {expected_display}.",
+        )
+
+    model_names = [
+        getattr(model, "name", None)
+        for model in getattr(info, "models", [])  # type: ignore[arg-type]
+        if getattr(model, "name", None)
+    ]
+    model_display = ", ".join(model_names) if model_names else (endpoint.model or "no models advertised")
+    version = getattr(info, "version", None)
+    service_name = getattr(info, "name", None) or "Service"
+    type_display = ", ".join(sorted(info_types)) if info_types else "unknown"
+    detail = f"{service_name} {version or ''} responded (types: {type_display}; models: {model_display})."
+    return CheckResult(label, "ok", detail.strip())
+
+
+async def _describe_endpoint_async(host: str, port: int, timeout: float) -> Info | None:
+    assert AsyncTcpClient is not None
+    assert Describe is not None
+    assert Info is not None
+
+    client = AsyncTcpClient(host, port)
+    await asyncio.wait_for(client.connect(), timeout=timeout)
+    try:
+        await asyncio.wait_for(client.write_event(Describe().event()), timeout=timeout)
+        while True:
+            event = await asyncio.wait_for(client.read_event(), timeout=timeout)
+            if event is None:
+                return None
+            if Info.is_type(event.type):
+                return Info.from_event(event)
+    finally:
+        await client.disconnect()
 
 
 def print_summary(results: list[CheckResult], config_path: Path | None) -> None:
