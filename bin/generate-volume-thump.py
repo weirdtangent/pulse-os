@@ -8,10 +8,14 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
-from pulse import audio  # pylint: disable=wrong-import-position
+
+def _load_audio():
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from pulse import audio  # pylint: disable=import-outside-toplevel
+
+    return audio
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +31,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    audio = _load_audio()
     args = parse_args()
     output_path = args.output.expanduser().resolve()
     result = audio.render_thump_sample(output_path)
@@ -38,4 +43,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
