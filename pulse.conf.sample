@@ -130,6 +130,15 @@ PULSE_ASSISTANT_WAKE_WORDS_HA="hey house"
 # Optional assistant language hint for STT/LLM
 PULSE_ASSISTANT_LANGUAGE="en"
 
+# Optional wake sound toggle (true = chime before/after capture)
+PULSE_ASSISTANT_WAKE_SOUND="true"
+
+# Preferred speaking style for the Pulse pipeline (relaxed, normal, aggressive)
+PULSE_ASSISTANT_SPEAKING_STYLE="normal"
+
+# Wake sensitivity hint for openWakeWord (low, normal, high)
+PULSE_ASSISTANT_WAKE_SENSITIVITY="normal"
+
 # Microphone capture command (16 kHz mono PCM)
 PULSE_ASSISTANT_MIC_CMD="arecord -q -t raw -f S16_LE -c 1 -r 16000 -"
 

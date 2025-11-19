@@ -156,6 +156,13 @@ class HomeAssistantConfig:
 
 
 @dataclass(frozen=True)
+class AssistantPreferences:
+    wake_sound: bool
+    speaking_style: Literal["relaxed", "normal", "aggressive"]
+    wake_sensitivity: Literal["low", "normal", "high"]
+
+
+@dataclass(frozen=True)
 class AssistantConfig:
     hostname: str
     device_name: str
@@ -177,6 +184,7 @@ class AssistantConfig:
     state_topic: str
     action_topic: str
     home_assistant: HomeAssistantConfig
+    preferences: AssistantPreferences
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -297,6 +305,20 @@ class AssistantConfig:
             reminder_service=ha_reminder_service,
         )
 
+        preferences = AssistantPreferences(
+            wake_sound=_as_bool(source.get("PULSE_ASSISTANT_WAKE_SOUND"), True),
+            speaking_style=_normalize_choice(
+                source.get("PULSE_ASSISTANT_SPEAKING_STYLE"),
+                {"relaxed", "normal", "aggressive"},
+                "normal",
+            ),
+            wake_sensitivity=_normalize_choice(
+                source.get("PULSE_ASSISTANT_WAKE_SENSITIVITY"),
+                {"low", "normal", "high"},
+                "normal",
+            ),
+        )
+
         transcript_topic = f"{mqtt.topic_base}/transcript"
         response_topic = f"{mqtt.topic_base}/response"
         state_topic = f"{mqtt.topic_base}/state"
@@ -323,6 +345,7 @@ class AssistantConfig:
             state_topic=state_topic,
             action_topic=action_topic,
             home_assistant=home_assistant,
+            preferences=preferences,
         )
 
 
@@ -362,3 +385,12 @@ def _optional_wyoming_endpoint(
         return None
     model = source.get(model_key) if model_key else None
     return WyomingEndpoint(host=host, port=port, model=model)
+
+
+def _normalize_choice(value: str | None, allowed: set[str], default: str) -> str:
+    if not value:
+        return default
+    lowered = value.strip().lower()
+    if lowered in allowed:
+        return lowered
+    return default

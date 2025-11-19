@@ -12,8 +12,10 @@ import logging
 import math
 import signal
 import sys
+import time
 from array import array
 from collections.abc import Iterable
+from dataclasses import dataclass, field, replace
 
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
@@ -29,6 +31,35 @@ from wyoming.tts import Synthesize, SynthesizeVoice
 from wyoming.wake import Detect, Detection, NotDetected
 
 LOGGER = logging.getLogger("pulse-assistant")
+
+
+@dataclass
+class AssistRunTracker:
+    pipeline: str
+    wake_word: str
+    start: float = field(default_factory=time.monotonic)
+    stage_start: float = field(default_factory=time.monotonic)
+    current_stage: str | None = None
+    stage_durations: dict[str, int] = field(default_factory=dict)
+
+    def begin_stage(self, stage: str) -> None:
+        now = time.monotonic()
+        if self.current_stage:
+            self.stage_durations[self.current_stage] = int((now - self.stage_start) * 1000)
+        self.current_stage = stage
+        self.stage_start = now
+
+    def finalize(self, status: str) -> dict[str, object]:
+        now = time.monotonic()
+        if self.current_stage:
+            self.stage_durations[self.current_stage] = int((now - self.stage_start) * 1000)
+        return {
+            "pipeline": self.pipeline,
+            "wake_word": self.wake_word,
+            "status": status,
+            "total_ms": int((now - self.start) * 1000),
+            "stages": self.stage_durations,
+        }
 
 
 def _compute_rms(chunk: bytes, sample_width: int) -> int:
@@ -65,6 +96,7 @@ class PulseAssistant:
         self.actions = ActionEngine(action_defs)
         self.llm: LLMProvider = OpenAIProvider(config.llm, LOGGER)
         self.home_assistant: HomeAssistantClient | None = None
+        self.preferences = config.preferences
         if config.home_assistant.base_url and config.home_assistant.token:
             try:
                 self.home_assistant = HomeAssistantClient(config.home_assistant)
@@ -74,11 +106,25 @@ class PulseAssistant:
             self.home_assistant, config.home_assistant, self._handle_scheduler_notification
         )
         self._shutdown = asyncio.Event()
+        base_topic = self.config.mqtt.topic_base
+        self._assist_in_progress_topic = f"{base_topic}/assistant/in_progress"
+        self._assist_metrics_topic = f"{base_topic}/assistant/metrics"
+        self._assist_stage_topic = f"{base_topic}/assistant/stage"
+        self._assist_pipeline_topic = f"{base_topic}/assistant/active_pipeline"
+        self._assist_wake_topic = f"{base_topic}/assistant/last_wake_word"
+        self._preferences_topic = f"{base_topic}/preferences"
+        self._assist_stage = "idle"
+        self._assist_pipeline: str | None = None
+        self._current_tracker: AssistRunTracker | None = None
+        self._ha_pipeline_override: str | None = None
 
     async def run(self) -> None:
         self.mqtt.connect()
+        self._subscribe_preference_topics()
+        self._publish_preferences()
+        self._publish_assistant_discovery()
         await self.mic.start()
-        self._publish_state("idle")
+        self._set_assist_stage("pulse", "idle")
         LOGGER.info("Pulse assistant ready (wake words: %s)", ", ".join(self.config.wake_models))
         while not self._shutdown.is_set():
             wake_word = await self._wait_for_wake_word()
@@ -92,9 +138,8 @@ class PulseAssistant:
                     await self._run_pulse_pipeline(wake_word)
             except Exception as exc:  # pylint: disable=broad-except
                 LOGGER.exception("Pipeline %s failed for wake word %s: %s", pipeline, wake_word, exc)
-                self._publish_state("error", {"wake_word": wake_word, "pipeline": pipeline})
-            finally:
-                self._publish_state("idle")
+                self._set_assist_stage(pipeline, "error", {"wake_word": wake_word, "error": str(exc)})
+                self._finalize_assist_run(status="error")
 
     async def shutdown(self) -> None:
         self._shutdown.set()
@@ -274,14 +319,20 @@ class PulseAssistant:
         return self.config.wake_routes.get(wake_word, "pulse")
 
     async def _run_pulse_pipeline(self, wake_word: str) -> None:
-        self._publish_state("listening", {"wake_word": wake_word, "pipeline": "pulse"})
+        tracker = AssistRunTracker("pulse", wake_word)
+        tracker.begin_stage("listening")
+        self._current_tracker = tracker
+        self._set_assist_stage("pulse", "listening", {"wake_word": wake_word})
         audio_bytes = await self._record_phrase()
         if not audio_bytes:
             LOGGER.debug("No speech captured for wake word %s", wake_word)
+            self._finalize_assist_run(status="no_audio")
             return
-        self._publish_state("thinking", {"wake_word": wake_word, "pipeline": "pulse"})
+        tracker.begin_stage("thinking")
+        self._set_assist_stage("pulse", "thinking", {"wake_word": wake_word})
         transcript = await self._transcribe(audio_bytes)
         if not transcript:
+            self._finalize_assist_run(status="no_transcript")
             return
         LOGGER.info("Transcript (%s): %s", wake_word, transcript)
         self._publish_message(self.config.transcript_topic, json.dumps({"text": transcript, "wake_word": wake_word}))
@@ -300,15 +351,20 @@ class PulseAssistant:
                 json.dumps({"executed": executed_actions, "wake_word": wake_word}),
             )
         if llm_result.response:
-            self._publish_state("speaking", {"wake_word": wake_word, "pipeline": "pulse"})
+            tracker.begin_stage("speaking")
+            self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word})
             self._publish_message(
                 self.config.response_topic,
                 json.dumps({"text": llm_result.response, "wake_word": wake_word}),
             )
             await self._speak(llm_result.response)
+        self._finalize_assist_run(status="success")
 
     async def _run_home_assistant_pipeline(self, wake_word: str) -> None:
-        self._publish_state("listening", {"wake_word": wake_word, "pipeline": "home_assistant"})
+        tracker = AssistRunTracker("home_assistant", wake_word)
+        tracker.begin_stage("listening")
+        self._current_tracker = tracker
+        self._set_assist_stage("home_assistant", "listening", {"wake_word": wake_word})
         ha_config = self.config.home_assistant
         ha_client = self.home_assistant
         if not ha_config.base_url or not ha_config.token:
@@ -316,15 +372,19 @@ class PulseAssistant:
                 "Home Assistant pipeline invoked for wake word '%s' but base URL/token are missing",
                 wake_word,
             )
+            self._finalize_assist_run(status="config_error")
             return
         if not ha_client:
             LOGGER.warning("Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
+            self._finalize_assist_run(status="config_error")
             return
         audio_bytes = await self._record_phrase()
         if not audio_bytes:
             LOGGER.debug("No speech captured for Home Assistant wake word %s", wake_word)
+            self._finalize_assist_run(status="no_audio")
             return
-        self._publish_state("thinking", {"wake_word": wake_word, "pipeline": "home_assistant"})
+        tracker.begin_stage("thinking")
+        self._set_assist_stage("home_assistant", "thinking", {"wake_word": wake_word})
         try:
             ha_result = await ha_client.assist_audio(
                 audio_bytes,
@@ -336,10 +396,12 @@ class PulseAssistant:
             )
         except HomeAssistantError as exc:
             LOGGER.warning("Home Assistant Assist call failed: %s", exc)
-            self._publish_state(
+            self._set_assist_stage(
+                "home_assistant",
                 "error",
                 {"wake_word": wake_word, "pipeline": "home_assistant", "reason": str(exc)},
             )
+            self._finalize_assist_run(status="error")
             return
         transcript = self._extract_ha_transcript(ha_result)
         if transcript:
@@ -349,7 +411,8 @@ class PulseAssistant:
                 json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
             )
         speech_text = self._extract_ha_speech(ha_result) or "Okay."
-        self._publish_state("speaking", {"wake_word": wake_word, "pipeline": "home_assistant"})
+        tracker.begin_stage("speaking")
+        self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
         self._publish_message(
             self.config.response_topic,
             json.dumps(
@@ -367,6 +430,7 @@ class PulseAssistant:
         else:
             tts_endpoint = ha_config.tts_endpoint or self.config.tts_endpoint
             await self._speak_via_endpoint(speech_text, tts_endpoint, self.config.tts_voice)
+        self._finalize_assist_run(status="success")
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
@@ -452,6 +516,192 @@ class PulseAssistant:
             await self.player.write(audio_bytes)
         finally:
             await self.player.stop()
+
+    def _subscribe_preference_topics(self) -> None:
+        base = self._preferences_topic
+        try:
+            self.mqtt.subscribe(f"{base}/wake_sound/set", self._handle_wake_sound_command)
+            self.mqtt.subscribe(f"{base}/speaking_style/set", self._handle_speaking_style_command)
+            self.mqtt.subscribe(f"{base}/wake_sensitivity/set", self._handle_wake_sensitivity_command)
+            self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
+        except RuntimeError:
+            LOGGER.debug("MQTT client not ready for preference subscriptions")
+
+    def _handle_wake_sound_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        enabled = value in {"on", "true", "1", "yes"}
+        self.preferences = replace(self.preferences, wake_sound=enabled)
+        self._publish_preference_state("wake_sound", "on" if enabled else "off")
+
+    def _handle_speaking_style_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        if value not in {"relaxed", "normal", "aggressive"}:
+            LOGGER.debug("Ignoring invalid speaking style: %s", payload)
+            return
+        self.preferences = replace(self.preferences, speaking_style=value)  # type: ignore[arg-type]
+        self._publish_preference_state("speaking_style", value)
+
+    def _handle_wake_sensitivity_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        if value not in {"low", "normal", "high"}:
+            LOGGER.debug("Ignoring invalid wake sensitivity: %s", payload)
+            return
+        self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
+        self._publish_preference_state("wake_sensitivity", value)
+
+    def _publish_preferences(self) -> None:
+        self._publish_preference_state("wake_sound", "on" if self.preferences.wake_sound else "off")
+        self._publish_preference_state("speaking_style", self.preferences.speaking_style)
+        self._publish_preference_state("wake_sensitivity", self.preferences.wake_sensitivity)
+        self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
+
+    def _publish_preference_state(self, key: str, value: str) -> None:
+        topic = f"{self._preferences_topic}/{key}/state"
+        self._publish_message(topic, value)
+
+    def _set_assist_stage(self, pipeline: str, stage: str, extra: dict | None = None) -> None:
+        self._assist_stage = stage
+        self._assist_pipeline = pipeline
+        in_progress = stage not in {"idle", "error"}
+        self._publish_message(self._assist_in_progress_topic, "ON" if in_progress else "OFF")
+        payload_extra = {"pipeline": pipeline, "stage": stage}
+        if extra:
+            payload_extra.update(extra)
+        self._publish_state(stage, payload_extra)
+        self._publish_message(self._assist_stage_topic, stage)
+        self._publish_message(self._assist_pipeline_topic, pipeline)
+        if extra and "wake_word" in extra:
+            self._publish_message(self._assist_wake_topic, str(extra["wake_word"]))
+
+    def _finalize_assist_run(self, status: str) -> None:
+        tracker = self._current_tracker
+        if tracker is None:
+            return
+        metrics = tracker.finalize(status)
+        self._publish_message(self._assist_metrics_topic, json.dumps(metrics))
+        self._set_assist_stage(tracker.pipeline, "idle", {"wake_word": tracker.wake_word, "status": status})
+        self._current_tracker = None
+
+    def _handle_ha_pipeline_command(self, payload: str) -> None:
+        value = payload.strip()
+        self._ha_pipeline_override = value or None
+        self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
+
+    def _active_ha_pipeline(self) -> str | None:
+        return self._ha_pipeline_override or self.config.home_assistant.assist_pipeline
+
+    def _publish_assistant_discovery(self) -> None:
+        device = {
+            "identifiers": [f"pulse:{self.config.hostname}"],
+            "manufacturer": "Pulse",
+            "model": "Pulse Kiosk",
+            "name": self.config.device_name,
+        }
+        prefix = "homeassistant"
+        hostname_safe = self.config.hostname.replace(" ", "_").replace("/", "_")
+        # Assist in progress binary sensor
+        self._publish_message(
+            f"{prefix}/binary_sensor/{hostname_safe}_assist_in_progress/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Assist In Progress",
+                    "unique_id": f"{self.config.hostname}-assist-in-progress",
+                    "state_topic": self._assist_in_progress_topic,
+                    "payload_on": "ON",
+                    "payload_off": "OFF",
+                    "device": device,
+                    "entity_category": "diagnostic",
+                }
+            ),
+        )
+        # Assist stage sensor
+        self._publish_message(
+            f"{prefix}/sensor/{hostname_safe}_assist_stage/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Assist Stage",
+                    "unique_id": f"{self.config.hostname}-assist-stage",
+                    "state_topic": self._assist_stage_topic,
+                    "device": device,
+                    "entity_category": "diagnostic",
+                    "icon": "mdi:progress-clock",
+                }
+            ),
+        )
+        # Last wake word sensor
+        self._publish_message(
+            f"{prefix}/sensor/{hostname_safe}_last_wake_word/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Last Wake Word",
+                    "unique_id": f"{self.config.hostname}-last-wake-word",
+                    "state_topic": self._assist_wake_topic,
+                    "device": device,
+                    "entity_category": "diagnostic",
+                    "icon": "mdi:account-voice",
+                }
+            ),
+        )
+        # Speaking style select
+        self._publish_message(
+            f"{prefix}/select/{hostname_safe}_speaking_style/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Speaking Style",
+                    "unique_id": f"{self.config.hostname}-speaking-style",
+                    "state_topic": f"{self._preferences_topic}/speaking_style/state",
+                    "command_topic": f"{self._preferences_topic}/speaking_style/set",
+                    "options": ["relaxed", "normal", "aggressive"],
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+        )
+        # Wake sensitivity select
+        self._publish_message(
+            f"{prefix}/select/{hostname_safe}_wake_sensitivity/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Wake Sensitivity",
+                    "unique_id": f"{self.config.hostname}-wake-sensitivity",
+                    "state_topic": f"{self._preferences_topic}/wake_sensitivity/state",
+                    "command_topic": f"{self._preferences_topic}/wake_sensitivity/set",
+                    "options": ["low", "normal", "high"],
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+        )
+        # Wake sound switch
+        self._publish_message(
+            f"{prefix}/switch/{hostname_safe}_wake_sound/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Wake Sound",
+                    "unique_id": f"{self.config.hostname}-wake-sound",
+                    "state_topic": f"{self._preferences_topic}/wake_sound/state",
+                    "command_topic": f"{self._preferences_topic}/wake_sound/set",
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+        )
+        # HA pipeline text entity
+        self._publish_message(
+            f"{prefix}/text/{hostname_safe}_ha_pipeline/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} HA Assist Pipeline",
+                    "unique_id": f"{self.config.hostname}-ha-assist-pipeline",
+                    "state_topic": f"{self._preferences_topic}/ha_pipeline/state",
+                    "command_topic": f"{self._preferences_topic}/ha_pipeline/set",
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+        )
 
 
 def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:

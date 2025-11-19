@@ -279,9 +279,24 @@ Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIM
 - If HA is using self-signed TLS, set `HOME_ASSISTANT_VERIFY_SSL="false"` or point `REQUESTS_CA_BUNDLE` at your CA certificate before launching the assistant.
 - The `journalctl -u pulse-assistant.service -f` log shows the detected pipeline (`pipeline=pulse|home_assistant`) for each request, so you can confirm wake-word routing quickly.
 
+#### MQTT telemetry & knobs
+
+Every Pulse assistant publishes real-time status and accepts config commands under `pulse/<hostname>/assistant/...`:
+
+| Topic | Description |
+| --- | --- |
+| `assistant/state` | JSON payload with `state`, `pipeline`, `stage`, and `wake_word`. |
+| `assistant/in_progress` | `ON` while a wake-word interaction is running; `OFF` otherwise. |
+| `assistant/metrics` | JSON timing info per request (`pipeline`, `wake_word`, per-stage milliseconds). |
+| `preferences/wake_sound/set` + `/state` | Turn the wake chime on/off (`on`/`off`). |
+| `preferences/speaking_style/set` + `/state` | Pick `relaxed`, `normal`, or `aggressive` for the Pulse pipeline persona. |
+| `preferences/wake_sensitivity/set` + `/state` | Choose `low`, `normal`, or `high`; surfaced for future openWakeWord tuning. |
+
+Use these topics in Home Assistant (MQTT select/switch sensors) to mirror the built-in Assist device capabilities, or just watch `assistant/metrics` to alert on slow responses. All preference topics are retained so dashboards will show the current value immediately after a reboot.
+
 <details>
   <summary><strong>Home Assistant trusted-network example</strong></summary>
-I am choosing to land my Pulse kiosk on a Home Assistant dashboard. To make it easy, so there is no login involved (and long-lived-tokens are a bit tricky when chromium), I setup HA to just trust the kiosk based on internal IP. So in my configuration.yaml, I include this - and just duplicate the IP config for each kiosk you setup:
+I am choosing to land my Pulse kiosk on a Home Assistant dashboard. To make it easy, so there is no login involved (and long-lived-tokens are a bit tricky with chromium), I setup HA to just trust the kiosk based on internal IP. So in my configuration.yaml, I include this - and just duplicate the IP config for each kiosk you setup:
 
 ```yaml
 

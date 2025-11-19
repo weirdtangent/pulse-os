@@ -90,6 +90,9 @@ Optional helpers:
 HOME_ASSISTANT_ASSIST_PIPELINE="Pulse Desk"
 HOME_ASSISTANT_TIMER_ENTITY="timer.kitchen"
 HOME_ASSISTANT_REMINDER_SERVICE="notify.mobile_app_pixel"
+PULSE_ASSISTANT_WAKE_SOUND="true"
+PULSE_ASSISTANT_SPEAKING_STYLE="normal"   # relaxed/normal/aggressive
+PULSE_ASSISTANT_WAKE_SENSITIVITY="normal" # low/normal/high
 ```
 
 If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. Leave them blank to keep using your original servers.
@@ -178,6 +181,23 @@ When a wake word mapped to the HA pipeline fires:
 | Silence after Assist | Check if `tts_output` is included; if not, ensure your HA pipeline ends with a TTS stage or provide `HOME_ASSISTANT_PIPER_HOST` so the fallback path works. |
 | SSL errors | Set `HOME_ASSISTANT_VERIFY_SSL="false"` for self-signed certs or install your CA bundle and point `REQUESTS_CA_BUNDLE` to it. |
 | Wrong pipeline triggered | Confirm the wake-word list contains the exact model name exposed by `wyoming-openwakeword`. |
+
+---
+
+## MQTT telemetry & controls
+
+Pulse publishes assistant-specific topics alongside the existing kiosk telemetry:
+
+| Topic | Direction | Notes |
+| --- | --- | --- |
+| `pulse/<host>/assistant/state` | out | JSON payload containing `state`, `pipeline`, `stage`, `wake_word`. |
+| `pulse/<host>/assistant/in_progress` | out | Binary sensor (`ON` during an interaction). |
+| `pulse/<host>/assistant/metrics` | out | Timing info (total + per-stage milliseconds, wake word, pipeline, status). |
+| `pulse/<host>/preferences/wake_sound/set` | in | `on`/`off`; state mirrored at `/state`. |
+| `pulse/<host>/preferences/speaking_style/set` | in | `relaxed`, `normal`, `aggressive`. |
+| `pulse/<host>/preferences/wake_sensitivity/set` | in | `low`, `normal`, `high`. |
+
+All preference states are retained so dashboards instantly reflect the last-known values after reboots. Async listeners can treat the `/set` topics as switches/selects in Home Assistant, while the `assistant/in_progress` topic mirrors the stock HA Voice binary sensor.
 
 ---
 
