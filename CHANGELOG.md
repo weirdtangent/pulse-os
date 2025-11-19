@@ -1,3 +1,10 @@
+# [0.28.0](https://github.com/weirdtangent/pulse-os/compare/v0.27.0...v0.28.0) (2025-11-19)
+
+
+### Features
+
+* _run_home_assistant_pipeline ([0c995b3](https://github.com/weirdtangent/pulse-os/commit/0c995b39426cb08414f186794085f8c6069b2484))
+
 # [0.27.0](https://github.com/weirdtangent/pulse-os/compare/v0.26.2...v0.27.0) (2025-11-19)
 
 
