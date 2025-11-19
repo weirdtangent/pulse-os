@@ -1,3 +1,10 @@
+# [0.26.0](https://github.com/weirdtangent/pulse-os/compare/v0.25.0...v0.26.0) (2025-11-19)
+
+
+### Features
+
+* validate each Wyoming endpoint with Describe request ([b75d7ff](https://github.com/weirdtangent/pulse-os/commit/b75d7ffbc39b1530d55172278bd36b7578cad5b7))
+
 # [0.25.0](https://github.com/weirdtangent/pulse-os/compare/v0.24.1...v0.25.0) (2025-11-19)
 
 
