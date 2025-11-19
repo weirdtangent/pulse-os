@@ -11,7 +11,7 @@ RestartSec=3
 User=pulse
 WorkingDirectory=/opt/pulse-os
 Environment=PYTHONPATH=/opt/pulse-os
-Environment=XDG_RUNTIME_DIR=/run/user/%%U
+Environment=XDG_RUNTIME_DIR=/run/user/%U
 PassEnvironment=MQTT_HOST MQTT_PORT PULSE_URL
 StandardOutput=journal
 StandardError=journal
