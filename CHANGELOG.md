@@ -1,3 +1,16 @@
+# [0.32.0](https://github.com/weirdtangent/pulse-os/compare/v0.31.1...v0.32.0) (2025-11-19)
+
+
+### Bug Fixes
+
+* install httpx for voice assistant ([6663ede](https://github.com/weirdtangent/pulse-os/commit/6663ede6f06d55449162528ae7beeb775d8df711))
+* retain MQTT messages for assistant; retain microphone stream errors ([863636e](https://github.com/weirdtangent/pulse-os/commit/863636e03f01367c0f683e2a73538ea6051d4b05))
+
+
+### Features
+
+* add wake sensitivity preference and map to openWakeWord trigger levels ([6330886](https://github.com/weirdtangent/pulse-os/commit/6330886dcdf14f99503ee9da77c1bb7a46a13810))
+
 ## [0.31.1](https://github.com/weirdtangent/pulse-os/compare/v0.31.0...v0.31.1) (2025-11-19)
 
 
