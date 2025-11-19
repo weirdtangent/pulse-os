@@ -1,3 +1,10 @@
+## [0.23.2](https://github.com/weirdtangent/pulse-os/compare/v0.23.1...v0.23.2) (2025-11-19)
+
+
+### Bug Fixes
+
+* improve pulse.conf.sample and sync-pulse-conf.py ([6ffa4ef](https://github.com/weirdtangent/pulse-os/commit/6ffa4ef624c194ee47c884db94d9423eb1677725))
+
 ## [0.23.1](https://github.com/weirdtangent/pulse-os/compare/v0.23.0...v0.23.1) (2025-11-19)
 
 
