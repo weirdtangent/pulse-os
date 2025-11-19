@@ -4,6 +4,7 @@ set -euo pipefail
 # setup config
 REPO_DIR="/opt/pulse-os"
 CONFIG_FILE="$REPO_DIR/pulse.conf"
+SYNC_SCRIPT="$REPO_DIR/bin/sync-pulse-conf.py"
 BOOT_MOUNT="/boot"
 if [ -d /boot/firmware ]; then
     BOOT_MOUNT="/boot/firmware"
@@ -13,11 +14,22 @@ BOOT_CMDLINE="$BOOT_MOUNT/cmdline.txt"
 BOOT_SPLASH="$BOOT_MOUNT/splash.rgb"
 FIRMWARE_LOGO="/lib/firmware/boot-splash.tga"
 LOCATION_FILE="/etc/pulse-location"
+
+# Keep pulse.conf in sync with the latest template before sourcing it.
+if [ -x "$SYNC_SCRIPT" ]; then
+    echo "[PulseOS] Syncing pulse.conf with template…"
+    if ! python3 "$SYNC_SCRIPT"; then
+        echo "[PulseOS] Warning: sync-pulse-conf failed; continuing with existing config." >&2
+    fi
+else
+    echo "[PulseOS] Warning: sync-pulse-conf missing at $SYNC_SCRIPT; skipping auto-sync." >&2
+fi
+
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
     source "$CONFIG_FILE"
 else
-  echo "Warning: no pulse.conf found, using defaults."
+    echo "[PulseOS] Warning: no pulse.conf found, using defaults."
 fi
 
 PULSE_REMOTE_LOGGING="${PULSE_REMOTE_LOGGING:-true}"
