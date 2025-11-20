@@ -730,12 +730,15 @@ class PulseAssistant:
 
     def _context_for_detect(self) -> dict[str, int] | None:
         sensitivity = self.preferences.wake_sensitivity
+        if sensitivity == "normal":
+            return None
         trigger_level_map = {
             "low": 5,
-            "normal": 3,
             "high": 2,
         }
-        trigger_level = trigger_level_map.get(sensitivity, 3)
+        trigger_level = trigger_level_map.get(sensitivity)
+        if trigger_level is None:
+            return None
         return {"trigger_level": trigger_level}
 
 
