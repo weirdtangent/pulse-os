@@ -1,3 +1,10 @@
+## [0.34.2](https://github.com/weirdtangent/pulse-os/compare/v0.34.1...v0.34.2) (2025-11-20)
+
+
+### Bug Fixes
+
+* log audio chunk capture for debugging ([4b9b7b7](https://github.com/weirdtangent/pulse-os/commit/4b9b7b74e70cc9baa9cb489f79df6d48c3880e75))
+
 ## [0.34.1](https://github.com/weirdtangent/pulse-os/compare/v0.34.0...v0.34.1) (2025-11-20)
 
 
