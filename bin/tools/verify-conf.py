@@ -17,6 +17,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+import json
+import ssl
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 try:
     import paho.mqtt.client as mqtt
@@ -279,6 +283,97 @@ def check_home_assistant(config: HomeAssistantConfig, timeout: float) -> CheckRe
     location = info.get("location_name") or info.get("message") or "Home Assistant"
     version = info.get("version") or "unknown version"
     return CheckResult("Home Assistant", "ok", f"{location} responded (version {version}).")
+
+
+def _build_ssl_context(config: HomeAssistantConfig, env: dict[str, str]) -> ssl.SSLContext | None:
+    if not config.base_url or config.base_url.startswith("http://"):
+        return None
+    if not config.verify_ssl:
+        return ssl._create_unverified_context()
+    cafile = env.get("REQUESTS_CA_BUNDLE") or env.get("SSL_CERT_FILE")
+    capath = env.get("SSL_CERT_DIR")
+    if cafile or capath:
+        return ssl.create_default_context(cafile=cafile or None, capath=capath or None)
+    return ssl.create_default_context()
+
+
+def _fetch_home_assistant_json(
+    config: HomeAssistantConfig,
+    env: dict[str, str],
+    path: str,
+    timeout: float,
+) -> dict | list:
+    if not config.base_url:
+        raise ValueError("Base URL not configured")
+    base = config.base_url.rstrip("/")
+    url = f"{base}{path}"
+    headers = {
+        "Authorization": f"Bearer {config.token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    request = urllib_request.Request(url, headers=headers)
+    context = _build_ssl_context(config, env)
+    open_kwargs: dict[str, object] = {"timeout": timeout}
+    if context is not None:
+        open_kwargs["context"] = context
+    with urllib_request.urlopen(request, **open_kwargs) as resp:  # type: ignore[arg-type]
+        payload = resp.read()
+    if not payload:
+        return {}
+    return json.loads(payload.decode("utf-8"))
+
+
+def check_home_assistant_assist_pipeline(
+    config: HomeAssistantConfig,
+    env: dict[str, str],
+    timeout: float,
+) -> CheckResult:
+    if not config.base_url:
+        return CheckResult("HA Assist pipelines", "skip", "HOME_ASSISTANT_BASE_URL not set.")
+    if not config.token:
+        return CheckResult("HA Assist pipelines", "fail", "HOME_ASSISTANT_TOKEN is missing.")
+    path = "/api/assist_pipeline/pipeline/list"
+    try:
+        payload = _fetch_home_assistant_json(config, env, path, timeout)
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore").strip()
+        snippet = body[:160] + ("…" if len(body) > 160 else "")
+        return CheckResult(
+            "HA Assist pipelines",
+            "fail",
+            f"{exc.code} error when calling {path}: {snippet or exc.reason}.",
+        )
+    except urllib_error.URLError as exc:
+        return CheckResult("HA Assist pipelines", "fail", f"Unable to reach Assist pipeline endpoint: {exc.reason}.")
+    except json.JSONDecodeError as exc:
+        return CheckResult(
+            "HA Assist pipelines",
+            "fail",
+            f"Assist pipeline endpoint returned invalid JSON: {exc}.",
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        return CheckResult("HA Assist pipelines", "fail", f"Assist pipeline request failed: {exc}.")
+
+    if isinstance(payload, dict):
+        candidates = payload.get("pipelines")
+        if isinstance(candidates, list):
+            pipelines = candidates
+        else:
+            pipelines = payload.get("items") if isinstance(payload.get("items"), list) else []
+    elif isinstance(payload, list):
+        pipelines = payload
+    else:
+        pipelines = []
+
+    count = len(pipelines)
+    if count == 0:
+        return CheckResult(
+            "HA Assist pipelines",
+            "fail",
+            "Assist endpoint responded but no pipelines were returned. Create a pipeline in HA first.",
+        )
+    return CheckResult("HA Assist pipelines", "ok", f"Assist endpoint returned {count} pipeline(s).")
 
 
 def check_llm(config: AssistantConfig) -> CheckResult:
@@ -676,6 +771,7 @@ def main() -> int:
     results.append(check_mqtt(config, args.timeout))
     results.append(check_remote_logging(env, config.hostname, args.timeout))
     results.append(check_home_assistant(config.home_assistant, args.timeout))
+    results.append(check_home_assistant_assist_pipeline(config.home_assistant, env, args.timeout))
     results.append(check_llm(config))
     results.extend(check_wyoming_endpoints(config, env, args.timeout))
 
