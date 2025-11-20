@@ -25,7 +25,6 @@ venv/
 #  dev work
 pulse.conf
 NOTES
-tools/
 
 # Generated config files (should not be tracked)
 config/system/syslog-ng/remote-log.conf
