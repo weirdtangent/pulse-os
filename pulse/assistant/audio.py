@@ -9,6 +9,8 @@ import os
 import shutil
 from asyncio.subprocess import Process
 
+from pulse import audio as pulse_audio
+
 
 class ArecordStream:
     """Capture PCM audio by shelling out to ``arecord`` (ALSA)."""
@@ -78,6 +80,7 @@ class AplaySink:
 
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
+        await self._nudge_sink_volume()
         player = self._resolve_player()
         try:
             cmd = self._build_command(player, rate, width, channels)
@@ -130,6 +133,9 @@ class AplaySink:
         except (asyncio.TimeoutError, RuntimeError):
             return ""
         return data.decode("utf-8", errors="ignore").strip()
+
+    async def _nudge_sink_volume(self) -> None:
+        await asyncio.to_thread(_reapply_sink_volume)
 
     def _resolve_player(self) -> str:
         return _determine_player(self.binary, self._logger)
@@ -240,3 +246,13 @@ def _determine_player(preferred: str, logger: logging.Logger) -> str:
         if _supported_player(candidate):
             return candidate
     return "aplay"
+
+
+def _reapply_sink_volume() -> None:
+    try:
+        volume = pulse_audio.get_current_volume()
+        if volume is None:
+            return
+        pulse_audio.set_volume(volume, play_feedback=False)
+    except Exception:  # pragma: no cover - best effort
+        pass
