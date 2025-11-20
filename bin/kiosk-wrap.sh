@@ -96,7 +96,7 @@ while true; do
     --remote-allow-origins=http://localhost:9222 \
     --disable-extensions-except="$HOME/cursorless" \
     --load-extension="$HOME/cursorless" \
-    --user-data-dir=/tmp/kiosk-profile \
+    --user-data-dir="$HOME/.config/kiosk-profile" \
     --disk-cache-dir=/tmp/kiosk-cache \
     --no-first-run \
     --no-default-browser-check \

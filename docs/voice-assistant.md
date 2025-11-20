@@ -179,7 +179,7 @@ When a wake word mapped to the HA pipeline fires:
 | --- | --- |
 | 401/403 errors | Run `bin/tools/verify-conf.py` to confirm the token, or reissue a HA long-lived token. |
 | Silence after Assist | Check if `tts_output` is included; if not, ensure your HA pipeline ends with a TTS stage or provide `HOME_ASSISTANT_PIPER_HOST` so the fallback path works. |
-| SSL errors | Set `HOME_ASSISTANT_VERIFY_SSL="false"` for self-signed certs or install your CA bundle and point `REQUESTS_CA_BUNDLE` to it. |
+| SSL errors | Set `HOME_ASSISTANT_VERIFY_SSL="false"` for self-signed certs or install your CA bundle and point `REQUESTS_CA_BUNDLE` to it. For system-wide trust, copy the CA into `/usr/local/share/ca-certificates/homeassistant-ca.crt` and run `sudo update-ca-certificates`. For the Chromium kiosk, install `libnss3-tools`, ensure the profile dir exists (`sudo -u pulse mkdir -p /home/pulse/.config/kiosk-profile/Default`), and import the CA with `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -A -t "C,," -n homeassistant -i /path/to/ha-root-ca.pem`; confirm via `certutil -L` before restarting `pulse-kiosk`. Keep `--user-data-dir` away from `/tmp` or the cert will be lost on every reboot. |
 | Wrong pipeline triggered | Confirm the wake-word list contains the exact model name exposed by `wyoming-openwakeword`. |
 
 ---

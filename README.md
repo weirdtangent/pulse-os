@@ -276,7 +276,13 @@ Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIM
 
 ##### Troubleshooting tips
 - `bin/tools/verify-conf.py` checks your HA token; run it whenever Assist requests fail silently.
-- If HA is using self-signed TLS, set `HOME_ASSISTANT_VERIFY_SSL="false"` or point `REQUESTS_CA_BUNDLE` at your CA certificate before launching the assistant.
+- If HA is using self-signed TLS, either temporarily set `HOME_ASSISTANT_VERIFY_SSL="false"` or, preferably, keep verification on and provide trust: point `REQUESTS_CA_BUNDLE` at your CA file **or** drop the CA into `/usr/local/share/ca-certificates/homeassistant-ca.crt` and run `sudo update-ca-certificates` so the whole OS trusts it.
+- Chromium keeps its own NSS store, so import the CA into the kiosk profile as well:
+  1. `sudo apt install -y libnss3-tools`
+  2. `sudo -u pulse mkdir -p /home/pulse/.config/kiosk-profile/Default`
+  3. `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -A -t "C,," -n homeassistant -i /path/to/ha-root-ca.pem`
+  4. `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -L | grep homeassistant` (confirm it stuck)
+  The profile path defaults to `~/.config/kiosk-profile`; adjust the `--user-data-dir` flag in `bin/kiosk-wrap.sh` if you changed it. Avoid pointing `--user-data-dir` at `/tmp` (the default tmpfs is wiped every reboot, so any imported cert disappears). Restart `pulse-kiosk` (or reboot) afterward so Chromium reloads the updated trust store.
 - The `journalctl -u pulse-assistant.service -f` log shows the detected pipeline (`pipeline=pulse|home_assistant`) for each request, so you can confirm wake-word routing quickly.
 
 #### MQTT telemetry & knobs
