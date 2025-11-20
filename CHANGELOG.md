@@ -90,7 +90,7 @@
 
 ### Features
 
-* verify_conf script to validate pulse.conf connectivity ([855f217](https://github.com/weirdtangent/pulse-os/commit/855f217e08dca34d4d47339ad72888a3183226a7))
+* verify-conf script to validate pulse.conf connectivity ([855f217](https://github.com/weirdtangent/pulse-os/commit/855f217e08dca34d4d47339ad72888a3183226a7))
 
 ## [0.24.1](https://github.com/weirdtangent/pulse-os/compare/v0.24.0...v0.24.1) (2025-11-19)
 

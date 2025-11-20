@@ -120,7 +120,7 @@ and what services it runs.
 After editing `pulse.conf`, run the new connectivity smoke test to confirm the networking pieces are reachable:
 
 ```bash
-bin/verify_conf.py --config /opt/pulse-os/pulse.conf
+bin/tools/verify-conf.py --config /opt/pulse-os/pulse.conf
 ```
 
 The script automatically sources the config (or uses the `--config` path you pass in), then:
@@ -129,7 +129,7 @@ The script automatically sources the config (or uses the `--config` path you pas
 - Issues a Wyoming `Describe` request to each openWakeWord/Whisper/Piper endpoint (falling back to raw TCP if the client library is missing) so you can confirm the right service replies with model metadata, and—when the `wyoming` Python client is available—runs a tiny functional probe (silence transcript, short TTS clip, wake-word NotDetected) to prove each daemon is actually doing work.
 - If `HOME_ASSISTANT_BASE_URL`/`HOME_ASSISTANT_TOKEN` are set, hits `/api/` to confirm the token works before you rely on Assist or HA service calls.
 
-Failures are reported with actionable text, and the process exits non-zero if any check fails so you can wire it into CI or deploy hooks.
+Failures are reported with actionable text, and the process exits non-zero if any check fails so you can wire it into CI or deploy hooks. All maker/diagnostic helpers now live under `bin/tools/` so the runtime `bin/` directory stays focused on services.
 
 <details>
   <summary><strong>Explore pulse.conf options</strong></summary>
@@ -275,7 +275,7 @@ Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIM
 - Stream audio directly through HA Assist when those wake words fire. The captured PCM is sent to `/api/assist_pipeline/run`, meaning Home Assistant picks the STT/TTS engines and returns both the transcript and the synthesized speech (fallback to your configured Wyoming TTS if HA doesn’t supply audio).
 
 ##### Troubleshooting tips
-- `bin/verify_conf.py` now checks your HA token; run it whenever Assist requests fail silently.
+- `bin/tools/verify-conf.py` checks your HA token; run it whenever Assist requests fail silently.
 - If HA is using self-signed TLS, set `HOME_ASSISTANT_VERIFY_SSL="false"` or point `REQUESTS_CA_BUNDLE` at your CA certificate before launching the assistant.
 - The `journalctl -u pulse-assistant.service -f` log shows the detected pipeline (`pipeline=pulse|home_assistant`) for each request, so you can confirm wake-word routing quickly.
 

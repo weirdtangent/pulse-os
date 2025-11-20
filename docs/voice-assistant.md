@@ -177,7 +177,7 @@ When a wake word mapped to the HA pipeline fires:
 
 | Problem | Fix |
 | --- | --- |
-| 401/403 errors | Run `bin/verify_conf.py` to confirm the token, or reissue a HA long-lived token. |
+| 401/403 errors | Run `bin/tools/verify-conf.py` to confirm the token, or reissue a HA long-lived token. |
 | Silence after Assist | Check if `tts_output` is included; if not, ensure your HA pipeline ends with a TTS stage or provide `HOME_ASSISTANT_PIPER_HOST` so the fallback path works. |
 | SSL errors | Set `HOME_ASSISTANT_VERIFY_SSL="false"` for self-signed certs or install your CA bundle and point `REQUESTS_CA_BUNDLE` to it. |
 | Wrong pipeline triggered | Confirm the wake-word list contains the exact model name exposed by `wyoming-openwakeword`. |
