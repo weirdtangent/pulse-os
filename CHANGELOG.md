@@ -1,3 +1,10 @@
+# [0.33.0](https://github.com/weirdtangent/pulse-os/compare/v0.32.0...v0.33.0) (2025-11-20)
+
+
+### Features
+
+* improve pulse.conf verification ([71a2ddc](https://github.com/weirdtangent/pulse-os/commit/71a2ddc82b0a50177bd1dd27a25ca0f1c2ff4dd2))
+
 # [0.32.0](https://github.com/weirdtangent/pulse-os/compare/v0.31.1...v0.32.0) (2025-11-19)
 
 
