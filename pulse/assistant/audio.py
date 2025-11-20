@@ -98,8 +98,14 @@ class AplaySink:
     async def write(self, chunk: bytes) -> None:
         if not self._proc or not self._proc.stdin:
             raise RuntimeError("Playback is not active")
-        self._proc.stdin.write(chunk)
-        await self._proc.stdin.drain()
+        try:
+            self._proc.stdin.write(chunk)
+            await self._proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            stderr = await self._drain_stderr()
+            await self.stop()
+            detail = f" ({stderr})" if stderr else ""
+            raise RuntimeError(f"Playback process exited unexpectedly{detail}") from exc
 
     async def stop(self) -> None:
         if not self._proc:
@@ -112,6 +118,15 @@ class AplaySink:
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(self._proc.wait(), timeout=2)
         self._proc = None
+
+    async def _drain_stderr(self) -> str:
+        if not self._proc or not self._proc.stderr:
+            return ""
+        try:
+            data = await asyncio.wait_for(self._proc.stderr.read(), timeout=0.05)
+        except (asyncio.TimeoutError, RuntimeError):
+            return ""
+        return data.decode("utf-8", errors="ignore").strip()
 
 
 def _alsa_format(width: int) -> str:

@@ -244,6 +244,73 @@ ensure_cmdline_kv() {
     log "Set kernel arg ${key}=${value}"
 }
 
+ensure_user_systemd_session() {
+    local user="${PULSE_USER:-pulse}"
+    if ! id "$user" >/dev/null 2>&1; then
+        log "User $user not found; skipping user service setup."
+        return
+    fi
+
+    local uid
+    uid=$(id -u "$user")
+
+    if command -v loginctl >/dev/null 2>&1; then
+        sudo loginctl enable-linger "$user" >/dev/null 2>&1 || true
+    fi
+
+    if ! sudo systemctl is-active --quiet "user@${uid}.service"; then
+        log "Starting systemd user instance for $user..."
+        sudo systemctl start "user@${uid}.service" >/dev/null 2>&1 || true
+    fi
+
+    local runtime="/run/user/${uid}"
+    local bus="${runtime}/bus"
+    if [ ! -S "$bus" ]; then
+        log "Waiting for user bus at ${bus}..."
+        for _ in {1..10}; do
+            [ -S "$bus" ] && break
+            sleep 0.2
+        done
+    fi
+
+    if [ -S "$bus" ]; then
+        log "Enabling PipeWire user services for $user..."
+        sudo -u "$user" \
+            XDG_RUNTIME_DIR="$runtime" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}" \
+            systemctl --user enable --now pipewire.service pipewire-pulse.service wireplumber.service \
+            >/dev/null 2>&1 || log "Warning: failed to enable user PipeWire services for $user."
+    else
+        log "Warning: user bus unavailable for $user; PipeWire user services not configured."
+    fi
+}
+
+ensure_pulse_asoundrc() {
+    local user="${PULSE_USER:-pulse}"
+    local home="/home/${user}"
+    local target="${home}/.asoundrc"
+
+    if [ ! -d "$home" ]; then
+        log "Home directory $home missing; skipping .asoundrc creation."
+        return
+    fi
+
+    if [ -f "$target" ]; then
+        return
+    fi
+
+    log "Creating default ALSA → PulseAudio bridge at ${target}..."
+    sudo -u "$user" tee "$target" >/dev/null <<'EOF'
+pcm.!default {
+    type pulse
+}
+
+ctl.!default {
+    type pulse
+}
+EOF
+}
+
 configure_display_stack() {
     log "Configuring Touch Display boot parameters…"
     ensure_boot_config_line "dtparam=i2c_arm=on"
@@ -558,12 +625,13 @@ setup_crontab() {
 }
 
 install_bluetooth_audio() {
-    # Don’t try to start user services during install — no DBus.
     if [ "$PULSE_BLUETOOTH_AUTOCONNECT" = "true" ]; then
         log "Enabling PipeWire audio stack..."
         sudo systemctl --global enable pipewire.service
         sudo systemctl --global enable pipewire-pulse.service
         sudo systemctl --global enable wireplumber.service
+        ensure_user_systemd_session
+        ensure_pulse_asoundrc
     else
         log "PipeWire left untouched (Bluetooth autoconnect disabled)"
     fi
