@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import importlib.util
+import json
 import os
 import shlex
 import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -16,9 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
-import json
-import ssl
+from typing import Callable, Literal
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
@@ -67,7 +68,7 @@ except ModuleNotFoundError:
     Detect = None  # type: ignore[assignment]
     Detection = None  # type: ignore[assignment]
     NotDetected = None  # type: ignore[assignment]
-    WYOMING_PROTOCOL_AVAILABLE = False
+WYOMING_PROTOCOL_AVAILABLE = False
 
 Status = Literal["ok", "fail", "skip"]
 
@@ -76,6 +77,10 @@ EXPECTED_WYOMING_TYPES: dict[str, set[str]] = {
     "Wyoming Piper": {"tts"},
     "Wyoming OpenWakeWord": {"wake"},
 }
+
+ParseResult = tuple[dict[str, str], dict[str, str], set[str]]
+ParseFunc = Callable[[Path], ParseResult]
+_PARSE_CONFIG_FUNC: ParseFunc | None = None
 
 
 def _silence_bytes(duration_ms: int, mic: MicConfig) -> bytes:
@@ -161,6 +166,61 @@ def load_env_from_config(config_path: Path | None) -> dict[str, str]:
         env[key.decode("utf-8")] = value.decode("utf-8")
 
     return env
+
+
+def _resolve_repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _load_parse_config_func() -> ParseFunc:
+    global _PARSE_CONFIG_FUNC
+    if _PARSE_CONFIG_FUNC is not None:
+        return _PARSE_CONFIG_FUNC
+
+    repo_dir = _resolve_repo_root()
+    script_path = repo_dir / "bin" / "tools" / "sync-pulse-conf.py"
+    if not script_path.exists():
+        raise FileNotFoundError(f"sync helper not found at {script_path}")
+
+    spec = importlib.util.spec_from_file_location("_sync_pulse_conf", script_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load module spec from {script_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+
+    parse_func = getattr(module, "parse_config_file", None)
+    if not callable(parse_func):
+        raise AttributeError("sync-pulse-conf.py does not expose parse_config_file()")
+
+    _PARSE_CONFIG_FUNC = parse_func  # type: ignore[assignment]
+    return parse_func
+
+
+def _parse_config_defaults(config_path: Path | None) -> dict[str, str]:
+    target: Path | None = None
+    if config_path and config_path.exists():
+        target = config_path
+    else:
+        fallback = _resolve_repo_root() / "pulse.conf.sample"
+        if fallback.exists():
+            target = fallback
+    if target is None:
+        return {}
+
+    parse_config = _load_parse_config_func()
+    variables, _, _ = parse_config(target)
+    return variables
+
+
+def _apply_config_defaults(env: dict[str, str], config_path: Path | None) -> None:
+    try:
+        defaults = _parse_config_defaults(config_path)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        print(f"Warning: unable to parse defaults ({exc}).", file=sys.stderr)
+        return
+    for key, value in defaults.items():
+        env.setdefault(key, value)
 
 
 def _is_truthy(value: str | None, default: bool = False) -> bool:
@@ -765,6 +825,7 @@ def main() -> int:
     if config_path is None:
         print("Warning: no pulse.conf found, falling back to current environment.", file=sys.stderr)
     env = load_env_from_config(config_path)
+    _apply_config_defaults(env, config_path)
     config = AssistantConfig.from_env(env)
 
     results: list[CheckResult] = []

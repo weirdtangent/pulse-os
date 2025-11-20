@@ -382,6 +382,13 @@ def _strip_new_markers(comment: str | None) -> str:
     return "\n".join(cleaned).strip("\n")
 
 
+def _is_pulse_version_block(block: str | None) -> bool:
+    if not block:
+        return False
+    stripped = block.lstrip()
+    return stripped.startswith("if [[ -z") and "PULSE_VERSION" in stripped
+
+
 def format_config_file(
     sections: list[dict[str, Any]],
     user_vars: dict[str, str],
@@ -434,9 +441,11 @@ def format_config_file(
                         lines.append(comment_line)
 
             # Add variable with NEW marker if applicable
-            is_block = bool(var_info.get("is_block"))
+            is_block = bool(var_info.get("is_block")) or var_name == "PULSE_VERSION"
             if is_block:
                 block_source = user_vars.get(var_name) or var_info["value"]
+                if var_name == "PULSE_VERSION" and not _is_pulse_version_block(block_source):
+                    block_source = var_info["value"]
                 for block_line in block_source.split("\n"):
                     lines.append(block_line)
             else:
@@ -470,6 +479,28 @@ def format_config_file(
             lines.append("")
 
     return "\n".join(lines)
+
+
+def repair_pulse_version_block(
+    user_vars: dict[str, str],
+    user_comments: dict[str, str],
+    placeholder_vars: set[str],
+    sample_vars: dict[str, str],
+) -> None:
+    """Ensure the multi-line PULSE_VERSION helper stays intact."""
+    sample_block = sample_vars.get("PULSE_VERSION")
+    if not sample_block:
+        return
+
+    user_block = user_vars.get("PULSE_VERSION")
+    if not _is_pulse_version_block(user_block):
+        user_vars["PULSE_VERSION"] = sample_block
+        placeholder_vars.discard("PULSE_VERSION")
+
+    for helper_name in ("_pulse_conf_dir", "_pulse_version_file"):
+        user_vars.pop(helper_name, None)
+        user_comments.pop(helper_name, None)
+        placeholder_vars.discard(helper_name)
 
 
 def apply_legacy_replacements(
@@ -512,8 +543,8 @@ def main() -> int:
     """Main entry point."""
     repo_dir = Path("/opt/pulse-os")
     if not repo_dir.exists():
-        # Try current directory for development
-        repo_dir = Path(__file__).parent.parent
+        # Try source checkout for development
+        repo_dir = Path(__file__).resolve().parents[2]
 
     sample_path = repo_dir / "pulse.conf.sample"
     user_config_path = repo_dir / "pulse.conf"
@@ -529,6 +560,7 @@ def main() -> int:
 
     # Parse user config file
     user_vars, user_comments, user_placeholder_vars = parse_config_file(user_config_path)
+    repair_pulse_version_block(user_vars, user_comments, user_placeholder_vars, sample_vars)
 
     legacy_actions = apply_legacy_replacements(user_vars, user_comments, user_placeholder_vars, sample_vars)
 

@@ -42,7 +42,7 @@ PULSE_WATCHDOG_INTERVAL=60
 # ============================================================================
 
 # MQTT_HOST — hostname/IP of the MQTT broker Pulse publishes to.
-MQTT_HOST="mosquitto.graystorm.com"
+MQTT_HOST="mosquitto.local"
 # MQTT_PORT — MQTT broker port (defaults to 1883).
 MQTT_PORT="1883"
 
