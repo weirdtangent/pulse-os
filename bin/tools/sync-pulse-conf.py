@@ -438,12 +438,13 @@ def format_config_file(
                 block_source = user_vars.get(var_name) or var_info["value"]
                 for block_line in block_source.split("\n"):
                     lines.append(block_line)
-            default_value = var_info["value"]
-            matches_default = var_value == default_value
-            if matches_default:
-                lines.append(f'# (default) {var_name}="{var_value}"')
             else:
-                lines.append(f'{var_name}="{var_value}"')
+                default_value = var_info["value"]
+                matches_default = var_value == default_value
+                if matches_default:
+                    lines.append(f'# (default) {var_name}="{var_value}"')
+                else:
+                    lines.append(f'{var_name}="{var_value}"')
 
             lines.append("")
 
