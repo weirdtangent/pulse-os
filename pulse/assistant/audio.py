@@ -79,7 +79,17 @@ class AplaySink:
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
         player = self._resolve_player()
-        cmd = self._build_command(player, rate, width, channels)
+        try:
+            cmd = self._build_command(player, rate, width, channels)
+        except ValueError as exc:
+            self._logger.warning(
+                "Player %s cannot handle width=%s (%s); falling back to aplay",
+                player,
+                width,
+                exc,
+            )
+            player = "aplay"
+            cmd = _build_aplay_command(rate, width, channels)
         self._logger.debug("Starting playback (%s): %s", player, " ".join(cmd))
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -138,10 +148,6 @@ def _alsa_format(width: int) -> str:
     }.get(width, "S16_LE")
 
 
-def _pulse_format(width: int) -> str:
-    return _alsa_format(width).lower()
-
-
 def _supported_player(binary: str) -> bool:
     if os.path.isabs(binary):
         return os.access(binary, os.X_OK)
@@ -152,8 +158,27 @@ def _player_candidates() -> list[str]:
     return ["pw-play", "paplay", "aplay"]
 
 
+def _pw_format(width: int) -> str | None:
+    return {
+        1: "s8",
+        2: "s16",
+        4: "s32",
+    }.get(width)
+
+
+def _paplay_format(width: int) -> str:
+    return {
+        1: "s8",
+        2: "s16le",
+        3: "s24le",
+        4: "s32le",
+    }.get(width, "s16le")
+
+
 def _build_pw_play_command(rate: int, width: int, channels: int) -> list[str]:
-    fmt = _alsa_format(width)
+    fmt = _pw_format(width)
+    if not fmt:
+        raise ValueError(f"pw-play has no format for width={width}")
     return [
         "pw-play",
         "--raw",
@@ -168,7 +193,7 @@ def _build_pw_play_command(rate: int, width: int, channels: int) -> list[str]:
 
 
 def _build_paplay_command(rate: int, width: int, channels: int) -> list[str]:
-    fmt = _pulse_format(width)
+    fmt = _paplay_format(width)
     return [
         "paplay",
         "--raw",
