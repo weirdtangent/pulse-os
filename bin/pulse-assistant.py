@@ -24,6 +24,7 @@ from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantErr
 from pulse.assistant.llm import LLMProvider, OpenAIProvider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.scheduler import AssistantScheduler
+from pulse.audio import play_volume_feedback
 from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.client import AsyncTcpClient
@@ -125,7 +126,8 @@ class PulseAssistant:
         self._publish_assistant_discovery()
         await self.mic.start()
         self._set_assist_stage("pulse", "idle")
-        LOGGER.info("Pulse assistant ready (wake words: %s)", ", ".join(self.config.wake_models))
+        friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
+        LOGGER.info("Pulse assistant ready (wake words: %s)", friendly_words)
         while not self._shutdown.is_set():
             wake_word = await self._wait_for_wake_word()
             if wake_word is None:
@@ -320,11 +322,24 @@ class PulseAssistant:
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
 
+    @staticmethod
+    def _display_wake_word(name: str) -> str:
+        return name.replace("_", " ").strip()
+
+    async def _maybe_play_wake_sound(self) -> None:
+        if not self.preferences.wake_sound:
+            return
+        try:
+            await asyncio.to_thread(play_volume_feedback)
+        except Exception:  # pylint: disable=broad-except
+            LOGGER.debug("Wake sound playback failed", exc_info=True)
+
     async def _run_pulse_pipeline(self, wake_word: str) -> None:
         tracker = AssistRunTracker("pulse", wake_word)
         tracker.begin_stage("listening")
         self._current_tracker = tracker
         self._set_assist_stage("pulse", "listening", {"wake_word": wake_word})
+        await self._maybe_play_wake_sound()
         audio_bytes = await self._record_phrase()
         if not audio_bytes:
             LOGGER.debug("No speech captured for wake word %s", wake_word)
@@ -367,6 +382,7 @@ class PulseAssistant:
         tracker.begin_stage("listening")
         self._current_tracker = tracker
         self._set_assist_stage("home_assistant", "listening", {"wake_word": wake_word})
+        await self._maybe_play_wake_sound()
         ha_config = self.config.home_assistant
         ha_client = self.home_assistant
         if not ha_config.base_url or not ha_config.token:
