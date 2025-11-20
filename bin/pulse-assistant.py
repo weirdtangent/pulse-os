@@ -171,6 +171,7 @@ class PulseAssistant:
             detection_task = asyncio.create_task(self._read_wake_events(client))
             while not detection_task.done():
                 chunk_bytes = await self.mic.read_chunk()
+                LOGGER.debug("Captured audio chunk (timestamp=%sms, size=%d)", timestamp, len(chunk_bytes))
                 chunk_event = AudioChunk(
                     rate=self.config.mic.rate,
                     width=self.config.mic.width,
@@ -199,8 +200,10 @@ class PulseAssistant:
                 return None
             if Detection.is_type(event.type):
                 detection = Detection.from_event(event)
+                LOGGER.info("Wake word detected: %s", detection.name or self.config.wake_models[0])
                 return detection.name or self.config.wake_models[0]
             if NotDetected.is_type(event.type):
+                LOGGER.debug("OpenWakeWord reported NotDetected")
                 return None
 
     async def _record_phrase(self) -> bytes | None:
