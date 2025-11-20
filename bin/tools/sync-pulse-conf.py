@@ -347,6 +347,28 @@ def _annotate_new_comment(comment: str | None, var_name: str) -> str:
     return "\n".join(lines)
 
 
+def _strip_new_markers(comment: str | None) -> str:
+    """Remove any '# NEW:' prefixes from a stored comment."""
+    if not comment:
+        return ""
+
+    cleaned: list[str] = []
+    for line in comment.split("\n"):
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            prefix_len = len(line) - len(stripped)
+            prefix = line[:prefix_len]
+            body = stripped.lstrip("#").strip()
+            if body.startswith("NEW:"):
+                body = body[4:].strip()
+                if not body:
+                    continue
+                cleaned.append(f"{prefix}# {body}")
+                continue
+        cleaned.append(line)
+    return "\n".join(cleaned).strip("\n")
+
+
 def format_config_file(
     sections: list[dict[str, Any]],
     user_vars: dict[str, str],
@@ -389,6 +411,8 @@ def format_config_file(
             comment = user_comments.get(var_name, var_info["comment"])
             if is_new:
                 comment = _annotate_new_comment(comment, var_name)
+            else:
+                comment = _strip_new_markers(comment)
 
             # Add comment
             if comment:
