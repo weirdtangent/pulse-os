@@ -113,7 +113,7 @@ WYOMING_OPENWAKEWORD_PORT="10400"
 PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey_jarvis"
 
 # PULSE_ASSISTANT_WAKE_WORDS_HA — models that should route audio through Home Assistant Assist instead of the Pulse pipeline.
-PULSE_ASSISTANT_WAKE_WORDS_HA="hey house"
+PULSE_ASSISTANT_WAKE_WORDS_HA="hey_house"
 
 # PULSE_ASSISTANT_WAKE_ROUTES — optional explicit mapping (model=pipeline) to override the defaults above.
 # PULSE_ASSISTANT_WAKE_ROUTES="hey_jarvis=pulse,hey_house=home_assistant"

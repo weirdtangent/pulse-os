@@ -261,7 +261,7 @@ Each detected wake word can map to either the local “Pulse” pipeline or the 
 | Variable | Description |
 | --- | --- |
 | `PULSE_ASSISTANT_WAKE_WORDS_PULSE` | Comma-separated list for local LLM flow (e.g., `hey_jarvis`). |
-| `PULSE_ASSISTANT_WAKE_WORDS_HA` | List for HA Assist (e.g., `hey house,hey nabu`). |
+| `PULSE_ASSISTANT_WAKE_WORDS_HA` | List for HA Assist (e.g., `hey_house,hey_nabu`). |
 | `PULSE_ASSISTANT_WAKE_ROUTES` | Optional explicit mapping (`hey_jarvis=pulse,hey_house=home_assistant`). |
 
 The assistant automatically reports the active pipeline inside the MQTT state topic so dashboards can display the current mode. Use this to reserve “Hey House …” for home automation phrases while keeping “Hey Jarvis …” for general questions answered by your preferred LLM provider.
