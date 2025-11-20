@@ -4,16 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import runpy
 import sys
 from pathlib import Path
 
-try:
-    from sync_pulse_conf import parse_config_file
-except ImportError:  # pragma: no cover - invoked outside repo root
-    script_dir = Path(__file__).resolve().parent
-    if str(script_dir) not in sys.path:
-        sys.path.insert(0, str(script_dir))
-    from sync_pulse_conf import parse_config_file  # type: ignore
+
+def _load_parse_fn(script_dir: Path):
+    candidate = script_dir / "sync-pulse-conf.py"
+    if not candidate.exists():
+        raise SystemExit(f"Missing helper script: {candidate}")
+    module_globals = runpy.run_path(str(candidate))
+    if "parse_config_file" not in module_globals:
+        raise SystemExit("sync-pulse-conf.py does not expose parse_config_file")
+    return module_globals["parse_config_file"]
+
+
+PARSE_CONFIG_FILE = _load_parse_fn(Path(__file__).resolve().parent)
 
 
 def _resolve_repo_root() -> Path:
@@ -62,8 +68,8 @@ def main() -> int:
     config_path = _resolve_config_path(args.config, repo_root / "pulse.conf")
     sample_path = _resolve_config_path(args.sample, repo_root / "pulse.conf.sample")
 
-    sample_vars, _, _ = parse_config_file(sample_path)
-    user_vars, _, _ = parse_config_file(config_path)
+    sample_vars, _, _ = PARSE_CONFIG_FILE(sample_path)
+    user_vars, _, _ = PARSE_CONFIG_FILE(config_path)
 
     defaults = sample_vars
 
