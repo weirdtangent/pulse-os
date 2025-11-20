@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -23,6 +23,8 @@ class HomeAssistantAuthError(HomeAssistantError):
 class HomeAssistantClient:
     config: HomeAssistantConfig
     timeout: float = 10.0
+    _client: httpx.AsyncClient = field(init=False, repr=False)
+    _closed: bool = field(init=False, default=True, repr=False)
 
     def __post_init__(self) -> None:
         if not self.config.base_url:

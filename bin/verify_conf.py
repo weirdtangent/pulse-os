@@ -281,6 +281,27 @@ def check_home_assistant(config: HomeAssistantConfig, timeout: float) -> CheckRe
     return CheckResult("Home Assistant", "ok", f"{location} responded (version {version}).")
 
 
+def check_llm(config: AssistantConfig) -> CheckResult:
+    provider = (config.llm.provider or "").strip().lower()
+    if provider != "openai":
+        display = provider or "<unknown>"
+        return CheckResult(
+            "LLM",
+            "skip",
+            f"LLM provider '{display}' is not validated by this tool (only 'openai' is supported).",
+        )
+
+    api_key = (config.llm.openai_api_key or "").strip()
+    if not api_key:
+        return CheckResult("LLM", "fail", "OPENAI_API_KEY is not set but provider is 'openai'.")
+    if not api_key.startswith("sk-"):
+        return CheckResult("LLM", "fail", "OPENAI_API_KEY does not look like an 'sk-' token.")
+
+    model = config.llm.openai_model or "<unspecified>"
+    base_url = config.llm.openai_base_url or "https://api.openai.com/v1"
+    return CheckResult("LLM", "ok", f"OpenAI model {model} configured (endpoint {base_url}).")
+
+
 def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeout: float) -> list[CheckResult]:
     checks: list[tuple[str, str, str, WyomingEndpoint]] = [
         ("Wyoming Whisper", "WYOMING_WHISPER_HOST", "WYOMING_WHISPER_PORT", config.stt_endpoint),
@@ -655,6 +676,7 @@ def main() -> int:
     results.append(check_mqtt(config, args.timeout))
     results.append(check_remote_logging(env, config.hostname, args.timeout))
     results.append(check_home_assistant(config.home_assistant, args.timeout))
+    results.append(check_llm(config))
     results.extend(check_wyoming_endpoints(config, env, args.timeout))
 
     print_summary(results, config_path)
