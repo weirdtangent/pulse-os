@@ -32,6 +32,7 @@ else
     echo "[PulseOS] Warning: no pulse.conf found, using defaults."
 fi
 
+PULSE_USER="${PULSE_USER:-pulse}"
 PULSE_REMOTE_LOGGING="${PULSE_REMOTE_LOGGING:-true}"
 # Support both new and legacy variable names for backward compatibility
 PULSE_DAY_NIGHT_AUTO="${PULSE_DAY_NIGHT_AUTO:-${PULSE_BACKLIGHT_SUN:-true}}"
