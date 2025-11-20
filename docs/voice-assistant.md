@@ -58,10 +58,10 @@ PULSE_VOICE_ASSISTANT="true"
 WYOMING_OPENWAKEWORD_HOST="your-nas"
 WYOMING_WHISPER_HOST="your-nas"
 WYOMING_PIPER_HOST="your-nas"
-PULSE_ASSISTANT_WAKE_WORDS="okay_pulse"
+PULSE_ASSISTANT_WAKE_WORDS_PULSE="okay_pulse"
 ```
 
-You can swap in any Wyoming-compatible servers (vosk, porcupine, etc.) and adjust `PULSE_ASSISTANT_WAKE_WORDS` to match the model name you’ve installed.
+You can swap in any Wyoming-compatible servers (vosk, porcupine, etc.) and adjust `PULSE_ASSISTANT_WAKE_WORDS_PULSE` to match the model name you’ve installed.
 
 ---
 
@@ -95,7 +95,7 @@ PULSE_ASSISTANT_SPEAKING_STYLE="normal"   # relaxed/normal/aggressive
 PULSE_ASSISTANT_WAKE_SENSITIVITY="normal" # low/normal/high
 ```
 
-If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. Leave them blank to keep using your original servers.
+If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. If the HA Whisper endpoint exposes multiple models, set `HOME_ASSISTANT_STT_MODEL` so we request the correct one. Leave these blank to keep using your original servers.
 
 ---
 

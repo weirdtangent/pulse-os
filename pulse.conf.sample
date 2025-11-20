@@ -17,183 +17,188 @@ if [[ -z "${PULSE_VERSION:-}" ]]; then
   unset _pulse_conf_dir _pulse_version_file
 fi
 
-# PulseOS user
+# PULSE_USER — Linux account that auto-logs in and runs Pulse services.
 PULSE_USER="pulse"
 
 # ============================================================================
 # Kiosk Configuration
 # ============================================================================
 
-# Kiosk landing page
+# PULSE_URL — Chromium kiosk landing page opened after boot.
 PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
 
-# Watchdog loop (cron) interval in minutes
+# PULSE_REVIVE_INTERVAL — minutes between watchdog cron runs that restart the kiosk if needed.
 PULSE_REVIVE_INTERVAL=2
 
-# Browser watchdog thresholds
+# PULSE_WATCHDOG_URL — lightweight URL Chromium fetches to prove connectivity.
 PULSE_WATCHDOG_URL="http://homeassistant.local:8123/static/icons/favicon.ico"
+# PULSE_WATCHDOG_LIMIT — failed watchdog fetches before we restart the browser.
 PULSE_WATCHDOG_LIMIT=5
+# PULSE_WATCHDOG_INTERVAL — seconds between watchdog fetches.
 PULSE_WATCHDOG_INTERVAL=60
 
 # ============================================================================
 # MQTT Configuration
 # ============================================================================
 
-# MQTT server
+# MQTT_HOST — hostname/IP of the MQTT broker Pulse publishes to.
 MQTT_HOST="mosquitto.graystorm.com"
+# MQTT_PORT — MQTT broker port (defaults to 1883).
 MQTT_PORT="1883"
 
-# Update availability polling cadence (valid: 2, 4, 6, 8, 12, or 24 checks per day)
+# PULSE_VERSION_CHECKS_PER_DAY — how many times per day we poll for new PulseOS releases (2/4/6/8/12/24).
 PULSE_VERSION_CHECKS_PER_DAY=12
 
-# Telemetry publishing interval in seconds (minimum 5)
+# PULSE_TELEMETRY_INTERVAL_SECONDS — seconds between telemetry MQTT publishes (minimum 5s).
 PULSE_TELEMETRY_INTERVAL_SECONDS=15
 
 # ============================================================================
 # Feature Toggles
 # ============================================================================
 
-# Automatically adjust screen brightness and audio volume based on sunrise/sunset
-# When enabled, screen and speaker adjust to day/night levels automatically
-# When disabled, you can control brightness and volume manually (via MQTT or system controls)
+# PULSE_DAY_NIGHT_AUTO — automatically adjust brightness + volume for sunrise/sunset; set to "false" for manual control.
 PULSE_DAY_NIGHT_AUTO="true"
 
-# Play a short heartbeat-style "thump-thump" after changing volume via MQTT slider.
-# Set to "false" to disable the feedback sound.
+# PULSE_VOLUME_TEST_SOUND — plays the heartbeat "thump-thump" after MQTT volume changes.
 PULSE_VOLUME_TEST_SOUND="true"
 
-# Autoconnect to previously-setup Bluetooth (typically for audio)
-# When enabled, PulseOS automatically connects to your Bluetooth speaker
-# and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off
+# PULSE_BLUETOOTH_AUTOCONNECT — automatically reconnect to the last paired Bluetooth audio device and send keepalives.
 PULSE_BLUETOOTH_AUTOCONNECT="true"
 
-# Bluetooth device MAC address (optional)
-# If not set, the script will automatically find the first connected/paired Bluetooth device
-# Format: "XX:XX:XX:XX:XX:XX" (e.g., "7A:5A:99:6E:50:4D")
+# PULSE_BT_MAC — optional Bluetooth MAC (XX:XX:XX:XX:XX:XX) to force which device we connect to.
 PULSE_BT_MAC=""
 
-# Send remote syslogs to remote server
+# PULSE_REMOTE_LOGGING — enable remote syslog forwarding.
 PULSE_REMOTE_LOGGING="true"
 
-# Safe reboot guard configuration
-# Minimum uptime (in seconds) before an automatic reboot is allowed
+# PULSE_REBOOT_MIN_UPTIME_SECONDS — minimum uptime (seconds) before an automatic reboot is allowed.
 PULSE_REBOOT_MIN_UPTIME_SECONDS="300"
-# Rolling window (in seconds) for counting automatic reboots
+# PULSE_REBOOT_WINDOW_SECONDS — rolling window (seconds) for counting automatic reboots.
 PULSE_REBOOT_WINDOW_SECONDS="900"
-# Maximum automatic reboot attempts inside the rolling window
+# PULSE_REBOOT_MAX_COUNT — maximum automatic reboots inside that rolling window.
 PULSE_REBOOT_MAX_COUNT="3"
 
 # ============================================================================
 # Remote Logging Configuration
 # ============================================================================
 
-# Remote logging target
+# PULSE_REMOTE_LOG_HOST — remote syslog server hostname/IP.
 PULSE_REMOTE_LOG_HOST="192.168.1.100"
+# PULSE_REMOTE_LOG_PORT — remote syslog server port.
 PULSE_REMOTE_LOG_PORT="5514"
 
 # ============================================================================
 # Voice Assistant (Wyoming Protocol)
 # ============================================================================
 
-# Enable voice assistant features (wake word detection, speech-to-text, text-to-speech)
+# PULSE_VOICE_ASSISTANT — enable the wake word/STT/TTS stack that talks to your Wyoming servers.
 PULSE_VOICE_ASSISTANT="false"
 
-# Wyoming Whisper (Speech-to-Text) server
-# Hostname or IP address of the wyoming-whisper server
+# WYOMING_WHISPER_HOST — hostname/IP of your wyoming-whisper (speech-to-text) server.
 WYOMING_WHISPER_HOST=""
+# WYOMING_WHISPER_PORT — TCP port exposed by wyoming-whisper (default 10300).
 WYOMING_WHISPER_PORT="10300"
 
-# Wyoming Piper (Text-to-Speech) server
-# Hostname or IP address of the wyoming-piper server
+# WYOMING_PIPER_HOST — hostname/IP of your wyoming-piper (text-to-speech) server.
 WYOMING_PIPER_HOST=""
+# WYOMING_PIPER_PORT — TCP port exposed by wyoming-piper (default 10200).
 WYOMING_PIPER_PORT="10200"
 
-# Wyoming OpenWakeWord (Wake Word Detection) server
-# Hostname or IP address of the wyoming-openwakeword server
+# WYOMING_OPENWAKEWORD_HOST — hostname/IP of your wyoming-openwakeword detector.
 WYOMING_OPENWAKEWORD_HOST=""
+# WYOMING_OPENWAKEWORD_PORT — TCP port exposed by wyoming-openwakeword (default 10400).
 WYOMING_OPENWAKEWORD_PORT="10400"
 
-# Assistant wake word models (legacy single pipeline). Equivalent to PULSE_ASSISTANT_WAKE_WORDS_PULSE.
-PULSE_ASSISTANT_WAKE_WORDS="okay_pulse"
-
-# Pulse pipeline wake words (comma separated). Each entry should match a wyoming-openwakeword model name.
+# PULSE_ASSISTANT_WAKE_WORDS_PULSE — comma-separated wyoming-openwakeword models handled by the local “Pulse” pipeline.
 PULSE_ASSISTANT_WAKE_WORDS_PULSE="okay_pulse"
 
-# Home Assistant pipeline wake words (comma separated). Defaults to empty unless you want
-# phrases like "hey house" to route audio through Home Assistant's Assist stack.
+# PULSE_ASSISTANT_WAKE_WORDS_HA — models that should route audio through Home Assistant Assist instead of the Pulse pipeline.
 PULSE_ASSISTANT_WAKE_WORDS_HA="hey house"
 
-# Optional explicit wake routing map. Format: model=pipeline (pipelines: pulse, home_assistant)
-# Multiple entries can be separated by commas.
+# PULSE_ASSISTANT_WAKE_ROUTES — optional explicit mapping (model=pipeline) to override the defaults above.
 # PULSE_ASSISTANT_WAKE_ROUTES="okay_pulse=pulse,hey_house=home_assistant"
 
-# Optional assistant language hint for STT/LLM
+# PULSE_ASSISTANT_LANGUAGE — optional language hint passed to the STT engine and LLM.
 PULSE_ASSISTANT_LANGUAGE="en"
 
-# Optional wake sound toggle (true = chime when a wake word fires)
+# PULSE_ASSISTANT_WAKE_SOUND — chime when a wake word fires (set to "false" for silent wakes).
 PULSE_ASSISTANT_WAKE_SOUND="true"
 
-# Preferred speaking style for the Pulse pipeline (relaxed, normal, aggressive)
+# PULSE_ASSISTANT_SPEAKING_STYLE — persona hint for the Pulse pipeline (relaxed, normal, aggressive).
 PULSE_ASSISTANT_SPEAKING_STYLE="normal"
 
-# Wake sensitivity hint for openWakeWord (low, normal, high)
+# PULSE_ASSISTANT_WAKE_SENSITIVITY — maps to openWakeWord trigger levels (low=5, normal=3, high=2).
 PULSE_ASSISTANT_WAKE_SENSITIVITY="normal"
 
-# Microphone capture command (16 kHz mono PCM)
+# PULSE_ASSISTANT_MIC_CMD — ALSA command used to stream 16 kHz mono PCM into the pipeline.
 PULSE_ASSISTANT_MIC_CMD="arecord -q -t raw -f S16_LE -c 1 -r 16000 -"
 
 # Voice activity detection tuning
+# PULSE_ASSISTANT_MIN_PHRASE_SECONDS — minimum captured speech (seconds) before we consider it a phrase.
 PULSE_ASSISTANT_MIN_PHRASE_SECONDS=1.5
+# PULSE_ASSISTANT_MAX_PHRASE_SECONDS — cap on phrase duration before we auto-stop recording.
 PULSE_ASSISTANT_MAX_PHRASE_SECONDS=8
+# PULSE_ASSISTANT_SILENCE_MS — milliseconds of silence that signal end-of-phrase.
 PULSE_ASSISTANT_SILENCE_MS=1200
+# PULSE_ASSISTANT_RMS_THRESHOLD — RMS floor used to ignore background noise.
 PULSE_ASSISTANT_RMS_THRESHOLD=120
 
-# LLM provider configuration
+# PULSE_ASSISTANT_PROVIDER — LLM backend slug; defaults to "openai".
 PULSE_ASSISTANT_PROVIDER="openai"
+# OPENAI_API_KEY — API key used when the provider is OpenAI (leave blank for other providers).
 OPENAI_API_KEY=""
+# OPENAI_MODEL — OpenAI chat/completions model to call for the Pulse pipeline.
 OPENAI_MODEL="gpt-4o-mini"
+# OPENAI_BASE_URL — override if you proxy OpenAI-compatible requests through another endpoint.
 OPENAI_BASE_URL="https://api.openai.com/v1"
 
 # Optional system prompt override (inline or via file)
 # PULSE_ASSISTANT_SYSTEM_PROMPT="You are a friendly desk assistant..."
 # PULSE_ASSISTANT_SYSTEM_PROMPT_FILE="/opt/pulse-os/prompt.txt"
 
-# Text-to-speech voice name (leave blank for server default)
+# PULSE_ASSISTANT_TTS_VOICE — preferred Piper voice (leave blank to use server default).
 PULSE_ASSISTANT_TTS_VOICE=""
 
-# Optional JSON action definitions for device control
-# File path or inline JSON string. Each action must include:
-#   slug, description, topic, payload (string or JSON)
+# PULSE_ASSISTANT_ACTIONS_FILE — JSON file describing MQTT/HA action slugs (slug, description, topic, payload).
 PULSE_ASSISTANT_ACTIONS_FILE="/opt/pulse-os/pulse-assistant-actions.json"
+# PULSE_ASSISTANT_ACTIONS — inline JSON string with the same schema as the file above.
 # PULSE_ASSISTANT_ACTIONS='[{"slug":"desk_lights_on","description":"Turn on desk lights","topic":"home/desk/lights/set","payload":{"state":"ON"}}]'
 
-# Display overlay tuning
+# PULSE_ASSISTANT_DISPLAY_SECONDS — how long the Tk response overlay should stay visible.
 PULSE_ASSISTANT_DISPLAY_SECONDS=8
+# PULSE_ASSISTANT_FONT_SIZE — response overlay font size (pixels).
 PULSE_ASSISTANT_FONT_SIZE=28
 
 # ============================================================================
 # Home Assistant Integration (optional)
 # ============================================================================
 
-# Base URL and long-lived access token for the local Home Assistant instance.
-# When set, the assistant can call HA services, timers, and Assist pipelines.
+# HOME_ASSISTANT_BASE_URL — base URL for your Home Assistant instance (used for Assist + REST calls).
 HOME_ASSISTANT_BASE_URL="http://homeassistant.local:8123"
+# HOME_ASSISTANT_TOKEN — long-lived access token the assistant uses when calling Home Assistant APIs.
 HOME_ASSISTANT_TOKEN=""
+# HOME_ASSISTANT_VERIFY_SSL — keep "true" to verify TLS, or set "false" for self-signed certs.
 HOME_ASSISTANT_VERIFY_SSL="true"
 
-# Optional Assist pipeline ID to target (falls back to HA default if blank)
+# HOME_ASSISTANT_ASSIST_PIPELINE — optional Assist pipeline ID to override HA’s default.
 HOME_ASSISTANT_ASSIST_PIPELINE=""
 
-# Optional Home Assistant-managed Wyoming endpoints (leave blank to keep using direct servers)
+# Optional Home Assistant–hosted Wyoming endpoints (leave blank to keep using the direct servers above).
+# HOME_ASSISTANT_OPENWAKEWORD_HOST — HA-provided wyoming-openwakeword host.
 HOME_ASSISTANT_OPENWAKEWORD_HOST=""
+# HOME_ASSISTANT_OPENWAKEWORD_PORT — HA-provided wyoming-openwakeword port.
 HOME_ASSISTANT_OPENWAKEWORD_PORT=""
+# HOME_ASSISTANT_WHISPER_HOST — HA-provided wyoming-whisper host.
 HOME_ASSISTANT_WHISPER_HOST=""
+# HOME_ASSISTANT_WHISPER_PORT — HA-provided wyoming-whisper port.
 HOME_ASSISTANT_WHISPER_PORT=""
+# HOME_ASSISTANT_STT_MODEL — optional model name to request from the HA-managed wyoming-whisper endpoint.
 HOME_ASSISTANT_STT_MODEL=""
+# HOME_ASSISTANT_PIPER_HOST — HA-provided wyoming-piper host.
 HOME_ASSISTANT_PIPER_HOST=""
+# HOME_ASSISTANT_PIPER_PORT — HA-provided wyoming-piper port.
 HOME_ASSISTANT_PIPER_PORT=""
 
-# Timer/reminder helpers (when set, the assistant will call these HA services; otherwise it falls
-# back to local timers/reminders with on-device notifications).
+# Timer/reminder helpers (when set, the assistant calls HA services; otherwise it falls back to local timers/reminders).
 # HOME_ASSISTANT_TIMER_ENTITY="timer.kitchen"
 # HOME_ASSISTANT_REMINDER_SERVICE="notify.mobile_app_phone"

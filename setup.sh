@@ -645,7 +645,8 @@ print_feature_summary() {
     local wyoming_openwakeword_host="${WYOMING_OPENWAKEWORD_HOST:-<not set>}"
     local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10400}"
     local pulse_assistant_provider="${PULSE_ASSISTANT_PROVIDER:-openai}"
-    local pulse_assistant_wake_words="${PULSE_ASSISTANT_WAKE_WORDS:-okay_pulse}"
+    local pulse_assistant_wake_words_pulse="${PULSE_ASSISTANT_WAKE_WORDS_PULSE:-okay_pulse}"
+    local pulse_assistant_wake_words_ha="${PULSE_ASSISTANT_WAKE_WORDS_HA:-}"
     local openai_model="${OPENAI_MODEL:-gpt-4o-mini}"
     # Build summary output by capturing printf statements
     local summary_output
@@ -742,9 +743,13 @@ print_feature_summary() {
                 "$wyoming_openwakeword_host:$wyoming_openwakeword_port" \
                 "Wake word detection server (wyoming-openwakeword)"
             kv_block \
-                "Assistant Wake Words" \
-                "$pulse_assistant_wake_words" \
-                "Comma-separated list of wake word models"
+                "Pulse Wake Words (PULSE_ASSISTANT_WAKE_WORDS_PULSE)" \
+                "$pulse_assistant_wake_words_pulse" \
+                "Comma-separated list of wake word models handled by the Pulse pipeline"
+            kv_block \
+                "HA Wake Words (PULSE_ASSISTANT_WAKE_WORDS_HA)" \
+                "${pulse_assistant_wake_words_ha:-<none>}" \
+                "Models that should route audio through Home Assistant Assist"
             kv_block \
                 "LLM Provider" \
                 "$pulse_assistant_provider (model: $openai_model)" \
