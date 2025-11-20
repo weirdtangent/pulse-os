@@ -1,3 +1,10 @@
+## [0.34.1](https://github.com/weirdtangent/pulse-os/compare/v0.34.0...v0.34.1) (2025-11-20)
+
+
+### Bug Fixes
+
+* normalize wake sensitivity to None for normal ([3bc659e](https://github.com/weirdtangent/pulse-os/commit/3bc659ed8fe29b906504979853003e826c629ec9))
+
 # [0.34.0](https://github.com/weirdtangent/pulse-os/compare/v0.33.4...v0.34.0) (2025-11-20)
 
 
