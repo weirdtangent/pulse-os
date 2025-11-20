@@ -283,6 +283,20 @@ Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIM
   3. `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -A -t "C,," -n homeassistant -i /path/to/ha-root-ca.pem`
   4. `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -L | grep homeassistant` (confirm it stuck)
   The profile path defaults to `~/.config/kiosk-profile`; adjust the `--user-data-dir` flag in `bin/kiosk-wrap.sh` if you changed it. Avoid pointing `--user-data-dir` at `/tmp` (the default tmpfs is wiped every reboot, so any imported cert disappears). Restart `pulse-kiosk` (or reboot) afterward so Chromium reloads the updated trust store.
+- Custom environment variables don’t belong in `pulse.conf`. `bin/tools/sync-pulse-conf.py` rewrites that file from `pulse.conf.sample`, and any unknown keys (like `REQUESTS_CA_BUNDLE`) are dropped the next time you sync. Instead, add them via a systemd drop-in so the service exports them automatically:
+  1. `sudo mkdir -p /etc/systemd/system/pulse-assistant.service.d`
+  2. Create `/etc/systemd/system/pulse-assistant.service.d/ca-override.conf` with:
+
+     ```
+     [Service]
+     Environment=REQUESTS_CA_BUNDLE=/opt/pulse-os/certs/ha-root-ca.pem
+     ```
+
+  3. `sudo systemctl daemon-reload`
+  4. `sudo systemctl restart pulse-assistant.service`
+  Repeat the same pattern for any other unit (e.g., your kiosk launcher) that needs the variable.
+- If you’re pointing Pulse at a custom HA hostname, double-check that the DNS entry resolves to the actual HA IP. The kiosk will happily use whatever IP it gets; if that host doesn’t run Home Assistant you’ll see 404s for `/api/assist_pipeline/run` even though the integration is enabled.
+- If `sync-pulse-conf.py` pushes anything into the “Legacy/Unknown Variables” section, it means those keys are no longer present in `pulse.conf.sample`. Either remove them or rename them to the current equivalents (the script’s `LEGACY_REPLACEMENTS` map handles some migrations automatically, but truly unknown names are left in that section so you can decide whether to keep or delete them).
 - The `journalctl -u pulse-assistant.service -f` log shows the detected pipeline (`pipeline=pulse|home_assistant`) for each request, so you can confirm wake-word routing quickly.
 
 #### MQTT telemetry & knobs

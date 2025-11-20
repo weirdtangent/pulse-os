@@ -70,7 +70,7 @@ PULSE_BLUETOOTH_AUTOCONNECT="true"
 # Bluetooth device MAC address (optional)
 # If not set, the script will automatically find the first connected/paired Bluetooth device
 # Format: "XX:XX:XX:XX:XX:XX" (e.g., "7A:5A:99:6E:50:4D")
-# PULSE_BT_MAC=""
+PULSE_BT_MAC=""
 
 # Send remote syslogs to remote server
 PULSE_REMOTE_LOGGING="true"
@@ -182,16 +182,16 @@ HOME_ASSISTANT_TOKEN=""
 HOME_ASSISTANT_VERIFY_SSL="true"
 
 # Optional Assist pipeline ID to target (falls back to HA default if blank)
-# HOME_ASSISTANT_ASSIST_PIPELINE="Pulse Pipeline"
+HOME_ASSISTANT_ASSIST_PIPELINE=""
 
 # Optional Home Assistant-managed Wyoming endpoints (leave blank to keep using direct servers)
-# HOME_ASSISTANT_OPENWAKEWORD_HOST="homeassistant.local"
-# HOME_ASSISTANT_OPENWAKEWORD_PORT="12101"
-# HOME_ASSISTANT_WHISPER_HOST="homeassistant.local"
-# HOME_ASSISTANT_WHISPER_PORT="12102"
-# HOME_ASSISTANT_STT_MODEL="faster-whisper-medium"
-# HOME_ASSISTANT_PIPER_HOST="homeassistant.local"
-# HOME_ASSISTANT_PIPER_PORT="12103"
+HOME_ASSISTANT_OPENWAKEWORD_HOST=""
+HOME_ASSISTANT_OPENWAKEWORD_PORT=""
+HOME_ASSISTANT_WHISPER_HOST=""
+HOME_ASSISTANT_WHISPER_PORT=""
+HOME_ASSISTANT_STT_MODEL=""
+HOME_ASSISTANT_PIPER_HOST=""
+HOME_ASSISTANT_PIPER_PORT=""
 
 # Timer/reminder helpers (when set, the assistant will call these HA services; otherwise it falls
 # back to local timers/reminders with on-device notifications).
