@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 COMMENT_ASSIGNMENT_RE = re.compile(r"#\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)")
+DEFAULT_COMMENT_RE = re.compile(r"#\s*\(default\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)")
 BASH_IF_RE = re.compile(r"^if\b")
 BASH_FI_RE = re.compile(r"^fi\b")
 
@@ -92,6 +93,17 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
             if stripped.startswith("#"):
                 # Skip section headers (they start with # and have ===)
                 if "===" not in stripped:
+                    default_match = DEFAULT_COMMENT_RE.match(stripped)
+                    if default_match:
+                        var_name = default_match.group(1)
+                        var_value = _strip_quotes(default_match.group(2))
+                        variables[var_name] = var_value
+                        if current_comment:
+                            comments[var_name] = "\n".join(current_comment)
+                            current_comment = []
+                        current_comment_has_new_marker = False
+                        i += 1
+                        continue
                     # Check for NEW marker with variable assignment on the same line
                     if "NEW:" in stripped and "=" in stripped:
                         match = re.search(r"NEW:\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)", stripped)
@@ -426,6 +438,10 @@ def format_config_file(
                 block_source = user_vars.get(var_name) or var_info["value"]
                 for block_line in block_source.split("\n"):
                     lines.append(block_line)
+            default_value = var_info["value"]
+            matches_default = var_value == default_value
+            if matches_default:
+                lines.append(f'# (default) {var_name}="{var_value}"')
             else:
                 lines.append(f'{var_name}="{var_value}"')
 
