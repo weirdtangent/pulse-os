@@ -1,3 +1,10 @@
+## [0.33.2](https://github.com/weirdtangent/pulse-os/compare/v0.33.1...v0.33.2) (2025-11-20)
+
+
+### Bug Fixes
+
+* fix check for HA token and add openai LLM API key check ([20a4bd4](https://github.com/weirdtangent/pulse-os/commit/20a4bd434af5f4629c1f5e5c99a3c76100ef42ee))
+
 ## [0.33.1](https://github.com/weirdtangent/pulse-os/compare/v0.33.0...v0.33.1) (2025-11-20)
 
 # [0.33.0](https://github.com/weirdtangent/pulse-os/compare/v0.32.0...v0.33.0) (2025-11-20)
