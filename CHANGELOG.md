@@ -1,3 +1,10 @@
+# [0.35.0](https://github.com/weirdtangent/pulse-os/compare/v0.34.2...v0.35.0) (2025-11-20)
+
+
+### Features
+
+* add kiosk SSL troubleshooting tips ([c769e74](https://github.com/weirdtangent/pulse-os/commit/c769e74db94c390b8fa6f0c303c10512926d90b6))
+
 ## [0.34.2](https://github.com/weirdtangent/pulse-os/compare/v0.34.1...v0.34.2) (2025-11-20)
 
 
