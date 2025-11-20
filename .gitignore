@@ -23,8 +23,12 @@ venv/
 .DS_Store
 
 #  dev work
-pulse.conf
 NOTES
 
 # Generated config files (should not be tracked)
 config/system/syslog-ng/remote-log.conf
+
+# personal work files/dirs
+pulse.conf
+pulse.conf.backup
+certs/
