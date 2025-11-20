@@ -9,6 +9,8 @@ import os
 import shutil
 from asyncio.subprocess import Process
 
+from pulse import audio as pulse_audio
+
 class ArecordStream:
     """Capture PCM audio by shelling out to ``arecord`` (ALSA)."""
 
@@ -77,6 +79,7 @@ class AplaySink:
 
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
+        player_env, sink = _player_env_with_sink()
         player = self._resolve_player()
         try:
             cmd = self._build_command(player, rate, width, channels)
@@ -89,12 +92,14 @@ class AplaySink:
             )
             player = "aplay"
             cmd = _build_aplay_command(rate, width, channels)
-        self._logger.debug("Starting playback (%s): %s", player, " ".join(cmd))
+        sink_detail = f" (sink={sink})" if sink else ""
+        self._logger.debug("Starting playback (%s): %s%s", player, " ".join(cmd), sink_detail)
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=player_env,
         )
 
     async def write(self, chunk: bytes) -> None:
@@ -239,5 +244,13 @@ def _determine_player(preferred: str, logger: logging.Logger) -> str:
         if _supported_player(candidate):
             return candidate
     return "aplay"
+
+
+def _player_env_with_sink() -> tuple[dict[str, str], str | None]:
+    env = os.environ.copy()
+    sink = pulse_audio.find_audio_sink()
+    if sink:
+        env["PULSE_SINK"] = sink
+    return env, sink
 
 
