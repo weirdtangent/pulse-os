@@ -110,13 +110,13 @@ WYOMING_OPENWAKEWORD_HOST=""
 WYOMING_OPENWAKEWORD_PORT="10400"
 
 # PULSE_ASSISTANT_WAKE_WORDS_PULSE — comma-separated wyoming-openwakeword models handled by the local “Pulse” pipeline.
-PULSE_ASSISTANT_WAKE_WORDS_PULSE="okay_pulse"
+PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey_jarvis"
 
 # PULSE_ASSISTANT_WAKE_WORDS_HA — models that should route audio through Home Assistant Assist instead of the Pulse pipeline.
 PULSE_ASSISTANT_WAKE_WORDS_HA="hey house"
 
 # PULSE_ASSISTANT_WAKE_ROUTES — optional explicit mapping (model=pipeline) to override the defaults above.
-# PULSE_ASSISTANT_WAKE_ROUTES="okay_pulse=pulse,hey_house=home_assistant"
+# PULSE_ASSISTANT_WAKE_ROUTES="hey_jarvis=pulse,hey_house=home_assistant"
 
 # PULSE_ASSISTANT_LANGUAGE — optional language hint passed to the STT engine and LLM.
 PULSE_ASSISTANT_LANGUAGE="en"

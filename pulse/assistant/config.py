@@ -41,7 +41,7 @@ def _split_csv(value: str | None) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-DEFAULT_WAKE_MODEL = "okay_pulse"
+DEFAULT_WAKE_MODEL = "hey_jarvis"
 WAKE_PIPELINES = {"pulse", "home_assistant"}
 
 

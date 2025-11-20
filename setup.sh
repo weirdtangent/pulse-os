@@ -645,7 +645,7 @@ print_feature_summary() {
     local wyoming_openwakeword_host="${WYOMING_OPENWAKEWORD_HOST:-<not set>}"
     local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10400}"
     local pulse_assistant_provider="${PULSE_ASSISTANT_PROVIDER:-openai}"
-    local pulse_assistant_wake_words_pulse="${PULSE_ASSISTANT_WAKE_WORDS_PULSE:-okay_pulse}"
+    local pulse_assistant_wake_words_pulse="${PULSE_ASSISTANT_WAKE_WORDS_PULSE:-hey_jarvis}"
     local pulse_assistant_wake_words_ha="${PULSE_ASSISTANT_WAKE_WORDS_HA:-}"
     local openai_model="${OPENAI_MODEL:-gpt-4o-mini}"
     # Build summary output by capturing printf statements

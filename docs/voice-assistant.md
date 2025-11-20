@@ -1,6 +1,6 @@
 # Pulse Voice Assistant
 
-This document walks through the first end-to-end “Hey Pulse” loop that landed in `pulse-assistant`:
+This document walks through the first end-to-end “Hey Jarvis” loop that landed in `pulse-assistant`:
 
 ```
 ReSpeaker mic → wyoming-openwakeword → wyoming-whisper → LLM → wyoming-piper → speakers + overlay
@@ -58,7 +58,7 @@ PULSE_VOICE_ASSISTANT="true"
 WYOMING_OPENWAKEWORD_HOST="your-nas"
 WYOMING_WHISPER_HOST="your-nas"
 WYOMING_PIPER_HOST="your-nas"
-PULSE_ASSISTANT_WAKE_WORDS_PULSE="okay_pulse"
+PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey_jarvis"
 ```
 
 You can swap in any Wyoming-compatible servers (vosk, porcupine, etc.) and adjust `PULSE_ASSISTANT_WAKE_WORDS_PULSE` to match the model name you’ve installed.
@@ -78,11 +78,11 @@ Pulse now supports two wake-word profiles:
 Example:
 
 ```
-PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey pulse,okay_pulse"
-PULSE_ASSISTANT_WAKE_WORDS_HA="hey house,hey nabu"
+PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey_jarvis"
+PULSE_ASSISTANT_WAKE_WORDS_HA="hey_house"
 ```
 
-When `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` are set, “Hey House …” streams through HA while “Hey Pulse …” keeps using your configured LLM provider.
+When `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` are set, “Hey House …” streams through HA while “Hey Jarvis …” keeps using your configured LLM provider.
 
 Optional helpers:
 
@@ -213,7 +213,7 @@ All preference states are retained so dashboards instantly reflect the last-know
 
 1. **Wake word:** watch `journalctl -u pulse-assistant.service -f` and say “Okay Pulse”. You should see a detection log and an MQTT state message change to `listening`.
 2. **STT sanity:** keep speaking after the chime; when you stop the transcript should be printed in the journal and published to `assistant/transcript`.
-3. **LLM + speech:** set `OPENAI_API_KEY` and ask, “Hey Pulse, what’s the weather tomorrow?”. You should hear Piper speak and the overlay should show the text.
+3. **LLM + speech:** set `OPENAI_API_KEY` and ask, “Hey Jarvis, what’s the weather tomorrow?”. You should hear Piper speak and the overlay should show the text.
 4. **Actions:** add the sample JSON above and say “Okay Pulse, turn on the desk lights.” Confirm the MQTT topic fired.
 
 If something stalls, re-run `./setup.sh` (it restarts the services), then check:

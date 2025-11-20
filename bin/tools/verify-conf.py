@@ -686,7 +686,7 @@ async def _probe_openwakeword_async(host: str, port: int, config: AssistantConfi
 
     client = AsyncTcpClient(host, port)
     await asyncio.wait_for(client.connect(), timeout=timeout)
-    models = config.wake_models or ["okay_pulse"]
+    models = config.wake_models or ["hey_jarvis"]
     timestamp = 0
     try:
         await asyncio.wait_for(client.write_event(Detect(names=models).event()), timeout=timeout)
