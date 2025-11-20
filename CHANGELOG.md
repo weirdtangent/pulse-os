@@ -1,3 +1,10 @@
+# [0.34.0](https://github.com/weirdtangent/pulse-os/compare/v0.33.4...v0.34.0) (2025-11-20)
+
+
+### Features
+
+* add wake sound support; fix wake word display in logs ([f865c01](https://github.com/weirdtangent/pulse-os/commit/f865c018683ed56d36564e25675dcd02af9ee6a4))
+
 ## [0.33.4](https://github.com/weirdtangent/pulse-os/compare/v0.33.3...v0.33.4) (2025-11-20)
 
 ## [0.33.3](https://github.com/weirdtangent/pulse-os/compare/v0.33.2...v0.33.3) (2025-11-20)
