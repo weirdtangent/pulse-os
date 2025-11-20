@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import shutil
 from asyncio.subprocess import Process
 
 
@@ -64,30 +66,21 @@ class ArecordStream:
 
 
 class AplaySink:
-    """Play PCM audio via ``aplay``."""
+    """Play PCM audio via ``aplay``/``pw-play``/``paplay``."""
 
-    def __init__(self, binary: str = "aplay", logger: logging.Logger | None = None) -> None:
-        self.binary = binary
+    def __init__(self, binary: str | None = None, logger: logging.Logger | None = None) -> None:
+        env_override = os.environ.get("PULSE_ASSISTANT_AUDIO_PLAYER")
+        if binary is None and env_override:
+            binary = env_override
+        self.binary = binary or "auto"
         self._proc: Process | None = None
         self._logger = logger or logging.getLogger(__name__)
 
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
-        fmt = _alsa_format(width)
-        cmd = [
-            self.binary,
-            "-q",
-            "-t",
-            "raw",
-            "-f",
-            fmt,
-            "-c",
-            str(channels),
-            "-r",
-            str(rate),
-            "-",
-        ]
-        self._logger.debug("Starting playback: %s", " ".join(cmd))
+        player = self._resolve_player()
+        cmd = self._build_command(player, rate, width, channels)
+        self._logger.debug("Starting playback (%s): %s", player, " ".join(cmd))
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -128,6 +121,13 @@ class AplaySink:
             return ""
         return data.decode("utf-8", errors="ignore").strip()
 
+    def _resolve_player(self) -> str:
+        return _determine_player(self.binary, self._logger)
+
+    @staticmethod
+    def _build_command(player: str, rate: int, width: int, channels: int) -> list[str]:
+        return _build_command_for_player(player, rate, width, channels)
+
 
 def _alsa_format(width: int) -> str:
     return {
@@ -136,3 +136,82 @@ def _alsa_format(width: int) -> str:
         3: "S24_LE",
         4: "S32_LE",
     }.get(width, "S16_LE")
+
+
+def _pulse_format(width: int) -> str:
+    return _alsa_format(width).lower()
+
+
+def _supported_player(binary: str) -> bool:
+    if os.path.isabs(binary):
+        return os.access(binary, os.X_OK)
+    return shutil.which(binary) is not None
+
+
+def _player_candidates() -> list[str]:
+    return ["pw-play", "paplay", "aplay"]
+
+
+def _build_pw_play_command(rate: int, width: int, channels: int) -> list[str]:
+    fmt = _alsa_format(width)
+    return [
+        "pw-play",
+        "--raw",
+        "--rate",
+        str(rate),
+        "--channels",
+        str(channels),
+        "--format",
+        fmt,
+        "-",
+    ]
+
+
+def _build_paplay_command(rate: int, width: int, channels: int) -> list[str]:
+    fmt = _pulse_format(width)
+    return [
+        "paplay",
+        "--raw",
+        "--rate",
+        str(rate),
+        "--channels",
+        str(channels),
+        f"--format={fmt}",
+        "-",
+    ]
+
+
+def _build_aplay_command(rate: int, width: int, channels: int) -> list[str]:
+    fmt = _alsa_format(width)
+    return [
+        "aplay",
+        "-q",
+        "-t",
+        "raw",
+        "-f",
+        fmt,
+        "-c",
+        str(channels),
+        "-r",
+        str(rate),
+        "-",
+    ]
+
+
+def _build_command_for_player(player: str, rate: int, width: int, channels: int) -> list[str]:
+    if player == "pw-play":
+        return _build_pw_play_command(rate, width, channels)
+    if player == "paplay":
+        return _build_paplay_command(rate, width, channels)
+    return _build_aplay_command(rate, width, channels)
+
+
+def _determine_player(preferred: str, logger: logging.Logger) -> str:
+    if preferred != "auto":
+        if _supported_player(preferred):
+            return preferred
+        logger.warning("Requested audio player '%s' not found; falling back to auto-detection", preferred)
+    for candidate in _player_candidates():
+        if _supported_player(candidate):
+            return candidate
+    return "aplay"
