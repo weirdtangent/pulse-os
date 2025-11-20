@@ -9,9 +9,6 @@ import os
 import shutil
 from asyncio.subprocess import Process
 
-from pulse import audio as pulse_audio
-
-
 class ArecordStream:
     """Capture PCM audio by shelling out to ``arecord`` (ALSA)."""
 
@@ -80,7 +77,6 @@ class AplaySink:
 
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
-        await self._nudge_sink_volume()
         player = self._resolve_player()
         try:
             cmd = self._build_command(player, rate, width, channels)
@@ -133,9 +129,6 @@ class AplaySink:
         except (asyncio.TimeoutError, RuntimeError):
             return ""
         return data.decode("utf-8", errors="ignore").strip()
-
-    async def _nudge_sink_volume(self) -> None:
-        await asyncio.to_thread(_reapply_sink_volume_and_wake)
 
     def _resolve_player(self) -> str:
         return _determine_player(self.binary, self._logger)
@@ -248,37 +241,3 @@ def _determine_player(preferred: str, logger: logging.Logger) -> str:
     return "aplay"
 
 
-def _reapply_sink_volume_and_wake() -> None:
-    try:
-        volume = pulse_audio.get_current_volume()
-        if volume is None:
-            return
-        sink = pulse_audio.find_audio_sink()
-        if not sink:
-            return
-        pulse_audio.set_volume(volume, sink=sink, play_feedback=False)
-        _send_wake_hiss(sink)
-    except Exception:  # pragma: no cover - best effort
-        pass
-
-
-def _send_wake_hiss(sink: str) -> None:
-    pw_play = shutil.which("pw-play")
-    if not pw_play:
-        return
-    try:
-        subprocess = __import__("subprocess")
-        process = subprocess.Popen(
-            [pw_play, "--raw", "--rate", "8000", "--channels", "1", "--format", "s16", "-"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env={**os.environ, "PULSE_SINK": sink},
-        )
-        hiss = os.urandom(8000 * 2 // 10)  # ~100ms of noise
-        if process.stdin:
-            process.stdin.write(hiss)
-            process.stdin.close()
-        process.wait(timeout=1)
-    except Exception:
-        pass
