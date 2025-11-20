@@ -1,3 +1,10 @@
+## [0.35.1](https://github.com/weirdtangent/pulse-os/compare/v0.35.0...v0.35.1) (2025-11-20)
+
+
+### Bug Fixes
+
+* improve voice assistant documentation, and set default values for all config options ([0f94a9f](https://github.com/weirdtangent/pulse-os/commit/0f94a9f3c3a46221c02f62bfc651199578ff4935))
+
 # [0.35.0](https://github.com/weirdtangent/pulse-os/compare/v0.34.2...v0.35.0) (2025-11-20)
 
 
