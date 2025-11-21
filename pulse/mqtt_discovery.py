@@ -13,6 +13,7 @@ def build_button_entity(
     payload_press: str = "press",
     entity_category: str | None = None,
     availability: dict[str, Any] | None = None,
+    json_attr_topic: str | None = None,
 ) -> dict[str, Any]:
     """Build a Home Assistant button entity definition.
 
@@ -40,6 +41,8 @@ def build_button_entity(
         entity["entity_category"] = entity_category
     if availability:
         entity["availability"] = availability
+    if json_attr_topic:
+        entity["json_attr_t"] = json_attr_topic
     return entity
 
 

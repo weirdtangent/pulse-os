@@ -713,6 +713,18 @@ class KioskMqttListener:
         topic = f"{self.config.topics.telemetry}/latest_version"
         payload = version if version else "unknown"
         self._safe_publish(None, topic, payload, qos=0, retain=True)
+        self._publish_version_metadata()
+
+    def _publish_version_metadata(self) -> None:
+        """Publish combined version info for HA button attributes."""
+        topic = f"{self.config.topics.telemetry}/version_meta"
+        payload = json.dumps(
+            {
+                "installed_version": self.local_version or self.config.sw_version or "unknown",
+                "latest_version": self.latest_remote_version or "unknown",
+            }
+        )
+        self._safe_publish(None, topic, payload, qos=0, retain=True)
 
     def _set_update_availability(self, available: bool, *, force: bool = False) -> None:
         should_publish = force
@@ -916,6 +928,7 @@ class KioskMqttListener:
                 "pl_avail": "online",
                 "pl_not_avail": "offline",
             },
+            json_attr_topic=f"{self.config.topics.telemetry}/version_meta",
         )
 
         volume_control = build_number_entity(
@@ -1023,6 +1036,7 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.brightness)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
+        self._publish_version_metadata()
         # Publish cached latest version if available
         if self.latest_remote_version:
             self._publish_latest_version(self.latest_remote_version)
