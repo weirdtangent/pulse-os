@@ -7,6 +7,27 @@ set -x
 source /opt/pulse-os/pulse.conf
 SAFE_REBOOT="/opt/pulse-os/bin/safe-reboot.sh"
 
+DEFAULT_WATCHDOG_URL="http://homeassistant.local:8123/static/icons/favicon.ico"
+DEFAULT_WATCHDOG_INTERVAL=60
+DEFAULT_WATCHDOG_LIMIT=5
+
+ensure_positive_int() {
+  local value="$1"
+  local fallback="$2"
+  local label="$3"
+
+  if [[ "$value" =~ ^[0-9]+$ ]] && (( value > 0 )); then
+    echo "$value"
+  else
+    echo "$(date) $label invalid ('$value'); using $fallback" >&2
+    echo "$fallback"
+  fi
+}
+
+: "${PULSE_WATCHDOG_URL:=$DEFAULT_WATCHDOG_URL}"
+PULSE_WATCHDOG_INTERVAL="$(ensure_positive_int "${PULSE_WATCHDOG_INTERVAL:-}" "$DEFAULT_WATCHDOG_INTERVAL" "PULSE_WATCHDOG_INTERVAL")"
+PULSE_WATCHDOG_LIMIT="$(ensure_positive_int "${PULSE_WATCHDOG_LIMIT:-}" "$DEFAULT_WATCHDOG_LIMIT" "PULSE_WATCHDOG_LIMIT")"
+
 echo "==== $(date) kiosk start (DISPLAY=${DISPLAY:-unset}) ===="
 
 DEFAULT_URL="https://github.com/weirdTangent/pulse-os"
