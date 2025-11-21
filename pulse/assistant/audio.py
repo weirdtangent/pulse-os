@@ -7,6 +7,7 @@ import contextlib
 import logging
 import os
 import shutil
+import subprocess
 from asyncio.subprocess import Process
 
 from pulse import audio as pulse_audio
@@ -81,6 +82,7 @@ class AplaySink:
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
         player_env, sink = _player_env_with_sink()
+        _warmup_sink(player_env, sink, rate, width, channels)
         player = self._resolve_player()
         try:
             cmd = self._build_command(player, rate, width, channels)
@@ -253,3 +255,38 @@ def _player_env_with_sink() -> tuple[dict[str, str], str | None]:
     if sink:
         env["PULSE_SINK"] = sink
     return env, sink
+
+
+def _warmup_sink(env: dict[str, str], sink: str | None, rate: int, width: int, channels: int) -> None:
+    if not sink:
+        return
+    pw_play = shutil.which("pw-play")
+    if not pw_play:
+        return
+    duration_seconds = 0.1
+    bytes_per_sample = width
+    samples = int(rate * duration_seconds)
+    silence = b"\x00" * samples * bytes_per_sample * channels
+    try:
+        subprocess.run(
+            [
+                pw_play,
+                "--target",
+                sink,
+                "--raw",
+                "--rate",
+                str(rate),
+                "--channels",
+                str(channels),
+                "--format",
+                _pw_format(width) or _paplay_format(width),
+                "-",
+            ],
+            input=silence,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            env=env,
+        )
+    except Exception:
+        pass
