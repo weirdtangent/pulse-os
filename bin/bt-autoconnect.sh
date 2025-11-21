@@ -124,7 +124,7 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
 
   # Play boot sound exactly once per boot, through BT sink
   if [ -f "$BOOT_SOUND" ] && [ ! -e "$FLAG" ]; then
-    aplay -D "$SINK" "$BOOT_SOUND" >/dev/null 2>&1 || true
+    pw-play --target "$SINK" "$BOOT_SOUND" >/dev/null 2>&1 || true
     touch "$FLAG"
   fi
 
@@ -142,7 +142,7 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
     if [ "$time_diff" -ge "$KEEPALIVE_INTERVAL" ]; then
       # Play silent keepalive to prevent speaker from auto-powering off
       # The silent sound keeps the audio connection active
-      aplay -D "$SINK" "$KEEPALIVE_SOUND" >/dev/null 2>&1 || true
+      pw-play --target "$SINK" "$KEEPALIVE_SOUND" >/dev/null 2>&1 || true
       echo "$current_time" > "$LAST_KEEPALIVE" 2>/dev/null || true
     fi
   fi
