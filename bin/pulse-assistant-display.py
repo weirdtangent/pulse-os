@@ -84,6 +84,7 @@ class AssistantDisplay:
         self._ha_base_url = ""
         self._ha_token = ""
         self._ha_ssl_context: ssl.SSLContext | None = None
+        self._now_playing_geometry: str | None = None
         self._init_now_playing(font_size)
 
     def _on_connect(self, client, _userdata, _flags, rc):  # type: ignore[no-untyped-def]
@@ -138,7 +139,10 @@ class AssistantDisplay:
             return
         if text:
             self.now_playing_canvas.itemconfig(self.now_playing_text_id, text=f"Now Playing:\n{text}")
+            if self._now_playing_geometry:
+                self.now_playing_window.geometry(self._now_playing_geometry)
             self.now_playing_window.deiconify()
+            self.now_playing_window.lift()
         else:
             self.now_playing_canvas.itemconfig(self.now_playing_text_id, text="")
             self.now_playing_window.withdraw()
@@ -201,7 +205,9 @@ class AssistantDisplay:
         window_height = max(68, int(font_size * 2.2))
         offset_x = self._screen_width - window_width - 40
         offset_y = self._screen_height - window_height - 40
-        self.now_playing_window.geometry(f"{window_width}x{window_height}+{offset_x}+{offset_y}")
+        geometry = f"{window_width}x{window_height}+{offset_x}+{offset_y}"
+        self._now_playing_geometry = geometry
+        self.now_playing_window.geometry(geometry)
 
         self.now_playing_canvas = tk.Canvas(
             self.now_playing_window,
@@ -212,6 +218,7 @@ class AssistantDisplay:
             highlightthickness=0,
         )
         self.now_playing_canvas.pack(fill=tk.BOTH, expand=True)
+        self._set_transparent_background(accent_color)
         padding = 10
         radius = 18
         self._draw_rounded_rect(
@@ -332,6 +339,14 @@ class AssistantDisplay:
             y1,
         ]
         return canvas.create_polygon(points, smooth=True, splinesteps=32, **kwargs)
+
+    def _set_transparent_background(self, transparent_color: str) -> None:
+        if not self.now_playing_window:
+            return
+        try:
+            self.now_playing_window.attributes("-transparentcolor", transparent_color)
+        except tk.TclError:
+            LOGGER.debug("Window transparency unsupported on this platform; falling back to solid background.")
 
 
 def main() -> None:
