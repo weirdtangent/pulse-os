@@ -248,7 +248,7 @@ Pulse can now appear as a Snapcast player so Music Assistant (or anything that c
    Optional helpers:
 
    - `PULSE_SNAPCLIENT_LATENCY_MS` — hand-tune the local buffer size.
-   - `PULSE_SNAPCLIENT_EXTRA_ARGS` — add any other `snapclient` CLI flags (space separated).
+   - `PULSE_SNAPCLIENT_EXTRA_ARGS` — add extra `snapclient` flags (defaults to `--player pulse` so audio goes through PipeWire/Pulse).
    - `PULSE_SNAPCLIENT_HOST_ID` — override the friendly name (defaults to the hostname).
 
 4. **Run `./setup.sh <location>`** so the new `pulse-snapclient.service` picks up your config. When `PULSE_SNAPCLIENT="true"` the setup script installs `snapclient`, writes `/etc/default/pulse-snapclient`, and enables the service.

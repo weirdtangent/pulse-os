@@ -188,7 +188,8 @@ PULSE_SNAPCLIENT_SOUNDCARD="default"
 # PULSE_SNAPCLIENT_LATENCY_MS — optional snapclient --latency override (milliseconds).
 PULSE_SNAPCLIENT_LATENCY_MS=""
 # PULSE_SNAPCLIENT_EXTRA_ARGS — additional snapclient CLI flags (space-separated).
-PULSE_SNAPCLIENT_EXTRA_ARGS=""
+# Defaults to "--player pulse" so audio routes through PipeWire/Pulse.
+PULSE_SNAPCLIENT_EXTRA_ARGS="--player pulse"
 # PULSE_SNAPCLIENT_HOST_ID — optional friendly name override (defaults to hostname).
 PULSE_SNAPCLIENT_HOST_ID=""
 
