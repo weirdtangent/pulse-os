@@ -81,7 +81,6 @@ class AplaySink:
     async def start(self, rate: int, width: int, channels: int) -> None:
         await self.stop()
         player_env, sink = _player_env_with_sink()
-        _send_wake_tone(player_env, sink)
         player = self._resolve_player()
         try:
             cmd = self._build_command(player, rate, width, channels)
@@ -254,23 +253,3 @@ def _player_env_with_sink() -> tuple[dict[str, str], str | None]:
     if sink:
         env["PULSE_SINK"] = sink
     return env, sink
-
-
-def _send_wake_tone(env: dict[str, str], sink: str | None) -> None:
-    pw_play = shutil.which("pw-play")
-    if not pw_play or not sink:
-        return
-    hiss = os.urandom(1600)  # ~100ms mono s16 at 8kHz
-    try:
-        import subprocess
-
-        subprocess.run(
-            [pw_play, "--raw", "--rate", "8000", "--channels", "1", "--format", "s16", "-"],
-            input=hiss,
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=env,
-        )
-    except Exception:
-        pass
