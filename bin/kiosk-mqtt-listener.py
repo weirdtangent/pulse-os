@@ -75,6 +75,7 @@ class TelemetryDescriptor:
     icon: str | None
     precision: int | None = None
     entity_category: str | None = "diagnostic"
+    expose_sensor: bool = True
 
 
 DEFAULT_VERSION_SOURCE_URL = "https://raw.githubusercontent.com/weirdtangent/pulse-os/main/VERSION"
@@ -161,6 +162,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         device_class=None,
         state_class="measurement",
         icon="mdi:volume-high",
+        expose_sensor=False,
     ),
     TelemetryDescriptor(
         key="brightness",
@@ -169,6 +171,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         device_class=None,
         state_class="measurement",
         icon="mdi:brightness-6",
+        expose_sensor=False,
     ),
     TelemetryDescriptor(
         key="now_playing",
@@ -976,6 +979,8 @@ class KioskMqttListener:
         sanitized_hostname = self._sanitize_hostname_for_entity_id(self.config.hostname)
         components: dict[str, dict[str, Any]] = {}
         for descriptor in TELEMETRY_SENSORS:
+            if not descriptor.expose_sensor:
+                continue
             cmps_entry: dict[str, Any] = {
                 "platform": "sensor",
                 "name": descriptor.name,
