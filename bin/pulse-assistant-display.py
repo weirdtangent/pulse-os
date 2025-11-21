@@ -190,8 +190,8 @@ class AssistantDisplay:
         self.now_playing_window.withdraw()
         self.now_playing_window.overrideredirect(True)
         self.now_playing_window.attributes("-topmost", True)
-        self.now_playing_window.configure(bg="")
-        self.now_playing_window.attributes("-transparentcolor", "")
+        accent_color = "#101820"
+        self.now_playing_window.configure(bg=accent_color)
         window_width = max(360, self._screen_width // 3)
         window_height = max(68, int(font_size * 2.2))
         offset_x = self._screen_width - window_width - 40
@@ -203,7 +203,7 @@ class AssistantDisplay:
             text="",
             font=("Helvetica", max(16, font_size // 2)),
             fg="#FFFFFF",
-            bg="#000000",
+            bg=accent_color,
             justify=tk.RIGHT,
             anchor="e",
         )
