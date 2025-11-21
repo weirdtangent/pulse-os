@@ -1,0 +1,19 @@
+[Unit]
+Description=Pulse Snapcast Client
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pulse
+WorkingDirectory=/opt/pulse-os
+EnvironmentFile=-/etc/default/pulse-snapclient
+ExecStart=/opt/pulse-os/bin/pulse-snapclient.sh
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

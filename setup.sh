@@ -38,6 +38,7 @@ PULSE_REMOTE_LOGGING="${PULSE_REMOTE_LOGGING:-true}"
 PULSE_DAY_NIGHT_AUTO="${PULSE_DAY_NIGHT_AUTO:-${PULSE_BACKLIGHT_SUN:-true}}"
 PULSE_BLUETOOTH_AUTOCONNECT="${PULSE_BLUETOOTH_AUTOCONNECT:-true}"
 PULSE_VOICE_ASSISTANT="${PULSE_VOICE_ASSISTANT:-false}"
+PULSE_SNAPCLIENT="${PULSE_SNAPCLIENT:-false}"
 
 export PULSE_REMOTE_LOG_HOST
 export PULSE_REMOTE_LOG_PORT
@@ -457,6 +458,43 @@ install_voice_assistant_python_deps() {
     fi
 }
 
+ensure_snapclient_package() {
+    if dpkg -s snapclient >/dev/null 2>&1; then
+        return
+    fi
+    log "Installing snapclient…"
+    sudo apt install -y snapclient
+}
+
+configure_snapclient() {
+    local enabled="${PULSE_SNAPCLIENT:-false}"
+    local config_file="/etc/default/pulse-snapclient"
+
+    if [ "$enabled" != "true" ]; then
+        log "Snapcast client disabled; removing config."
+        sudo rm -f "$config_file"
+        return
+    fi
+
+    if [ -z "${PULSE_SNAPCAST_HOST:-}" ]; then
+        log "Snapcast client enabled but PULSE_SNAPCAST_HOST is empty; skipping configuration."
+        return
+    fi
+
+    ensure_snapclient_package
+
+    sudo tee "$config_file" >/dev/null <<EOF
+SNAPCAST_HOST="${PULSE_SNAPCAST_HOST}"
+SNAPCAST_PORT="${PULSE_SNAPCAST_PORT:-1704}"
+SNAPCAST_CONTROL_PORT="${PULSE_SNAPCAST_CONTROL_PORT:-1705}"
+SNAPCLIENT_SOUNDCARD="${PULSE_SNAPCLIENT_SOUNDCARD:-pulse}"
+SNAPCLIENT_LATENCY_MS="${PULSE_SNAPCLIENT_LATENCY_MS:-}"
+SNAPCLIENT_EXTRA_ARGS="${PULSE_SNAPCLIENT_EXTRA_ARGS:-}"
+SNAPCLIENT_HOST_ID="${PULSE_SNAPCLIENT_HOST_ID:-}"
+EOF
+    log "Wrote Snapcast client defaults to $config_file"
+}
+
 setup_user_dirs() {
     log "Ensuring user config dirs…"
     ensure_dir "/home/$PULSE_USER/.config"
@@ -525,6 +563,9 @@ link_system_files() {
 
     sudo ln -sf "$REPO_DIR/config/system/pulse-bt-mute.service" \
         /etc/systemd/system/pulse-bt-mute.service
+
+    sudo ln -sf "$REPO_DIR/config/system/pulse-snapclient.service" \
+        /etc/systemd/system/pulse-snapclient.service
 
     sudo ln -sf "$REPO_DIR/config/system/pulse-backlight.conf" \
         /etc/pulse-backlight.conf
@@ -661,6 +702,14 @@ enable_services() {
         sudo systemctl --global disable pulse-assistant-display.service 2>/dev/null || true
     fi
 
+    if [ "$PULSE_SNAPCLIENT" = "true" ] && [ -n "${PULSE_SNAPCAST_HOST:-}" ]; then
+        log "Enabling Snapcast client..."
+        sudo systemctl enable --now pulse-snapclient.service
+    else
+        log "Snapcast client disabled; stopping service..."
+        sudo systemctl disable --now pulse-snapclient.service 2>/dev/null || true
+    fi
+
     log "Enabling user services (user-global)…"
     # These create symlinks in /etc/systemd/user/
     # The pulse user's per-user systemd instance will load them automatically.
@@ -775,12 +824,15 @@ print_feature_summary() {
     local pulse_version_checks_per_day="${PULSE_VERSION_CHECKS_PER_DAY:-12}"
     local pulse_telemetry_interval_seconds="${PULSE_TELEMETRY_INTERVAL_SECONDS:-15}"
     local pulse_voice_assistant="${PULSE_VOICE_ASSISTANT:-false}"
+    local pulse_snapclient="${PULSE_SNAPCLIENT:-false}"
     local wyoming_whisper_host="${WYOMING_WHISPER_HOST:-<not set>}"
     local wyoming_whisper_port="${WYOMING_WHISPER_PORT:-10300}"
     local wyoming_piper_host="${WYOMING_PIPER_HOST:-<not set>}"
     local wyoming_piper_port="${WYOMING_PIPER_PORT:-10200}"
     local wyoming_openwakeword_host="${WYOMING_OPENWAKEWORD_HOST:-<not set>}"
     local wyoming_openwakeword_port="${WYOMING_OPENWAKEWORD_PORT:-10400}"
+    local pulse_snapcast_host="${PULSE_SNAPCAST_HOST:-}"
+    local pulse_snapcast_port="${PULSE_SNAPCAST_PORT:-1704}"
     local pulse_assistant_provider="${PULSE_ASSISTANT_PROVIDER:-openai}"
     local pulse_assistant_wake_words_pulse="${PULSE_ASSISTANT_WAKE_WORDS_PULSE:-hey_jarvis}"
     local pulse_assistant_wake_words_ha="${PULSE_ASSISTANT_WAKE_WORDS_HA:-}"
@@ -892,6 +944,20 @@ print_feature_summary() {
                 "$pulse_assistant_provider (model: $openai_model)" \
                 "Large language model used for responses"
         fi
+        local snapcast_status
+        if [ "$pulse_snapclient" = "true" ]; then
+            if [ -n "$pulse_snapcast_host" ]; then
+                snapcast_status="enabled (${pulse_snapcast_host}:${pulse_snapcast_port})"
+            else
+                snapcast_status="enabled (host not set)"
+            fi
+        else
+            snapcast_status="disabled"
+        fi
+        kv_block \
+            "Snapcast Client (PULSE_SNAPCLIENT)" \
+            "$snapcast_status" \
+            "Runs snapclient so Music Assistant can stream to Pulse speakers"
         echo "──────────────────────────────"
     )
 
@@ -921,6 +987,7 @@ main() {
     setup_user_dirs
     link_home_files
     link_system_files
+    configure_snapclient
     install_boot_splash
     enable_services
     setup_crontab

@@ -170,6 +170,29 @@ PULSE_ASSISTANT_DISPLAY_SECONDS=8
 PULSE_ASSISTANT_FONT_SIZE=28
 
 # ============================================================================
+# Snapcast Client (optional)
+# ============================================================================
+
+# PULSE_SNAPCLIENT — run snapclient so this Pulse shows up as a Snapcast player.
+PULSE_SNAPCLIENT="false"
+
+# PULSE_SNAPCAST_HOST — hostname/IP of your Snapserver instance.
+PULSE_SNAPCAST_HOST=""
+# PULSE_SNAPCAST_PORT — Snapserver PCM stream port (default 1704).
+PULSE_SNAPCAST_PORT="1704"
+# PULSE_SNAPCAST_CONTROL_PORT — Snapserver control channel port (default 1705).
+PULSE_SNAPCAST_CONTROL_PORT="1705"
+
+# PULSE_SNAPCLIENT_SOUNDCARD — snapclient --soundcard target (pulse, pipewire, hw:0,0, etc.).
+PULSE_SNAPCLIENT_SOUNDCARD="pulse"
+# PULSE_SNAPCLIENT_LATENCY_MS — optional snapclient --latency override (milliseconds).
+PULSE_SNAPCLIENT_LATENCY_MS=""
+# PULSE_SNAPCLIENT_EXTRA_ARGS — additional snapclient CLI flags (space-separated).
+PULSE_SNAPCLIENT_EXTRA_ARGS=""
+# PULSE_SNAPCLIENT_HOST_ID — optional friendly name override (defaults to hostname).
+PULSE_SNAPCLIENT_HOST_ID=""
+
+# ============================================================================
 # Home Assistant Integration (optional)
 # ============================================================================
 

@@ -210,6 +210,53 @@ All preference states are retained so dashboards instantly reflect the last-know
 
 ---
 
+## Snapcast Multiroom Output
+
+Pulse can now appear as a Snapcast player so Music Assistant (or anything that can send audio to Snapserver) can target each kiosk directly.
+
+1. **Run Snapserver** somewhere on your network. The `ivdata/snapserver` image exposes the latest upstream bits and works well in Docker/Compose environments: [ivdata/snapserver](https://hub.docker.com/r/ivdata/snapserver/). A minimal compose file looks like:
+
+   ```yaml
+   version: "3.9"
+   services:
+     snapserver:
+       image: ivdata/snapserver:latest
+       container_name: snapserver
+       network_mode: host            # simplest way to expose ports 1704/1705
+       restart: unless-stopped
+       environment:
+         - SNAPSERVER_STREAMS=pipe:///tmp/snapfifo?name=MusicAssistant
+         - SNAPSERVER_LOGLEVEL=info
+       volumes:
+         - /opt/snapserver/config/snapserver.conf:/etc/snapserver.conf:ro
+         - /opt/snapserver/state:/var/lib/snapserver
+         - /opt/snapserver/tmp:/tmp
+   ```
+
+2. **Point Music Assistant at the new server.** In `Settings → Player Providers → Snapcast`, toggle “Use existing Snapserver” and drop in the IP/port you used above (1705 is the default control port).
+
+3. **Enable the client on each Pulse.** Set the following in `pulse.conf`:
+
+   ```
+   PULSE_SNAPCLIENT="true"
+   PULSE_SNAPCAST_HOST="192.168.1.100"   # Snapserver host
+   PULSE_SNAPCAST_PORT="1704"            # optional, defaults shown
+   PULSE_SNAPCAST_CONTROL_PORT="1705"
+   PULSE_SNAPCLIENT_SOUNDCARD="pulse"    # use 'pulse' (PipeWire) or an ALSA hw target
+   ```
+
+   Optional helpers:
+
+   - `PULSE_SNAPCLIENT_LATENCY_MS` — hand-tune the local buffer size.
+   - `PULSE_SNAPCLIENT_EXTRA_ARGS` — add any other `snapclient` CLI flags (space separated).
+   - `PULSE_SNAPCLIENT_HOST_ID` — override the friendly name (defaults to the hostname).
+
+4. **Run `./setup.sh <location>`** so the new `pulse-snapclient.service` picks up your config. When `PULSE_SNAPCLIENT="true"` the setup script installs `snapclient`, writes `/etc/default/pulse-snapclient`, and enables the service.
+
+Once the service reports in, the Snapcast provider surfaces the Pulse device as a MA player, and Home Assistant creates a `media_player.snapcast_client_*` entity for automations or voice actions.
+
+---
+
 ## Manual Test Checklist
 
 1. **Wake word:** watch `journalctl -u pulse-assistant.service -f` and say “Okay Pulse”. You should see a detection log and an MQTT state message change to `listening`.
