@@ -10,7 +10,6 @@ import os
 import queue
 import ssl
 import threading
-import time
 import tkinter as tk
 import urllib.error
 import urllib.request
@@ -173,9 +172,7 @@ class AssistantDisplay:
             LOGGER.warning("Now-playing overlay disabled: PULSE_DISPLAY_NOW_PLAYING_ENTITY is empty.")
             return
         if not base_url or not token:
-            LOGGER.warning(
-                "Now-playing overlay disabled: HOME_ASSISTANT_BASE_URL or HOME_ASSISTANT_TOKEN is not set."
-            )
+            LOGGER.warning("Now-playing overlay disabled: HOME_ASSISTANT_BASE_URL or HOME_ASSISTANT_TOKEN is not set.")
             return
 
         self._now_playing_active = True
@@ -258,6 +255,7 @@ class AssistantDisplay:
         if title and artist:
             return f"{artist} — {title}"
         return title or artist or ""
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()

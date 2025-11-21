@@ -6,10 +6,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Tuple
 
-ParseResult = Tuple[dict[str, str], dict[str, str], set[str]]
+ParseResult = tuple[dict[str, str], dict[str, str], set[str]]
 ParseFunc = Callable[[Path], ParseResult]
 
 
@@ -97,4 +97,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
