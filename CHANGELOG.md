@@ -1,3 +1,10 @@
+# [0.40.0](https://github.com/weirdtangent/pulse-os/compare/v0.39.2...v0.40.0) (2025-11-21)
+
+
+### Features
+
+* add now-playing overlay with icon ([80ffdfe](https://github.com/weirdtangent/pulse-os/commit/80ffdfea41ed6d6c02b0a026b3477cd5d1f14330))
+
 ## [0.39.2](https://github.com/weirdtangent/pulse-os/compare/v0.39.1...v0.39.2) (2025-11-21)
 
 
