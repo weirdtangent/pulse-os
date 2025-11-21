@@ -1,3 +1,10 @@
+## [0.40.2](https://github.com/weirdtangent/pulse-os/compare/v0.40.1...v0.40.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* update now-playing label to use [playing] prefix ([83ab889](https://github.com/weirdtangent/pulse-os/commit/83ab889b0a38a9230e3e631e56784bd8d31d1d11))
+
 ## [0.40.1](https://github.com/weirdtangent/pulse-os/compare/v0.40.0...v0.40.1) (2025-11-21)
 
 
