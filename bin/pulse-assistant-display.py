@@ -212,12 +212,12 @@ class AssistantDisplay:
     def _now_playing_loop(self) -> None:
         while not self._now_playing_stop.is_set():
             text = ""
-        try:
-            payload = self._fetch_now_playing_state()
-            text = self._format_now_playing(payload)
-            LOGGER.debug("Now-playing metadata: %s", text or "<idle>")
-        except Exception as exc:  # pylint: disable=broad-except
-            LOGGER.warning("Failed to fetch now-playing metadata: %s", exc)
+            try:
+                payload = self._fetch_now_playing_state()
+                text = self._format_now_playing(payload)
+                LOGGER.debug("Now-playing metadata: %s", text or "<idle>")
+            except Exception as exc:  # pylint: disable=broad-except
+                LOGGER.warning("Failed to fetch now-playing metadata: %s", exc)
             if self._now_playing_queue:
                 self._now_playing_queue.put(text)
             if self._now_playing_stop.wait(self._now_playing_interval):
