@@ -9,7 +9,7 @@ SNAPCLIENT_BIN="${SNAPCLIENT_BIN:-/usr/bin/snapclient}"
 if [ ! -x "$SNAPCLIENT_BIN" ]; then
     log "snapclient binary not found at $SNAPCLIENT_BIN"
     exit 1
-}
+fi
 
 SNAPCAST_HOST="${SNAPCAST_HOST:-}"
 if [ -z "$SNAPCAST_HOST" ]; then
