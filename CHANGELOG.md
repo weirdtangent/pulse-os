@@ -1,3 +1,10 @@
+## [0.40.1](https://github.com/weirdtangent/pulse-os/compare/v0.40.0...v0.40.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* have now-playing window use accent color ([ab1d7f1](https://github.com/weirdtangent/pulse-os/commit/ab1d7f1ec9820cdee2c4952942c961f637e918ad))
+
 # [0.40.0](https://github.com/weirdtangent/pulse-os/compare/v0.39.2...v0.40.0) (2025-11-21)
 
 
