@@ -895,10 +895,7 @@ print_feature_summary() {
         echo "──────────────────────────────"
     )
 
-    # Print to stdout (for normal interactive use)
-    echo "$summary_output"
-
-    # Also write to log file and publish to MQTT (for background runs)
+    # Suppress stdout summary to keep setup logs concise
     write_summary_to_log "$summary_output"
     publish_summary_to_mqtt "$summary_output"
 }
