@@ -1,3 +1,10 @@
+## [0.37.1](https://github.com/weirdtangent/pulse-os/compare/v0.37.0...v0.37.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* use pw-play for bt-autoconnect.sh ([2a4eb58](https://github.com/weirdtangent/pulse-os/commit/2a4eb58c56ee4944b7b41ab60785cfc93b2be1d0))
+
 # [0.37.0](https://github.com/weirdtangent/pulse-os/compare/v0.36.3...v0.37.0) (2025-11-21)
 
 
