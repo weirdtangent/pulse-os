@@ -204,8 +204,8 @@ class AssistantDisplay:
             font=("Helvetica", max(16, font_size // 2)),
             fg="#FFFFFF",
             bg=accent_color,
-            justify=tk.RIGHT,
-            anchor="e",
+            justify=tk.LEFT,
+            anchor="w",
         )
         self.now_playing_label.pack(expand=True, fill=tk.BOTH, padx=16, pady=10)
         self.now_playing_label.configure(borderwidth=0, highlightthickness=0)
