@@ -1,3 +1,21 @@
+# [0.39.0](https://github.com/weirdtangent/pulse-os/compare/v0.38.1...v0.39.0) (2025-11-21)
+
+
+### Bug Fixes
+
+* fix indentation in now-playing display ([7498deb](https://github.com/weirdtangent/pulse-os/commit/7498debd41cde95b188b10003803f792ef7e3236))
+* have to fix the setup.sh script too ([1c500e7](https://github.com/weirdtangent/pulse-os/commit/1c500e7b354aab599ec8240ed11ec82c674d2c75))
+* lawfirm of ruff and black ([2457797](https://github.com/weirdtangent/pulse-os/commit/2457797082d3090da7ce722cd5d95433766d9e15))
+* set pulse as default snapclient player ([6ce61e8](https://github.com/weirdtangent/pulse-os/commit/6ce61e81a0b0797ad6c8a21891a7cd7e61209dc8))
+* snapcast should default to default soundcard ([79c13c9](https://github.com/weirdtangent/pulse-os/commit/79c13c90c54cae8789ce78b43b7174d33d5a81d0))
+* update doc and sample config for now-playing display ([6670f89](https://github.com/weirdtangent/pulse-os/commit/6670f894fe62a16660cdca416522ed7937d35674))
+* update now-playing display logic ([3cd60b8](https://github.com/weirdtangent/pulse-os/commit/3cd60b8a34d61367cc381432fd518bb4678fca8a))
+
+
+### Features
+
+* add now-playing metadata support to assistant display ([d7566c9](https://github.com/weirdtangent/pulse-os/commit/d7566c9e081619993f39046ffcfda40dcedcfcf4))
+
 ## [0.38.1](https://github.com/weirdtangent/pulse-os/compare/v0.38.0...v0.38.1) (2025-11-21)
 
 
