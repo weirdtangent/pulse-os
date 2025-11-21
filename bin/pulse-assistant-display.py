@@ -42,13 +42,21 @@ def _int_from_env(value: str | None, fallback: int, minimum: int) -> int:
 
 
 class AssistantDisplay:
-    def __init__(self, mqtt_host: str, mqtt_port: int, topic: str, timeout: int, font_size: int) -> None:
+    def __init__(
+        self,
+        mqtt_host: str,
+        mqtt_port: int,
+        topic: str,
+        timeout: int,
+        font_size: int,
+        client_id: str | None = None,
+    ) -> None:
         self.topic = topic
         self.timeout_ms = max(1000, timeout * 1000)
         self.queue: queue.Queue[str] = queue.Queue()
         self._now_playing_queue: queue.Queue[str] | None = None
         self._hide_job: str | None = None
-        self._client = mqtt.Client(client_id="pulse-assistant-display")
+        self._client = mqtt.Client(client_id=client_id or "pulse-assistant-display")
         username = os.environ.get("MQTT_USERNAME")
         if username:
             self._client.username_pw_set(username, os.environ.get("MQTT_PASSWORD") or "")
@@ -312,7 +320,15 @@ def main() -> None:
     hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
     topic = os.environ.get("PULSE_ASSISTANT_DISPLAY_TOPIC") or f"pulse/{hostname}/assistant/response"
 
-    display = AssistantDisplay(mqtt_host, mqtt_port, topic, timeout=args.timeout, font_size=args.font_size)
+    client_id = f"pulse-assistant-display-{hostname}"
+    display = AssistantDisplay(
+        mqtt_host,
+        mqtt_port,
+        topic,
+        timeout=args.timeout,
+        font_size=args.font_size,
+        client_id=client_id,
+    )
     display.run()
 
 
