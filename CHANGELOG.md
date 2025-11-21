@@ -1,3 +1,35 @@
+# [0.36.0](https://github.com/weirdtangent/pulse-os/compare/v0.35.1...v0.36.0) (2025-11-21)
+
+
+### Bug Fixes
+
+* another try at fixing the audio issue ([3766750](https://github.com/weirdtangent/pulse-os/commit/376675099435391caae4d2ed21b33a6679ca6076))
+* assistant/audio.py: reapply sink volume before every playback ([3656f17](https://github.com/weirdtangent/pulse-os/commit/3656f17f564062f15d743ca5b02f2ada2175b5d7))
+* audio.py: fallback to aplay for unsupported width ([ff50333](https://github.com/weirdtangent/pulse-os/commit/ff50333c01e2b9d01d22de29817286255f5d9281))
+* audio.py: reapply sink volume and send wake hiss ([06cec2a](https://github.com/weirdtangent/pulse-os/commit/06cec2affbb608658b0e3b3c4846a5d1e4b98fb8))
+* dump-config.py: use runpy to load sync-pulse-conf.py ([a415b93](https://github.com/weirdtangent/pulse-os/commit/a415b931dcad22da26f22694b2cf9eee9a8f534b))
+* fix sample config with correct wakeword defaults ([a84bfe1](https://github.com/weirdtangent/pulse-os/commit/a84bfe15a7950041cbcbc50e1daed52f4de7eae4))
+* pulse-assistant-wrapper.sh: set XDG_RUNTIME_DIR if not set ([25edd7f](https://github.com/weirdtangent/pulse-os/commit/25edd7f6f05f2c7318e6c51548a183bdac84b407))
+* setup.sh: add missing pulse user systemd session setup ([9f4c48a](https://github.com/weirdtangent/pulse-os/commit/9f4c48a78e728b04ccfc326b59e5ed29fc0df404))
+* setup.sh: add PULSE_USER to defaults ([ab9f5f4](https://github.com/weirdtangent/pulse-os/commit/ab9f5f482381483780ec98fc02083a7fae4d5f41))
+* strip NEW markers from comments when syncing pulse.conf ([cb674e5](https://github.com/weirdtangent/pulse-os/commit/cb674e56f063aa5ce173ff6ebd1ddcdbc2491255))
+* sync-pulse-conf.py: add legacy replacement for PULSE_ASSISTANT_WAKE_WORDS ([f239368](https://github.com/weirdtangent/pulse-os/commit/f239368056a7590518a0e2785780ab455087777e))
+* sync-pulse-conf.py: strip new markers from default comments ([42c1f4e](https://github.com/weirdtangent/pulse-os/commit/42c1f4e5d9447e43dd11025281ff6ebdc38f6485))
+* verify-conf should be aware of default ENV values ([d0c43c8](https://github.com/weirdtangent/pulse-os/commit/d0c43c8aaf999071c10ed5ec547cfef9118795c3))
+* well, try to fix, flakey BT audio playback ([ce2def2](https://github.com/weirdtangent/pulse-os/commit/ce2def29242116518a7fec5fc6a8f8ee722b7fde))
+
+
+### Features
+
+* add assist pipeline check to verify-conf.py ([e993382](https://github.com/weirdtangent/pulse-os/commit/e99338240f05df1bf1b524e8cef2a3679881c9c1))
+* add dump-config.py to print only non-default values from pulse.conf ([1dd1985](https://github.com/weirdtangent/pulse-os/commit/1dd19858d5273d5c0ed9d4f332a559acaf8545da))
+* trying this again - add dump-config.py to dump config overrides ([a5cdbbb](https://github.com/weirdtangent/pulse-os/commit/a5cdbbbd2963eb2d35acf1c2b1820a9c580cd72e))
+
+
+### Reverts
+
+* revert pulse audio volume nudge and wake hiss ([b7d0358](https://github.com/weirdtangent/pulse-os/commit/b7d03587e166977680aa59bbef6d351d3f939453))
+
 ## [0.35.1](https://github.com/weirdtangent/pulse-os/compare/v0.35.0...v0.35.1) (2025-11-20)
 
 
