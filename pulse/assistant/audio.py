@@ -11,6 +11,7 @@ from asyncio.subprocess import Process
 
 from pulse import audio as pulse_audio
 
+
 class ArecordStream:
     """Capture PCM audio by shelling out to ``arecord`` (ALSA)."""
 
@@ -131,7 +132,7 @@ class AplaySink:
             return ""
         try:
             data = await asyncio.wait_for(self._proc.stderr.read(), timeout=0.05)
-        except (asyncio.TimeoutError, RuntimeError):
+        except (TimeoutError, RuntimeError):
             return ""
         return data.decode("utf-8", errors="ignore").strip()
 
@@ -252,5 +253,3 @@ def _player_env_with_sink() -> tuple[dict[str, str], str | None]:
     if sink:
         env["PULSE_SINK"] = sink
     return env, sink
-
-

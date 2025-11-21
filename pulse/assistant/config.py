@@ -70,9 +70,7 @@ def _parse_wake_route_string(value: str | None) -> dict[str, str]:
 def _parse_wake_profiles(source: dict[str, str]) -> tuple[list[str], dict[str, str]]:
     routes: dict[str, str] = {}
 
-    pulse_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE")) or [
-        DEFAULT_WAKE_MODEL
-    ]
+    pulse_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE")) or [DEFAULT_WAKE_MODEL]
 
     ha_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_HA"))
     manual_routes = _parse_wake_route_string(source.get("PULSE_ASSISTANT_WAKE_ROUTES"))
