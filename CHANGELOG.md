@@ -1,3 +1,10 @@
+# [0.37.0](https://github.com/weirdtangent/pulse-os/compare/v0.36.3...v0.37.0) (2025-11-21)
+
+
+### Features
+
+* add persistent system journal configuration ([3189e40](https://github.com/weirdtangent/pulse-os/commit/3189e4061eba8d678d7429adf5416d6cc83c55a8))
+
 ## [0.36.3](https://github.com/weirdtangent/pulse-os/compare/v0.36.2...v0.36.3) (2025-11-21)
 
 ## [0.36.2](https://github.com/weirdtangent/pulse-os/compare/v0.36.1...v0.36.2) (2025-11-21)
