@@ -1,3 +1,10 @@
+## [0.41.2](https://github.com/weirdtangent/pulse-os/compare/v0.41.1...v0.41.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* fix MQTT success check for Paho MQTT client v2 ([32de6ff](https://github.com/weirdtangent/pulse-os/commit/32de6ff64f30968a4bbe3db2b8be67beaa7e0d2a))
+
 ## [0.41.1](https://github.com/weirdtangent/pulse-os/compare/v0.41.0...v0.41.1) (2025-11-21)
 
 # [0.41.0](https://github.com/weirdtangent/pulse-os/compare/v0.40.8...v0.41.0) (2025-11-21)
