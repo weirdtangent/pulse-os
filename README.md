@@ -6,8 +6,8 @@
 
 ### Raspberry Pi 5 + Pi 7" Touch Display 2
 
-A lightweight Raspberry Pi–based kiosk OS for Home Assistant dashboards and voice attendant.
-Includes auto-repair watchdog, backlight control, Bluetooth audio support, remote logging, mqtt support, and a simple pulse.conf config system for each device.
+A lightweight Raspberry Pi–based kiosk OS for Home Assistant dashboards. Includes auto-repair watchdog, backlight
+control, Snapcast audio support, remote logging, mqtt support, and a simple pulse.conf config system for each device.
 
 ---
 
