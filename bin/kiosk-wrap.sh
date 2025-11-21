@@ -68,7 +68,16 @@ append_pulse_host_param() {
   printf '%s' "$url"
 }
 
-URL="$(append_pulse_host_param "$URL" "${PULSE_HOSTNAME:-}")"
+HOSTNAME_FALLBACK="${PULSE_HOSTNAME:-}"
+if [[ -z "$HOSTNAME_FALLBACK" ]]; then
+  if command -v hostname >/dev/null 2>&1; then
+    HOSTNAME_FALLBACK="$(hostname -s 2>/dev/null || hostname)"
+  fi
+  # Final guard: empty string if hostname command failed
+  HOSTNAME_FALLBACK="${HOSTNAME_FALLBACK:-}"
+fi
+
+URL="$(append_pulse_host_param "$URL" "$HOSTNAME_FALLBACK")"
 
 # Isolate Chromium temp files away from /tmp (tmpfs)
 export TMPDIR="$HOME/.cache/chromium-tmp"
