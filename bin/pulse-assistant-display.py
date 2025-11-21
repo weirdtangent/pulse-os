@@ -131,11 +131,7 @@ class AssistantDisplay:
             self.root.after(200, self._poll_now_playing_queue)
 
     def _update_now_playing_label(self, text: str) -> None:
-        if (
-            not self.now_playing_window
-            or not self.now_playing_canvas
-            or self.now_playing_text_id is None
-        ):
+        if not self.now_playing_window or not self.now_playing_canvas or self.now_playing_text_id is None:
             return
         if text:
             self.now_playing_canvas.itemconfig(self.now_playing_text_id, text=f"Now Playing:\n{text}")
