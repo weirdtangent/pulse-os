@@ -1,3 +1,10 @@
+## [0.40.4](https://github.com/weirdtangent/pulse-os/compare/v0.40.3...v0.40.4) (2025-11-21)
+
+
+### Bug Fixes
+
+* align now-playing label to the left ([439aecc](https://github.com/weirdtangent/pulse-os/commit/439aecc2ae95554a0e5cb8267e222c43844ffca6))
+
 ## [0.40.3](https://github.com/weirdtangent/pulse-os/compare/v0.40.2...v0.40.3) (2025-11-21)
 
 
