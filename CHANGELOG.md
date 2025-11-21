@@ -1,3 +1,10 @@
+## [0.39.2](https://github.com/weirdtangent/pulse-os/compare/v0.39.1...v0.39.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* fix now-playing display placement ([31046ff](https://github.com/weirdtangent/pulse-os/commit/31046ffa8f15bb843093d8ed0bf81d81dfe3e8e5))
+
 ## [0.39.1](https://github.com/weirdtangent/pulse-os/compare/v0.39.0...v0.39.1) (2025-11-21)
 
 
