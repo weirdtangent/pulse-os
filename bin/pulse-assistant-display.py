@@ -75,7 +75,8 @@ class AssistantDisplay:
         self.root.after(250, self._poll_queue)
 
         self.now_playing_window: tk.Toplevel | None = None
-        self.now_playing_label: tk.Label | None = None
+        self.now_playing_canvas: tk.Canvas | None = None
+        self.now_playing_text_id: int | None = None
         self._now_playing_stop = threading.Event()
         self._now_playing_active = False
         self._now_playing_interval = 5
@@ -129,13 +130,17 @@ class AssistantDisplay:
             self.root.after(200, self._poll_now_playing_queue)
 
     def _update_now_playing_label(self, text: str) -> None:
-        if not self.now_playing_label or not self.now_playing_window:
+        if (
+            not self.now_playing_window
+            or not self.now_playing_canvas
+            or self.now_playing_text_id is None
+        ):
             return
         if text:
-            self.now_playing_label.config(text=f"Now Playing:\n{text}")
+            self.now_playing_canvas.itemconfig(self.now_playing_text_id, text=f"Now Playing:\n{text}")
             self.now_playing_window.deiconify()
         else:
-            self.now_playing_label.config(text="")
+            self.now_playing_canvas.itemconfig(self.now_playing_text_id, text="")
             self.now_playing_window.withdraw()
 
     def _show_text(self, text: str) -> None:
@@ -198,17 +203,36 @@ class AssistantDisplay:
         offset_y = self._screen_height - window_height - 40
         self.now_playing_window.geometry(f"{window_width}x{window_height}+{offset_x}+{offset_y}")
 
-        self.now_playing_label = tk.Label(
+        self.now_playing_canvas = tk.Canvas(
             self.now_playing_window,
+            width=window_width,
+            height=window_height,
+            bg=accent_color,
+            bd=0,
+            highlightthickness=0,
+        )
+        self.now_playing_canvas.pack(fill=tk.BOTH, expand=True)
+        padding = 10
+        radius = 18
+        self._draw_rounded_rect(
+            self.now_playing_canvas,
+            padding,
+            padding,
+            window_width - padding,
+            window_height - padding,
+            radius,
+            fill="#1C1C1C",
+            outline="",
+        )
+        self.now_playing_text_id = self.now_playing_canvas.create_text(
+            padding * 2,
+            window_height / 2,
             text="",
             font=("Helvetica", max(16, font_size // 2)),
-            fg="#FFFFFF",
-            bg=accent_color,
-            justify=tk.LEFT,
+            fill="#FFFFFF",
             anchor="w",
+            justify=tk.LEFT,
         )
-        self.now_playing_label.pack(expand=True, fill=tk.BOTH, padx=16, pady=10)
-        self.now_playing_label.configure(borderwidth=0, highlightthickness=0)
 
         self._now_playing_queue = queue.Queue()
         self.root.after(500, self._poll_now_playing_queue)
@@ -269,6 +293,45 @@ class AssistantDisplay:
         if title and artist:
             return f"{artist} — {title}"
         return title or artist or ""
+
+    @staticmethod
+    def _draw_rounded_rect(
+        canvas: tk.Canvas,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        radius: float,
+        **kwargs,
+    ) -> int:
+        radius = max(0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
+        points = [
+            x1 + radius,
+            y1,
+            x2 - radius,
+            y1,
+            x2,
+            y1,
+            x2,
+            y1 + radius,
+            x2,
+            y2 - radius,
+            x2,
+            y2,
+            x2 - radius,
+            y2,
+            x1 + radius,
+            y2,
+            x1,
+            y2,
+            x1,
+            y2 - radius,
+            x1,
+            y1 + radius,
+            x1,
+            y1,
+        ]
+        return canvas.create_polygon(points, smooth=True, splinesteps=32, **kwargs)
 
 
 def main() -> None:
