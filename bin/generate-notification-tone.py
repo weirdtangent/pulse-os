@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the bundled double "thump-thump" volume feedback sample."""
+"""Generate the bundled notification tone used for volume/wake cues."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
         "-o",
         "--output",
         type=Path,
-        default=REPO_ROOT / "assets" / "pulse-volume-thump.wav",
+        default=REPO_ROOT / "assets" / "notification.wav",
         help="Destination path for the generated WAV file",
     )
     return parser.parse_args()
@@ -34,7 +34,7 @@ def main() -> None:
     audio = _load_audio()
     args = parse_args()
     output_path = args.output.expanduser().resolve()
-    result = audio.render_thump_sample(output_path)
+    result = audio.render_notification_sample(output_path)
     if not result:
         print(f"Failed to write sample to {output_path}", file=sys.stderr)
         sys.exit(1)

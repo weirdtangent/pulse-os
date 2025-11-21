@@ -11,20 +11,13 @@ import wave
 from pathlib import Path
 
 _LOGGER = logging.getLogger("pulse.audio")
-_THUMP_FILENAME = "pulse-volume-thump.wav"
-_THUMP_SAMPLE_RATE = 48_000
-_THUMP_FREQUENCY_HZ = 140
-_THUMP_MAX_AMPLITUDE = 28_000
-_THUMP_DECAY_RATE = 3.0
-_FIRST_THUMP_DURATION_SECONDS = 0.12
-_SECOND_THUMP_DURATION_SECONDS = 0.12
-_THUMP_GAP_SECONDS = 0.08
-_SECOND_THUMP_GAIN = 0.8
-_THUMP_SEQUENCE = (
-    ("pulse", _FIRST_THUMP_DURATION_SECONDS, 1.0),
-    ("gap", _THUMP_GAP_SECONDS, None),
-    ("pulse", _SECOND_THUMP_DURATION_SECONDS, _SECOND_THUMP_GAIN),
-)
+_NOTIFICATION_FILENAME = "notification.wav"
+_NOTIFICATION_SAMPLE_RATE = 48_000
+_NOTIFICATION_FREQUENCY_HZ = 720
+_NOTIFICATION_MAX_AMPLITUDE = 30_000
+_NOTIFICATION_DURATION_SECONDS = 0.22
+_NOTIFICATION_DECAY_RATE = 4.5
+_NOTIFICATION_FADE_IN_SECONDS = 0.01
 
 
 def _runtime_env() -> dict[str, str]:
@@ -48,61 +41,52 @@ def _run_pactl(args: list[str]) -> subprocess.CompletedProcess[str] | None:
         return None
 
 
-def _thump_sample_path() -> Path:
+def _notification_sample_path() -> Path:
     runtime_dir = Path(_runtime_env()["XDG_RUNTIME_DIR"])
-    return runtime_dir / _THUMP_FILENAME
+    return runtime_dir / _NOTIFICATION_FILENAME
 
 
-def _bundled_thump_sample() -> Path | None:
-    candidate = Path(__file__).resolve().parent.parent / "assets" / _THUMP_FILENAME
+def _bundled_notification_sample() -> Path | None:
+    candidate = Path(__file__).resolve().parent.parent / "assets" / _NOTIFICATION_FILENAME
     if candidate.exists():
         return candidate
     return None
 
 
-def render_thump_sample(destination: Path) -> Path | None:
-    """Render the double thump sample to the provided path."""
+def render_notification_sample(destination: Path) -> Path | None:
+    """Render the default notification tone to the provided path."""
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         with wave.open(str(destination), "wb") as wav_file:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
-            wav_file.setframerate(_THUMP_SAMPLE_RATE)
-            _write_double_thump(wav_file)
+            wav_file.setframerate(_NOTIFICATION_SAMPLE_RATE)
+            _write_notification_beep(wav_file)
         return destination
     except OSError as exc:
         _LOGGER.debug("Unable to create thump sample at %s: %s", destination, exc)
         return None
 
 
-def _write_double_thump(wav_file: wave.Wave_write) -> None:
-    for kind, duration, gain in _THUMP_SEQUENCE:
-        if kind == "gap":
-            _write_silence(wav_file, duration)
-        else:
-            assert gain is not None
-            _write_pulse(wav_file, duration, gain)
-
-
-def _write_silence(wav_file: wave.Wave_write, duration_seconds: float) -> None:
-    samples = int(_THUMP_SAMPLE_RATE * duration_seconds)
-    wav_file.writeframes(b"\x00\x00" * samples)
-
-
-def _write_pulse(wav_file: wave.Wave_write, duration_seconds: float, gain: float) -> None:
-    samples = max(1, int(_THUMP_SAMPLE_RATE * duration_seconds))
+def _write_notification_beep(wav_file: wave.Wave_write) -> None:
+    samples = max(1, int(_NOTIFICATION_SAMPLE_RATE * _NOTIFICATION_DURATION_SECONDS))
+    fade_in_samples = max(1, int(_NOTIFICATION_SAMPLE_RATE * _NOTIFICATION_FADE_IN_SECONDS))
     for i in range(samples):
-        envelope = math.exp(-_THUMP_DECAY_RATE * i / samples)
-        angle = 2 * math.pi * _THUMP_FREQUENCY_HZ * i / _THUMP_SAMPLE_RATE
-        value = int(gain * envelope * _THUMP_MAX_AMPLITUDE * math.sin(angle))
+        t = i / _NOTIFICATION_SAMPLE_RATE
+        decay = math.exp(-_NOTIFICATION_DECAY_RATE * t / _NOTIFICATION_DURATION_SECONDS)
+        fade_in = min(1.0, i / fade_in_samples)
+        angle = 2 * math.pi * _NOTIFICATION_FREQUENCY_HZ * t
+        value = int(
+            fade_in * decay * _NOTIFICATION_MAX_AMPLITUDE * math.sin(angle)
+        )
         wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
 
 
-def _ensure_thump_sample() -> Path | None:
-    path = _thump_sample_path()
+def _ensure_notification_sample() -> Path | None:
+    path = _notification_sample_path()
     if path.exists():
         return path
-    bundled = _bundled_thump_sample()
+    bundled = _bundled_notification_sample()
     if bundled:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,7 +95,7 @@ def _ensure_thump_sample() -> Path | None:
         except OSError as exc:
             _LOGGER.debug("Unable to copy bundled thump sample: %s", exc)
             return bundled
-    return render_thump_sample(path)
+    return render_notification_sample(path)
 
 
 def find_audio_sink() -> str | None:
@@ -231,7 +215,7 @@ def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = F
 
 def play_volume_feedback() -> None:
     """Play a short confirmation thump after adjusting volume."""
-    sample = _ensure_thump_sample()
+    sample = _ensure_notification_sample()
     if not sample:
         return
     player = None

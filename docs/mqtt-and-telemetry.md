@@ -37,7 +37,7 @@ Home Assistant also discovers two `number` entities published by the same servic
 - `Audio Volume` → topic `pulse/<hostname>/audio/volume/set`
 - `Screen Brightness` → topic `pulse/<hostname>/display/brightness/set`
 
-Both sliders write a retained telemetry value so dashboards stay in sync. The volume slider automatically plays a short heartbeat-style "thump-thump" after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/pulse-volume-thump.wav`—run `bin/generate-volume-thump.py` if you ever want to regenerate or remix it.
+Both sliders write a retained telemetry value so dashboards stay in sync. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/notification.wav`—run `bin/generate-notification-tone.py` if you ever want to regenerate or remix it.
 
 ---
 
