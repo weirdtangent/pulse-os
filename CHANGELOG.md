@@ -1,3 +1,10 @@
+## [0.41.3](https://github.com/weirdtangent/pulse-os/compare/v0.41.2...v0.41.3) (2025-11-21)
+
+
+### Bug Fixes
+
+* correct MQTT entity IDs for volume and brightness controls ([e8fbe65](https://github.com/weirdtangent/pulse-os/commit/e8fbe65a5492acaf5ece0f87a48651f14f872bb1))
+
 ## [0.41.2](https://github.com/weirdtangent/pulse-os/compare/v0.41.1...v0.41.2) (2025-11-21)
 
 
