@@ -55,10 +55,12 @@ At ~15‑second intervals (configurable), each kiosk publishes retained MQTT sen
 | `sensor.pulse_load_avg_1m` / `_5m` / `_15m` | Standard Linux load averages. |
 | `sensor.pulse_volume` | Current audio volume (%). |
 | `sensor.pulse_brightness` | Current screen brightness (%). |
+| `sensor.pulse_now_playing` | Friendly “Artist — Title” text mirrored from the kiosk’s configured `media_player`. |
 
 - Sensors automatically expire if the kiosk stops reporting (HA shows them unavailable).
 - Tune the cadence with `PULSE_TELEMETRY_INTERVAL_SECONDS` (minimum 5 s) in `pulse.conf`.
 - Because the messages are retained, dashboards continue to show the last value even if HA restarts.
+- The Now Playing sensor is enabled when you set `HOME_ASSISTANT_BASE_URL`, `HOME_ASSISTANT_TOKEN`, and (optionally) `PULSE_MEDIA_PLAYER_ENTITY`. Leave the entity blank to default to `media_player.snapcast_client_<hostname>` or point it at any Music Assistant / Sonos / custom sensor entity you prefer.
 
 Use these metrics to build health dashboards, automations (e.g., alert when CPU temp > 80 °C), or long-term statistics in the recorder of your choice.
 

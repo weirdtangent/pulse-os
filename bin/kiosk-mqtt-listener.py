@@ -3,6 +3,7 @@ import atexit
 import json
 import os
 import socket
+import ssl
 import subprocess
 import threading
 import time
@@ -58,6 +59,10 @@ class EnvConfig:
     version_checks_per_day: int
     telemetry_interval_seconds: int
     volume_feedback_enabled: bool
+    media_player_entity: str | None
+    ha_base_url: str
+    ha_token: str
+    ha_verify_ssl: bool
 
 
 @dataclass(frozen=True)
@@ -69,6 +74,7 @@ class TelemetryDescriptor:
     state_class: str | None
     icon: str | None
     precision: int | None = None
+    entity_category: str | None = "diagnostic"
 
 
 DEFAULT_VERSION_SOURCE_URL = "https://raw.githubusercontent.com/weirdtangent/pulse-os/main/VERSION"
@@ -164,6 +170,16 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         state_class="measurement",
         icon="mdi:brightness-6",
     ),
+    TelemetryDescriptor(
+        key="now_playing",
+        name="Now Playing",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        icon="mdi:music-note",
+        precision=None,
+        entity_category=None,
+    ),
 ]
 
 
@@ -180,8 +196,8 @@ def log(message: str) -> None:
 def load_config() -> EnvConfig:
     mqtt_host = os.environ.get("MQTT_HOST", "localhost")
     mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
-    pulse_url = os.environ.get("PULSE_URL", "")
     hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
+    pulse_url = _ensure_pulse_host_param(os.environ.get("PULSE_URL", ""), hostname)
     friendly_name = os.environ.get("PULSE_NAME") or hostname.replace("-", " ").title()
     manufacturer = os.environ.get("PULSE_MANUFACTURER", "Pulse")
     model = os.environ.get("PULSE_MODEL", "Pulse Kiosk")
@@ -223,6 +239,17 @@ def load_config() -> EnvConfig:
 
     volume_feedback_enabled = _as_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"), default=True)
 
+    media_player_entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
+    if not media_player_entity:
+        sanitized = hostname.lower().replace("-", "_").replace(".", "_")
+        media_player_entity = f"media_player.snapcast_client_{sanitized}"
+
+    ha_base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
+    ha_token = (os.environ.get("HOME_ASSISTANT_TOKEN") or "").strip()
+    ha_verify_ssl = _as_bool(os.environ.get("HOME_ASSISTANT_VERIFY_SSL"), default=True)
+    if not ha_base_url or not ha_token:
+        media_player_entity = None
+
     return EnvConfig(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
@@ -238,6 +265,10 @@ def load_config() -> EnvConfig:
         version_checks_per_day=version_checks_per_day,
         telemetry_interval_seconds=telemetry_interval_seconds,
         volume_feedback_enabled=volume_feedback_enabled,
+        media_player_entity=media_player_entity,
+        ha_base_url=ha_base_url,
+        ha_token=ha_token,
+        ha_verify_ssl=ha_verify_ssl,
     )
 
 
@@ -278,6 +309,18 @@ def detect_mac_address() -> str | None:
     if (node >> 40) % 2:
         return None
     return ":".join(f"{(node >> ele) & 0xFF:02X}" for ele in range(40, -1, -8))
+
+
+def _ensure_pulse_host_param(url: str, hostname: str | None) -> str:
+    if not url or not hostname:
+        return url
+    parsed = urllib.parse.urlparse(url)
+    query_items = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    if any(key == "pulse_host" for key, _ in query_items):
+        return url
+    query_items.append(("pulse_host", hostname))
+    new_query = urllib.parse.urlencode(query_items)
+    return urllib.parse.urlunparse(parsed._replace(query=new_query))
 
 
 def build_device_info(config: EnvConfig) -> dict[str, Any]:
@@ -345,6 +388,8 @@ class KioskMqttListener:
         self._telemetry_lock = threading.Lock()
         self._telemetry_thread: threading.Thread | None = None
         self._telemetry_stop_event = threading.Event()
+        self._ha_ssl_context = self._build_ha_ssl_context()
+        self._last_now_playing_error: float = 0.0
 
     def log(self, message: str) -> None:
         log(message)
@@ -400,8 +445,8 @@ class KioskMqttListener:
             if self._telemetry_stop_event.wait(interval):
                 break
 
-    def _collect_telemetry_metrics(self) -> dict[str, int | float]:
-        metrics: dict[str, int | float] = {}
+    def _collect_telemetry_metrics(self) -> dict[str, int | float | str]:
+        metrics: dict[str, int | float | str] = {}
         now = time.time()
         uptime_seconds = max(0, int(now - psutil.boot_time()))
         metrics["uptime_seconds"] = uptime_seconds
@@ -434,6 +479,9 @@ class KioskMqttListener:
         if brightness is not None:
             metrics["brightness"] = brightness
 
+        now_playing = self._collect_now_playing_text()
+        metrics["now_playing"] = now_playing
+
         return metrics
 
     def _get_current_volume(self) -> int | None:
@@ -443,6 +491,107 @@ class KioskMqttListener:
     def _get_current_brightness(self) -> int | None:
         """Get current screen brightness percentage."""
         return display.get_current_brightness()
+
+    def _collect_now_playing_text(self) -> str:
+        if (
+            not self.config.media_player_entity
+            or not self.config.ha_base_url
+            or not self.config.ha_token
+        ):
+            return ""
+        payload = self._fetch_media_player_state()
+        if payload is None:
+            return ""
+        return self._format_now_playing(payload)
+
+    def _build_ha_ssl_context(self) -> ssl.SSLContext | None:
+        base_url = self.config.ha_base_url.lower()
+        if not base_url.startswith("https"):
+            return None
+        if self.config.ha_verify_ssl:
+            return ssl.create_default_context()
+        return ssl._create_unverified_context()
+
+    def _fetch_media_player_state(self) -> dict[str, Any] | None:
+        entity = self.config.media_player_entity
+        if not entity:
+            return None
+        url = f"{self.config.ha_base_url.rstrip('/')}/api/states/{entity}"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {self.config.ha_token}",
+                "Accept": "application/json",
+            },
+        )
+        open_kwargs: dict[str, Any] = {"timeout": 6}
+        if self._ha_ssl_context is not None:
+            open_kwargs["context"] = self._ha_ssl_context
+        try:
+            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]
+                data = response.read()
+        except urllib.error.HTTPError as exc:
+            self._log_now_playing_error(f"now-playing: HA returned {exc.code} for {entity}: {exc.reason}")
+            return None
+        except urllib.error.URLError as exc:
+            self._log_now_playing_error(f"now-playing: HA connection error: {exc}")
+            return None
+        except Exception as exc:  # pylint: disable=broad-except
+            self._log_now_playing_error(f"now-playing: unexpected error: {exc}")
+            return None
+        try:
+            return json.loads(data.decode("utf-8"))
+        except json.JSONDecodeError:
+            self._log_now_playing_error("now-playing: invalid JSON response from HA")
+            return None
+
+    def _log_now_playing_error(self, message: str) -> None:
+        now = time.monotonic()
+        if now - self._last_now_playing_error < 60:
+            return
+        self._last_now_playing_error = now
+        self.log(message)
+
+    @staticmethod
+    def _format_now_playing(payload: dict[str, Any] | None) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        state = str(payload.get("state") or "").lower()
+        entity_id = str(payload.get("entity_id") or "")
+        attributes = payload.get("attributes") or {}
+
+        def normalize(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value.strip()
+            return str(value).strip()
+
+        if entity_id.startswith("sensor."):
+            clean_state = normalize(payload.get("state"))
+            if clean_state and clean_state not in {"unknown", "unavailable"}:
+                return clean_state
+            return ""
+
+        if state not in {"playing", "on", "buffering", "paused"}:
+            return ""
+
+        title = (
+            normalize(attributes.get("media_title"))
+            or normalize(attributes.get("media_episode_title"))
+            or normalize(attributes.get("media_album_name"))
+            or normalize(attributes.get("media_content_id"))
+        )
+        artist = (
+            normalize(attributes.get("media_artist"))
+            or normalize(attributes.get("media_album_artist"))
+            or normalize(attributes.get("media_series_title"))
+            or normalize(attributes.get("app_name"))
+        )
+
+        if title and artist:
+            return f"{artist} — {title}"
+        return title or artist or ""
 
     @staticmethod
     def _read_cpu_temperature() -> float | None:
@@ -485,11 +634,11 @@ class KioskMqttListener:
             self._safe_publish(None, topic, payload, qos=0, retain=True)
 
     @staticmethod
-    def _format_metric_value(value: int | float, precision: int | None) -> str:
-        if precision is None:
-            return str(value)
-        format_str = f"{{:.{precision}f}}"
-        return format_str.format(value)
+    def _format_metric_value(value: int | float | str, precision: int | None) -> str:
+        if isinstance(value, (int, float)) and precision is not None:
+            format_str = f"{{:.{precision}f}}"
+            return format_str.format(value)
+        return str(value)
 
     @staticmethod
     def _calculate_update_interval_seconds(checks_per_day: int) -> float:
@@ -815,9 +964,10 @@ class KioskMqttListener:
                 "default_entity_id": f"sensor.{sanitized_hostname}_{descriptor.key}",
                 "unique_id": f"{self.config.hostname}_{descriptor.key}",
                 "stat_t": f"{base_topic}/{descriptor.key}",
-                "entity_category": "diagnostic",
                 "expire_after": expire_after,
             }
+            if descriptor.entity_category:
+                cmps_entry["entity_category"] = descriptor.entity_category
             if descriptor.unit:
                 cmps_entry["unit_of_meas"] = descriptor.unit
             if descriptor.device_class:

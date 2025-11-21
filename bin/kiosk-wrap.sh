@@ -43,6 +43,33 @@ echo "==== $(date) kiosk start (DISPLAY=${DISPLAY:-unset}) ===="
 DEFAULT_URL="https://github.com/weirdTangent/pulse-os"
 URL="${PULSE_URL:-$DEFAULT_URL}"
 
+append_pulse_host_param() {
+  local url="$1"
+  local host="$2"
+  if [[ -z "$url" || -z "$host" ]]; then
+    printf '%s' "$url"
+    return
+  fi
+  if [[ "$url" == *"?pulse_host="* || "$url" == *"&pulse_host="* ]]; then
+    printf '%s' "$url"
+    return
+  fi
+  local fragment=""
+  if [[ "$url" == *"#"* ]]; then
+    fragment="${url#*#}"
+    url="${url%%#*}"
+  fi
+  local sep='?'
+  [[ "$url" == *\?* ]] && sep='&'
+  url="${url}${sep}pulse_host=${host}"
+  if [[ -n "$fragment" ]]; then
+    url="${url}#${fragment}"
+  fi
+  printf '%s' "$url"
+}
+
+URL="$(append_pulse_host_param "$URL" "${PULSE_HOSTNAME:-}")"
+
 # Isolate Chromium temp files away from /tmp (tmpfs)
 export TMPDIR="$HOME/.cache/chromium-tmp"
 mkdir -p "$TMPDIR"
