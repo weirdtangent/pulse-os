@@ -79,48 +79,9 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
   # Make it default sink
   pactl set-default-sink "$SINK" >/dev/null 2>&1 || true
 
-  # Restore volume after connection (muted during shutdown to avoid "Disconnected" announcement)
-  # Keep volume at 0 for an extended period to avoid "Connected" announcement
-  # The speaker may wait for volume to be set before announcing, or announce late
-  VOLUME_RESTORED_FLAG="/run/user/$(id -u)/pulse-bt-volume-restored"
-  if [ ! -e "$VOLUME_RESTORED_FLAG" ]; then
-    # Ensure volume starts at 0 on boot (in case speaker remembers last volume)
-    # This prevents "Connected" announcement from being audible
-    pactl set-sink-volume "$SINK" 0% >/dev/null 2>&1 || true
-    pactl set-sink-mute "$SINK" 1 >/dev/null 2>&1 || true
-    # Start volume restoration in background to avoid blocking autoconnect script
-    (
-      # Wait a reasonable amount of time before restoring volume
-      # Some speakers may have volume-controlled announcements, so we keep it muted briefly
-      # Wait up to 30 seconds, checking every 5 seconds if X is up
-      # Once X is up, wait an additional 10 seconds before restoring volume
-      X_UP=false
-      i=0
-      while [ $i -lt 6 ]; do
-        sleep 5
-        i=$((i + 1))
-        if [ -n "${DISPLAY:-}" ] || [ -S "/tmp/.X11-unix/X0" ] 2>/dev/null; then
-          X_UP=true
-          break
-        fi
-      done
-      
-      # If X is up, wait additional 10 seconds. If not, wait anyway (max 30 seconds total)
-      if [ "$X_UP" = true ]; then
-        sleep 10  # Additional 10 seconds after X is detected
-      else
-        # X not detected, wait a bit more anyway
-        sleep 5
-      fi
-      
-      # Restore to 50% volume and unmute (adjust volume as needed)
-      if pactl list sinks short 2>/dev/null | grep -q "$SINK"; then
-        pactl set-sink-mute "$SINK" 0 >/dev/null 2>&1 || true
-        pactl set-sink-volume "$SINK" 50% >/dev/null 2>&1 || true
-      fi
-      touch "$VOLUME_RESTORED_FLAG"
-    ) &
-  fi
+  DEFAULT_VOL="${PULSE_BT_DEFAULT_VOLUME:-50}"
+  pactl set-sink-mute "$SINK" 0 >/dev/null 2>&1 || true
+  pactl set-sink-volume "$SINK" "${DEFAULT_VOL}%" >/dev/null 2>&1 || true
 
   # Play boot sound exactly once per boot, through BT sink
   if [ -f "$BOOT_SOUND" ] && [ ! -e "$FLAG" ]; then
