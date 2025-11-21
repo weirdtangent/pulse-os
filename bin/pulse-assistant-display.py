@@ -212,11 +212,12 @@ class AssistantDisplay:
     def _now_playing_loop(self) -> None:
         while not self._now_playing_stop.is_set():
             text = ""
-            try:
-                payload = self._fetch_now_playing_state()
-                text = self._format_now_playing(payload)
-            except Exception as exc:  # pylint: disable=broad-except
-                LOGGER.debug("Failed to fetch now-playing metadata: %s", exc)
+        try:
+            payload = self._fetch_now_playing_state()
+            text = self._format_now_playing(payload)
+            LOGGER.debug("Now-playing metadata: %s", text or "<idle>")
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.warning("Failed to fetch now-playing metadata: %s", exc)
             if self._now_playing_queue:
                 self._now_playing_queue.put(text)
             if self._now_playing_stop.wait(self._now_playing_interval):
@@ -234,8 +235,15 @@ class AssistantDisplay:
         open_kwargs: dict[str, object] = {"timeout": 6}
         if self._ha_ssl_context is not None:
             open_kwargs["context"] = self._ha_ssl_context
-        with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]
-            data = response.read()
+        try:
+            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]
+                data = response.read()
+        except urllib.error.HTTPError as exc:
+            LOGGER.warning("HA returned %s when fetching %s: %s", exc.code, url, exc.reason)
+            raise
+        except urllib.error.URLError as exc:
+            LOGGER.warning("HA connection error: %s", exc)
+            raise
         return json.loads(data.decode("utf-8"))
 
     def _format_now_playing(self, payload: dict | list | None) -> str:
