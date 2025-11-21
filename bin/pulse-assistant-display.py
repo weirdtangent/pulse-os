@@ -198,7 +198,7 @@ class AssistantDisplay:
         card_color = "#1C1C1C"
         accent_color = card_color
         self.now_playing_window.configure(bg=accent_color)
-        window_width = max(360, self._screen_width // 3)
+        window_width = max(420, self._screen_width // 2)
         window_height = max(68, int(font_size * 2.2))
         offset_x = self._screen_width - window_width - 40
         offset_y = self._screen_height - window_height - 40
