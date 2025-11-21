@@ -132,7 +132,7 @@ class AssistantDisplay:
         if not self.now_playing_label or not self.now_playing_window:
             return
         if text:
-            self.now_playing_label.config(text=f"♪ {text}")
+            self.now_playing_label.config(text=f"[playing] {text}")
             self.now_playing_window.deiconify()
         else:
             self.now_playing_label.config(text="")
