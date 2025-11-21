@@ -1,3 +1,10 @@
+# [0.42.0](https://github.com/weirdtangent/pulse-os/compare/v0.41.4...v0.42.0) (2025-11-21)
+
+
+### Features
+
+* expose version metadata to Home Assistant ([b6e3a5e](https://github.com/weirdtangent/pulse-os/commit/b6e3a5ee52e5671e7d0028edb06d5c311938038c))
+
 ## [0.41.4](https://github.com/weirdtangent/pulse-os/compare/v0.41.3...v0.41.4) (2025-11-21)
 
 
