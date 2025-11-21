@@ -359,7 +359,7 @@ homeassistant:
 
 <details>
   <summary><strong>Volume feedback thump sample</strong></summary>
-  The notification tone that plays after each volume change (and when the assistant starts listening) lives in `assets/notification.wav`. Run `bin/generate-notification-tone.py` if you ever want to regenerate or remix the WAV (for example, to tweak duration or pitch). The script copies the result into `assets/`, and the runtime automatically stages the file under the active user's `XDG_RUNTIME_DIR` as needed.
+  The notification tone that plays after each volume change (and when the assistant starts listening) lives in `assets/notification.wav`. Run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix the WAV (for example, to tweak duration or pitch). The script copies the result into `assets/`, and the runtime automatically stages the file under the active user's `XDG_RUNTIME_DIR` as needed.
 </details>
 
 <details>
