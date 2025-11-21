@@ -1,3 +1,10 @@
+## [0.40.8](https://github.com/weirdtangent/pulse-os/compare/v0.40.7...v0.40.8) (2025-11-21)
+
+
+### Bug Fixes
+
+* assistant display window width ([1d332fe](https://github.com/weirdtangent/pulse-os/commit/1d332febde47e81fd803f51789a466ed5550ae9b))
+
 ## [0.40.7](https://github.com/weirdtangent/pulse-os/compare/v0.40.6...v0.40.7) (2025-11-21)
 
 
