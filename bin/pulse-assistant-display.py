@@ -132,7 +132,7 @@ class AssistantDisplay:
         if not self.now_playing_label or not self.now_playing_window:
             return
         if text:
-            self.now_playing_label.config(text=text)
+            self.now_playing_label.config(text=f"♪ {text}")
             self.now_playing_window.deiconify()
         else:
             self.now_playing_label.config(text="")
@@ -190,10 +190,10 @@ class AssistantDisplay:
         self.now_playing_window.withdraw()
         self.now_playing_window.overrideredirect(True)
         self.now_playing_window.attributes("-topmost", True)
-        self.now_playing_window.configure(bg="#000000")
-        self.now_playing_window.attributes("-alpha", 0.82)
-        window_width = max(320, self._screen_width // 4)
-        window_height = max(60, int(font_size * 2.2))
+        self.now_playing_window.configure(bg="")
+        self.now_playing_window.attributes("-transparentcolor", "")
+        window_width = max(360, self._screen_width // 3)
+        window_height = max(68, int(font_size * 2.2))
         offset_x = self._screen_width - window_width - 40
         offset_y = self._screen_height - window_height - 40
         self.now_playing_window.geometry(f"{window_width}x{window_height}+{offset_x}+{offset_y}")
@@ -201,13 +201,14 @@ class AssistantDisplay:
         self.now_playing_label = tk.Label(
             self.now_playing_window,
             text="",
-            font=("Helvetica", max(14, font_size // 2)),
-            fg="#C8C8C8",
+            font=("Helvetica", max(16, font_size // 2)),
+            fg="#FFFFFF",
             bg="#000000",
             justify=tk.RIGHT,
             anchor="e",
         )
-        self.now_playing_label.pack(expand=True, fill=tk.BOTH, padx=12, pady=8)
+        self.now_playing_label.pack(expand=True, fill=tk.BOTH, padx=16, pady=10)
+        self.now_playing_label.configure(borderwidth=0, highlightthickness=0)
 
         self._now_playing_queue = queue.Queue()
         self.root.after(500, self._poll_now_playing_queue)
