@@ -493,11 +493,7 @@ class KioskMqttListener:
         return display.get_current_brightness()
 
     def _collect_now_playing_text(self) -> str:
-        if (
-            not self.config.media_player_entity
-            or not self.config.ha_base_url
-            or not self.config.ha_token
-        ):
+        if not self.config.media_player_entity or not self.config.ha_base_url or not self.config.ha_token:
             return ""
         payload = self._fetch_media_player_state()
         if payload is None:
