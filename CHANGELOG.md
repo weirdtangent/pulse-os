@@ -1,3 +1,10 @@
+## [0.40.7](https://github.com/weirdtangent/pulse-os/compare/v0.40.6...v0.40.7) (2025-11-21)
+
+
+### Bug Fixes
+
+* assistant display background color ([eed9ed8](https://github.com/weirdtangent/pulse-os/commit/eed9ed897a4c9c1882076f4bd027f7c991cb084e))
+
 ## [0.40.6](https://github.com/weirdtangent/pulse-os/compare/v0.40.5...v0.40.6) (2025-11-21)
 
 
