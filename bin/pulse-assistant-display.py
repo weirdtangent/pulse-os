@@ -135,7 +135,7 @@ class AssistantDisplay:
             self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
         else:
             self.now_playing_label.config(text="")
-            self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
+            self.now_playing_label.place_forget()
 
     def _show_text(self, text: str) -> None:
         self.label.config(text=text)
