@@ -32,3 +32,4 @@ config/system/syslog-ng/remote-log.conf
 pulse.conf
 pulse.conf.backup
 certs/
+
