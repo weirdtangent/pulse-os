@@ -242,7 +242,7 @@ def load_config() -> EnvConfig:
     media_player_entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
     if not media_player_entity:
         sanitized = hostname.lower().replace("-", "_").replace(".", "_")
-        media_player_entity = f"media_player.snapcast_client_{sanitized}"
+        media_player_entity = f"media_player.{sanitized}_2"
 
     ha_base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
     ha_token = (os.environ.get("HOME_ASSISTANT_TOKEN") or "").strip()

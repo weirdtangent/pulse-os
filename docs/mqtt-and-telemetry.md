@@ -60,7 +60,7 @@ At ~15‑second intervals (configurable), each kiosk publishes retained MQTT sen
 - Sensors automatically expire if the kiosk stops reporting (HA shows them unavailable).
 - Tune the cadence with `PULSE_TELEMETRY_INTERVAL_SECONDS` (minimum 5 s) in `pulse.conf`.
 - Because the messages are retained, dashboards continue to show the last value even if HA restarts.
-- The Now Playing sensor is enabled when you set `HOME_ASSISTANT_BASE_URL`, `HOME_ASSISTANT_TOKEN`, and (optionally) `PULSE_MEDIA_PLAYER_ENTITY`. Leave the entity blank to default to `media_player.snapcast_client_<hostname>` or point it at any Music Assistant / Sonos / custom sensor entity you prefer.
+- The Now Playing sensor is enabled when you set `HOME_ASSISTANT_BASE_URL`, `HOME_ASSISTANT_TOKEN`, and (optionally) `PULSE_MEDIA_PLAYER_ENTITY`. Leave the entity blank to default to `media_player.<hostname>_2` (the Music Assistant entity Pulse creates) or point it at any Sonos / custom sensor entity you prefer.
 
 Use these metrics to build health dashboards, automations (e.g., alert when CPU temp > 80 °C), or long-term statistics in the recorder of your choice.
 

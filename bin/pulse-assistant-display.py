@@ -19,6 +19,12 @@ import paho.mqtt.client as mqtt
 LOGGER = logging.getLogger("pulse-assistant-display")
 
 
+def _default_media_player_entity() -> str:
+    hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
+    sanitized = hostname.lower().replace("-", "_").replace(".", "_")
+    return f"media_player.{sanitized}_2"
+
+
 def _is_truthy(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
@@ -165,7 +171,15 @@ class AssistantDisplay:
 
     def _init_now_playing(self, font_size: int) -> None:
         show = _is_truthy(os.environ.get("PULSE_DISPLAY_SHOW_NOW_PLAYING"))
-        entity = (os.environ.get("PULSE_DISPLAY_NOW_PLAYING_ENTITY") or "").strip()
+        entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
+        legacy_entity = (os.environ.get("PULSE_DISPLAY_NOW_PLAYING_ENTITY") or "").strip()
+        if not entity and legacy_entity:
+            LOGGER.warning(
+                "PULSE_DISPLAY_NOW_PLAYING_ENTITY is deprecated; please migrate to PULSE_MEDIA_PLAYER_ENTITY."
+            )
+            entity = legacy_entity
+        if not entity:
+            entity = _default_media_player_entity()
         base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
         token = (os.environ.get("HOME_ASSISTANT_TOKEN") or "").strip()
         interval = _int_from_env(os.environ.get("PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS"), fallback=5, minimum=2)
@@ -173,9 +187,6 @@ class AssistantDisplay:
 
         if not show:
             LOGGER.debug("Now-playing overlay disabled (PULSE_DISPLAY_SHOW_NOW_PLAYING=false).")
-            return
-        if not entity:
-            LOGGER.warning("Now-playing overlay disabled: PULSE_DISPLAY_NOW_PLAYING_ENTITY is empty.")
             return
         if not base_url or not token:
             LOGGER.warning("Now-playing overlay disabled: HOME_ASSISTANT_BASE_URL or HOME_ASSISTANT_TOKEN is not set.")
