@@ -56,7 +56,10 @@ class AssistantDisplay:
         self.queue: queue.Queue[str] = queue.Queue()
         self._now_playing_queue: queue.Queue[str] | None = None
         self._hide_job: str | None = None
-        self._client = mqtt.Client(client_id=client_id or "pulse-assistant-display")
+        callback_kwargs: dict[str, object] = {}
+        if hasattr(mqtt, "CallbackAPIVersion"):
+            callback_kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
+        self._client = mqtt.Client(client_id=client_id or "pulse-assistant-display", **callback_kwargs)
         username = os.environ.get("MQTT_USERNAME")
         if username:
             self._client.username_pw_set(username, os.environ.get("MQTT_PASSWORD") or "")
@@ -101,12 +104,23 @@ class AssistantDisplay:
         self._now_playing_geometry: str | None = None
         self._init_now_playing(font_size)
 
-    def _on_connect(self, client, _userdata, _flags, rc):  # type: ignore[no-untyped-def]
-        if rc == 0:
+    def _on_connect(self, client, _userdata, _flags, reason_code, properties=None):  # type: ignore[no-untyped-def]
+        if self._is_connect_success(reason_code):
             client.subscribe(self.topic)
-            LOGGER.info("Subscribed to %s", self.topic)
+            LOGGER.info("Subscribed to %s (rc=%s)", self.topic, reason_code)
         else:
-            LOGGER.error("Failed to connect to MQTT (%s)", rc)
+            LOGGER.error("Failed to connect to MQTT (reason=%s, properties=%s)", reason_code, properties)
+
+    @staticmethod
+    def _is_connect_success(reason_code) -> bool:
+        try:
+            if hasattr(reason_code, "is_success"):
+                return bool(reason_code.is_success())
+            if hasattr(reason_code, "is_good"):
+                return bool(reason_code.is_good())
+            return int(reason_code) == 0
+        except Exception:  # pragma: no cover - defensive
+            return False
 
     def _on_message(self, _client, _userdata, message):  # type: ignore[no-untyped-def]
         try:

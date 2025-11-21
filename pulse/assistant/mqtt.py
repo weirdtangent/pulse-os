@@ -25,7 +25,14 @@ class AssistantMqtt:
         with self._lock:
             if self._client is not None:
                 return
-            client = mqtt.Client(client_id=f"pulse-assistant-{self.config.topic_base}", clean_session=True)
+            callback_kwargs: dict[str, object] = {}
+            if hasattr(mqtt, "CallbackAPIVersion"):
+                callback_kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
+            client = mqtt.Client(
+                client_id=f"pulse-assistant-{self.config.topic_base}",
+                clean_session=True,
+                **callback_kwargs,
+            )
             if self.config.username:
                 client.username_pw_set(self.config.username, self.config.password or "")
             try:

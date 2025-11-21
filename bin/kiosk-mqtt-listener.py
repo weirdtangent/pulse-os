@@ -323,6 +323,17 @@ def _ensure_pulse_host_param(url: str, hostname: str | None) -> str:
     return urllib.parse.urlunparse(parsed._replace(query=new_query))
 
 
+def _is_mqtt_success(reason_code) -> bool:
+    try:
+        if hasattr(reason_code, "is_success"):
+            return bool(reason_code.is_success())
+        if hasattr(reason_code, "is_good"):
+            return bool(reason_code.is_good())
+        return int(reason_code) == 0
+    except Exception:  # pragma: no cover - defensive guard
+        return False
+
+
 def build_device_info(config: EnvConfig) -> dict[str, Any]:
     info: dict[str, Any] = {
         "identifiers": [f"pulse:{config.hostname}"],
@@ -982,8 +993,11 @@ class KioskMqttListener:
     def publish_availability(self, client: mqtt.Client, state: str) -> None:
         self._safe_publish(client, self.config.topics.availability, state, qos=1, retain=True)
 
-    def on_connect(self, client, _userdata, _flags, rc):
-        self.log(f"Connected to MQTT (rc={rc}); subscribing to topics")
+    def on_connect(self, client, _userdata, _flags, reason_code, properties=None):
+        if not _is_mqtt_success(reason_code):
+            self.log(f"MQTT connection failed (reason={reason_code}, properties={properties})")
+            return
+        self.log(f"Connected to MQTT (reason={reason_code}); subscribing to topics")
         self._mqtt_client = client
         client.subscribe(self.config.topics.home)
         client.subscribe(self.config.topics.goto)
@@ -1143,7 +1157,10 @@ def main():
     atexit.register(listener.stop_update_checker)
     atexit.register(listener.stop_telemetry)
 
-    client = mqtt.Client()
+    callback_kwargs: dict[str, object] = {}
+    if hasattr(mqtt, "CallbackAPIVersion"):
+        callback_kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
+    client = mqtt.Client(**callback_kwargs)
     client.on_connect = listener.on_connect
     client.on_message = listener.on_message
     client.will_set(
