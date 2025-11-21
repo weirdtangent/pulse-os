@@ -134,7 +134,7 @@ class AssistantDisplay:
         if not self.now_playing_window or not self.now_playing_canvas or self.now_playing_text_id is None:
             return
         if text:
-            self.now_playing_canvas.itemconfig(self.now_playing_text_id, text=f"Now Playing:\n{text}")
+            self.now_playing_canvas.itemconfig(self.now_playing_text_id, text=f"Now Playing:\n  {text}")
             if self._now_playing_geometry:
                 self.now_playing_window.geometry(self._now_playing_geometry)
             self.now_playing_window.deiconify()
