@@ -227,7 +227,8 @@ class AssistantDisplay:
     def _format_now_playing(self, payload: dict | list | None) -> str:
         if not isinstance(payload, dict):
             return ""
-        if payload.get("state") != "playing":
+        state = str(payload.get("state") or "").lower()
+        if state not in {"playing", "on"}:
             return ""
         attributes = payload.get("attributes") or {}
         title = attributes.get("media_title") or ""
