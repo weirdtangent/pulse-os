@@ -1,5 +1,7 @@
 [Unit]
 Description=Ensure BT speaker is connected and set as default sink
+After=pipewire.service pipewire-pulse.service wireplumber.service
+Wants=pipewire.service pipewire-pulse.service wireplumber.service
 
 [Service]
 Type=oneshot
