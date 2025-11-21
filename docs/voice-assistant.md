@@ -212,7 +212,7 @@ Now-playing metadata from Home Assistant can be pinned to the lower-right corner
 
 ```
 PULSE_DISPLAY_SHOW_NOW_PLAYING="true"
-PULSE_DISPLAY_NOW_PLAYING_ENTITY="media_player.snapcast_client_pulse_bedroom"
+PULSE_DISPLAY_NOW_PLAYING_ENTITY="media_player.snapcast_client_pulse_<location>"
 PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS=5
 ```
 
