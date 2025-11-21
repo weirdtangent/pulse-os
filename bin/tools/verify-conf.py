@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import shlex
+import shutil
 import socket
 import ssl
 import subprocess
@@ -326,6 +327,33 @@ def check_remote_logging(env: dict[str, str], hostname: str, timeout: float) -> 
 
     elapsed = time.perf_counter() - start
     return CheckResult("Remote logging", "ok", f"Sent test syslog to {host}:{port} in {elapsed:.2f}s.")
+
+
+def check_snapcast(env: dict[str, str], timeout: float) -> CheckResult:
+    enabled = _is_truthy(env.get("PULSE_SNAPCLIENT"), default=False)
+    if not enabled:
+        return CheckResult("Snapcast client", "skip", "PULSE_SNAPCLIENT is disabled.")
+
+    host = (env.get("PULSE_SNAPCAST_HOST") or "").strip()
+    if not host:
+        return CheckResult("Snapcast client", "fail", "PULSE_SNAPCAST_HOST is empty.")
+
+    control_port = _int_or_default(env.get("PULSE_SNAPCAST_CONTROL_PORT"), 1705)
+    if not control_port:
+        return CheckResult("Snapcast client", "fail", "PULSE_SNAPCAST_CONTROL_PORT is missing or invalid.")
+
+    if shutil.which("snapclient") is None:
+        return CheckResult("Snapcast client", "fail", "snapclient binary not found on this system (rerun setup).")
+
+    start = time.perf_counter()
+    try:
+        with socket.create_connection((host, control_port), timeout=timeout):
+            pass
+    except OSError as exc:
+        return CheckResult("Snapcast client", "fail", f"Unable to reach {host}:{control_port} ({exc}).")
+
+    elapsed = time.perf_counter() - start
+    return CheckResult("Snapcast client", "ok", f"Connected to {host}:{control_port} in {elapsed:.2f}s.")
 
 
 def check_home_assistant(config: HomeAssistantConfig, timeout: float) -> CheckResult:
@@ -832,6 +860,7 @@ def main() -> int:
     results: list[CheckResult] = []
     results.append(check_mqtt(config, args.timeout))
     results.append(check_remote_logging(env, config.hostname, args.timeout))
+    results.append(check_snapcast(env, args.timeout))
     results.append(check_home_assistant(config.home_assistant, args.timeout))
     results.append(check_home_assistant_assist_pipeline(config.home_assistant, env, args.timeout))
     results.append(check_llm(config))

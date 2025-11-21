@@ -242,7 +242,7 @@ Pulse can now appear as a Snapcast player so Music Assistant (or anything that c
    PULSE_SNAPCAST_HOST="192.168.1.100"   # Snapserver host
    PULSE_SNAPCAST_PORT="1704"            # optional, defaults shown
    PULSE_SNAPCAST_CONTROL_PORT="1705"
-   PULSE_SNAPCLIENT_SOUNDCARD="pulse"    # use 'pulse' (PipeWire) or an ALSA hw target
+   PULSE_SNAPCLIENT_SOUNDCARD="default"  # 'default' routes through PipeWire/Pulse; override for ALSA hw
    ```
 
    Optional helpers:

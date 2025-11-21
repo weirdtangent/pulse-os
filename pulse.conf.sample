@@ -183,8 +183,8 @@ PULSE_SNAPCAST_PORT="1704"
 # PULSE_SNAPCAST_CONTROL_PORT — Snapserver control channel port (default 1705).
 PULSE_SNAPCAST_CONTROL_PORT="1705"
 
-# PULSE_SNAPCLIENT_SOUNDCARD — snapclient --soundcard target (pulse, pipewire, hw:0,0, etc.).
-PULSE_SNAPCLIENT_SOUNDCARD="pulse"
+# PULSE_SNAPCLIENT_SOUNDCARD — snapclient --soundcard target (default, pipewire, hw:0,0, etc.).
+PULSE_SNAPCLIENT_SOUNDCARD="default"
 # PULSE_SNAPCLIENT_LATENCY_MS — optional snapclient --latency override (milliseconds).
 PULSE_SNAPCLIENT_LATENCY_MS=""
 # PULSE_SNAPCLIENT_EXTRA_ARGS — additional snapclient CLI flags (space-separated).
