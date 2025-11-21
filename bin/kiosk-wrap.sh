@@ -2,7 +2,11 @@
 exec >>"$HOME/kiosk.log" 2>&1
 
 # Be tolerant of hiccups (don't use -e)
-set -x
+case "${PULSE_KIOSK_DEBUG:-0}" in
+  1|true|TRUE|yes|YES)
+    set -x
+    ;;
+esac
 
 source /opt/pulse-os/pulse.conf
 SAFE_REBOOT="/opt/pulse-os/bin/safe-reboot.sh"
