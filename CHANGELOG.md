@@ -1,3 +1,11 @@
+## [0.40.5](https://github.com/weirdtangent/pulse-os/compare/v0.40.4...v0.40.5) (2025-11-21)
+
+
+### Bug Fixes
+
+* update kiosk-wrap.sh to use new watchdog defaults ([67c9492](https://github.com/weirdtangent/pulse-os/commit/67c94927b208a618ff78173538b1afc1a0704c3d))
+* update now-playing label to use canvas, rounded rect, and text id ([7f2c2e7](https://github.com/weirdtangent/pulse-os/commit/7f2c2e71253922727db250064356648905bf0854))
+
 ## [0.40.4](https://github.com/weirdtangent/pulse-os/compare/v0.40.3...v0.40.4) (2025-11-21)
 
 
