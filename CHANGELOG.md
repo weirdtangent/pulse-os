@@ -1,3 +1,10 @@
+## [0.41.4](https://github.com/weirdtangent/pulse-os/compare/v0.41.3...v0.41.4) (2025-11-21)
+
+
+### Bug Fixes
+
+* exclude telemetry sensors from Home Assistant discovery ([1b80f25](https://github.com/weirdtangent/pulse-os/commit/1b80f252907eda7a728b684ea0aa0d743fb48e68))
+
 ## [0.41.3](https://github.com/weirdtangent/pulse-os/compare/v0.41.2...v0.41.3) (2025-11-21)
 
 
