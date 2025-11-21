@@ -166,7 +166,16 @@ class AssistantDisplay:
         interval = _int_from_env(os.environ.get("PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS"), fallback=5, minimum=2)
         verify_ssl = _is_truthy(os.environ.get("HOME_ASSISTANT_VERIFY_SSL"), default=True)
 
-        if not (show and entity and base_url and token):
+        if not show:
+            LOGGER.debug("Now-playing overlay disabled (PULSE_DISPLAY_SHOW_NOW_PLAYING=false).")
+            return
+        if not entity:
+            LOGGER.warning("Now-playing overlay disabled: PULSE_DISPLAY_NOW_PLAYING_ENTITY is empty.")
+            return
+        if not base_url or not token:
+            LOGGER.warning(
+                "Now-playing overlay disabled: HOME_ASSISTANT_BASE_URL or HOME_ASSISTANT_TOKEN is not set."
+            )
             return
 
         self._now_playing_active = True
@@ -194,6 +203,11 @@ class AssistantDisplay:
         self.root.after(500, self._poll_now_playing_queue)
         thread = threading.Thread(target=self._now_playing_loop, daemon=True)
         thread.start()
+        LOGGER.info(
+            "Now-playing overlay enabled for %s (interval=%ss)",
+            self._now_playing_entity,
+            self._now_playing_interval,
+        )
 
     def _now_playing_loop(self) -> None:
         while not self._now_playing_stop.is_set():
