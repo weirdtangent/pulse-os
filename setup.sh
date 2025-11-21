@@ -312,6 +312,48 @@ ctl.!default {
 EOF
 }
 
+ensure_wireplumber_bt_keepalive() {
+    local user="${PULSE_USER:-pulse}"
+    local home="/home/${user}"
+    local conf_dir="${home}/.config/wireplumber/wireplumber.conf.d"
+    local conf_file="${conf_dir}/50-pulse-bt-nosuspend.conf"
+
+    if [ ! -d "$home" ]; then
+        log "Home directory $home missing; skipping WirePlumber Bluetooth override."
+        return
+    fi
+
+    if [ ! -f "$conf_file" ]; then
+        sudo -u "$user" mkdir -p "$conf_dir"
+        sudo -u "$user" tee "$conf_file" >/dev/null <<'EOF'
+# Keep Bluetooth outputs awake so short prompts aren't clipped
+rule = {
+  matches = [
+    { node.name = "~bluez_output.*" }
+  ]
+  actions = {
+    update-props = {
+      session.suspend-timeout-seconds = 0
+    }
+  }
+}
+EOF
+        log "Configured WirePlumber Bluetooth keepalive at $conf_file"
+    fi
+
+    local uid
+    uid=$(id -u "$user")
+    local runtime="/run/user/${uid}"
+    local bus="${runtime}/bus"
+    if [ -S "$bus" ]; then
+        sudo -u "$user" \
+            XDG_RUNTIME_DIR="$runtime" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}" \
+            systemctl --user try-restart wireplumber.service pipewire.service pipewire-pulse.service \
+            >/dev/null 2>&1 || true
+    fi
+}
+
 configure_display_stack() {
     log "Configuring Touch Display boot parameters…"
     ensure_boot_config_line "dtparam=i2c_arm=on"
@@ -633,6 +675,7 @@ install_bluetooth_audio() {
         sudo systemctl --global enable wireplumber.service
         ensure_user_systemd_session
         ensure_pulse_asoundrc
+        ensure_wireplumber_bt_keepalive
     else
         log "PipeWire left untouched (Bluetooth autoconnect disabled)"
     fi
