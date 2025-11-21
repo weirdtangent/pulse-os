@@ -354,6 +354,30 @@ EOF
     fi
 }
 
+ensure_persistent_journal() {
+    log "Configuring persistent system journal…"
+    sudo mkdir -p /var/log/journal
+    sudo systemd-tmpfiles --create --prefix /var/log/journal
+    local mid
+    if mid=$(cat /etc/machine-id 2>/dev/null); then
+        sudo mkdir -p "/var/log/journal/${mid}"
+        sudo chown root:systemd-journal /var/log/journal "/var/log/journal/${mid}"
+        sudo chmod 2755 /var/log/journal "/var/log/journal/${mid}"
+    fi
+    sudo tee /etc/tmpfiles.d/pulse-journal.conf >/dev/null <<'EOF'
+d /var/log/journal 2755 root systemd-journal -
+d /var/log/journal/%m 2755 root systemd-journal -
+EOF
+    sudo systemd-tmpfiles --create /etc/tmpfiles.d/pulse-journal.conf
+    if sudo grep -q '^Storage=' /etc/systemd/journald.conf; then
+        sudo sed -i 's/^Storage=.*/Storage=persistent/' /etc/systemd/journald.conf
+    else
+        echo "Storage=persistent" | sudo tee -a /etc/systemd/journald.conf >/dev/null
+    fi
+    sudo systemctl enable --now systemd-journal-flush.service >/dev/null 2>&1 || true
+    sudo systemctl restart systemd-journald >/dev/null 2>&1 || true
+}
+
 configure_display_stack() {
     log "Configuring Touch Display boot parameters…"
     ensure_boot_config_line "dtparam=i2c_arm=on"
@@ -676,6 +700,7 @@ install_bluetooth_audio() {
         ensure_user_systemd_session
         ensure_pulse_asoundrc
         ensure_wireplumber_bt_keepalive
+        ensure_persistent_journal
     else
         log "PipeWire left untouched (Bluetooth autoconnect disabled)"
     fi
