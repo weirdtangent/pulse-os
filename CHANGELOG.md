@@ -1,3 +1,18 @@
+# [0.41.0](https://github.com/weirdtangent/pulse-os/compare/v0.40.8...v0.41.0) (2025-11-21)
+
+
+### Bug Fixes
+
+* add volume and brightness telemetry ([152c0da](https://github.com/weirdtangent/pulse-os/commit/152c0dad150304186e08ac99f32bbfd9dcc23775))
+* assistant display now playing text indentation ([75dba53](https://github.com/weirdtangent/pulse-os/commit/75dba53bc05185ffa8d8accf1c35c4ecbc139096))
+* assistant display window width ([38f849f](https://github.com/weirdtangent/pulse-os/commit/38f849f3a0d7bc517bbe7d9f5b7a766ca42b7002))
+* use unique Mqtt client ID for assistant display ([edcbd73](https://github.com/weirdtangent/pulse-os/commit/edcbd73782df2ad607541cf403a96edc9ad41223))
+
+
+### Features
+
+* add now playing telemetry to kiosk-mqtt-listener and wrap.sh ([1a993e6](https://github.com/weirdtangent/pulse-os/commit/1a993e67c9812594e98428b2ad605803e4068eb1))
+
 ## [0.40.8](https://github.com/weirdtangent/pulse-os/compare/v0.40.7...v0.40.8) (2025-11-21)
 
 
