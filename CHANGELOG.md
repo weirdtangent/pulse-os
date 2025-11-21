@@ -1,3 +1,11 @@
+## [0.36.1](https://github.com/weirdtangent/pulse-os/compare/v0.36.0...v0.36.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* linter ([00e738f](https://github.com/weirdtangent/pulse-os/commit/00e738f1873f95bd4ca2122419150a6b1d7b611f))
+* send wake tone to pulseaudio sink ([aaf39be](https://github.com/weirdtangent/pulse-os/commit/aaf39bec6e6e4aca6a31d905109437b6f3fe3680))
+
 # [0.36.0](https://github.com/weirdtangent/pulse-os/compare/v0.35.1...v0.36.0) (2025-11-21)
 
 
