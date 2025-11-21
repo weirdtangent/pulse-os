@@ -7,7 +7,6 @@ import contextlib
 import logging
 import os
 import shutil
-import subprocess
 from asyncio.subprocess import Process
 
 from pulse import audio as pulse_audio
