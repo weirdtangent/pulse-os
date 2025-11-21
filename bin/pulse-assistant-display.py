@@ -195,7 +195,8 @@ class AssistantDisplay:
         self.now_playing_window.withdraw()
         self.now_playing_window.overrideredirect(True)
         self.now_playing_window.attributes("-topmost", True)
-        accent_color = "#101820"
+        accent_color = self.root["bg"] if "bg" in self.root.configure() else "#000000"
+        card_color = "#1C1C1C"
         self.now_playing_window.configure(bg=accent_color)
         window_width = max(360, self._screen_width // 3)
         window_height = max(68, int(font_size * 2.2))
@@ -224,7 +225,7 @@ class AssistantDisplay:
             window_width - padding,
             window_height - padding,
             radius,
-            fill="#1C1C1C",
+            fill=card_color,
             outline="",
         )
         self.now_playing_text_id = self.now_playing_canvas.create_text(
