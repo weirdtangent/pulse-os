@@ -37,7 +37,7 @@ Home Assistant also discovers two `number` entities published by the same servic
 - `Audio Volume` → topic `pulse/<hostname>/audio/volume/set`
 - `Screen Brightness` → topic `pulse/<hostname>/display/brightness/set`
 
-Both sliders write a retained telemetry value so dashboards stay in sync. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
+Both sliders publish retained telemetry updates, and the telemetry loop re-sends the live hardware levels every ~15 seconds so brightness/volume changes from other services (like the sunrise scheduler) stay reflected in Home Assistant. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
 
 ---
 
@@ -53,6 +53,8 @@ At ~15‑second intervals (configurable), each kiosk publishes retained MQTT sen
 | `sensor.pulse_memory_usage` | RAM usage %. |
 | `sensor.pulse_disk_usage` | Root disk usage %. |
 | `sensor.pulse_load_avg_1m` / `_5m` / `_15m` | Standard Linux load averages. |
+| `sensor.pulse_volume` | Current audio volume (%). |
+| `sensor.pulse_brightness` | Current screen brightness (%). |
 
 - Sensors automatically expire if the kiosk stops reporting (HA shows them unavailable).
 - Tune the cadence with `PULSE_TELEMETRY_INTERVAL_SECONDS` (minimum 5 s) in `pulse.conf`.

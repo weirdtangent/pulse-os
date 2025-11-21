@@ -148,6 +148,22 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         icon="mdi:chart-line",
         precision=2,
     ),
+    TelemetryDescriptor(
+        key="volume",
+        name="Audio Volume",
+        unit="%",
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:volume-high",
+    ),
+    TelemetryDescriptor(
+        key="brightness",
+        name="Screen Brightness",
+        unit="%",
+        device_class=None,
+        state_class="measurement",
+        icon="mdi:brightness-6",
+    ),
 ]
 
 
