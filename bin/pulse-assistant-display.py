@@ -195,8 +195,7 @@ class AssistantDisplay:
         self.now_playing_window.withdraw()
         self.now_playing_window.overrideredirect(True)
         self.now_playing_window.attributes("-topmost", True)
-        card_color = "#1C1C1C"
-        accent_color = card_color
+        accent_color = "#101820"
         self.now_playing_window.configure(bg=accent_color)
         window_width = max(420, self._screen_width // 2)
         window_height = max(68, int(font_size * 2.2))
@@ -215,39 +214,16 @@ class AssistantDisplay:
             highlightthickness=0,
         )
         self.now_playing_canvas.pack(fill=tk.BOTH, expand=True)
-        self._set_transparent_background(accent_color)
-        padding = 10
-        radius = 18
-        shadow_offset = 4
-        shadow_color = "#050505"
-        self._draw_rounded_rect(
-            self.now_playing_canvas,
-            padding + shadow_offset,
-            padding + shadow_offset,
-            window_width - padding + shadow_offset,
-            window_height - padding + shadow_offset,
-            radius,
-            fill=shadow_color,
-            outline="",
-        )
-        self._draw_rounded_rect(
-            self.now_playing_canvas,
-            padding,
-            padding,
-            window_width - padding,
-            window_height - padding,
-            radius,
-            fill=card_color,
-            outline="",
-        )
+        padding = 14
         self.now_playing_text_id = self.now_playing_canvas.create_text(
-            padding * 2,
+            padding,
             window_height / 2,
             text="",
             font=("Helvetica", max(16, font_size // 2)),
             fill="#FFFFFF",
             anchor="w",
             justify=tk.LEFT,
+            width=window_width - padding * 2,
         )
 
         self._now_playing_queue = queue.Queue()
@@ -309,54 +285,6 @@ class AssistantDisplay:
         if title and artist:
             return f"{artist} — {title}"
         return title or artist or ""
-
-    @staticmethod
-    def _draw_rounded_rect(
-        canvas: tk.Canvas,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        radius: float,
-        **kwargs,
-    ) -> int:
-        radius = max(0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
-        points = [
-            x1 + radius,
-            y1,
-            x2 - radius,
-            y1,
-            x2,
-            y1,
-            x2,
-            y1 + radius,
-            x2,
-            y2 - radius,
-            x2,
-            y2,
-            x2 - radius,
-            y2,
-            x1 + radius,
-            y2,
-            x1,
-            y2,
-            x1,
-            y2 - radius,
-            x1,
-            y1 + radius,
-            x1,
-            y1,
-        ]
-        return canvas.create_polygon(points, smooth=True, splinesteps=32, **kwargs)
-
-    def _set_transparent_background(self, transparent_color: str) -> None:
-        if not self.now_playing_window:
-            return
-        try:
-            self.now_playing_window.attributes("-transparentcolor", transparent_color)
-        except tk.TclError:
-            LOGGER.debug("Window transparency unsupported on this platform; falling back to solid background.")
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
