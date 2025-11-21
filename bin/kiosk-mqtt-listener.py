@@ -329,7 +329,18 @@ def _is_mqtt_success(reason_code) -> bool:
             return bool(reason_code.is_success())
         if hasattr(reason_code, "is_good"):
             return bool(reason_code.is_good())
-        return int(reason_code) == 0
+        candidate = reason_code
+        if hasattr(reason_code, "value"):
+            candidate = reason_code.value
+        if isinstance(candidate, str):
+            normalized = candidate.strip().lower()
+            if normalized in {"success", "granted qos0", "granted qos 0"}:
+                return True
+            try:
+                candidate = int(normalized, 0)
+            except ValueError:
+                return False
+        return int(candidate) == 0
     except Exception:  # pragma: no cover - defensive guard
         return False
 
