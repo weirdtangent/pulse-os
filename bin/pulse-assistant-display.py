@@ -195,8 +195,8 @@ class AssistantDisplay:
         self.now_playing_window.withdraw()
         self.now_playing_window.overrideredirect(True)
         self.now_playing_window.attributes("-topmost", True)
-        accent_color = self.root["bg"] if "bg" in self.root.configure() else "#000000"
         card_color = "#1C1C1C"
+        accent_color = card_color
         self.now_playing_window.configure(bg=accent_color)
         window_width = max(360, self._screen_width // 3)
         window_height = max(68, int(font_size * 2.2))
@@ -218,6 +218,18 @@ class AssistantDisplay:
         self._set_transparent_background(accent_color)
         padding = 10
         radius = 18
+        shadow_offset = 4
+        shadow_color = "#050505"
+        self._draw_rounded_rect(
+            self.now_playing_canvas,
+            padding + shadow_offset,
+            padding + shadow_offset,
+            window_width - padding + shadow_offset,
+            window_height - padding + shadow_offset,
+            radius,
+            fill=shadow_color,
+            outline="",
+        )
         self._draw_rounded_rect(
             self.now_playing_canvas,
             padding,
