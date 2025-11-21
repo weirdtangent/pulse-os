@@ -8,11 +8,32 @@ import json
 import logging
 import os
 import queue
+import ssl
+import threading
+import time
 import tkinter as tk
+import urllib.error
+import urllib.request
 
 import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger("pulse-assistant-display")
+
+
+def _is_truthy(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_from_env(value: str | None, fallback: int, minimum: int) -> int:
+    if value is None:
+        return max(minimum, fallback)
+    try:
+        parsed = int(value)
+        return max(minimum, parsed)
+    except ValueError:
+        return max(minimum, fallback)
 
 
 class AssistantDisplay:
@@ -20,6 +41,7 @@ class AssistantDisplay:
         self.topic = topic
         self.timeout_ms = max(1000, timeout * 1000)
         self.queue: queue.Queue[str] = queue.Queue()
+        self._now_playing_queue: queue.Queue[str] | None = None
         self._hide_job: str | None = None
         self._client = mqtt.Client(client_id="pulse-assistant-display")
         username = os.environ.get("MQTT_USERNAME")
@@ -53,6 +75,16 @@ class AssistantDisplay:
         self.label.pack(expand=True, fill=tk.BOTH, padx=40, pady=40)
         self.root.after(250, self._poll_queue)
 
+        self.now_playing_label: tk.Label | None = None
+        self._now_playing_stop = threading.Event()
+        self._now_playing_active = False
+        self._now_playing_interval = 5
+        self._now_playing_entity = ""
+        self._ha_base_url = ""
+        self._ha_token = ""
+        self._ha_ssl_context: ssl.SSLContext | None = None
+        self._init_now_playing(font_size)
+
     def _on_connect(self, client, _userdata, _flags, rc):  # type: ignore[no-untyped-def]
         if rc == 0:
             client.subscribe(self.topic)
@@ -84,6 +116,28 @@ class AssistantDisplay:
             pass
         self.root.after(200, self._poll_queue)
 
+    def _poll_now_playing_queue(self) -> None:
+        if not self._now_playing_queue:
+            return
+        try:
+            while True:
+                text = self._now_playing_queue.get_nowait()
+                self._update_now_playing_label(text)
+        except queue.Empty:
+            pass
+        if self._now_playing_active:
+            self.root.after(200, self._poll_now_playing_queue)
+
+    def _update_now_playing_label(self, text: str) -> None:
+        if not self.now_playing_label:
+            return
+        if text:
+            self.now_playing_label.config(text=text)
+            self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
+        else:
+            self.now_playing_label.config(text="")
+            self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
+
     def _show_text(self, text: str) -> None:
         self.label.config(text=text)
         self.root.deiconify()
@@ -101,7 +155,86 @@ class AssistantDisplay:
         finally:
             self._client.loop_stop()
             self._client.disconnect()
+            if self._now_playing_active:
+                self._now_playing_stop.set()
 
+    def _init_now_playing(self, font_size: int) -> None:
+        show = _is_truthy(os.environ.get("PULSE_DISPLAY_SHOW_NOW_PLAYING"))
+        entity = (os.environ.get("PULSE_DISPLAY_NOW_PLAYING_ENTITY") or "").strip()
+        base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
+        token = (os.environ.get("HOME_ASSISTANT_TOKEN") or "").strip()
+        interval = _int_from_env(os.environ.get("PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS"), fallback=5, minimum=2)
+        verify_ssl = _is_truthy(os.environ.get("HOME_ASSISTANT_VERIFY_SSL"), default=True)
+
+        if not (show and entity and base_url and token):
+            return
+
+        self._now_playing_active = True
+        self._now_playing_interval = interval
+        self._now_playing_entity = entity
+        self._ha_base_url = base_url.rstrip("/")
+        self._ha_token = token
+        if self._ha_base_url.lower().startswith("https"):
+            self._ha_ssl_context = ssl.create_default_context() if verify_ssl else ssl._create_unverified_context()
+        else:
+            self._ha_ssl_context = None
+
+        self.now_playing_label = tk.Label(
+            self.root,
+            text="",
+            font=("Helvetica", max(14, font_size // 2)),
+            fg="#C8C8C8",
+            bg="#000000",
+            justify=tk.RIGHT,
+            anchor="e",
+        )
+        self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
+
+        self._now_playing_queue = queue.Queue()
+        self.root.after(500, self._poll_now_playing_queue)
+        thread = threading.Thread(target=self._now_playing_loop, daemon=True)
+        thread.start()
+
+    def _now_playing_loop(self) -> None:
+        while not self._now_playing_stop.is_set():
+            text = ""
+            try:
+                payload = self._fetch_now_playing_state()
+                text = self._format_now_playing(payload)
+            except Exception as exc:  # pylint: disable=broad-except
+                LOGGER.debug("Failed to fetch now-playing metadata: %s", exc)
+            if self._now_playing_queue:
+                self._now_playing_queue.put(text)
+            if self._now_playing_stop.wait(self._now_playing_interval):
+                break
+
+    def _fetch_now_playing_state(self) -> dict:
+        url = f"{self._ha_base_url}/api/states/{self._now_playing_entity}"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {self._ha_token}",
+                "Accept": "application/json",
+            },
+        )
+        open_kwargs: dict[str, object] = {"timeout": 6}
+        if self._ha_ssl_context is not None:
+            open_kwargs["context"] = self._ha_ssl_context
+        with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]
+            data = response.read()
+        return json.loads(data.decode("utf-8"))
+
+    def _format_now_playing(self, payload: dict | list | None) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        if payload.get("state") != "playing":
+            return ""
+        attributes = payload.get("attributes") or {}
+        title = attributes.get("media_title") or ""
+        artist = attributes.get("media_artist") or attributes.get("media_album_artist") or ""
+        if title and artist:
+            return f"{artist} — {title}"
+        return title or artist or ""
 
 def main() -> None:
     parser = argparse.ArgumentParser()

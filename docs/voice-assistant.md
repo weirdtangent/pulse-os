@@ -208,6 +208,16 @@ All preference states are retained so dashboards instantly reflect the last-know
 
 `pulse-assistant-display.py` runs as a user-level service whenever `PULSE_VOICE_ASSISTANT="true"`. It subscribes to `pulse/<hostname>/assistant/response`, renders the text in a borderless Tk window, and auto-hides after `PULSE_ASSISTANT_DISPLAY_SECONDS` (default 8s). Tweak the font via `PULSE_ASSISTANT_FONT_SIZE`.
 
+Now-playing metadata from Home Assistant can be pinned to the lower-right corner of the overlay. Point it at any `media_player` entity (Snapcast clients, Sonos, etc.) by setting:
+
+```
+PULSE_DISPLAY_SHOW_NOW_PLAYING="true"
+PULSE_DISPLAY_NOW_PLAYING_ENTITY="media_player.snapcast_client_pulse_bedroom"
+PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS=5
+```
+
+The display daemon reuses `HOME_ASSISTANT_BASE_URL` / `HOME_ASSISTANT_TOKEN` and polls the entity for `media_title` / `media_artist`. When the player’s state is `playing`, you’ll see “Artist — Title” rendered on-screen; it hides automatically when playback stops.
+
 ---
 
 ## Snapcast Multiroom Output

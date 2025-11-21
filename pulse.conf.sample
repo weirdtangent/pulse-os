@@ -168,6 +168,12 @@ PULSE_ASSISTANT_ACTIONS_FILE="/opt/pulse-os/pulse-assistant-actions.json"
 PULSE_ASSISTANT_DISPLAY_SECONDS=8
 # PULSE_ASSISTANT_FONT_SIZE — response overlay font size (pixels).
 PULSE_ASSISTANT_FONT_SIZE=28
+# PULSE_DISPLAY_SHOW_NOW_PLAYING — show Home Assistant media metadata on the overlay.
+PULSE_DISPLAY_SHOW_NOW_PLAYING="false"
+# PULSE_DISPLAY_NOW_PLAYING_ENTITY — HA media_player entity to mirror (e.g. media_player.snapcast_client_pulse_bedroom).
+PULSE_DISPLAY_NOW_PLAYING_ENTITY=""
+# PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS — how often to refresh metadata from HA (seconds).
+PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS=5
 
 # ============================================================================
 # Snapcast Client (optional)
