@@ -55,10 +55,10 @@ class AssistantDisplay:
         self.root.withdraw()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-        width = self.root.winfo_screenwidth()
-        height = self.root.winfo_screenheight()
-        frame_height = int(min(260, height * 0.25))
-        self.root.geometry(f"{width}x{frame_height}+0+{height - frame_height}")
+        self._screen_width = self.root.winfo_screenwidth()
+        self._screen_height = self.root.winfo_screenheight()
+        frame_height = int(min(260, self._screen_height * 0.25))
+        self.root.geometry(f"{self._screen_width}x{frame_height}+0+{self._screen_height - frame_height}")
         self.root.configure(bg="#000000")
         self.root.attributes("-alpha", 0.82)
 
@@ -68,12 +68,13 @@ class AssistantDisplay:
             font=("Helvetica", font_size),
             fg="#FFFFFF",
             bg="#000000",
-            wraplength=width - 80,
+            wraplength=self._screen_width - 80,
             justify=tk.LEFT,
         )
         self.label.pack(expand=True, fill=tk.BOTH, padx=40, pady=40)
         self.root.after(250, self._poll_queue)
 
+        self.now_playing_window: tk.Toplevel | None = None
         self.now_playing_label: tk.Label | None = None
         self._now_playing_stop = threading.Event()
         self._now_playing_active = False
@@ -128,14 +129,14 @@ class AssistantDisplay:
             self.root.after(200, self._poll_now_playing_queue)
 
     def _update_now_playing_label(self, text: str) -> None:
-        if not self.now_playing_label:
+        if not self.now_playing_label or not self.now_playing_window:
             return
         if text:
             self.now_playing_label.config(text=text)
-            self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
+            self.now_playing_window.deiconify()
         else:
             self.now_playing_label.config(text="")
-            self.now_playing_label.place_forget()
+            self.now_playing_window.withdraw()
 
     def _show_text(self, text: str) -> None:
         self.label.config(text=text)
@@ -185,8 +186,20 @@ class AssistantDisplay:
         else:
             self._ha_ssl_context = None
 
+        self.now_playing_window = tk.Toplevel(self.root)
+        self.now_playing_window.withdraw()
+        self.now_playing_window.overrideredirect(True)
+        self.now_playing_window.attributes("-topmost", True)
+        self.now_playing_window.configure(bg="#000000")
+        self.now_playing_window.attributes("-alpha", 0.82)
+        window_width = max(320, self._screen_width // 4)
+        window_height = max(60, int(font_size * 2.2))
+        offset_x = self._screen_width - window_width - 40
+        offset_y = self._screen_height - window_height - 40
+        self.now_playing_window.geometry(f"{window_width}x{window_height}+{offset_x}+{offset_y}")
+
         self.now_playing_label = tk.Label(
-            self.root,
+            self.now_playing_window,
             text="",
             font=("Helvetica", max(14, font_size // 2)),
             fg="#C8C8C8",
@@ -194,7 +207,7 @@ class AssistantDisplay:
             justify=tk.RIGHT,
             anchor="e",
         )
-        self.now_playing_label.place(relx=1.0, rely=1.0, x=-40, y=-30, anchor="se")
+        self.now_playing_label.pack(expand=True, fill=tk.BOTH, padx=12, pady=8)
 
         self._now_playing_queue = queue.Queue()
         self.root.after(500, self._poll_now_playing_queue)
