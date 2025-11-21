@@ -917,7 +917,7 @@ class KioskMqttListener:
 
         volume_control = build_number_entity(
             "Audio Volume",
-            f"{self.config.hostname}_volume",
+            f"{self.config.hostname}_control_volume",
             self.config.topics.volume,
             f"{self.config.topics.telemetry}/volume",
             sanitized_hostname,
@@ -931,7 +931,7 @@ class KioskMqttListener:
 
         brightness_control = build_number_entity(
             "Screen Brightness",
-            f"{self.config.hostname}_brightness",
+            f"{self.config.hostname}_control_brightness",
             self.config.topics.brightness,
             f"{self.config.topics.telemetry}/brightness",
             sanitized_hostname,
@@ -980,7 +980,7 @@ class KioskMqttListener:
                 "platform": "sensor",
                 "name": descriptor.name,
                 "default_entity_id": f"sensor.{sanitized_hostname}_{descriptor.key}",
-                "unique_id": f"{self.config.hostname}_{descriptor.key}",
+                "unique_id": f"{self.config.hostname}_telemetry_{descriptor.key}",
                 "stat_t": f"{base_topic}/{descriptor.key}",
                 "expire_after": expire_after,
             }
