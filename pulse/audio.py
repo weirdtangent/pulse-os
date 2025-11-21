@@ -76,9 +76,7 @@ def _write_notification_beep(wav_file: wave.Wave_write) -> None:
         decay = math.exp(-_NOTIFICATION_DECAY_RATE * t / _NOTIFICATION_DURATION_SECONDS)
         fade_in = min(1.0, i / fade_in_samples)
         angle = 2 * math.pi * _NOTIFICATION_FREQUENCY_HZ * t
-        value = int(
-            fade_in * decay * _NOTIFICATION_MAX_AMPLITUDE * math.sin(angle)
-        )
+        value = int(fade_in * decay * _NOTIFICATION_MAX_AMPLITUDE * math.sin(angle))
         wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
 
 

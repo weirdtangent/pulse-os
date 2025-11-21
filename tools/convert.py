@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 from pathlib import Path
+
 from PIL import Image
 
 SOURCE = Path("assets/graystorm-pulse_splash.png")  # adjust filename
-TARGET = Path("assets/boot-splash.rgb")             # or wherever you need it
+TARGET = Path("assets/boot-splash.rgb")  # or wherever you need it
 
 with Image.open(SOURCE) as img:
     img = img.convert("RGB").resize((1280, 720), Image.Resampling.LANCZOS)
