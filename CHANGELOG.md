@@ -1,3 +1,10 @@
+## [0.37.4](https://github.com/weirdtangent/pulse-os/compare/v0.37.3...v0.37.4) (2025-11-21)
+
+
+### Bug Fixes
+
+* bt-autoconnect.sh - use PULSE_BT_DEFAULT_VOLUME env var ([aec7c69](https://github.com/weirdtangent/pulse-os/commit/aec7c69cb7e4dd463cdb42739c33316d227f05f6))
+
 ## [0.37.3](https://github.com/weirdtangent/pulse-os/compare/v0.37.2...v0.37.3) (2025-11-21)
 
 ## [0.37.2](https://github.com/weirdtangent/pulse-os/compare/v0.37.1...v0.37.2) (2025-11-21)
