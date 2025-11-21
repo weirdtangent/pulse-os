@@ -1,3 +1,11 @@
+# [0.38.0](https://github.com/weirdtangent/pulse-os/compare/v0.37.4...v0.38.0) (2025-11-21)
+
+
+### Features
+
+* add 3d model for Bookpod Zero Speaker ([cd423e8](https://github.com/weirdtangent/pulse-os/commit/cd423e8efb4a0d1611e90fabcca4bac93a40aba6))
+* add snapcast client support ([86cf160](https://github.com/weirdtangent/pulse-os/commit/86cf160000440c37f22a4240f78469ee6c17994e))
+
 ## [0.37.4](https://github.com/weirdtangent/pulse-os/compare/v0.37.3...v0.37.4) (2025-11-21)
 
 
