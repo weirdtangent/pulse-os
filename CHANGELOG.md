@@ -1,3 +1,10 @@
+## [0.38.1](https://github.com/weirdtangent/pulse-os/compare/v0.38.0...v0.38.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* syntax error in pulse-snapclient.sh ([59379ab](https://github.com/weirdtangent/pulse-os/commit/59379ab110f91bf37d37db35d979e61a13114a73))
+
 # [0.38.0](https://github.com/weirdtangent/pulse-os/compare/v0.37.4...v0.38.0) (2025-11-21)
 
 
