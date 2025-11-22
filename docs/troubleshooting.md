@@ -86,6 +86,24 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
 
 5. **If speaker is off**: Make sure the speaker is powered on. The autoconnect script will connect once the speaker is turned on and the script runs (every 15 seconds).
 
+## Snapcast / Music Assistant silent but beeps work
+
+**Problem**: Wake-word beeps and `pactl set-sink-volume` feedback come through the speakers, but Music Assistant or Snapcast streams are silent. `journalctl -u pulse-snapclient.service` shows `PulsePlayer` connecting and then timing out (`No chunk received for 5000ms, disconnecting from pulse.`), and `pactl list sink-inputs` is empty while music is “playing”.
+
+**Solution**: Snapclient uses the PulseAudio/PipeWire backend (`--player pulse`). If the `pipewire-pulse` user services aren’t running, Snapclient silently falls back to ALSA and no audio reaches the kiosk sink.
+
+1. **Rerun** `./setup.sh <location>` so the new `configure_snapclient()` path calls `ensure_user_systemd_session`, which starts `pipewire.service`, `pipewire-pulse.service`, and `wireplumber.service` for the `pulse` user even when Bluetooth autoconnect is disabled.
+2. **Manual fix** (if you can’t rerun setup right away):
+   ```bash
+   sudo loginctl enable-linger pulse
+   sudo -u pulse \
+     XDG_RUNTIME_DIR=/run/user/$(id -u pulse) \
+     DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u pulse)/bus \
+     systemctl --user enable --now pipewire.service pipewire-pulse.service wireplumber.service
+   sudo systemctl restart pulse-snapclient.service
+   ```
+3. Verify with `pactl list sink-inputs | grep -B3 snapclient` while Music Assistant plays; you should now see a `snapclient` sink input and the speakers will output the stream.
+
 ## Display rotation glitches
 
 **Problem**: Display rotation is incorrect or glitchy after boot.
