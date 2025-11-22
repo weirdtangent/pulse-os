@@ -1,3 +1,16 @@
+# [0.49.0](https://github.com/weirdtangent/pulse-os/compare/v0.48.5...v0.49.0) (2025-11-22)
+
+
+### Bug Fixes
+
+* handle AM/PM in timer commands ([7d324c9](https://github.com/weirdtangent/pulse-os/commit/7d324c99bc8e633b1ad101b565cf3b79868c1e8f))
+
+
+### Features
+
+* add follow-up support to assistant ([09b2754](https://github.com/weirdtangent/pulse-os/commit/09b2754ed834e5119fd29c8f2370d4ca3ad8264b))
+* add transcript logging opt-out toggle ([12fd7e4](https://github.com/weirdtangent/pulse-os/commit/12fd7e486e8bc0e1fcf1e88da4f818d1cec3ef3c))
+
 ## [0.48.5](https://github.com/weirdtangent/pulse-os/compare/v0.48.4...v0.48.5) (2025-11-22)
 
 
