@@ -419,17 +419,14 @@ def render_overlay_html(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
-:root {{
-  color-scheme: dark;
-}}
 html {{
-  background: transparent;
+  background: transparent !important;
 }}
 body {{
   margin: 0;
   width: 100vw;
   height: 100vh;
-  background: transparent;
+  background: transparent !important;
   font-family: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
   color: {theme.text_color};
 }}
