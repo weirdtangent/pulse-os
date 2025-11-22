@@ -971,6 +971,7 @@ class PulseAssistant:
             return False
         lowered = transcript.strip().lower()
         normalized = re.sub(r"[^\w\s]", " ", lowered)
+        normalized = re.sub(r"\b([ap])\s+m\b", r"\1m", normalized)
         normalized = re.sub(r"\s+", " ", normalized).strip()
         timer_start = self._extract_timer_start_intent(normalized)
         if timer_start:
@@ -979,6 +980,14 @@ class PulseAssistant:
             phrase = self._describe_duration(duration)
             label_text = f" for {label}" if label else ""
             spoken = f"Starting a {phrase} timer{label_text}."
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            await self._speak(spoken)
+            return True
+        alarm_start = self._extract_alarm_start_intent(normalized)
+        if alarm_start:
+            time_of_day, days, label = alarm_start
+            await self.schedule_service.create_alarm(time_of_day=time_of_day, days=days, label=label)
+            spoken = self._format_alarm_confirmation(time_of_day, days, label)
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
@@ -1210,6 +1219,81 @@ class PulseAssistant:
             minutes = seconds // 60
             return f"{minutes} minute{'s' if minutes != 1 else ''}"
         return f"{seconds} seconds"
+
+    @staticmethod
+    def _extract_alarm_start_intent(text: str) -> tuple[str, list[int] | None, str | None] | None:
+        if "alarm" not in text:
+            return None
+        time_match = re.search(
+            r"(?:alarm\s+(?:for|at)\s+)?(\d{1,4}(?::\d{2})?)\s*(am|pm)?",
+            text,
+        )
+        if not time_match:
+            return None
+        time_token = time_match.group(1)
+        suffix = time_match.group(2)
+        time_of_day = PulseAssistant._parse_time_token(time_token, suffix)
+        if not time_of_day:
+            return None
+        days = None
+        day_match = re.search(r"(?:on|every)\s+([a-z ,]+)", text)
+        if day_match:
+            days = parse_day_tokens(day_match.group(1))
+        label = None
+        label_match = re.search(r"(?:called|named)\s+([a-z0-9 ]+)", text)
+        if label_match:
+            label = label_match.group(1).strip()
+        return time_of_day, days, label
+
+    @staticmethod
+    def _parse_time_token(token: str, suffix: str | None) -> str | None:
+        token = token.replace(" ", "")
+        hour_str = token
+        minute_str = "00"
+        if ":" in token:
+            hour_str, minute_str = token.split(":", 1)
+        elif len(token) in (3, 4):
+            hour_str = token[:-2]
+            minute_str = token[-2:]
+        try:
+            hour = int(hour_str)
+            minute = int(minute_str)
+        except ValueError:
+            return None
+        if suffix:
+            if suffix.startswith("p") and hour < 12:
+                hour += 12
+            if suffix.startswith("a") and hour == 12:
+                hour = 0
+        hour %= 24
+        minute = max(0, min(59, minute))
+        return f"{hour:02d}:{minute:02d}"
+
+    @staticmethod
+    def _format_alarm_confirmation(time_of_day: str, days: list[int] | None, label: str | None) -> str:
+        try:
+            dt = datetime.strptime(time_of_day, "%H:%M").replace(year=1900, month=1, day=1)
+            time_phrase = dt.strftime("%-I:%M %p")
+        except ValueError:
+            time_phrase = time_of_day
+        if days:
+            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            normalized_days = sorted({d % 7 for d in days})
+            if normalized_days == [0, 1, 2, 3, 4]:
+                day_phrase = " on weekdays"
+            elif normalized_days == [5, 6]:
+                day_phrase = " on weekends"
+            elif normalized_days == list(range(7)):
+                day_phrase = " every day"
+            elif len(normalized_days) == 1:
+                day_phrase = f" on {day_names[normalized_days[0]]}"
+            else:
+                names = ", ".join(day_names[d] for d in normalized_days)
+                day_phrase = f" on {names}"
+        else:
+            day_phrase = ""
+        label_phrase = f" called {label}" if label else ""
+        return f"Setting an alarm for {time_phrase}{day_phrase}{label_phrase}."
 
     async def _maybe_handle_music_command(self, transcript: str) -> bool:
         query = (transcript or "").strip().lower()
