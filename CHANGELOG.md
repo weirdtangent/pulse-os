@@ -1,3 +1,15 @@
+# [0.51.0](https://github.com/weirdtangent/pulse-os/compare/v0.50.1...v0.51.0) (2025-11-22)
+
+
+### Bug Fixes
+
+* 1 clock, 0-4 timers, overlay changes ([c8a6293](https://github.com/weirdtangent/pulse-os/commit/c8a6293459572f66b274dd6c39713191eef01d91))
+
+
+### Features
+
+* add kiosk-hosted overlay endpoint and MQTT refresh topic ([141c414](https://github.com/weirdtangent/pulse-os/commit/141c4144fa633902badda4ae30a69c43332a2802))
+
 ## [0.50.1](https://github.com/weirdtangent/pulse-os/compare/v0.50.0...v0.50.1) (2025-11-22)
 
 # [0.50.0](https://github.com/weirdtangent/pulse-os/compare/v0.49.7...v0.50.0) (2025-11-22)
