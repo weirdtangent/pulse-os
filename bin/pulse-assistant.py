@@ -1127,11 +1127,15 @@ class PulseAssistant:
         if not any(word in lowered for word in ("start", "set", "create")):
             return None
         duration_match = re.search(
-            r"(\d+(?:\.\d+)?)\s*(seconds?|second|secs?|minutes?|minute|mins?|hours?|hour|hrs?)", lowered
+            r"((?:\d+(?:\.\d+)?|[a-z]+))\s*(seconds?|second|secs?|minutes?|minute|mins?|hours?|hour|hrs?)",
+            lowered,
         )
         if not duration_match:
             return None
-        amount = float(duration_match.group(1))
+        raw_amount = duration_match.group(1)
+        amount = PulseAssistant._parse_numeric_token(raw_amount)
+        if amount is None:
+            return None
         unit = duration_match.group(2)
         unit = unit.rstrip("s")
         multipliers = {
@@ -1151,6 +1155,52 @@ class PulseAssistant:
             if candidate and not re.fullmatch(r"\d+(\.\d+)?\s*(seconds?|minutes?|hours?)", candidate):
                 label = candidate
         return duration_seconds, label
+
+    @staticmethod
+    def _parse_numeric_token(token: str) -> float | None:
+        try:
+            return float(token)
+        except ValueError:
+            pass
+        token = token.strip().lower()
+        number_words = {
+            "zero": 0,
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+            "twenty": 20,
+            "thirty": 30,
+            "forty": 40,
+            "fifty": 50,
+            "sixty": 60,
+            "half": 0.5,
+            "quarter": 0.25,
+            "a": 1,
+            "an": 1,
+        }
+        if token in number_words:
+            return float(number_words[token])
+        # Handle composite like "twenty five"
+        parts = token.split()
+        if len(parts) == 2 and parts[0] in number_words and parts[1] in number_words and number_words[parts[1]] < 10:
+            return float(number_words[parts[0]] + number_words[parts[1]])
+        return None
 
     @staticmethod
     def _describe_duration(seconds: int) -> str:
