@@ -9,8 +9,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .schedule_service import PlaybackConfig, parse_day_tokens
+
 if TYPE_CHECKING:  # pragma: no cover
     from .home_assistant import HomeAssistantClient
+    from .schedule_service import ScheduleService
     from .scheduler import AssistantScheduler
 
 
@@ -97,6 +100,7 @@ class ActionEngine:
         mqtt_client,
         ha_client: HomeAssistantClient | None = None,
         scheduler: AssistantScheduler | None = None,
+        schedule_service: ScheduleService | None = None,
     ) -> list[str]:
         executed: list[str] = []
 
@@ -125,7 +129,7 @@ class ActionEngine:
                 if handled:
                     executed.append(slug)
             else:
-                handled = await _maybe_execute_scheduler_action(slug, arg_string, scheduler)
+                handled = await _maybe_execute_scheduler_action(slug, arg_string, scheduler, schedule_service)
                 if handled:
                     executed.append(slug)
         return executed
@@ -184,21 +188,10 @@ async def _maybe_execute_scheduler_action(
     slug: str,
     arg_string: str,
     scheduler: AssistantScheduler | None,
+    schedule_service: ScheduleService | None,
 ) -> bool:
-    if scheduler is None:
-        return False
     args = _parse_action_args(arg_string)
-    if slug == "timer.start":
-        duration_text = args.get("duration") or args.get("seconds") or arg_string
-        if not duration_text:
-            return False
-        duration = _parse_duration_seconds(duration_text)
-        if duration <= 0:
-            return False
-        label = args.get("label")
-        await scheduler.start_timer(duration, label)
-        return True
-    if slug == "reminder.create":
+    if slug == "reminder.create" and scheduler is not None:
         message = args.get("message") or args.get("text") or arg_string
         when_text = args.get("when") or args.get("time")
         if not message:
@@ -211,7 +204,132 @@ async def _maybe_execute_scheduler_action(
                 return False
         await scheduler.schedule_reminder(when, message)
         return True
+    if schedule_service is not None:
+        if slug == "timer.start":
+            duration = _duration_from_args(args, arg_string)
+            if duration <= 0:
+                return False
+            playback = _playback_from_args(args)
+            await schedule_service.create_timer(duration_seconds=duration, label=args.get("label"), playback=playback)
+            return True
+        if slug in {"timer.add", "timer.extend"}:
+            duration = _duration_from_args(args, "")
+            if duration <= 0:
+                return False
+            event_id = _resolve_schedule_event_id(schedule_service, "timer", args)
+            if not event_id:
+                return False
+            await schedule_service.extend_timer(event_id, int(duration))
+            return True
+        if slug in {"timer.stop", "timer.cancel"}:
+            event_id = _resolve_schedule_event_id(schedule_service, "timer", args)
+            if not event_id:
+                return False
+            await schedule_service.stop_event(event_id, reason="action_stop")
+            return True
+        if slug == "timer.cancel_all":
+            await schedule_service.cancel_all_timers()
+            return True
+        if slug == "alarm.set":
+            time_text = args.get("time") or args.get("at") or arg_string
+            if not time_text:
+                return False
+            days = parse_day_tokens(args.get("days") or args.get("repeat"))
+            playback = _playback_from_args(args)
+            single_flag = args.get("single") or args.get("once")
+            single_shot = bool(single_flag) if single_flag is not None else None
+            await schedule_service.create_alarm(
+                time_of_day=time_text,
+                label=args.get("label") or args.get("name"),
+                days=days,
+                playback=playback,
+                single_shot=single_shot,
+            )
+            return True
+        if slug == "alarm.update":
+            event_id = _resolve_schedule_event_id(schedule_service, "alarm", args)
+            if not event_id:
+                return False
+            days = (
+                parse_day_tokens(args.get("days") or args.get("repeat"))
+                if ("days" in args or "repeat" in args)
+                else None
+            )
+            playback = _playback_from_args(args) if "type" in args or "mode" in args or "source" in args else None
+            await schedule_service.update_alarm(
+                event_id,
+                time_of_day=args.get("time") or args.get("at"),
+                days=days,
+                label=args.get("label") or args.get("name"),
+                playback=playback,
+            )
+            return True
+        if slug == "alarm.delete":
+            event_id = _resolve_schedule_event_id(schedule_service, "alarm", args)
+            if not event_id:
+                return False
+            await schedule_service.delete_event(event_id)
+            return True
+        if slug == "alarm.stop":
+            event_id = _resolve_schedule_event_id(schedule_service, "alarm", args)
+            if not event_id:
+                return False
+            await schedule_service.stop_event(event_id, reason="action_stop")
+            return True
+        if slug == "alarm.snooze":
+            event_id = _resolve_schedule_event_id(schedule_service, "alarm", args)
+            if not event_id:
+                return False
+            minutes = int(float(args.get("minutes") or 5))
+            await schedule_service.snooze_alarm(event_id, minutes=minutes)
+            return True
+    if scheduler is not None and slug == "timer.start":
+        duration_text = args.get("duration") or args.get("seconds") or arg_string
+        if not duration_text:
+            return False
+        duration = _parse_duration_seconds(duration_text)
+        if duration <= 0:
+            return False
+        label = args.get("label")
+        await scheduler.start_timer(duration, label)
+        return True
     return False
+
+
+def _duration_from_args(args: dict[str, str], fallback: str) -> float:
+    duration_text = args.get("duration") or args.get("seconds") or fallback
+    if not duration_text:
+        return 0.0
+    return _parse_duration_seconds(duration_text)
+
+
+def _playback_from_args(args: dict[str, str]) -> PlaybackConfig:
+    mode = (args.get("type") or args.get("mode") or "beep").lower()
+    if mode != "music":
+        return PlaybackConfig()
+    return PlaybackConfig(
+        mode="music",
+        music_source=args.get("source") or args.get("playlist") or args.get("media"),
+        music_entity=args.get("entity") or args.get("player"),
+        media_content_type=args.get("content_type"),
+        provider=args.get("provider"),
+        description=args.get("description") or args.get("label"),
+    )
+
+
+def _resolve_schedule_event_id(schedule_service: ScheduleService, event_type: str, args: dict[str, str]) -> str | None:
+    candidate = args.get("id") or args.get("event_id")
+    if candidate:
+        return candidate
+    label = args.get("label") or args.get("name")
+    if not label:
+        return None
+    lowered = label.strip().lower()
+    for event in schedule_service.list_events(event_type):
+        event_label = (event.get("label") or "").lower()
+        if event_label and lowered in event_label:
+            return event["id"]
+    return None
 
 
 def _parse_duration_seconds(value: str) -> float:

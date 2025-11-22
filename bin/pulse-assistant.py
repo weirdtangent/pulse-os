@@ -10,19 +10,25 @@ import contextlib
 import json
 import logging
 import math
+import os
+import re
 import signal
 import sys
 import time
 from array import array
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from pulse.assistant.actions import ActionEngine, load_action_definitions
+from pulse.assistant.actions import ActionEngine, _parse_duration_seconds, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.llm import LLMProvider, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
+from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.audio import play_volume_feedback
 from wyoming.asr import Transcribe, Transcript
@@ -107,7 +113,16 @@ class PulseAssistant:
         self.scheduler = AssistantScheduler(
             self.home_assistant, config.home_assistant, self._handle_scheduler_notification
         )
+        schedule_path = self._determine_schedule_file()
+        self.schedule_service = ScheduleService(
+            storage_path=schedule_path,
+            hostname=self.config.hostname,
+            ha_client=self.home_assistant,
+            on_state_changed=self._handle_schedule_state_changed,
+            on_active_event=self._handle_active_schedule_event,
+        )
         self._shutdown = asyncio.Event()
+        self._loop: asyncio.AbstractEventLoop | None = None
         base_topic = self.config.mqtt.topic_base
         self._assist_in_progress_topic = f"{base_topic}/assistant/in_progress"
         self._assist_metrics_topic = f"{base_topic}/assistant/metrics"
@@ -115,16 +130,23 @@ class PulseAssistant:
         self._assist_pipeline_topic = f"{base_topic}/assistant/active_pipeline"
         self._assist_wake_topic = f"{base_topic}/assistant/last_wake_word"
         self._preferences_topic = f"{base_topic}/preferences"
+        self._schedules_state_topic = f"{base_topic}/schedules/state"
+        self._schedule_command_topic = f"{base_topic}/schedules/command"
+        self._alarms_active_topic = f"{base_topic}/alarms/active"
+        self._timers_active_topic = f"{base_topic}/timers/active"
         self._assist_stage = "idle"
         self._assist_pipeline: str | None = None
         self._current_tracker: AssistRunTracker | None = None
         self._ha_pipeline_override: str | None = None
 
     async def run(self) -> None:
+        self._loop = asyncio.get_running_loop()
         self.mqtt.connect()
         self._subscribe_preference_topics()
+        self._subscribe_schedule_topics()
         self._publish_preferences()
         self._publish_assistant_discovery()
+        await self.schedule_service.start()
         await self.mic.start()
         self._set_assist_stage("pulse", "idle")
         friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
@@ -147,6 +169,7 @@ class PulseAssistant:
     async def shutdown(self) -> None:
         self._shutdown.set()
         await self.mic.stop()
+        await self.schedule_service.stop()
         self.mqtt.disconnect()
         await self.player.stop()
         if self.home_assistant:
@@ -357,6 +380,9 @@ class PulseAssistant:
             return
         LOGGER.info("Transcript (%s): %s", wake_word, transcript)
         self._publish_message(self.config.transcript_topic, json.dumps({"text": transcript, "wake_word": wake_word}))
+        if await self._maybe_handle_schedule_shortcut(transcript):
+            self._finalize_assist_run(status="success")
+            return
         prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
         llm_result = await self.llm.generate(transcript, prompt_actions)
         LOGGER.debug("LLM response: %s", llm_result)
@@ -365,6 +391,7 @@ class PulseAssistant:
             self.mqtt if llm_result.actions else None,
             self.home_assistant,
             self.scheduler,
+            self.schedule_service,
         )
         if executed_actions:
             self._publish_message(
@@ -550,6 +577,12 @@ class PulseAssistant:
         except RuntimeError:
             LOGGER.debug("MQTT client not ready for preference subscriptions")
 
+    def _subscribe_schedule_topics(self) -> None:
+        try:
+            self.mqtt.subscribe(self._schedule_command_topic, self._handle_schedule_command_message)
+        except RuntimeError:
+            LOGGER.debug("MQTT client not ready for schedule command subscription")
+
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes"}
@@ -583,6 +616,29 @@ class PulseAssistant:
         topic = f"{self._preferences_topic}/{key}/state"
         self._publish_message(topic, value, retain=True)
 
+    def _handle_schedule_state_changed(self, snapshot: dict[str, Any]) -> None:
+        try:
+            payload = json.dumps(snapshot)
+        except TypeError:
+            LOGGER.debug("Unable to serialize schedule snapshot: %s", snapshot)
+            return
+        self._publish_message(self._schedules_state_topic, payload, retain=True)
+
+    def _handle_active_schedule_event(self, event_type: str, payload: dict[str, Any] | None) -> None:
+        topic = self._alarms_active_topic if event_type == "alarm" else self._timers_active_topic
+        message = payload or {"state": "idle"}
+        self._publish_message(topic, json.dumps(message))
+
+    def _handle_schedule_command_message(self, payload: str) -> None:
+        if not self._loop:
+            return
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            LOGGER.debug("Ignoring malformed schedule command: %s", payload)
+            return
+        asyncio.run_coroutine_threadsafe(self._process_schedule_command(data), self._loop)
+
     def _set_assist_stage(self, pipeline: str, stage: str, extra: dict | None = None) -> None:
         self._assist_stage = stage
         self._assist_pipeline = pipeline
@@ -605,6 +661,253 @@ class PulseAssistant:
         self._publish_message(self._assist_metrics_topic, json.dumps(metrics))
         self._set_assist_stage(tracker.pipeline, "idle", {"wake_word": tracker.wake_word, "status": status})
         self._current_tracker = None
+
+    @staticmethod
+    def _determine_schedule_file() -> Path:
+        override = os.environ.get("PULSE_SCHEDULE_FILE")
+        if override:
+            return Path(override).expanduser()
+        return Path.home() / ".local" / "share" / "pulse" / "schedules.json"
+
+    async def _process_schedule_command(self, payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            return
+        action = str(payload.get("action") or "").lower()
+        if not action:
+            return
+        try:
+            if action in {"create_alarm", "add_alarm"}:
+                time_text = payload.get("time") or payload.get("time_of_day")
+                if not time_text:
+                    raise ValueError("alarm time is required")
+                days = self._coerce_day_list(payload.get("days"))
+                playback = self._playback_from_payload(payload.get("playback"))
+                single_flag = payload.get("single_shot")
+                single_shot = bool(single_flag) if single_flag is not None else None
+                await self.schedule_service.create_alarm(
+                    time_of_day=str(time_text),
+                    label=payload.get("label"),
+                    days=days,
+                    playback=playback,
+                    single_shot=single_shot,
+                )
+            elif action == "update_alarm":
+                event_id = payload.get("event_id")
+                if not event_id:
+                    raise ValueError("event_id is required to update an alarm")
+                days = self._coerce_day_list(payload.get("days")) if "days" in payload else None
+                playback = self._playback_from_payload(payload.get("playback")) if "playback" in payload else None
+                await self.schedule_service.update_alarm(
+                    str(event_id),
+                    time_of_day=payload.get("time") or payload.get("time_of_day"),
+                    days=days,
+                    label=payload.get("label"),
+                    playback=playback,
+                )
+            elif action in {"delete_alarm", "delete_timer", "delete"}:
+                event_id = payload.get("event_id")
+                if event_id:
+                    await self.schedule_service.delete_event(str(event_id))
+            elif action in {"start_timer", "create_timer"}:
+                seconds = self._coerce_duration_seconds(payload.get("duration") or payload.get("seconds"))
+                playback = self._playback_from_payload(payload.get("playback"))
+                await self.schedule_service.create_timer(
+                    duration_seconds=seconds,
+                    label=payload.get("label"),
+                    playback=playback,
+                )
+            elif action in {"add_time", "extend_timer"}:
+                event_id = payload.get("event_id")
+                seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration"))
+                if event_id:
+                    await self.schedule_service.extend_timer(str(event_id), int(seconds))
+            elif action in {"stop", "cancel"}:
+                event_id = payload.get("event_id")
+                if event_id:
+                    await self.schedule_service.stop_event(str(event_id), reason="mqtt_stop")
+            elif action == "snooze":
+                event_id = payload.get("event_id")
+                minutes = int(payload.get("minutes", 5))
+                if event_id:
+                    await self.schedule_service.snooze_alarm(str(event_id), minutes=max(1, minutes))
+            elif action == "cancel_all":
+                event_type = (payload.get("event_type") or "timer").lower()
+                if event_type == "timer":
+                    await self.schedule_service.cancel_all_timers()
+            elif action == "next_alarm":
+                info = self.schedule_service.get_next_alarm()
+                response = {"next_alarm": info}
+                self._publish_message(f"{self._schedules_state_topic}/next_alarm", json.dumps(response))
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.debug("Schedule command %s failed: %s", action, exc)
+
+    @staticmethod
+    def _playback_from_payload(payload: dict[str, Any] | None) -> PlaybackConfig:
+        if not isinstance(payload, dict):
+            if str(payload or "").lower() == "music":
+                return PlaybackConfig(mode="music")
+            return PlaybackConfig()
+        mode = (payload.get("mode") or payload.get("type") or "beep").lower()
+        if mode != "music":
+            return PlaybackConfig()
+        return PlaybackConfig(
+            mode="music",
+            music_entity=payload.get("entity") or payload.get("music_entity"),
+            music_source=payload.get("source") or payload.get("media_content_id"),
+            media_content_type=payload.get("media_content_type") or payload.get("content_type"),
+            provider=payload.get("provider"),
+            description=payload.get("description") or payload.get("name"),
+        )
+
+    @staticmethod
+    def _coerce_duration_seconds(raw_value: Any) -> float:
+        if raw_value is None:
+            raise ValueError("duration is required")
+        if isinstance(raw_value, (int, float)):
+            seconds = float(raw_value)
+        else:
+            seconds = _parse_duration_seconds(str(raw_value))
+        if seconds <= 0:
+            raise ValueError("duration must be positive")
+        return seconds
+
+    @staticmethod
+    def _coerce_day_list(value: Any) -> list[int] | None:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            tokens = ",".join(str(item) for item in value)
+            return parse_day_tokens(tokens)
+        return parse_day_tokens(str(value))
+
+    async def _maybe_handle_schedule_shortcut(self, transcript: str) -> bool:
+        if not transcript or not transcript.strip():
+            return False
+        if not self.schedule_service:
+            return False
+        lowered = transcript.strip().lower()
+        if "next alarm" in lowered or lowered.startswith("when is my alarm"):
+            info = self.schedule_service.get_next_alarm()
+            if info:
+                message = self._format_alarm_summary(info)
+            else:
+                message = "You do not have any alarms scheduled."
+            await self._speak(message)
+            return True
+        if "cancel all timers" in lowered:
+            count = await self.schedule_service.cancel_all_timers()
+            if count > 0:
+                await self._speak(f"Cancelled {count} timer{'s' if count != 1 else ''}.")
+            else:
+                await self._speak("You do not have any timers running.")
+            return True
+        if self._is_stop_phrase(lowered):
+            handled = await self._stop_active_schedule(lowered)
+            if handled:
+                return True
+        add_match = re.search(r"(add|plus)\s+(\d+)\s*(minute|min|minutes|mins)", lowered)
+        if add_match:
+            minutes = int(add_match.group(2))
+            seconds = minutes * 60
+            label = self._extract_timer_label(lowered)
+            if await self._extend_timer_shortcut(seconds, label):
+                label_text = f" to the {label} timer" if label else ""
+                await self._speak(f"Added {minutes} minutes{label_text}.")
+                return True
+        if "cancel my timer" in lowered or "cancel the timer" in lowered:
+            label = self._extract_timer_label(lowered)
+            if await self._cancel_timer_shortcut(label):
+                await self._speak("Timer cancelled.")
+                return True
+        return False
+
+    @staticmethod
+    def _is_stop_phrase(lowered: str) -> bool:
+        stop_phrases = {
+            "stop",
+            "stop it",
+            "stop alarm",
+            "stop the alarm",
+            "turn off the alarm",
+            "cancel the alarm",
+            "stop the timer",
+        }
+        if lowered in stop_phrases:
+            return True
+        return lowered.startswith("stop alarm") or lowered.startswith("stop the alarm")
+
+    async def _stop_active_schedule(self, lowered: str) -> bool:
+        alarm = self.schedule_service.active_event("alarm")
+        if alarm:
+            await self.schedule_service.stop_event(alarm["id"], reason="voice")
+            return True
+        timer = self.schedule_service.active_event("timer")
+        if timer and ("timer" in lowered or lowered in {"stop", "stop it"}):
+            await self.schedule_service.stop_event(timer["id"], reason="voice")
+            return True
+        return False
+
+    def _format_alarm_summary(self, alarm: dict[str, Any]) -> str:
+        next_fire = alarm.get("next_fire")
+        label = alarm.get("label")
+        try:
+            dt = datetime.fromisoformat(next_fire) if next_fire else None
+        except (TypeError, ValueError):
+            dt = None
+        if dt:
+            dt = dt.astimezone()
+            time_str = dt.strftime("%I:%M %p").lstrip("0")
+            day = dt.strftime("%A")
+            base = f"Your next alarm is set for {time_str} on {day}"
+        else:
+            base = "You have an upcoming alarm"
+        if label:
+            base = f"{base} ({label})"
+        return f"{base}."
+
+    def _extract_timer_label(self, lowered: str) -> str | None:
+        match = re.search(r"timer (?:for|named)\s+([a-z0-9 ]+)", lowered)
+        if match:
+            return match.group(1).strip()
+        match = re.search(r"for ([a-z0-9 ]+) timer", lowered)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    async def _extend_timer_shortcut(self, seconds: int, label: str | None) -> bool:
+        timer = self._find_timer_candidate(label)
+        if not timer:
+            return False
+        await self.schedule_service.extend_timer(timer["id"], seconds)
+        return True
+
+    async def _cancel_timer_shortcut(self, label: str | None) -> bool:
+        timer = self._find_timer_candidate(label)
+        if not timer:
+            return False
+        await self.schedule_service.stop_event(timer["id"], reason="voice_cancel")
+        return True
+
+    def _find_timer_candidate(self, label: str | None) -> dict[str, Any] | None:
+        timers = self.schedule_service.list_events("timer")
+        if not timers:
+            return None
+        if label:
+            wanted = label.lower()
+            for timer in timers:
+                current_label = (timer.get("label") or "").lower()
+                if current_label and wanted in current_label:
+                    return timer
+        active = self.schedule_service.active_event("timer")
+        if active:
+            if not label:
+                return active
+            current_label = (active.get("label") or "").lower()
+            if current_label and label.lower() in current_label:
+                return active
+        if len(timers) == 1 and not label:
+            return timers[0]
+        return None
 
     def _handle_ha_pipeline_command(self, payload: str) -> None:
         value = payload.strip()

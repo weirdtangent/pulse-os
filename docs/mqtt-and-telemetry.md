@@ -92,3 +92,36 @@ mode: single
 
 Because the MQTT message is retained, Home Assistant will immediately show the most recent summary after every restart, plus whenever a kiosk reruns `setup.sh`. Feel free to swap the action for markdown cards, mobile push, or whatever flow fits your deployment.
 
+---
+
+## Assistant Alarms, Timers & Commands
+
+Voice alarms and timers now surface their state over MQTT so Home Assistant dashboards (and the new on-device overlay) can stay in sync:
+
+| Topic | Description |
+| ----- | ----------- |
+| `pulse/<hostname>/assistant/schedules/state` | Retained JSON snapshot with two arrays: `alarms` and `timers`. Each entry includes the event `id`, `type`, `label`, next-fire timestamp (`next_fire`), duration/target info, repeat days, and playback metadata (`mode`, music source, etc.). Use this for list cards or history tracking. |
+| `pulse/<hostname>/assistant/alarms/active` | Live updates when an alarm is ringing. Payload format: `{"state": "ringing", "event": {...}}` or `{"state": "idle"}` when cleared. |
+| `pulse/<hostname>/assistant/timers/active` | Same as above but for timers (single-use duration events). |
+
+### Command topic
+
+Publish JSON commands to `pulse/<hostname>/assistant/schedules/command` to control alarms/timers from automations, dashboards, or the new overlay buttons. Supported actions:
+
+| Action | Required fields | Notes |
+| ------ | ---------------- | ----- |
+| `{"action": "create_alarm", "time": "8:30am", "label": "Weekdays", "days": "weekdays", "playback": {"mode": "music", "source": "tidal:playlist:123"}}` | `time` | `days` accepts `weekdays`, `weekends`, `daily`, or comma-separated day names (`mon,wed`). `playback.mode` defaults to `beep`; set to `music` to trigger Music Assistant via `music_entity`/`source`. |
+| `{"action": "update_alarm", "event_id": "<id>", "time": "7:00", "days": "mon,tue,wed"}` | `event_id` | Any omitted field stays unchanged. |
+| `{"action": "delete_alarm", "event_id": "<id>"}` | `event_id` | Removes the alarm entirely. |
+| `{"action": "start_timer", "duration": "15m", "label": "Bread"}` | `duration` | Duration accepts `90s`, `15m`, `2h`, or raw seconds. |
+| `{"action": "add_time", "event_id": "<id>", "seconds": 180}` | `event_id`, `seconds` | Adds time to an existing timer (overlay uses +3 min by default). |
+| `{"action": "stop", "event_id": "<id>"}` | `event_id` | Works for either alarms or timers. |
+| `{"action": "snooze", "event_id": "<id>", "minutes": 5}` | `event_id` | Snoozes an active alarm, default 5 min. |
+| `{"action": "cancel_all", "event_type": "timer"}` | — | Cancels every outstanding timer. |
+
+Responses are implicit—the kiosk publishes the updated state snapshot immediately after every successful command.
+
+### On-screen overlay
+
+`bin/pulse-assistant-display.py` now listens to the `alarms/active` and `timers/active` topics. When something is ringing a fullscreen overlay appears with a stop button plus a context action (SNOOZE for alarms, ADD 3 MIN for timers). Each button posts the matching command JSON back to the `schedules/command` topic, so your physical display, automations, and voice assistant all stay coordinated.
+
