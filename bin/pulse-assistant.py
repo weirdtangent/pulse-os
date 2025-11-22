@@ -1066,6 +1066,17 @@ class PulseAssistant:
         normalized = re.sub(r"^(?:hey|ok|okay)\s+(?:jarvis|pulse)\s+", "", normalized)
         normalized = re.sub(r"^(?:jarvis|pulse)\s+", "", normalized)
         normalized = re.sub(r"\s+", " ", normalized).strip()
+        alarm_intent = self._extract_alarm_start_intent(normalized)
+        if self._mentions_alarm_cancel(normalized):
+            handled = await self._stop_active_schedule(normalized)
+            if handled:
+                return True
+            if await self._cancel_alarm_shortcut(alarm_intent):
+                spoken = "Alarm cancelled."
+                self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+                await self._speak(spoken)
+                return True
+            return False
         timer_start = self._extract_timer_start_intent(normalized)
         if timer_start:
             duration, label = timer_start
@@ -1076,9 +1087,8 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
-        alarm_start = self._extract_alarm_start_intent(normalized)
-        if alarm_start:
-            time_of_day, days, label = alarm_start
+        if alarm_intent:
+            time_of_day, days, label = alarm_intent
             await self.schedule_service.create_alarm(time_of_day=time_of_day, days=days, label=label)
             spoken = self._format_alarm_confirmation(time_of_day, days, label)
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
@@ -1146,6 +1156,43 @@ class PulseAssistant:
         if re.search(timer_stop_pattern, lowered):
             return True
         return False
+
+    @staticmethod
+    def _mentions_alarm_cancel(text: str) -> bool:
+        if "alarm" not in text:
+            return False
+        cancel_words = ("cancel", "delete", "remove", "clear", "turn off")
+        return any(word in text for word in cancel_words)
+
+    async def _cancel_alarm_shortcut(
+        self, alarm_intent: tuple[str, list[int] | None, str | None] | None
+    ) -> bool:
+        if not self.schedule_service or not alarm_intent:
+            return False
+        time_of_day, _, label = alarm_intent
+        target = self._find_alarm_candidate(time_of_day, label)
+        if not target:
+            return False
+        await self.schedule_service.delete_event(target["id"])
+        return True
+
+    def _find_alarm_candidate(self, time_of_day: str | None, label: str | None) -> dict[str, Any] | None:
+        alarms = self.schedule_service.list_events("alarm")
+        if not alarms:
+            return None
+        label_lower = label.lower() if label else None
+        matches: list[dict[str, Any]] = []
+        for alarm in alarms:
+            event_time = alarm.get("time")
+            if time_of_day and event_time != time_of_day:
+                continue
+            event_label = (alarm.get("label") or "").lower()
+            if label_lower and (not event_label or label_lower not in event_label):
+                continue
+            matches.append(alarm)
+        if not matches:
+            return None
+        return matches[0]
 
     async def _stop_active_schedule(self, lowered: str) -> bool:
         alarm = self.schedule_service.active_event("alarm")
