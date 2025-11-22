@@ -1,3 +1,10 @@
+## [0.48.2](https://github.com/weirdtangent/pulse-os/compare/v0.48.1...v0.48.2) (2025-11-22)
+
+
+### Bug Fixes
+
+* support numeric tokens in timer start intent ([0344549](https://github.com/weirdtangent/pulse-os/commit/0344549c1a5494edc75a2a641ac461eb5091b557))
+
 ## [0.48.1](https://github.com/weirdtangent/pulse-os/compare/v0.48.0...v0.48.1) (2025-11-22)
 
 
