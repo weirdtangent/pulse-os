@@ -6,10 +6,11 @@ import copy
 import json
 import threading
 import time
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import escape as html_escape
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -395,11 +396,7 @@ def render_overlay_html(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
         if cards
     )
 
-    notification_html = (
-        _build_notification_bar(snapshot)
-        if theme.show_notification_bar
-        else ""
-    )
+    notification_html = _build_notification_bar(snapshot) if theme.show_notification_bar else ""
 
     root_attrs = (
         f'id="pulse-overlay-root" '
@@ -560,8 +557,9 @@ def _build_clock_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
         position = positions[idx]
         tz_attr = clock.timezone or ""
         label = html_escape(clock.label or "Clock")
+        tz_attr_escaped = html_escape(tz_attr, quote=True)
         card = f"""
-<div class="overlay-card overlay-card--ambient overlay-card--clock" data-clock data-tz="{html_escape(tz_attr, quote=True)}">
+<div class="overlay-card overlay-card--ambient overlay-card--clock" data-clock data-tz="{tz_attr_escaped}">
   <div class="overlay-card__title">{label}</div>
   <div class="overlay-clock__time" data-clock-time>--:--</div>
   <div class="overlay-clock__date" data-clock-date></div>
@@ -719,7 +717,7 @@ def _parse_timestamp(value: Any) -> float | None:
     except ValueError:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt.timestamp()
 
 
@@ -732,5 +730,3 @@ def _event_label(payload: dict[str, Any] | None, *, default: str) -> str:
         if label:
             return str(label)
     return default
-
-

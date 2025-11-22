@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from pulse.overlay import (
     ClockConfig,
@@ -54,20 +54,20 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-cell="middle-right"', html)
 
     def test_timer_card_rendered(self) -> None:
-        target = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        target = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
         timers = ({"id": "tea", "label": "Tea", "next_fire": target},)
         html = render_overlay_html(self._snapshot(timers=timers), self.theme)
         self.assertIn("overlay-card--timer", html)
         self.assertIn('data-target-ms="', html)
 
     def test_notification_bar_icons(self) -> None:
-        future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        future = (datetime.now(UTC) + timedelta(minutes=10)).isoformat()
         alarms = ({"id": "alarm1", "label": "Wake Up", "next_fire": future},)
         timers = (
             {
                 "id": "timer1",
                 "label": "Tea",
-                "next_fire": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
+                "next_fire": (datetime.now(UTC) + timedelta(minutes=2)).isoformat(),
             },
         )
         snapshot = self._snapshot(alarms=alarms, timers=timers, now_playing="Artist — Title")
@@ -84,4 +84,3 @@ class OverlayRenderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

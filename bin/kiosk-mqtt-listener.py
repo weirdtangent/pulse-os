@@ -265,9 +265,9 @@ def load_config() -> EnvConfig:
     overlay_port = int(os.environ.get("PULSE_OVERLAY_PORT", "8800"))
     overlay_bind = (os.environ.get("PULSE_OVERLAY_BIND") or "0.0.0.0").strip() or "0.0.0.0"
     overlay_allowed_raw = os.environ.get("PULSE_OVERLAY_ALLOWED_ORIGINS", "*")
-    overlay_allowed_origins = tuple(
-        origin.strip() for origin in overlay_allowed_raw.split(",") if origin.strip()
-    ) or ("*",)
+    overlay_allowed_origins = tuple(origin.strip() for origin in overlay_allowed_raw.split(",") if origin.strip()) or (
+        "*",
+    )
     overlay_clock_spec = os.environ.get("PULSE_OVERLAY_CLOCKS")
     overlay_clocks = parse_clock_config(
         overlay_clock_spec,
