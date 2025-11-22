@@ -6,8 +6,7 @@
 
 ### Raspberry Pi 5 + Pi 7" Touch Display 2
 
-A lightweight Raspberry Pi–based kiosk OS for Home Assistant dashboards. Includes auto-repair watchdog, backlight
-control, Snapcast audio support, remote logging, mqtt support, and a simple pulse.conf config system for each device.
+A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a scripted setup flow per device. It bundles watchdog/backlight management, MQTT telemetry and actions, Snapcast output, remote logging, and an optional Wyoming voice assistant that can switch between OpenAI and Gemini LLMs on demand.
 
 ---
 
@@ -70,66 +69,57 @@ control, Snapcast audio support, remote logging, mqtt support, and a simple puls
 
 ## 1) First‑boot basics
 
-```bash
-# Get to the starting line
-# login/ssh into your Pulse as "pulse" user
-sudo apt update && sudo apt full-upgrade -y
-sudo apt install git gh neovim -y
-sudo chown pulse:pulse /opt
-
-# Clone and install PulseOS
-cd /opt
-git clone https://github.com/weirdtangent/pulse-os.git
-cd pulse-os
-
-# Create pulse.conf (from pulse.conf.sample, see below for help)
-cp pulse.conf.sample pulse.conf
-vi pulse.conf
-# run the setup script, when ready
-#   setup.sh should be also run each time you update or
-#   if you change conf file - you don't need <location> on re-runs
-#   the Mqtt "Update" button upgrades and re-runs setup for you
-#   first run requires a location slug (e.g. ./setup.sh kitchen)
-./setup.sh <location-name>
-```
+1. **Update Raspberry Pi OS and install prerequisites.**
+   ```bash
+   sudo apt update && sudo apt full-upgrade -y
+   sudo apt install -y git gh neovim
+   sudo chown pulse:pulse /opt
+   ```
+2. **Clone PulseOS under `/opt` and open the repo.**
+   ```bash
+   cd /opt
+   git clone https://github.com/weirdtangent/pulse-os.git
+   cd pulse-os
+   ```
+3. **Create `pulse.conf` from the sample and edit it for this kiosk.**
+   ```bash
+   cp pulse.conf.sample pulse.conf
+   vi pulse.conf
+   ```
+4. **Run the setup script with a location slug (first boot only).**
+   ```bash
+   ./setup.sh <location-name>
+   ```
+   Re-run `./setup.sh` after changing `pulse.conf` or pulling new code (omit the location on repeat runs). The MQTT “Update” button performs the same update+setup flow remotely.
 
 ---
 
 # PulseOS Configuration
 
-PulseOS is configured through a small plain-text file called **pulse.conf**.
-This file is unique to each device.
-
-The repository ships with a template named:
-
-    pulse.conf.sample
-
-To configure your device, copy the template:
+Each kiosk reads `/opt/pulse-os/pulse.conf`. Copy the sample, edit the values that matter for this device, then rerun `./setup.sh`.
 
 ```bash
 cp /opt/pulse-os/pulse.conf.sample /opt/pulse-os/pulse.conf
 vi /opt/pulse-os/pulse.conf
 ```
 
-Every option in this file is optional; PulseOS has safe defaults for all behavior.
-But configuring it lets you customize how your Pulse boots, what it displays,
-and what services it runs.
+All keys are optional, but filling out the relevant sections keeps boot, kiosk, MQTT, and assistant services aligned with your environment.
 
 ### Quick config verification
 
-After editing `pulse.conf`, run the new connectivity smoke test to confirm the networking pieces are reachable:
+After editing `pulse.conf`, run the connectivity check to confirm the services you referenced are reachable:
 
 ```bash
 bin/tools/verify-conf.py --config /opt/pulse-os/pulse.conf
 ```
 
-The script automatically sources the config (or uses the `--config` path you pass in), then:
-- Connects to your MQTT broker with the configured credentials.
-- Sends a one-line RFC5424 syslog message to the remote logging target (only if `PULSE_REMOTE_LOGGING="true"`).
-- Issues a Wyoming `Describe` request to each openWakeWord/Whisper/Piper endpoint (falling back to raw TCP if the client library is missing) so you can confirm the right service replies with model metadata, and—when the `wyoming` Python client is available—runs a tiny functional probe (silence transcript, short TTS clip, wake-word NotDetected) to prove each daemon is actually doing work.
-- If `HOME_ASSISTANT_BASE_URL`/`HOME_ASSISTANT_TOKEN` are set, hits `/api/` to confirm the token works before you rely on Assist or HA service calls.
+It loads the config (or the path you pass with `--config`) and:
+- Connects to the MQTT broker using your credentials.
+- Sends a single RFC5424 syslog line if remote logging is enabled.
+- Calls each configured Wyoming endpoint (openWakeWord/Whisper/Piper) and, when possible, performs a short functional probe.
+- Tests `HOME_ASSISTANT_BASE_URL`/`HOME_ASSISTANT_TOKEN` by calling `/api/`.
 
-Failures are reported with actionable text, and the process exits non-zero if any check fails so you can wire it into CI or deploy hooks. All maker/diagnostic helpers now live under `bin/tools/` so the runtime `bin/` directory stays focused on services.
+Any failure is printed with remediation text and the script exits non-zero so you can gate deployments on it if desired.
 
 <details>
   <summary><strong>Explore pulse.conf options</strong></summary>
@@ -246,17 +236,11 @@ Wyoming OpenWakeWord (Wake Word Detection) server configuration:
 
 ### Voice Assistant (Preview)
 
-Pulse can now behave like a hands-free desk assistant by chaining three Wyoming servers with the new `pulse-assistant` daemon:
-
-1. `wyoming-openwakeword` listens for the wake phrase (default: “Okay Pulse”) and pauses the kiosk while you speak.
-2. `wyoming-whisper` converts that captured audio into text and ships it to the LLM provider you configure (OpenAI by default, Gemini is also supported — both can stay configured and you can switch between them via the new MQTT/HA “LLM Provider” preference).
-3. The assistant runs automations (MQTT actions) and streams the reply through `wyoming-piper`, while a lightweight Tk overlay shows the text response on-screen.
-
-All of the knobs (`PULSE_ASSISTANT_*`, `OPENAI_*`/`GEMINI_*`, `WYOMING_*`) live in `pulse.conf`. See [`docs/voice-assistant.md`](docs/voice-assistant.md) for setup diagrams, container examples, and manual test steps.
+The `pulse-assistant` daemon streams wake audio to your Wyoming servers, calls the configured LLM, then speaks and displays the reply. Configure `PULSE_ASSISTANT_*`, `WYOMING_*`, and `OPENAI_*`/`GEMINI_*` in `pulse.conf`, rerun `./setup.sh`, and review [`docs/voice-assistant.md`](docs/voice-assistant.md) for deployment diagrams.
 
 #### Dual wake-word pipelines
 
-Each detected wake word can map to either the local “Pulse” pipeline or the “Home Assistant” pipeline:
+Map each wake word to the local pipeline or the Home Assistant pipeline:
 
 | Variable | Description |
 | --- | --- |
@@ -264,40 +248,22 @@ Each detected wake word can map to either the local “Pulse” pipeline or the 
 | `PULSE_ASSISTANT_WAKE_WORDS_HA` | List for HA Assist (e.g., `hey_house,hey_nabu`). |
 | `PULSE_ASSISTANT_WAKE_ROUTES` | Optional explicit mapping (`hey_jarvis=pulse,hey_house=home_assistant`). |
 
-The assistant automatically reports the active pipeline inside the MQTT state topic so dashboards can display the current mode. Use this to reserve “Hey House …” for home automation phrases while keeping “Hey Jarvis …” for general questions answered by your preferred LLM provider.
+`assistant/state` always includes the active pipeline so dashboards can display which route handled the request.
 
 #### Home Assistant actions, timers, and reminders
 
-Set `HOME_ASSISTANT_BASE_URL` + `HOME_ASSISTANT_TOKEN` (plus `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` if you have them) and the assistant can:
+Set `HOME_ASSISTANT_BASE_URL` and `HOME_ASSISTANT_TOKEN`, then add `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` if you use those helpers. The assistant can then:
 
-- Call HA services directly via the new action slugs: `ha.turn_on:light.kitchen`, `ha.turn_off:switch.projector`, etc. Just mention those slugs in your prompt instructions and the daemon will translate them into REST calls.
-- Start timers or reminders using `timer.start:duration=10m,label=Tea` and `reminder.create:when=2025-01-01T09:00,message=Turn off the hose`. When HA timer/reminder services are configured they’re used first; otherwise a lightweight on-device scheduler fires and speaks the reminder.
-- Stream audio directly through HA Assist when those wake words fire. The captured PCM is sent to `/api/assist_pipeline/run`, meaning Home Assistant picks the STT/TTS engines and returns both the transcript and the synthesized speech (fallback to your configured Wyoming TTS if HA doesn’t supply audio).
+- Execute action slugs such as `ha.turn_on:light.kitchen` or `ha.turn_off:switch.projector`.
+- Start timers/reminders via `timer.start` and `reminder.create`. If the HA helpers are missing, the built-in scheduler handles both locally.
+- Stream wake audio through HA Assist pipelines when a wake word is mapped to `home_assistant`. Pulse falls back to your Piper endpoint if HA does not return TTS audio.
 
 ##### Troubleshooting tips
-- `bin/tools/verify-conf.py` checks your HA token; run it whenever Assist requests fail silently.
-- If HA is using self-signed TLS, either temporarily set `HOME_ASSISTANT_VERIFY_SSL="false"` or, preferably, keep verification on and provide trust: point `REQUESTS_CA_BUNDLE` at your CA file **or** drop the CA into `/usr/local/share/ca-certificates/homeassistant-ca.crt` and run `sudo update-ca-certificates` so the whole OS trusts it.
-- Chromium keeps its own NSS store, so import the CA into the kiosk profile as well:
-  1. `sudo apt install -y libnss3-tools`
-  2. `sudo -u pulse mkdir -p /home/pulse/.config/kiosk-profile/Default`
-  3. `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -A -t "C,," -n homeassistant -i /path/to/ha-root-ca.pem`
-  4. `sudo -u pulse certutil -d sql:/home/pulse/.config/kiosk-profile/Default -L | grep homeassistant` (confirm it stuck)
-  The profile path defaults to `~/.config/kiosk-profile`; adjust the `--user-data-dir` flag in `bin/kiosk-wrap.sh` if you changed it. Avoid pointing `--user-data-dir` at `/tmp` (the default tmpfs is wiped every reboot, so any imported cert disappears). Restart `pulse-kiosk` (or reboot) afterward so Chromium reloads the updated trust store.
-- Custom environment variables don’t belong in `pulse.conf`. `bin/tools/sync-pulse-conf.py` rewrites that file from `pulse.conf.sample`, and any unknown keys (like `REQUESTS_CA_BUNDLE`) are dropped the next time you sync. Instead, add them via a systemd drop-in so the service exports them automatically:
-  1. `sudo mkdir -p /etc/systemd/system/pulse-assistant.service.d`
-  2. Create `/etc/systemd/system/pulse-assistant.service.d/ca-override.conf` with:
-
-     ```
-     [Service]
-     Environment=REQUESTS_CA_BUNDLE=/opt/pulse-os/certs/ha-root-ca.pem
-     ```
-
-  3. `sudo systemctl daemon-reload`
-  4. `sudo systemctl restart pulse-assistant.service`
-  Repeat the same pattern for any other unit (e.g., your kiosk launcher) that needs the variable.
-- If you’re pointing Pulse at a custom HA hostname, double-check that the DNS entry resolves to the actual HA IP. The kiosk will happily use whatever IP it gets; if that host doesn’t run Home Assistant you’ll see 404s for `/api/assist_pipeline/run` even though the integration is enabled.
-- If `sync-pulse-conf.py` pushes anything into the “Legacy/Unknown Variables” section, it means those keys are no longer present in `pulse.conf.sample`. Either remove them or rename them to the current equivalents (the script’s `LEGACY_REPLACEMENTS` map handles some migrations automatically, but truly unknown names are left in that section so you can decide whether to keep or delete them).
-- The `journalctl -u pulse-assistant.service -f` log shows the detected pipeline (`pipeline=pulse|home_assistant`) for each request, so you can confirm wake-word routing quickly.
+- Run `bin/tools/verify-conf.py` whenever Assist calls fail; it confirms MQTT, Wyoming services, and HA credentials.
+- For self-signed HA hosts, keep TLS verification on and provide the CA: set `REQUESTS_CA_BUNDLE=/path/to/ca.pem`, install the same CA into Chromium’s profile with `certutil`, then restart `pulse-kiosk`.
+- Store extra environment variables in systemd drop-ins (e.g., `/etc/systemd/system/pulse-assistant.service.d/override.conf`) because `pulse.conf` is regenerated from the sample.
+- Confirm custom HA hostnames resolve to the actual HA server; mismatched DNS produces `/api/assist_pipeline/run` 404s.
+- Watch `journalctl -u pulse-assistant.service -f` to see which pipeline handled each wake word and whether HA responded.
 
 #### MQTT telemetry & knobs
 
@@ -310,11 +276,10 @@ Every Pulse assistant publishes real-time status and accepts config commands und
 | `assistant/metrics` | JSON timing info per request (`pipeline`, `wake_word`, per-stage milliseconds). |
 | `preferences/wake_sound/set` + `/state` | Turn the wake chime on/off (`on`/`off`). |
 | `preferences/speaking_style/set` + `/state` | Pick `relaxed`, `normal`, or `aggressive` for the Pulse pipeline persona. |
-| `preferences/wake_sensitivity/set` + `/state` | Choose `low`, `normal`, or `high`; surfaced for future openWakeWord tuning. |
+| `preferences/wake_sensitivity/set` + `/state` | `low`, `normal`, or `high` (maps to openWakeWord trigger levels 5/3/2). |
+| `preferences/llm_provider/set` + `/state` | `openai` or `gemini`; switches the active model without editing `pulse.conf`. |
 
-Use these topics in Home Assistant (MQTT select/switch sensors) to mirror the built-in Assist device capabilities, or just watch `assistant/metrics` to alert on slow responses. All preference topics are retained so dashboards will show the current value immediately after a reboot.
-
-Wake sensitivity currently maps to openWakeWord trigger levels (low → level 5, normal → 3, high → 2), so “low” requires a more confident detection before the assistant wakes up.
+Use these topics as MQTT selects/switches in Home Assistant or publish to them directly; they are retained so dashboards repopulate immediately after a reboot.
 
 <details>
   <summary><strong>Home Assistant trusted-network example</strong></summary>
@@ -341,15 +306,13 @@ homeassistant:
 
 <details>
   <summary><strong>Home Assistant photo frame dashboard</strong></summary>
-  Want the Nest-style slideshow with fades + clock overlay that the Pulse kiosk now uses? Follow the step-by-step guide in
-
-  [host-assistant-photo-frame](docs/home-assistant-photo-frame.md)
+  Follow [home-assistant-photo-frame](docs/home-assistant-photo-frame.md) for the slideshow dashboard used on the kiosk.
 
   * random image helper sensors (command_line + template)
   * installing the custom `pulse-photo-card` resource
   * Lovelace YAML for a full-screen panel view with double-buffered crossfades
 
-  The card never flashes white between photos, keeps the current time/date overlaid, and falls back cleanly if HA loses connection.
+  The card keeps time/date overlaid, prevents white flashes between photos, and handles HA reconnects.
 </details>
 
 <details>
@@ -364,11 +327,10 @@ homeassistant:
 
 <details>
   <summary><strong>Cases & printable accessories</strong></summary>
-I am using a fantastic model I found for the Raspberry Pi Touch Display 2 - with attached Pi 5 case:
-https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2#profileId-1868464
-I encourage you to use this model, rate it, and boost it!
+This enclosure fits the Pi Touch Display 2 with a Pi 5 mounted on the back:
+<https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2#profileId-1868464>
 
-Also, I'm including in /models the ReSpeaker case and cover that I figured out. At the moment I just glue the stands of that to the cover of the Pi case behind the display, so everything is fairly hidden. One day I'll include some pics.
+The `/models` directory also includes STL/SCAD files for the ReSpeaker stand, plate, and cover; and BoomPod cup. Mount the stand behind the display to keep the microphone array out of sight. The BookPod can be glued down to one of the legs.
 </details>
 
 <details>
@@ -404,7 +366,14 @@ One step at a time. 🙂
 
 ## Troubleshooting checklist
 
-Common fixes for this build now live in [troubleshooting](docs/troubleshooting.md) (black-half-screen issues, touch alignment, autologin resets, etc.). Check that file first; send PRs with any new gotchas so we can keep the list growing without bloating the README.
+Start with the dedicated [troubleshooting guide](docs/troubleshooting.md). The quick checks below cover the most common blockers:
+
+1. **Display issues:** reseat both DSI ribbons, confirm the Pi Touch Display 2 is configured for `DSI-2`, and reboot. The guide includes the exact `config.txt` pins if they were overwritten.
+2. **Login loop or blank X session:** make sure the `pulse` user still has automatic console login enabled (`sudo raspi-config nonint do_boot_behaviour B2`), then rerun `./setup.sh`.
+3. **Wake-word not triggering:** watch `journalctl -u pulse-assistant.service -f` for detection logs, verify the Wyoming endpoints with `bin/tools/verify-conf.py`, and confirm the microphone command in `pulse.conf`.
+4. **MQTT buttons missing:** re-sync `pulse.conf`, rerun `./setup.sh`, and confirm the broker credentials with the verify script before reloading MQTT discovery in Home Assistant.
+
+Document any new fixes in `docs/troubleshooting.md` so the list stays current.
 
 ---
 
