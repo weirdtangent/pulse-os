@@ -102,7 +102,25 @@ Hard-refresh the dashboard (Cmd/Ctrl + Shift + R) after saving to ensure
 
 ---
 
-## 5. Troubleshooting
+## 5. PulseOS overlay endpoint
+
+The kiosk renders the clock/timer/notification overlay itself and serves it at `http://<pulse-host>:8800/overlay`. Instead of duplicating that logic in the card, you can embed the returned HTML (complete with inline CSS + JS) directly on top of the slideshow:
+
+1. Make sure `PULSE_OVERLAY_ENABLED="true"` (default) and that Home Assistant can reach TCP port `8800` on the kiosk. Adjust `PULSE_OVERLAY_BIND`, `PULSE_OVERLAY_PORT`, and `PULSE_OVERLAY_ALLOWED_ORIGINS` if you need to lock it down.
+2. Subscribe to `pulse/<hostname>/overlay/refresh`. Anytime the kiosk clocks, timers, alarms, now playing text, or notification bar changes, it publishes a tiny JSON hint (`{"version":12,"reason":"timers","ts":...}`). Treat the version as a cache key: when it bumps, fetch `/overlay` once. Keep a slow periodic refresh (e.g., every 2 minutes) just in case an MQTT message drops.
+3. Inject the returned HTML into the overlay layer of `pulse-photo-card`. The markup already includes JS to keep clocks/timers ticking locally and uses CSS grid slots (top-left, center, etc.) so urgent cards (timers/alarms) shade the center of the screen while ambient clocks stay transparent near the corners. If the fetch fails, immediately fall back to the card's built-in lower-left clock so the user always sees the local time.
+
+You can customize the layout colors and clock list per kiosk via the new `PULSE_OVERLAY_*` knobs in `pulse.conf`. A sample clock list might look like:
+
+```
+PULSE_OVERLAY_CLOCKS="local=Home,America/Chicago=HQ,Europe/London=LDN,Asia/Tokyo=TYO"
+```
+
+Those entries fill the top-left, top-right, middle-left, and middle-right cells respectively. Timers/alarms automatically occupy the remaining center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled”, “timer running”, and “Now Playing”.
+
+---
+
+## 6. Troubleshooting
 
 - **Black screen** → the helper returned a path HA can’t serve. Verify `sensor.pulse_current_photo_url` looks like `media-source://media_source/local/...`.
 - **401 Unauthorized in console** → you’re hitting `/local/...` or added your own query parameters. Let the card resolve the media-source path; don’t append cache busters, the signed `authSig` already handles caching.

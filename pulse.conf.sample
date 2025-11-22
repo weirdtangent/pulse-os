@@ -40,6 +40,41 @@ PULSE_WATCHDOG_LIMIT=5
 PULSE_WATCHDOG_INTERVAL=60
 
 # ============================================================================
+# Overlay & Photo Frame
+# ============================================================================
+
+# PULSE_OVERLAY_ENABLED — enable the kiosk-hosted overlay HTML endpoint.
+PULSE_OVERLAY_ENABLED="true"
+
+# PULSE_OVERLAY_PORT — TCP port the overlay HTTP server listens on (default 8800).
+PULSE_OVERLAY_PORT="8800"
+
+# PULSE_OVERLAY_BIND — bind address for the overlay server (0.0.0.0 for all interfaces).
+PULSE_OVERLAY_BIND="0.0.0.0"
+
+# PULSE_OVERLAY_ALLOWED_ORIGINS — comma-separated list of allowed CORS origins (“*” allows all).
+PULSE_OVERLAY_ALLOWED_ORIGINS="*"
+
+# PULSE_OVERLAY_CLOCKS — optional comma-separated timezone list for the grid clocks.
+# Example: PULSE_OVERLAY_CLOCKS="local=Home,America/New_York=NYC,Europe/London=LDN"
+PULSE_OVERLAY_CLOCKS=""
+
+# PULSE_OVERLAY_AMBIENT_BG — CSS color for persistent cards (clocks, now playing).
+PULSE_OVERLAY_AMBIENT_BG="rgba(0, 0, 0, 0.32)"
+
+# PULSE_OVERLAY_ALERT_BG — CSS color for alert cards (timers, alarms).
+PULSE_OVERLAY_ALERT_BG="rgba(0, 0, 0, 0.65)"
+
+# PULSE_OVERLAY_TEXT_COLOR — primary overlay text color.
+PULSE_OVERLAY_TEXT_COLOR="#FFFFFF"
+
+# PULSE_OVERLAY_ACCENT_COLOR — accent color for titles and highlights.
+PULSE_OVERLAY_ACCENT_COLOR="#88C0D0"
+
+# PULSE_OVERLAY_NOTIFICATION_BAR — show the icon bar at the top of the overlay.
+PULSE_OVERLAY_NOTIFICATION_BAR="true"
+
+# ============================================================================
 # Telemetry & MQTT
 # ============================================================================
 

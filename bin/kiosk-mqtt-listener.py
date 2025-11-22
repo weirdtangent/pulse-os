@@ -12,6 +12,8 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,14 @@ import websocket
 from packaging.version import InvalidVersion, Version
 from pulse import audio, display
 from pulse.mqtt_discovery import build_button_entity, build_number_entity
+from pulse.overlay import (
+    ClockConfig,
+    OverlayChange,
+    OverlayStateManager,
+    OverlayTheme,
+    parse_clock_config,
+    render_overlay_html,
+)
 
 
 @dataclass(frozen=True)
@@ -35,12 +45,36 @@ class Topics:
     availability: str
     update_availability: str
     telemetry: str
+    overlay_refresh: str
 
 
 @dataclass(frozen=True)
 class DevToolsConfig:
     discovery_url: str
     timeout: float
+
+
+@dataclass(frozen=True)
+class AssistantTopics:
+    base: str
+    schedules_state: str
+    alarms_active: str
+    timers_active: str
+    command: str
+
+
+@dataclass(frozen=True)
+class OverlayConfig:
+    enabled: bool
+    bind_address: str
+    port: int
+    allowed_origins: tuple[str, ...]
+    clocks: tuple[ClockConfig, ...]
+    ambient_background: str
+    alert_background: str
+    text_color: str
+    accent_color: str
+    show_notification_bar: bool
 
 
 @dataclass(frozen=True)
@@ -63,6 +97,8 @@ class EnvConfig:
     ha_base_url: str
     ha_token: str
     ha_verify_ssl: bool
+    assistant_topics: AssistantTopics
+    overlay: OverlayConfig
 
 
 @dataclass(frozen=True)
@@ -217,11 +253,38 @@ def load_config() -> EnvConfig:
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
         telemetry=f"pulse/{hostname}/telemetry",
+        overlay_refresh=f"pulse/{hostname}/overlay/refresh",
     )
 
     devtools = DevToolsConfig(
         discovery_url=os.environ.get("CHROMIUM_DEVTOOLS_URL", "http://localhost:9222/json"),
         timeout=float(os.environ.get("CHROMIUM_DEVTOOLS_TIMEOUT", "3")),
+    )
+
+    overlay_enabled = _as_bool(os.environ.get("PULSE_OVERLAY_ENABLED"), True)
+    overlay_port = int(os.environ.get("PULSE_OVERLAY_PORT", "8800"))
+    overlay_bind = (os.environ.get("PULSE_OVERLAY_BIND") or "0.0.0.0").strip() or "0.0.0.0"
+    overlay_allowed_raw = os.environ.get("PULSE_OVERLAY_ALLOWED_ORIGINS", "*")
+    overlay_allowed_origins = tuple(
+        origin.strip() for origin in overlay_allowed_raw.split(",") if origin.strip()
+    ) or ("*",)
+    overlay_clock_spec = os.environ.get("PULSE_OVERLAY_CLOCKS")
+    overlay_clocks = parse_clock_config(
+        overlay_clock_spec,
+        default_label=friendly_name,
+        log=log,
+    )
+    overlay_config = OverlayConfig(
+        enabled=overlay_enabled,
+        bind_address=overlay_bind,
+        port=overlay_port,
+        allowed_origins=overlay_allowed_origins,
+        clocks=overlay_clocks,
+        ambient_background=os.environ.get("PULSE_OVERLAY_AMBIENT_BG", "rgba(0, 0, 0, 0.32)"),
+        alert_background=os.environ.get("PULSE_OVERLAY_ALERT_BG", "rgba(0, 0, 0, 0.65)"),
+        text_color=os.environ.get("PULSE_OVERLAY_TEXT_COLOR", "#FFFFFF"),
+        accent_color=os.environ.get("PULSE_OVERLAY_ACCENT_COLOR", "#88C0D0"),
+        show_notification_bar=_as_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -253,6 +316,15 @@ def load_config() -> EnvConfig:
     if not ha_base_url or not ha_token:
         media_player_entity = None
 
+    assistant_base = f"pulse/{hostname}/assistant"
+    assistant_topics = AssistantTopics(
+        base=assistant_base,
+        schedules_state=f"{assistant_base}/schedules/state",
+        alarms_active=f"{assistant_base}/alarms/active",
+        timers_active=f"{assistant_base}/timers/active",
+        command=f"{assistant_base}/schedules/command",
+    )
+
     return EnvConfig(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
@@ -272,6 +344,8 @@ def load_config() -> EnvConfig:
         ha_base_url=ha_base_url,
         ha_token=ha_token,
         ha_verify_ssl=ha_verify_ssl,
+        assistant_topics=assistant_topics,
+        overlay=overlay_config,
     )
 
 
@@ -415,6 +489,32 @@ class KioskMqttListener:
         self._telemetry_stop_event = threading.Event()
         self._ha_ssl_context = self._build_ha_ssl_context()
         self._last_now_playing_error: float = 0.0
+        self.assistant_topics = config.assistant_topics
+        self.overlay_config = config.overlay
+        self.overlay_state: OverlayStateManager | None = None
+        self._overlay_theme: OverlayTheme | None = None
+        self._overlay_http_server: ThreadingHTTPServer | None = None
+        self._overlay_http_thread: threading.Thread | None = None
+        self._overlay_topic_handlers: dict[str, Any] = {}
+
+        if self.overlay_config.enabled:
+            self.overlay_state = OverlayStateManager(self.overlay_config.clocks)
+            self._overlay_theme = OverlayTheme(
+                ambient_background=self.overlay_config.ambient_background,
+                alert_background=self.overlay_config.alert_background,
+                text_color=self.overlay_config.text_color,
+                accent_color=self.overlay_config.accent_color,
+                show_notification_bar=self.overlay_config.show_notification_bar,
+            )
+            self._overlay_topic_handlers = {
+                self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
+                self.assistant_topics.alarms_active: lambda payload: self._handle_overlay_active_event(
+                    "alarm", payload
+                ),
+                self.assistant_topics.timers_active: lambda payload: self._handle_overlay_active_event(
+                    "timer", payload
+                ),
+            }
 
     def log(self, message: str) -> None:
         log(message)
@@ -507,6 +607,10 @@ class KioskMqttListener:
         now_playing = self._collect_now_playing_text()
         metrics["now_playing"] = now_playing
 
+        if self.overlay_state:
+            change = self.overlay_state.update_now_playing(now_playing)
+            self._handle_overlay_change(change)
+
         return metrics
 
     def _get_current_volume(self) -> int | None:
@@ -572,6 +676,143 @@ class KioskMqttListener:
             return
         self._last_now_playing_error = now
         self.log(message)
+
+    def _handle_overlay_change(self, change: OverlayChange) -> None:
+        if not self.overlay_state or not change.changed:
+            return
+        self._emit_overlay_refresh(change.version, change.reason)
+
+    def _emit_overlay_refresh(self, version: int, reason: str, *, client: mqtt.Client | None = None) -> None:
+        payload = json.dumps(
+            {
+                "version": version,
+                "reason": reason,
+                "ts": int(time.time()),
+            }
+        )
+        self._safe_publish(client, self.config.topics.overlay_refresh, payload, qos=0, retain=False)
+
+    def _handle_overlay_schedule_state(self, payload: bytes) -> None:
+        if not self.overlay_state:
+            return
+        data = self._decode_json_bytes(payload)
+        if not isinstance(data, dict):
+            self.log("overlay: ignoring malformed schedules payload")
+            return
+        change = self.overlay_state.update_schedule_snapshot(data)
+        self._handle_overlay_change(change)
+
+    def _handle_overlay_active_event(self, event_type: str, payload: bytes) -> None:
+        if not self.overlay_state:
+            return
+        data = self._decode_json_bytes(payload)
+        change = self.overlay_state.update_active_event(event_type, data if isinstance(data, dict) else None)
+        self._handle_overlay_change(change)
+
+    @staticmethod
+    def _decode_json_bytes(payload: bytes) -> Any:
+        try:
+            return json.loads(payload.decode("utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+    def _start_overlay_server(self) -> None:
+        if not self.overlay_state or not self._overlay_theme or not self.overlay_config.enabled:
+            return
+        if self._overlay_http_server:
+            return
+        handler_cls = self._build_overlay_http_handler()
+        try:
+            server = ThreadingHTTPServer(
+                (self.overlay_config.bind_address, self.overlay_config.port),
+                handler_cls,
+            )
+        except OSError as exc:
+            self.log(
+                f"overlay http: failed to bind {self.overlay_config.bind_address}:{self.overlay_config.port} ({exc})"
+            )
+            return
+        thread = threading.Thread(target=server.serve_forever, name="pulse-overlay-http", daemon=True)
+        self._overlay_http_server = server
+        self._overlay_http_thread = thread
+        thread.start()
+        self.log(
+            f"overlay http: serving on http://{self.overlay_config.bind_address}:{self.overlay_config.port}/overlay"
+        )
+
+    def stop_overlay_server(self) -> None:
+        server = self._overlay_http_server
+        if not server:
+            return
+        self.log("overlay http: shutting down")
+        server.shutdown()
+        server.server_close()
+        if self._overlay_http_thread:
+            self._overlay_http_thread.join(timeout=2)
+        self._overlay_http_server = None
+        self._overlay_http_thread = None
+
+    def _build_overlay_http_handler(self):
+        listener = self
+
+        class OverlayRequestHandler(BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):  # noqa: D401 - suppress default logging
+                return
+
+            def _set_common_headers(self) -> None:
+                origin = self.headers.get("Origin")
+                allowed_origin = listener._allowed_overlay_origin(origin)
+                if allowed_origin:
+                    self.send_header("Access-Control-Allow-Origin", allowed_origin)
+                    if allowed_origin != "*":
+                        self.send_header("Vary", "Origin")
+                self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Accept, Content-Type")
+                self.send_header("Cache-Control", "no-store, max-age=0")
+
+            def do_OPTIONS(self) -> None:  # noqa: N802
+                if not listener.overlay_state:
+                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Overlay disabled")
+                    return
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self._set_common_headers()
+                self.end_headers()
+
+            def do_HEAD(self) -> None:  # noqa: N802
+                self._serve_overlay(include_body=False)
+
+            def do_GET(self) -> None:  # noqa: N802
+                self._serve_overlay(include_body=True)
+
+            def _serve_overlay(self, *, include_body: bool) -> None:
+                state = listener.overlay_state
+                theme = listener._overlay_theme
+                if not state or not theme:
+                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Overlay disabled")
+                    return
+                path = self.path.split("?", 1)[0]
+                if path not in {"/overlay", "/overlay/"}:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
+                    return
+                snapshot = state.snapshot()
+                body = render_overlay_html(snapshot, theme).encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self._set_common_headers()
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                if include_body:
+                    self.wfile.write(body)
+
+        return OverlayRequestHandler
+
+    def _allowed_overlay_origin(self, origin: str | None) -> str | None:
+        allowed = self.overlay_config.allowed_origins
+        if not allowed or allowed == ("*",):
+            return "*"
+        if origin and origin in allowed:
+            return origin
+        return None
 
     @staticmethod
     def _format_now_playing(payload: dict[str, Any] | None) -> str:
@@ -1034,6 +1275,10 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.reboot)
         client.subscribe(self.config.topics.volume)
         client.subscribe(self.config.topics.brightness)
+        if self.overlay_state:
+            client.subscribe(self.assistant_topics.schedules_state)
+            client.subscribe(self.assistant_topics.alarms_active)
+            client.subscribe(self.assistant_topics.timers_active)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_version_metadata()
@@ -1047,6 +1292,9 @@ class KioskMqttListener:
         self.publish_update_button_availability(client, self.is_update_available())
         self.start_update_checker(client)
         self.start_telemetry()
+        if self.overlay_state:
+            self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
+            self._start_overlay_server()
 
     def on_message(self, _client, _userdata, msg):
         if msg.topic == self.config.topics.home:
@@ -1061,6 +1309,10 @@ class KioskMqttListener:
             self.handle_volume(msg.payload)
         elif msg.topic == self.config.topics.brightness:
             self.handle_brightness(msg.payload)
+        elif self.overlay_state and msg.topic in self._overlay_topic_handlers:
+            handler = self._overlay_topic_handlers.get(msg.topic)
+            if handler:
+                handler(msg.payload)
         else:
             self.log(f"Received message on unexpected topic {msg.topic}")
 
@@ -1186,6 +1438,7 @@ def main():
     listener = KioskMqttListener(config)
     atexit.register(listener.stop_update_checker)
     atexit.register(listener.stop_telemetry)
+    atexit.register(listener.stop_overlay_server)
 
     callback_kwargs: dict[str, object] = {}
     if hasattr(mqtt, "CallbackAPIVersion"):

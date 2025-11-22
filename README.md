@@ -338,6 +338,7 @@ homeassistant:
   * random image helper sensors (command_line + template)
   * installing the custom `pulse-photo-card` resource
   * Lovelace YAML for a full-screen panel view with double-buffered crossfades
+  * a kiosk-hosted `/overlay` endpoint + MQTT refresh topic that keeps clocks/timers/Now Playing overlays in sync with zero extra Lovelace code
 
   The card keeps time/date overlaid, prevents white flashes between photos, and handles HA reconnects.
 </details>
