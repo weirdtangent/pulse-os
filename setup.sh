@@ -50,11 +50,14 @@ log() {
 
 usage() {
     cat <<EOF
-Usage: $0 <location>
+Usage: $0 [--no-restart] [location]
 
 Provide the physical location identifier (e.g. kitchen). After the first
 successful run, the script remembers the last location written to
 $LOCATION_FILE and you may omit the argument to reuse it.
+
+Flags:
+  --no-restart    Skip automatic service restart at the end of setup.
 EOF
 }
 
@@ -980,14 +983,54 @@ print_feature_summary() {
     publish_summary_to_mqtt "$summary_output"
 }
 
-main() {
-    if [ "$#" -gt 1 ]; then
-        usage
-        exit 1
+restart_pulse_services() {
+    local restart_script="$REPO_DIR/bin/tools/restart-services.sh"
+    if [ ! -x "$restart_script" ]; then
+        log "Restart script not found at $restart_script; skipping automatic restart."
+        return
     fi
 
+    log "Restarting Pulse services via restart-services.sh…"
+    if "$restart_script"; then
+        log "Pulse services restarted."
+    else
+        log "Warning: service restart script failed; check the output above."
+    fi
+}
+
+main() {
+    local location_arg=""
+    local auto_restart="true"
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --no-restart)
+                auto_restart="false"
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            --*)
+                echo "Unknown option: $1" >&2
+                usage
+                exit 1
+                ;;
+            *)
+                if [ -n "$location_arg" ]; then
+                    echo "Only one location argument is allowed." >&2
+                    usage
+                    exit 1
+                fi
+                location_arg="$1"
+                shift
+                ;;
+        esac
+    done
+
     local location
-    location=$(resolve_location "${1:-}")
+    location=$(resolve_location "$location_arg")
     if [ -z "$location" ]; then
         log "Error: location is required on first run (e.g. ./setup.sh kitchen)."
         usage
@@ -1007,6 +1050,11 @@ main() {
     setup_crontab
     install_bluetooth_audio
     print_feature_summary
+    if [ "$auto_restart" = "true" ]; then
+        restart_pulse_services
+    else
+        log "Skipping service restart (--no-restart)."
+    fi
 
     log "PulseOS setup complete!"
 }
