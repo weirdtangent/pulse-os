@@ -266,10 +266,6 @@ class PulseAssistant:
         with self._self_audio_lock:
             return self._local_audio_depth > 0 or self._self_audio_remote_active
 
-    def _remote_audio_is_active(self) -> bool:
-        with self._self_audio_lock:
-            return self._self_audio_remote_active
-
     def _increment_local_audio_depth(self) -> None:
         notify = False
         with self._self_audio_lock:
@@ -315,12 +311,13 @@ class PulseAssistant:
         self._media_resume_task = None
 
     async def _maybe_pause_media_playback(self) -> None:
-        if (
-            self._media_pause_pending
-            or not self.home_assistant
-            or not self._media_player_entity
-            or not self._remote_audio_is_active()
-        ):
+        if self._media_pause_pending or not self.home_assistant or not self._media_player_entity:
+            return
+        state = await self._fetch_media_player_state()
+        if not state:
+            return
+        status = str(state.get("state") or "").lower()
+        if status != "playing":
             return
         try:
             await self.home_assistant.call_service(
@@ -1266,14 +1263,8 @@ class PulseAssistant:
         return True
 
     async def _describe_current_track(self, emphasize_artist: bool) -> bool:
-        entity = self.config.media_player_entity
-        ha_client = self.home_assistant
-        if not entity or not ha_client:
-            return False
-        try:
-            state = await ha_client.get_state(entity)
-        except HomeAssistantError as exc:
-            LOGGER.debug("Unable to read media_player %s: %s", entity, exc)
+        state = await self._fetch_media_player_state()
+        if state is None:
             spoken = "I couldn't reach the player for that info."
             await self._speak(spoken)
             self._log_assistant_response("music", spoken, pipeline="pulse")
@@ -1302,6 +1293,17 @@ class PulseAssistant:
         await self._speak(message)
         self._log_assistant_response("music", message, pipeline="pulse")
         return True
+
+    async def _fetch_media_player_state(self) -> dict[str, Any] | None:
+        entity = self.config.media_player_entity
+        ha_client = self.home_assistant
+        if not entity or not ha_client:
+            return None
+        try:
+            return await ha_client.get_state(entity)
+        except HomeAssistantError as exc:
+            LOGGER.debug("Unable to read media_player %s: %s", entity, exc)
+            return None
 
     def _handle_ha_pipeline_command(self, payload: str) -> None:
         value = payload.strip()
