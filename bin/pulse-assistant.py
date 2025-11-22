@@ -95,7 +95,8 @@ class PulseAssistant:
         self.mqtt = AssistantMqtt(config.mqtt, logger=LOGGER)
         action_defs = load_action_definitions(config.action_file, config.inline_actions)
         self.actions = ActionEngine(action_defs)
-        self.llm: LLMProvider = build_llm_provider(config.llm, LOGGER)
+        self._llm_provider_override: str | None = None
+        self.llm: LLMProvider = self._build_llm_provider()
         self.home_assistant: HomeAssistantClient | None = None
         self.preferences = config.preferences
         if config.home_assistant.base_url and config.home_assistant.token:
@@ -545,6 +546,7 @@ class PulseAssistant:
             self.mqtt.subscribe(f"{base}/speaking_style/set", self._handle_speaking_style_command)
             self.mqtt.subscribe(f"{base}/wake_sensitivity/set", self._handle_wake_sensitivity_command)
             self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
+            self.mqtt.subscribe(f"{base}/llm_provider/set", self._handle_llm_provider_command)
         except RuntimeError:
             LOGGER.debug("MQTT client not ready for preference subscriptions")
 
@@ -575,6 +577,7 @@ class PulseAssistant:
         self._publish_preference_state("speaking_style", self.preferences.speaking_style)
         self._publish_preference_state("wake_sensitivity", self.preferences.wake_sensitivity)
         self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
+        self._publish_preference_state("llm_provider", self._active_llm_provider())
 
     def _publish_preference_state(self, key: str, value: str) -> None:
         topic = f"{self._preferences_topic}/{key}/state"
@@ -610,6 +613,28 @@ class PulseAssistant:
 
     def _active_ha_pipeline(self) -> str | None:
         return self._ha_pipeline_override or self.config.home_assistant.assist_pipeline
+
+    def _handle_llm_provider_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        if not value:
+            self._llm_provider_override = None
+        elif value in {"openai", "gemini"}:
+            self._llm_provider_override = value
+        else:
+            LOGGER.debug("Ignoring invalid LLM provider: %s", payload)
+            return
+        self.llm = self._build_llm_provider()
+        self._publish_preference_state("llm_provider", self._active_llm_provider())
+
+    def _active_llm_provider(self) -> str:
+        provider = self._llm_provider_override or self.config.llm.provider or "openai"
+        return provider.strip().lower() or "openai"
+
+    def _build_llm_provider(self) -> LLMProvider:
+        provider = self._active_llm_provider()
+        llm_config = replace(self.config.llm, provider=provider)
+        LOGGER.info("Using %s LLM provider", provider)
+        return build_llm_provider(llm_config, LOGGER)
 
     def _publish_assistant_discovery(self) -> None:
         device = {
@@ -724,6 +749,22 @@ class PulseAssistant:
                     "unique_id": f"{self.config.hostname}-ha-assist-pipeline",
                     "state_topic": f"{self._preferences_topic}/ha_pipeline/state",
                     "command_topic": f"{self._preferences_topic}/ha_pipeline/set",
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+            retain=True,
+        )
+        # LLM provider select
+        self._publish_message(
+            f"{prefix}/select/{hostname_safe}_llm_provider/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} LLM Provider",
+                    "unique_id": f"{self.config.hostname}-llm-provider",
+                    "state_topic": f"{self._preferences_topic}/llm_provider/state",
+                    "command_topic": f"{self._preferences_topic}/llm_provider/set",
+                    "options": ["openai", "gemini"],
                     "device": device,
                     "entity_category": "config",
                 }

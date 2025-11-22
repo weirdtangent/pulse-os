@@ -249,7 +249,7 @@ Wyoming OpenWakeWord (Wake Word Detection) server configuration:
 Pulse can now behave like a hands-free desk assistant by chaining three Wyoming servers with the new `pulse-assistant` daemon:
 
 1. `wyoming-openwakeword` listens for the wake phrase (default: “Okay Pulse”) and pauses the kiosk while you speak.
-2. `wyoming-whisper` converts that captured audio into text and ships it to the LLM provider you configure (OpenAI by default, Gemini is also supported).
+2. `wyoming-whisper` converts that captured audio into text and ships it to the LLM provider you configure (OpenAI by default, Gemini is also supported — both can stay configured and you can switch between them via the new MQTT/HA “LLM Provider” preference).
 3. The assistant runs automations (MQTT actions) and streams the reply through `wyoming-piper`, while a lightweight Tk overlay shows the text response on-screen.
 
 All of the knobs (`PULSE_ASSISTANT_*`, `OPENAI_*`/`GEMINI_*`, `WYOMING_*`) live in `pulse.conf`. See [`docs/voice-assistant.md`](docs/voice-assistant.md) for setup diagrams, container examples, and manual test steps.

@@ -119,6 +119,8 @@ GEMINI_MODEL="gemini-1.5-flash-latest"
 
 Both providers support optional base URL + timeout overrides (`OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `GEMINI_BASE_URL`, `GEMINI_TIMEOUT_SECONDS`) in case you proxy the traffic elsewhere.
 
+You can keep both credential sets in `pulse.conf` and flip between them at runtime. Publish `openai` or `gemini` to `pulse/<hostname>/preferences/llm_provider/set` (or use the new “LLM Provider” select that shows up in Home Assistant discovery) and the assistant will rebuild its LLM client on the fly.
+
 You can override the persona via `PULSE_ASSISTANT_SYSTEM_PROMPT` or supply a path in `PULSE_ASSISTANT_SYSTEM_PROMPT_FILE`.
 
 ### MQTT Actions
@@ -209,6 +211,7 @@ Pulse publishes assistant-specific topics alongside the existing kiosk telemetry
 | `pulse/<host>/preferences/speaking_style/set` | in | `relaxed`, `normal`, `aggressive`. |
 | `pulse/<host>/preferences/wake_sensitivity/set` | in | `low`, `normal`, `high` (mapped to openWakeWord trigger levels 5/3/2). |
 | `pulse/<host>/preferences/ha_pipeline/set` | in | Free-form pipeline ID (leave blank to use HA’s default). |
+| `pulse/<host>/preferences/llm_provider/set` | in | `openai` or `gemini`; switches the active LLM without editing `pulse.conf`. |
 
 All preference states are retained so dashboards instantly reflect the last-known values after reboots. Async listeners can treat the `/set` topics as switches/selects in Home Assistant, while the `assistant/in_progress` topic mirrors the stock HA Voice binary sensor.
 

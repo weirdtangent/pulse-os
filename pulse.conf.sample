@@ -159,6 +159,8 @@ PULSE_ASSISTANT_RMS_THRESHOLD=120
 # --- LLM provider -----------------------------------------------------------
 # PULSE_ASSISTANT_PROVIDER — LLM backend slug; defaults to "openai".
 PULSE_ASSISTANT_PROVIDER="openai"
+# Publish "openai" or "gemini" to pulse/<hostname>/preferences/llm_provider/set (or use the HA select)
+# to change providers at runtime without editing this file.
 
 # OPENAI_API_KEY — API key used when the provider is OpenAI (leave blank for other providers).
 OPENAI_API_KEY=""
