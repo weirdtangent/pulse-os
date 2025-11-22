@@ -1,3 +1,10 @@
+# [0.44.0](https://github.com/weirdtangent/pulse-os/compare/v0.43.0...v0.44.0) (2025-11-22)
+
+
+### Features
+
+* add LLM selector in mqtt and pulse.conf.sample ([004ce0a](https://github.com/weirdtangent/pulse-os/commit/004ce0a9289e2a36c6db805e8e5ac493f055e7a4))
+
 # [0.43.0](https://github.com/weirdtangent/pulse-os/compare/v0.42.2...v0.43.0) (2025-11-22)
 
 
