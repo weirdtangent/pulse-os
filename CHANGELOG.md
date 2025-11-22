@@ -1,3 +1,10 @@
+## [0.48.1](https://github.com/weirdtangent/pulse-os/compare/v0.48.0...v0.48.1) (2025-11-22)
+
+
+### Bug Fixes
+
+* improve assistant display error handling ([5598ce2](https://github.com/weirdtangent/pulse-os/commit/5598ce212cd4a15b0860db27115471b2af6215c5))
+
 # [0.48.0](https://github.com/weirdtangent/pulse-os/compare/v0.47.0...v0.48.0) (2025-11-22)
 
 
