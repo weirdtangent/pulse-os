@@ -1,3 +1,10 @@
+## [0.52.4](https://github.com/weirdtangent/pulse-os/compare/v0.52.3...v0.52.4) (2025-11-22)
+
+
+### Bug Fixes
+
+* disable application cache and set disk cache size for chromium ([63f1a40](https://github.com/weirdtangent/pulse-os/commit/63f1a402e6396a90c9da6bf9156c5b7c133bc099))
+
 ## [0.52.3](https://github.com/weirdtangent/pulse-os/compare/v0.52.2...v0.52.3) (2025-11-22)
 
 ## [0.52.2](https://github.com/weirdtangent/pulse-os/compare/v0.52.1...v0.52.2) (2025-11-22)
