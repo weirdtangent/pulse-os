@@ -1,3 +1,10 @@
+## [0.48.5](https://github.com/weirdtangent/pulse-os/compare/v0.48.4...v0.48.5) (2025-11-22)
+
+
+### Bug Fixes
+
+* don't resume playing media unless it was paused by the assistant ([6716190](https://github.com/weirdtangent/pulse-os/commit/671619056d3557dd477338c9f6857a7b6b28afe9))
+
 ## [0.48.4](https://github.com/weirdtangent/pulse-os/compare/v0.48.3...v0.48.4) (2025-11-22)
 
 
