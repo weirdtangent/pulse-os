@@ -1,3 +1,10 @@
+## [0.49.3](https://github.com/weirdtangent/pulse-os/compare/v0.49.2...v0.49.3) (2025-11-22)
+
+
+### Bug Fixes
+
+* ensure per-user audio stack is running when Bluetooth autoconnect is disabled ([009de96](https://github.com/weirdtangent/pulse-os/commit/009de96b0384d63601181e8d8a40aa1528a71e3f))
+
 ## [0.49.2](https://github.com/weirdtangent/pulse-os/compare/v0.49.1...v0.49.2) (2025-11-22)
 
 ## [0.49.1](https://github.com/weirdtangent/pulse-os/compare/v0.49.0...v0.49.1) (2025-11-22)
