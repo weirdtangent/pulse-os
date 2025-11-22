@@ -62,6 +62,7 @@ initramfs-tools
 init-system-helpers
 iproute2
 iputils-ping
+jq
 keyboard-configuration
 kmod
 kms++-utils
