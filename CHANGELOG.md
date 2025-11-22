@@ -1,3 +1,10 @@
+# [0.46.0](https://github.com/weirdtangent/pulse-os/compare/v0.45.0...v0.46.0) (2025-11-22)
+
+
+### Features
+
+* add wake trigger level while Pulse is speaking and auto-pause media playback ([cdc9de6](https://github.com/weirdtangent/pulse-os/commit/cdc9de620517248a5947171f4dc436bb2754f92f))
+
 # [0.45.0](https://github.com/weirdtangent/pulse-os/compare/v0.44.3...v0.45.0) (2025-11-22)
 
 
