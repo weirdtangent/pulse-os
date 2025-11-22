@@ -259,12 +259,6 @@ class AssistantDisplay:
     def _init_now_playing(self, font_size: int) -> None:
         show = _is_truthy(os.environ.get("PULSE_DISPLAY_SHOW_NOW_PLAYING"))
         entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
-        legacy_entity = (os.environ.get("PULSE_DISPLAY_NOW_PLAYING_ENTITY") or "").strip()
-        if not entity and legacy_entity:
-            LOGGER.warning(
-                "PULSE_DISPLAY_NOW_PLAYING_ENTITY is deprecated; please migrate to PULSE_MEDIA_PLAYER_ENTITY."
-            )
-            entity = legacy_entity
         if not entity:
             entity = _default_media_player_entity()
         base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
