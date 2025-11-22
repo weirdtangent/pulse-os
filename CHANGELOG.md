@@ -1,3 +1,10 @@
+## [0.49.5](https://github.com/weirdtangent/pulse-os/compare/v0.49.4...v0.49.5) (2025-11-22)
+
+
+### Bug Fixes
+
+* disable stock snapclient.service to avoid conflicts ([9abfab9](https://github.com/weirdtangent/pulse-os/commit/9abfab9f4a1afbcdc98c0337ebad7073fa2c2607))
+
 ## [0.49.4](https://github.com/weirdtangent/pulse-os/compare/v0.49.3...v0.49.4) (2025-11-22)
 
 
