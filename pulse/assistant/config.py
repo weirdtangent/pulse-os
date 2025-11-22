@@ -128,6 +128,10 @@ class LLMConfig:
     openai_api_key: str | None
     openai_base_url: str
     openai_timeout: int
+    gemini_model: str
+    gemini_api_key: str | None
+    gemini_base_url: str
+    gemini_timeout: int
 
 
 @dataclass(frozen=True)
@@ -245,6 +249,10 @@ class AssistantConfig:
             openai_api_key=source.get("OPENAI_API_KEY"),
             openai_base_url=source.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             openai_timeout=_as_int(source.get("OPENAI_TIMEOUT_SECONDS"), 45),
+            gemini_model=source.get("GEMINI_MODEL", "gemini-1.5-flash-latest"),
+            gemini_api_key=source.get("GEMINI_API_KEY"),
+            gemini_base_url=source.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
+            gemini_timeout=_as_int(source.get("GEMINI_TIMEOUT_SECONDS"), 45),
         )
 
         topic_base = source.get("PULSE_ASSISTANT_TOPIC_BASE") or f"pulse/{hostname}/assistant"

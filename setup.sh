@@ -837,6 +837,11 @@ print_feature_summary() {
     local pulse_assistant_wake_words_pulse="${PULSE_ASSISTANT_WAKE_WORDS_PULSE:-hey_jarvis}"
     local pulse_assistant_wake_words_ha="${PULSE_ASSISTANT_WAKE_WORDS_HA:-}"
     local openai_model="${OPENAI_MODEL:-gpt-4o-mini}"
+    local gemini_model="${GEMINI_MODEL:-gemini-1.5-flash-latest}"
+    local llm_model="$openai_model"
+    if [ "$pulse_assistant_provider" = "gemini" ]; then
+        llm_model="$gemini_model"
+    fi
     # Build summary output by capturing printf statements
     local summary_output
     summary_output=$(
@@ -941,7 +946,7 @@ print_feature_summary() {
                 "Models that should route audio through Home Assistant Assist"
             kv_block \
                 "LLM Provider" \
-                "$pulse_assistant_provider (model: $openai_model)" \
+                "$pulse_assistant_provider (model: $llm_model)" \
                 "Large language model used for responses"
         fi
         local snapcast_status

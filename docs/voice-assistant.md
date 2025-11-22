@@ -17,7 +17,7 @@ The heavy models (wake/STT/TTS) are expected to run on another box (NAS, HA serv
   PULSE_ASSISTANT_MIC_CMD="arecord -q -t raw -f S16_LE -c 1 -r 16000 -"
   ```
 * Remote Wyoming services (Docker examples below)
-* An LLM provider – OpenAI works out of the box via `OPENAI_API_KEY`, but the provider layer is pluggable.
+* An LLM provider – OpenAI (`OPENAI_*`) or Google Gemini (`GEMINI_*`) work out of the box, but the provider layer is pluggable.
 * Optional: MQTT broker if you want automations or the on-screen overlay.
 
 After updating `pulse.conf`, rerun `./setup.sh <location>` so the new systemd units are linked and enabled.
@@ -101,13 +101,23 @@ If you’re letting HA proxy the Wyoming services you can also point the assista
 
 ## LLM and Automations
 
-`pulse-assistant` injects your options into the LLM system prompt. At minimum set:
+`pulse-assistant` injects your options into the LLM system prompt. Pick a provider and set the matching variables:
 
 ```
 PULSE_ASSISTANT_PROVIDER="openai"
 OPENAI_API_KEY="sk-..."
 OPENAI_MODEL="gpt-4o-mini"
 ```
+
+Or, to route the Pulse pipeline through Google Gemini instead:
+
+```
+PULSE_ASSISTANT_PROVIDER="gemini"
+GEMINI_API_KEY="AIza..."
+GEMINI_MODEL="gemini-1.5-flash-latest"
+```
+
+Both providers support optional base URL + timeout overrides (`OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `GEMINI_BASE_URL`, `GEMINI_TIMEOUT_SECONDS`) in case you proxy the traffic elsewhere.
 
 You can override the persona via `PULSE_ASSISTANT_SYSTEM_PROMPT` or supply a path in `PULSE_ASSISTANT_SYSTEM_PROMPT_FILE`.
 
@@ -271,7 +281,7 @@ Once the service reports in, the Snapcast provider surfaces the Pulse device as 
 
 1. **Wake word:** watch `journalctl -u pulse-assistant.service -f` and say “Okay Pulse”. You should see a detection log and an MQTT state message change to `listening`.
 2. **STT sanity:** keep speaking after the chime; when you stop the transcript should be printed in the journal and published to `assistant/transcript`.
-3. **LLM + speech:** set `OPENAI_API_KEY` and ask, “Hey Jarvis, what’s the weather tomorrow?”. You should hear Piper speak and the overlay should show the text.
+3. **LLM + speech:** set the appropriate API key for your provider (`OPENAI_API_KEY` or `GEMINI_API_KEY`) and ask, “Hey Jarvis, what’s the weather tomorrow?”. You should hear Piper speak and the overlay should show the text.
 4. **Actions:** add the sample JSON above and say “Okay Pulse, turn on the desk lights.” Confirm the MQTT topic fired.
 
 If something stalls, re-run `./setup.sh` (it restarts the services), then check:

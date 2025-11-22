@@ -467,23 +467,34 @@ def check_home_assistant_assist_pipeline(
 
 def check_llm(config: AssistantConfig) -> CheckResult:
     provider = (config.llm.provider or "").strip().lower()
-    if provider != "openai":
-        display = provider or "<unknown>"
-        return CheckResult(
-            "LLM",
-            "skip",
-            f"LLM provider '{display}' is not validated by this tool (only 'openai' is supported).",
-        )
+    if provider == "openai":
+        api_key = (config.llm.openai_api_key or "").strip()
+        if not api_key:
+            return CheckResult("LLM", "fail", "OPENAI_API_KEY is not set but provider is 'openai'.")
+        if not api_key.startswith("sk-"):
+            return CheckResult("LLM", "fail", "OPENAI_API_KEY does not look like an 'sk-' token.")
 
-    api_key = (config.llm.openai_api_key or "").strip()
-    if not api_key:
-        return CheckResult("LLM", "fail", "OPENAI_API_KEY is not set but provider is 'openai'.")
-    if not api_key.startswith("sk-"):
-        return CheckResult("LLM", "fail", "OPENAI_API_KEY does not look like an 'sk-' token.")
+        model = config.llm.openai_model or "<unspecified>"
+        base_url = config.llm.openai_base_url or "https://api.openai.com/v1"
+        return CheckResult("LLM", "ok", f"OpenAI model {model} configured (endpoint {base_url}).")
 
-    model = config.llm.openai_model or "<unspecified>"
-    base_url = config.llm.openai_base_url or "https://api.openai.com/v1"
-    return CheckResult("LLM", "ok", f"OpenAI model {model} configured (endpoint {base_url}).")
+    if provider == "gemini":
+        api_key = (config.llm.gemini_api_key or "").strip()
+        if not api_key:
+            return CheckResult("LLM", "fail", "GEMINI_API_KEY is not set but provider is 'gemini'.")
+        if not api_key.startswith("AI"):
+            return CheckResult("LLM", "fail", "GEMINI_API_KEY does not look like an 'AI...'/AIza token.")
+
+        model = config.llm.gemini_model or "<unspecified>"
+        base_url = config.llm.gemini_base_url or "https://generativelanguage.googleapis.com/v1beta"
+        return CheckResult("LLM", "ok", f"Gemini model {model} configured (endpoint {base_url}).")
+
+    display = provider or "<unknown>"
+    return CheckResult(
+        "LLM",
+        "skip",
+        f"LLM provider '{display}' is not validated by this tool (only 'openai' and 'gemini' are supported).",
+    )
 
 
 def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeout: float) -> list[CheckResult]:

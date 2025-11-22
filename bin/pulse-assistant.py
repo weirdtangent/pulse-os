@@ -21,7 +21,7 @@ from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
-from pulse.assistant.llm import LLMProvider, OpenAIProvider
+from pulse.assistant.llm import LLMProvider, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.audio import play_volume_feedback
@@ -95,7 +95,7 @@ class PulseAssistant:
         self.mqtt = AssistantMqtt(config.mqtt, logger=LOGGER)
         action_defs = load_action_definitions(config.action_file, config.inline_actions)
         self.actions = ActionEngine(action_defs)
-        self.llm: LLMProvider = OpenAIProvider(config.llm, LOGGER)
+        self.llm: LLMProvider = build_llm_provider(config.llm, LOGGER)
         self.home_assistant: HomeAssistantClient | None = None
         self.preferences = config.preferences
         if config.home_assistant.base_url and config.home_assistant.token:
