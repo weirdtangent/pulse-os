@@ -93,7 +93,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         icon="mdi:timer",
     ),
     TelemetryDescriptor(
-        key="cpu_percent",
+        key="cpu_usage",
         name="CPU Usage",
         unit="%",
         device_class=None,
@@ -111,7 +111,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         precision=1,
     ),
     TelemetryDescriptor(
-        key="memory_percent",
+        key="memory_usage",
         name="Memory Usage",
         unit="%",
         device_class=None,
@@ -477,10 +477,10 @@ class KioskMqttListener:
         metrics["uptime_seconds"] = uptime_seconds
 
         cpu_percent = psutil.cpu_percent(interval=None)
-        metrics["cpu_percent"] = round(cpu_percent, 1)
+        metrics["cpu_usage"] = round(cpu_percent, 1)
 
         mem = psutil.virtual_memory()
-        metrics["memory_percent"] = round(mem.percent, 1)
+        metrics["memory_usage"] = round(mem.percent, 1)
 
         disk = psutil.disk_usage("/")
         metrics["disk_percent"] = round(disk.percent, 1)
