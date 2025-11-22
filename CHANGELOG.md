@@ -1,3 +1,10 @@
+## [0.52.5](https://github.com/weirdtangent/pulse-os/compare/v0.52.4...v0.52.5) (2025-11-22)
+
+
+### Bug Fixes
+
+* more tweaks to try and get Chromium to render properly ([376ab9b](https://github.com/weirdtangent/pulse-os/commit/376ab9b80851137cb5df9d77403a57dc912eb722))
+
 ## [0.52.4](https://github.com/weirdtangent/pulse-os/compare/v0.52.3...v0.52.4) (2025-11-22)
 
 
