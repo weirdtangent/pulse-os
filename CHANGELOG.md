@@ -1,3 +1,10 @@
+## [0.42.2](https://github.com/weirdtangent/pulse-os/compare/v0.42.1...v0.42.2) (2025-11-22)
+
+
+### Bug Fixes
+
+* remove unit from uptime sensor to get duration device class ([e17d87b](https://github.com/weirdtangent/pulse-os/commit/e17d87b1ef675089957cca16987117222d5e11e8))
+
 ## [0.42.1](https://github.com/weirdtangent/pulse-os/compare/v0.42.0...v0.42.1) (2025-11-22)
 
 
