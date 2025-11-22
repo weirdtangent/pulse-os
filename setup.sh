@@ -483,6 +483,11 @@ configure_snapclient() {
 
     ensure_snapclient_package
 
+    if systemctl list-unit-files | grep -q "^snapclient.service"; then
+        log "Disabling stock snapclient.service to avoid conflicts…"
+        sudo systemctl disable --now snapclient.service 2>/dev/null || true
+    fi
+
     sudo tee "$config_file" >/dev/null <<EOF
 SNAPCAST_HOST="${PULSE_SNAPCAST_HOST}"
 SNAPCAST_PORT="${PULSE_SNAPCAST_PORT:-1704}"
