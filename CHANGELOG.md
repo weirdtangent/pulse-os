@@ -1,3 +1,10 @@
+## [0.48.3](https://github.com/weirdtangent/pulse-os/compare/v0.48.2...v0.48.3) (2025-11-22)
+
+
+### Bug Fixes
+
+* log assistant responses for music control ([3f6035b](https://github.com/weirdtangent/pulse-os/commit/3f6035b9fa8ac5cb5e76e8de8ce47d882f0d0e81))
+
 ## [0.48.2](https://github.com/weirdtangent/pulse-os/compare/v0.48.1...v0.48.2) (2025-11-22)
 
 
