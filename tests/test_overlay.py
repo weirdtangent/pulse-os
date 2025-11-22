@@ -39,9 +39,9 @@ class OverlayRenderTests(unittest.TestCase):
         data.update(overrides)
         return OverlaySnapshot(**data)
 
-    def test_single_clock_center_cell(self) -> None:
+    def test_single_clock_bottom_left_cell(self) -> None:
         html = render_overlay_html(self._snapshot(), self.theme)
-        self.assertIn('data-cell="center"', html)
+        self.assertIn('data-cell="bottom-left"', html)
         self.assertIn("Local", html)
 
     def test_two_clocks_split_left_right(self) -> None:

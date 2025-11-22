@@ -287,7 +287,7 @@ CELL_ORDER = (
 )
 
 CLOCK_POSITION_MAP = {
-    1: ("center",),
+    1: ("bottom-left",),
     2: ("middle-left", "middle-right"),
     3: ("top-left", "top-right", "middle-left"),
     4: ("top-left", "top-right", "middle-left", "middle-right"),
@@ -296,7 +296,7 @@ CLOCK_POSITION_MAP = {
 TIMER_POSITION_MAP = {
     1: ("center",),
     2: ("middle-left", "middle-right"),
-    3: ("top-left", "top-right", "center"),
+    3: ("middle-left", "middle-right", "top-center"),
     4: ("top-left", "top-right", "middle-left", "middle-right"),
 }
 
