@@ -1,3 +1,10 @@
+## [0.49.7](https://github.com/weirdtangent/pulse-os/compare/v0.49.6...v0.49.7) (2025-11-22)
+
+
+### Bug Fixes
+
+* handle assistant commands with punctuation ([a4b86c0](https://github.com/weirdtangent/pulse-os/commit/a4b86c0c130038d667a2c48118fb62b4e22288cb))
+
 ## [0.49.6](https://github.com/weirdtangent/pulse-os/compare/v0.49.5...v0.49.6) (2025-11-22)
 
 ## [0.49.5](https://github.com/weirdtangent/pulse-os/compare/v0.49.4...v0.49.5) (2025-11-22)
