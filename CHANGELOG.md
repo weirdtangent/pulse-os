@@ -1,3 +1,10 @@
+## [0.49.4](https://github.com/weirdtangent/pulse-os/compare/v0.49.3...v0.49.4) (2025-11-22)
+
+
+### Bug Fixes
+
+* add troubleshooting section for snapclient/music assistant silent but beeps work ([0fa0012](https://github.com/weirdtangent/pulse-os/commit/0fa00124e3bd090526da2aae7a2a3d780942ada6))
+
 ## [0.49.3](https://github.com/weirdtangent/pulse-os/compare/v0.49.2...v0.49.3) (2025-11-22)
 
 
