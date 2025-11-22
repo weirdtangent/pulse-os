@@ -1,3 +1,10 @@
+## [0.48.4](https://github.com/weirdtangent/pulse-os/compare/v0.48.3...v0.48.4) (2025-11-22)
+
+
+### Bug Fixes
+
+* normalize input for assistant commands; add timer panel to display ([0521527](https://github.com/weirdtangent/pulse-os/commit/052152780a628a107dab438345c9ce897c29090b))
+
 ## [0.48.3](https://github.com/weirdtangent/pulse-os/compare/v0.48.2...v0.48.3) (2025-11-22)
 
 
