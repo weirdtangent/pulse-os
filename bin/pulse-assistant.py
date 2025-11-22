@@ -552,6 +552,7 @@ class PulseAssistant:
                     self.config.response_topic,
                     json.dumps({"text": llm_result.response, "wake_word": wake_word}),
                 )
+                self._log_assistant_response(wake_word, llm_result.response, pipeline="pulse")
                 await self._speak(llm_result.response)
                 self._trigger_media_resume_after_response()
             self._finalize_assist_run(status="success")
@@ -626,6 +627,7 @@ class PulseAssistant:
                     }
                 ),
             )
+            self._log_assistant_response(wake_word, speech_text, pipeline="home_assistant")
             tts_audio = self._extract_ha_tts_audio(ha_result)
             if tts_audio:
                 await self._play_pcm_audio(
@@ -971,20 +973,33 @@ class PulseAssistant:
         if not self.schedule_service:
             return False
         lowered = transcript.strip().lower()
+        timer_start = self._extract_timer_start_intent(lowered)
+        if timer_start:
+            duration, label = timer_start
+            await self.schedule_service.create_timer(duration_seconds=duration, label=label)
+            phrase = self._describe_duration(duration)
+            label_text = f" for {label}" if label else ""
+            spoken = f"Starting a {phrase} timer{label_text}."
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            await self._speak(spoken)
+            return True
         if "next alarm" in lowered or lowered.startswith("when is my alarm"):
             info = self.schedule_service.get_next_alarm()
             if info:
                 message = self._format_alarm_summary(info)
             else:
                 message = "You do not have any alarms scheduled."
+            self._log_assistant_response("shortcut", message, pipeline="pulse")
             await self._speak(message)
             return True
         if "cancel all timers" in lowered:
             count = await self.schedule_service.cancel_all_timers()
             if count > 0:
-                await self._speak(f"Cancelled {count} timer{'s' if count != 1 else ''}.")
+                spoken = f"Cancelled {count} timer{'s' if count != 1 else ''}."
             else:
-                await self._speak("You do not have any timers running.")
+                spoken = "You do not have any timers running."
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            await self._speak(spoken)
             return True
         if self._is_stop_phrase(lowered):
             handled = await self._stop_active_schedule(lowered)
@@ -997,12 +1012,16 @@ class PulseAssistant:
             label = self._extract_timer_label(lowered)
             if await self._extend_timer_shortcut(seconds, label):
                 label_text = f" to the {label} timer" if label else ""
-                await self._speak(f"Added {minutes} minutes{label_text}.")
+                spoken = f"Added {minutes} minutes{label_text}."
+                self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+                await self._speak(spoken)
                 return True
         if "cancel my timer" in lowered or "cancel the timer" in lowered:
             label = self._extract_timer_label(lowered)
             if await self._cancel_timer_shortcut(label):
-                await self._speak("Timer cancelled.")
+                spoken = "Timer cancelled."
+                self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+                await self._speak(spoken)
                 return True
         return False
 
@@ -1093,6 +1112,55 @@ class PulseAssistant:
         if len(timers) == 1 and not label:
             return timers[0]
         return None
+
+    @staticmethod
+    def _log_assistant_response(wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
+        if not text:
+            return
+        snippet = text if len(text) <= 240 else f"{text[:237]}..."
+        LOGGER.info("Response (%s/%s): %s", pipeline, wake_word, snippet)
+
+    @staticmethod
+    def _extract_timer_start_intent(lowered: str) -> tuple[int, str | None] | None:
+        if "timer" not in lowered:
+            return None
+        if not any(word in lowered for word in ("start", "set", "create")):
+            return None
+        duration_match = re.search(
+            r"(\d+(?:\.\d+)?)\s*(seconds?|second|secs?|minutes?|minute|mins?|hours?|hour|hrs?)", lowered
+        )
+        if not duration_match:
+            return None
+        amount = float(duration_match.group(1))
+        unit = duration_match.group(2)
+        unit = unit.rstrip("s")
+        multipliers = {
+            "second": 1,
+            "sec": 1,
+            "minute": 60,
+            "min": 60,
+            "hour": 3600,
+            "hr": 3600,
+        }
+        multiplier = multipliers.get(unit, 60)
+        duration_seconds = max(1, int(amount * multiplier))
+        label = None
+        label_match = re.search(r"timer for ([a-z][a-z0-9 ]+)", lowered)
+        if label_match:
+            candidate = label_match.group(1).strip()
+            if candidate and not re.fullmatch(r"\d+(\.\d+)?\s*(seconds?|minutes?|hours?)", candidate):
+                label = candidate
+        return duration_seconds, label
+
+    @staticmethod
+    def _describe_duration(seconds: int) -> str:
+        if seconds % 3600 == 0:
+            hours = seconds // 3600
+            return f"{hours} hour{'s' if hours != 1 else ''}"
+        if seconds % 60 == 0:
+            minutes = seconds // 60
+            return f"{minutes} minute{'s' if minutes != 1 else ''}"
+        return f"{seconds} seconds"
 
     async def _maybe_handle_music_command(self, transcript: str) -> bool:
         query = (transcript or "").strip().lower()
