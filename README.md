@@ -96,7 +96,9 @@ A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a s
    ```bash
    ./setup.sh <location-name>
    ```
-   Re-run `./setup.sh` after changing `pulse.conf` or pulling new code (omit the location on repeat runs). The MQTT “Update” button performs the same update+setup flow remotely.
+   By default `setup.sh` finishes by calling `bin/tools/restart-services.sh` so every kiosk service reloads without a reboot. Pass `--no-restart` if you’re iterating on a single unit and want to restart things manually (you can always run the helper script yourself later).
+
+   Re-run `./setup.sh` after changing `pulse.conf` or pulling new code (omit the location on repeat runs). The MQTT “Update” button performs the same update + setup flow remotely and inherits the automatic restart step.
 
 ---
 

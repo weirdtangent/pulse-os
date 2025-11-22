@@ -11,7 +11,7 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 | Button | Topic | Action |
 | ------ | ----- | ------ |
 | `Home` | `pulse/<hostname>/kiosk/home` | Reopens the configured `PULSE_URL` in Chromium. |
-| `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, reruns `./setup.sh`, then calls the safe reboot guard. |
+| `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, reruns `./setup.sh` (which restarts all Pulse services unless the kiosk was provisioned with `./setup.sh --no-restart`), then calls the safe reboot guard. |
 | `Reboot` | `pulse/<hostname>/kiosk/reboot` | Requests a safe reboot (respecting the guard thresholds). |
 
 ### Update button requirements
@@ -29,6 +29,8 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 - There is no payload validation; only expose the buttons on a broker you control. The safe reboot wrapper prevents repeated reboots when multiple watchers fire inside a short window.
 - Button availability is dynamic: the `Update` button only appears when GitHub’s `VERSION` file is newer than the kiosk’s local version. The kiosk checks 12×/day by default (2/4/6/8/12/24 options via `PULSE_VERSION_CHECKS_PER_DAY`).
 - The Update button title automatically changes to `Update to vX.Y.Z` so you know which release will be applied before clicking.
+
+Need to restart everything locally without re-running the whole setup flow? Run `sudo bin/tools/restart-services.sh` on the kiosk to bounce the same units the setup/Update path touches.
 
 ### MQTT Number Entities (volume & brightness)
 
