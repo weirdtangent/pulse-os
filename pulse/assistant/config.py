@@ -188,6 +188,7 @@ class AssistantConfig:
     preferences: AssistantPreferences
     media_player_entity: str | None
     self_audio_trigger_level: int
+    log_llm_messages: bool
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -335,6 +336,8 @@ class AssistantConfig:
         state_topic = f"{mqtt.topic_base}/state"
         action_topic = f"{mqtt.topic_base}/actions"
 
+        log_llm_messages = _as_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
+
         return AssistantConfig(
             hostname=hostname,
             device_name=device_name,
@@ -359,6 +362,7 @@ class AssistantConfig:
             preferences=preferences,
             media_player_entity=media_player_entity,
             self_audio_trigger_level=self_audio_trigger_level,
+            log_llm_messages=log_llm_messages,
         )
 
 

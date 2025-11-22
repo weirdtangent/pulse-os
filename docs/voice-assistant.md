@@ -94,6 +94,8 @@ PULSE_ASSISTANT_WAKE_SOUND="true"
 PULSE_ASSISTANT_SPEAKING_STYLE="normal"   # relaxed/normal/aggressive
 PULSE_ASSISTANT_WAKE_SENSITIVITY="normal" # low/normal/high
 PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
+PULSE_ASSISTANT_LOG_LLM="true"
+    PULSE_ASSISTANT_LOG_LLM="true"
 ```
 
 If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. If the HA Whisper endpoint exposes multiple models, set `HOME_ASSISTANT_STT_MODEL` so we request the correct one. Leave these blank to keep using your original servers.
@@ -101,6 +103,10 @@ If you’re letting HA proxy the Wyoming services you can also point the assista
 ### Music Assistant control
 
 Set `PULSE_MEDIA_PLAYER_ENTITY="media_player.<your_player>"` (and the required `HOME_ASSISTANT_*` credentials) to let the Pulse pipeline pause/stop/skip music or describe what’s playing without extra automations. Example prompts: “Pause the music”, “Next song”, “What song is this?”, or “Who is this?”. Pulse calls the standard Home Assistant `media_player` services and responds verbally with the result.
+
+### Transcript logging toggle
+
+Every request logs “Transcript …” / “Response …” lines to `journalctl -u pulse-assistant` so you can debug wake-word interactions. If you’d rather suppress those entries (while still publishing transcripts to MQTT), set `PULSE_ASSISTANT_LOG_LLM="false"` in `pulse.conf` or flip the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm`. The switch shows up automatically in Home Assistant discovery next to the other assistant preferences.
 
 ### Ignoring Pulse’s own audio
 

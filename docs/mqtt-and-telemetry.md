@@ -125,3 +125,7 @@ Responses are implicit—the kiosk publishes the updated state snapshot immediat
 
 `bin/pulse-assistant-display.py` listens to the `alarms/active` and `timers/active` topics. When something is ringing a fullscreen overlay appears with a stop button plus a context action (SNOOZE for alarms, ADD 3 MIN for timers). Each button posts the matching command JSON back to the `schedules/command` topic, so your physical display, automations, and voice assistant all stay coordinated.
 
+### Transcript logging switch
+
+The assistant logs every transcript/response pair to `journalctl` by default. To disable that per-device, either set `PULSE_ASSISTANT_LOG_LLM=false` in `pulse.conf` **or** toggle the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm` (`state` topic mirrors the current value, `set` accepts `on`/`off`). Disabling the switch suppresses the log lines but does **not** prevent the transcript JSON from being published to MQTT.
+

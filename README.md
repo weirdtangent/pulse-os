@@ -271,6 +271,10 @@ With `HOME_ASSISTANT_*` credentials and `PULSE_MEDIA_PLAYER_ENTITY` set, you can
 - “Pause the music”, “Stop the music”, “Next song”.
 - “What song is this?” / “Who is this?” → pulls artist/title from the media player attributes and reads them back.
 
+#### Transcript logging opt-out
+
+By default the assistant logs every transcript/response pair to `journalctl -u pulse-assistant`. If you need to suppress those entries for PII reasons, set `PULSE_ASSISTANT_LOG_LLM="false"` in `pulse.conf` (or add the env var to the systemd override) and rerun `./setup.sh`. You can also toggle the setting at runtime via the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm` (exposed over Home Assistant discovery alongside the existing wake sound / speaking style options).
+
 #### Home Assistant actions, timers, and reminders
 
 Set `HOME_ASSISTANT_BASE_URL` and `HOME_ASSISTANT_TOKEN`, then add `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` if you use those helpers. The assistant can then:

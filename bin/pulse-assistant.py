@@ -154,6 +154,7 @@ class PulseAssistant:
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
         self._media_resume_delay = 2.0
+        self._log_llm_messages = config.log_llm_messages
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -518,7 +519,8 @@ class PulseAssistant:
             if not transcript:
                 self._finalize_assist_run(status="no_transcript")
                 return
-            LOGGER.info("Transcript (%s): %s", wake_word, transcript)
+            if self._log_llm_messages:
+                LOGGER.info("Transcript (%s): %s", wake_word, transcript)
             transcript_payload = {"text": transcript, "wake_word": wake_word}
             self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
             if await self._maybe_handle_music_command(transcript):
@@ -540,7 +542,8 @@ class PulseAssistant:
                 follow_up_transcript = await self._transcribe(follow_up_audio)
                 if not follow_up_transcript:
                     break
-                LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
+                if self._log_llm_messages:
+                    LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
                 payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
                 self._publish_message(self.config.transcript_topic, json.dumps(payload))
                 if await self._maybe_handle_music_command(follow_up_transcript):
@@ -604,7 +607,8 @@ class PulseAssistant:
                 return
             transcript = self._extract_ha_transcript(ha_result)
             if transcript:
-                LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
+                if self._log_llm_messages:
+                    LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
                 self._publish_message(
                     self.config.transcript_topic,
                     json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
@@ -809,6 +813,7 @@ class PulseAssistant:
             self.mqtt.subscribe(f"{base}/wake_sensitivity/set", self._handle_wake_sensitivity_command)
             self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
             self.mqtt.subscribe(f"{base}/llm_provider/set", self._handle_llm_provider_command)
+            self.mqtt.subscribe(f"{base}/log_llm/set", self._handle_log_llm_command)
         except RuntimeError:
             LOGGER.debug("MQTT client not ready for preference subscriptions")
 
@@ -829,6 +834,14 @@ class PulseAssistant:
         enabled = value in {"on", "true", "1", "yes"}
         self.preferences = replace(self.preferences, wake_sound=enabled)
         self._publish_preference_state("wake_sound", "on" if enabled else "off")
+
+    def _handle_log_llm_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        enabled = value in {"on", "true", "1", "yes"}
+        if self._log_llm_messages == enabled:
+            return
+        self._log_llm_messages = enabled
+        self._publish_preference_state("log_llm", "on" if enabled else "off")
 
     def _handle_now_playing_message(self, payload: str) -> None:
         normalized = payload.strip()
@@ -868,6 +881,7 @@ class PulseAssistant:
         self._publish_preference_state("wake_sensitivity", self.preferences.wake_sensitivity)
         self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
         self._publish_preference_state("llm_provider", self._active_llm_provider())
+        self._publish_preference_state("log_llm", "on" if self._log_llm_messages else "off")
 
     def _publish_preference_state(self, key: str, value: str) -> None:
         topic = f"{self._preferences_topic}/{key}/state"
@@ -1194,9 +1208,8 @@ class PulseAssistant:
             return timers[0]
         return None
 
-    @staticmethod
-    def _log_assistant_response(wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
-        if not text:
+    def _log_assistant_response(self, wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
+        if not self._log_llm_messages or not text:
             return
         snippet = text if len(text) <= 240 else f"{text[:237]}..."
         LOGGER.info("Response (%s/%s): %s", pipeline, wake_word, snippet)
@@ -1588,6 +1601,23 @@ class PulseAssistant:
                     "unique_id": f"{self.config.hostname}-wake-sound",
                     "state_topic": f"{self._preferences_topic}/wake_sound/state",
                     "command_topic": f"{self._preferences_topic}/wake_sound/set",
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+            retain=True,
+        )
+        # Log LLM switch
+        self._publish_message(
+            f"{prefix}/switch/{hostname_safe}_log_llm/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Log LLM Responses",
+                    "unique_id": f"{self.config.hostname}-log-llm",
+                    "state_topic": f"{self._preferences_topic}/log_llm/state",
+                    "command_topic": f"{self._preferences_topic}/log_llm/set",
                     "payload_on": "on",
                     "payload_off": "off",
                     "device": device,
