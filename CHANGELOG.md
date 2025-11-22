@@ -1,3 +1,10 @@
+# [0.52.0](https://github.com/weirdtangent/pulse-os/compare/v0.51.1...v0.52.0) (2025-11-22)
+
+
+### Features
+
+* update overlay to use 24-hour clock by default ([539184e](https://github.com/weirdtangent/pulse-os/commit/539184ef15a36aa9d7ef305f9e98ad88b5b92cf9))
+
 ## [0.51.1](https://github.com/weirdtangent/pulse-os/compare/v0.51.0...v0.51.1) (2025-11-22)
 
 
