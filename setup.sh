@@ -493,6 +493,10 @@ SNAPCLIENT_EXTRA_ARGS="${PULSE_SNAPCLIENT_EXTRA_ARGS:---player pulse}"
 SNAPCLIENT_HOST_ID="${PULSE_SNAPCLIENT_HOST_ID:-}"
 EOF
     log "Wrote Snapcast client defaults to $config_file"
+
+    # Snapclient streams through PipeWire/Pulse (--player pulse). Make sure the
+    # per-user audio stack is running even when Bluetooth autoconnect is disabled.
+    ensure_user_systemd_session
 }
 
 setup_user_dirs() {
