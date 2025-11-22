@@ -507,6 +507,7 @@ class PulseAssistant:
         self._set_assist_stage("pulse", "listening", {"wake_word": wake_word})
         await self._maybe_play_wake_sound()
         await self._maybe_pause_media_playback()
+        await self.schedule_service.pause_active_audio()
         try:
             audio_bytes = await self._record_phrase()
             if not audio_bytes:
@@ -556,6 +557,7 @@ class PulseAssistant:
                 follow_up_needed = self._should_listen_for_follow_up(llm_result)
             self._finalize_assist_run(status="success")
         finally:
+            await self.schedule_service.resume_active_audio()
             self._ensure_media_resume()
 
     async def _run_home_assistant_pipeline(self, wake_word: str) -> None:
@@ -579,6 +581,7 @@ class PulseAssistant:
             LOGGER.warning("Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
             self._finalize_assist_run(status="config_error")
             return
+        await self.schedule_service.pause_active_audio()
         try:
             audio_bytes = await self._record_phrase()
             if not audio_bytes:
@@ -643,6 +646,7 @@ class PulseAssistant:
                 self._trigger_media_resume_after_response()
             self._finalize_assist_run(status="success")
         finally:
+            await self.schedule_service.resume_active_audio()
             self._ensure_media_resume()
 
     async def _execute_llm_turn(

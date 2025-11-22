@@ -292,6 +292,10 @@ class PlaybackHandle:
         self._task: asyncio.Task | None = None
         self._sink = None
         self._orig_volume: int | None = None
+        self._pause_flag = False
+        self._pause_condition = asyncio.Event()
+        self._pause_condition.set()
+        self._music_paused = False
 
     async def start(self) -> None:
         if self.playback.mode == "music" and self.ha_client:
@@ -308,6 +312,25 @@ class PlaybackHandle:
         if self.playback.mode == "music" and self.ha_client:
             await self._stop_music()
         await self._restore_volume()
+        self._pause_condition.set()
+
+    async def pause(self) -> None:
+        if self.playback.mode == "music" and self.ha_client:
+            await self._pause_music()
+            return
+        if self._pause_flag:
+            return
+        self._pause_flag = True
+        self._pause_condition.clear()
+
+    async def resume(self) -> None:
+        if self.playback.mode == "music" and self.ha_client:
+            await self._resume_music()
+            return
+        if not self._pause_flag:
+            return
+        self._pause_flag = False
+        self._pause_condition.set()
 
     async def _start_music(self) -> None:
         entity = (
@@ -344,6 +367,35 @@ class PlaybackHandle:
             await self.ha_client.call_service("media_player", "media_stop", {"entity_id": entity})
         except Exception:  # pylint: disable=broad-except
             LOGGER.debug("Failed to stop media_player for alarm", exc_info=True)
+        self._music_paused = False
+
+    async def _pause_music(self) -> None:
+        entity = (
+            self.playback.music_entity
+            or os.environ.get("PULSE_MEDIA_PLAYER_ENTITY")
+            or _default_media_player_entity(self.hostname)
+        )
+        if not entity or self._music_paused:
+            return
+        try:
+            await self.ha_client.call_service("media_player", "media_pause", {"entity_id": entity})
+            self._music_paused = True
+        except Exception:  # pylint: disable=broad-except
+            LOGGER.debug("Failed to pause media_player for alarm", exc_info=True)
+
+    async def _resume_music(self) -> None:
+        entity = (
+            self.playback.music_entity
+            or os.environ.get("PULSE_MEDIA_PLAYER_ENTITY")
+            or _default_media_player_entity(self.hostname)
+        )
+        if not entity or not self._music_paused:
+            return
+        try:
+            await self.ha_client.call_service("media_player", "media_play", {"entity_id": entity})
+            self._music_paused = False
+        except Exception:  # pylint: disable=broad-except
+            LOGGER.debug("Failed to resume media_player for alarm", exc_info=True)
 
     async def _beep_loop(self) -> None:
         self._sink = pulse_audio.find_audio_sink()
@@ -354,6 +406,9 @@ class PlaybackHandle:
         stop_at = self._loop.time() + 60.0
         try:
             while not self._stop_event.is_set() and self._loop.time() < stop_at:
+                await self._wait_if_paused()
+                if self._stop_event.is_set():
+                    break
                 now = self._loop.time()
                 if self._sink:
                     if now < ramp_end:
@@ -368,6 +423,10 @@ class PlaybackHandle:
             raise
         finally:
             await self._restore_volume()
+
+    async def _wait_if_paused(self) -> None:
+        while self._pause_flag and not self._stop_event.is_set():
+            await asyncio.sleep(0.05)
 
     async def _restore_volume(self) -> None:
         if self._sink is None or self._orig_volume is None:
@@ -415,6 +474,22 @@ class ScheduleService:
         for event_id in active:
             await self.stop_event(event_id, reason="shutdown")
         self._started = False
+
+    async def pause_active_audio(self) -> None:
+        async with self._lock:
+            handles = [active.handle for active in self._active.values()]
+        await asyncio.gather(
+            *(handle.pause() for handle in handles if handle),
+            return_exceptions=True,
+        )
+
+    async def resume_active_audio(self) -> None:
+        async with self._lock:
+            handles = [active.handle for active in self._active.values()]
+        await asyncio.gather(
+            *(handle.resume() for handle in handles if handle),
+            return_exceptions=True,
+        )
 
     async def create_alarm(
         self,
