@@ -18,6 +18,7 @@ from .config import LLMConfig
 class LLMResult:
     response: str
     actions: list[str]
+    follow_up: bool = False
 
 
 class LLMProvider:
@@ -33,12 +34,13 @@ def _parse_llm_response(response_text: str) -> LLMResult:
 
     response = (parsed.get("response") or "").strip()
     raw_actions = parsed.get("actions") or []
+    follow_up = bool(parsed.get("follow_up"))
     actions: list[str] = []
     if isinstance(raw_actions, list):
         for slug in raw_actions:
             if isinstance(slug, str) and slug:
                 actions.append(slug)
-    return LLMResult(response=response or response_text.strip(), actions=actions)
+    return LLMResult(response=response or response_text.strip(), actions=actions, follow_up=follow_up)
 
 
 def _format_system_prompt(config: LLMConfig, actions_for_prompt: list[dict[str, str]]) -> str:
@@ -59,7 +61,8 @@ When you want to trigger hardware actions, you may only use the following slugs:
 Always respond **only** with JSON in the form:
 {{
   "response": "text to say aloud",
-  "actions": ["optional_action_slug"]
+  "actions": ["optional_action_slug"],
+  "follow_up": true  # optional, set true only when you explicitly need more info
 }}
 """
     return system_content

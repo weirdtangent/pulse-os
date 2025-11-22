@@ -27,7 +27,7 @@ from pulse.assistant.actions import ActionEngine, _parse_duration_seconds, load_
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
-from pulse.assistant.llm import LLMProvider, build_llm_provider
+from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
@@ -527,31 +527,30 @@ class PulseAssistant:
             if await self._maybe_handle_schedule_shortcut(transcript):
                 self._finalize_assist_run(status="success")
                 return
-            prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
-            llm_result = await self.llm.generate(transcript, prompt_actions)
-            LOGGER.debug("LLM response: %s", llm_result)
-            executed_actions = await self.actions.execute(
-                llm_result.actions,
-                self.mqtt if llm_result.actions else None,
-                self.home_assistant,
-                self.scheduler,
-                self.schedule_service,
-            )
-            if executed_actions:
-                self._publish_message(
-                    self.config.action_topic,
-                    json.dumps({"executed": executed_actions, "wake_word": wake_word}),
-                )
-            if llm_result.response:
-                tracker.begin_stage("speaking")
-                self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word})
-                self._publish_message(
-                    self.config.response_topic,
-                    json.dumps({"text": llm_result.response, "wake_word": wake_word}),
-                )
-                self._log_assistant_response(wake_word, llm_result.response, pipeline="pulse")
-                await self._speak(llm_result.response)
-                self._trigger_media_resume_after_response()
+            llm_result = await self._execute_llm_turn(transcript, wake_word, tracker)
+            follow_up_needed = self._should_listen_for_follow_up(llm_result)
+            while follow_up_needed:
+                tracker.begin_stage("listening")
+                self._set_assist_stage("pulse", "listening", {"wake_word": wake_word, "follow_up": True})
+                follow_up_audio = await self._record_follow_up_phrase(timeout_seconds=5.0)
+                if not follow_up_audio:
+                    break
+                tracker.begin_stage("thinking")
+                self._set_assist_stage("pulse", "thinking", {"wake_word": wake_word, "follow_up": True})
+                follow_up_transcript = await self._transcribe(follow_up_audio)
+                if not follow_up_transcript:
+                    break
+                LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
+                payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
+                self._publish_message(self.config.transcript_topic, json.dumps(payload))
+                if await self._maybe_handle_music_command(follow_up_transcript):
+                    follow_up_needed = False
+                    continue
+                if await self._maybe_handle_schedule_shortcut(follow_up_transcript):
+                    follow_up_needed = False
+                    continue
+                llm_result = await self._execute_llm_turn(follow_up_transcript, wake_word, tracker, follow_up=True)
+                follow_up_needed = self._should_listen_for_follow_up(llm_result)
             self._finalize_assist_run(status="success")
         finally:
             self._ensure_media_resume()
@@ -641,6 +640,80 @@ class PulseAssistant:
             self._finalize_assist_run(status="success")
         finally:
             self._ensure_media_resume()
+
+    async def _execute_llm_turn(
+        self,
+        transcript: str,
+        wake_word: str,
+        tracker: AssistRunTracker,
+        *,
+        follow_up: bool = False,
+    ) -> LLMResult | None:
+        prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
+        llm_result = await self.llm.generate(transcript, prompt_actions)
+        LOGGER.debug("LLM response: %s", llm_result)
+        executed_actions = await self.actions.execute(
+            llm_result.actions,
+            self.mqtt if llm_result.actions else None,
+            self.home_assistant,
+            self.scheduler,
+            self.schedule_service,
+        )
+        if executed_actions:
+            self._publish_message(
+                self.config.action_topic,
+                json.dumps({"executed": executed_actions, "wake_word": wake_word}),
+            )
+        if llm_result.response:
+            tracker.begin_stage("speaking")
+            stage_extra = {"wake_word": wake_word}
+            if follow_up:
+                stage_extra["follow_up"] = True
+            self._set_assist_stage("pulse", "speaking", stage_extra)
+            response_payload = {
+                "text": llm_result.response,
+                "wake_word": wake_word,
+            }
+            if follow_up:
+                response_payload["follow_up"] = True
+            self._publish_message(self.config.response_topic, json.dumps(response_payload))
+            tag = "follow_up" if follow_up else wake_word
+            self._log_assistant_response(tag, llm_result.response, pipeline="pulse")
+            await self._speak(llm_result.response)
+            self._trigger_media_resume_after_response()
+        return llm_result
+
+    @staticmethod
+    def _should_listen_for_follow_up(llm_result: LLMResult | None) -> bool:
+        if not llm_result:
+            return False
+        if llm_result.follow_up:
+            return True
+        response = (llm_result.response or "").strip()
+        return bool(response.endswith("?"))
+
+    async def _record_follow_up_phrase(self, timeout_seconds: float) -> bytes | None:
+        chunk_ms = self.config.mic.chunk_ms
+        max_chunks = max(1, int((timeout_seconds * 1000) / chunk_ms))
+        silence_chunks = max(1, int(self.config.phrase.silence_ms / chunk_ms))
+        buffer = bytearray()
+        silence_run = 0
+        chunks = 0
+        while chunks < max_chunks:
+            try:
+                chunk = await asyncio.wait_for(self.mic.read_chunk(), timeout=timeout_seconds)
+            except TimeoutError:
+                break
+            buffer.extend(chunk)
+            rms = _compute_rms(chunk, self.config.mic.width)
+            if rms < self.config.phrase.rms_floor and chunks >= 1:
+                silence_run += 1
+                if silence_run >= silence_chunks:
+                    break
+            else:
+                silence_run = 0
+            chunks += 1
+        return bytes(buffer) if buffer else None
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
