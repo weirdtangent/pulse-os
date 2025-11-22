@@ -98,6 +98,10 @@ PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
 
 If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. If the HA Whisper endpoint exposes multiple models, set `HOME_ASSISTANT_STT_MODEL` so we request the correct one. Leave these blank to keep using your original servers.
 
+### Music Assistant control
+
+Set `PULSE_MEDIA_PLAYER_ENTITY="media_player.<your_player>"` (and the required `HOME_ASSISTANT_*` credentials) to let the Pulse pipeline pause/stop/skip music or describe what’s playing without extra automations. Example prompts: “Pause the music”, “Next song”, “What song is this?”, or “Who is this?”. Pulse calls the standard Home Assistant `media_player` services and responds verbally with the result.
+
 ### Ignoring Pulse’s own audio
 
 When the kiosk is playing music (or speaking a TTS reply) the microphones used by `pulse-assistant` can hear that playback and occasionally fire the wake word, especially if the lyrics contain “Jarvis”. The assistant always watches the existing `pulse/<hostname>/telemetry/now_playing` feed published by `pulse-kiosk-mqtt.service` and tracks its own playback sessions. While self audio is active it temporarily bumps the openWakeWord trigger level (default 7) so ambient music is ignored but spoken wake words are still accepted. Tune the behavior with `PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL` if you need the assistant to be more/less strict while Pulse is playing audio. When Home Assistant access + `PULSE_MEDIA_PLAYER_ENTITY` are configured, the assistant will also pause that media player as soon as a wake word fires and resume playback roughly two seconds after the spoken response completes.

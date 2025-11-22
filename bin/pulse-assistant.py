@@ -524,6 +524,9 @@ class PulseAssistant:
             LOGGER.info("Transcript (%s): %s", wake_word, transcript)
             transcript_payload = {"text": transcript, "wake_word": wake_word}
             self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
+            if await self._maybe_handle_music_command(transcript):
+                self._finalize_assist_run(status="success")
+                return
             if await self._maybe_handle_schedule_shortcut(transcript):
                 self._finalize_assist_run(status="success")
                 return
@@ -1090,6 +1093,87 @@ class PulseAssistant:
         if len(timers) == 1 and not label:
             return timers[0]
         return None
+
+    async def _maybe_handle_music_command(self, transcript: str) -> bool:
+        query = (transcript or "").strip().lower()
+        if not query or not self.home_assistant or not self.config.media_player_entity:
+            return False
+        controls = [
+            (("pause the music", "pause music", "pause the song", "pause song"), "media_pause", "Paused the music."),
+            (
+                ("stop the music", "stop music", "stop the song", "stop song"),
+                "media_stop",
+                "Stopped the music.",
+            ),
+            (
+                ("next song", "skip song", "skip this song", "next track"),
+                "media_next_track",
+                "Skipping to the next song.",
+            ),
+        ]
+        for phrases, service, success_text in controls:
+            if any(phrase in query for phrase in phrases):
+                return await self._call_music_service(service, success_text)
+        info_phrases = (
+            "what song is this",
+            "what song am i listening to",
+            "what is this song",
+            "what's this song",
+            "what's playing",
+            "what song",
+            "who is this",
+            "who's this",
+        )
+        if any(phrase in query for phrase in info_phrases):
+            return await self._describe_current_track("who" in query)
+        return False
+
+    async def _call_music_service(self, service: str, success_text: str) -> bool:
+        entity = self.config.media_player_entity
+        ha_client = self.home_assistant
+        if not entity or not ha_client:
+            return False
+        try:
+            await ha_client.call_service("media_player", service, {"entity_id": entity})
+        except HomeAssistantError as exc:
+            LOGGER.debug("Music control %s failed for %s: %s", service, entity, exc)
+            await self._speak("I couldn't control the music right now.")
+            return True
+        await self._speak(success_text)
+        return True
+
+    async def _describe_current_track(self, emphasize_artist: bool) -> bool:
+        entity = self.config.media_player_entity
+        ha_client = self.home_assistant
+        if not entity or not ha_client:
+            return False
+        try:
+            state = await ha_client.get_state(entity)
+        except HomeAssistantError as exc:
+            LOGGER.debug("Unable to read media_player %s: %s", entity, exc)
+            await self._speak("I couldn't reach the player for that info.")
+            return True
+        status = str(state.get("state") or "")
+        attributes = state.get("attributes") or {}
+        title = attributes.get("media_title") or attributes.get("media_episode_title")
+        artist = (
+            attributes.get("media_artist")
+            or attributes.get("media_album_artist")
+            or attributes.get("media_series_title")
+        )
+        if status not in {"playing", "paused"} or not (title or artist):
+            await self._speak("Nothing is playing right now.")
+            return True
+        if title and artist:
+            message = f"This is {artist} — {title}."
+        elif title:
+            message = f"This song is {title}."
+        else:
+            message = f"This is by {artist}."
+        if emphasize_artist and artist and not title:
+            message = f"This is {artist}."
+        await self._speak(message)
+        return True
 
     def _handle_ha_pipeline_command(self, payload: str) -> None:
         value = payload.strip()

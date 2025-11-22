@@ -264,6 +264,13 @@ When the kiosk is already playing audio we enforce a higher openWakeWord trigger
 - Lower it (minimum **2**) if you often say the wake word softly while the kiosk is making noise.
 - When Home Assistant access is configured and `PULSE_MEDIA_PLAYER_ENTITY` points at your Music Assistant player, the assistant auto-pauses that entity as soon as you say the wake word and resumes playback ~2 s after the spoken response finishes.
 
+#### Voice music controls
+
+With `HOME_ASSISTANT_*` credentials and `PULSE_MEDIA_PLAYER_ENTITY` set, you can ask the Pulse pipeline to control or describe the active Music Assistant player directly (no custom actions required). Example phrases:
+
+- “Pause the music”, “Stop the music”, “Next song”.
+- “What song is this?” / “Who is this?” → pulls artist/title from the media player attributes and reads them back.
+
 #### Home Assistant actions, timers, and reminders
 
 Set `HOME_ASSISTANT_BASE_URL` and `HOME_ASSISTANT_TOKEN`, then add `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` if you use those helpers. The assistant can then:
