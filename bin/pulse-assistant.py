@@ -1061,8 +1061,10 @@ class PulseAssistant:
         if not self.schedule_service:
             return False
         lowered = transcript.strip().lower()
-        normalized = re.sub(r"[^\w\s]", " ", lowered)
+        normalized = re.sub(r"[^\w\s:]", " ", lowered)
         normalized = re.sub(r"\b([ap])\s+m\b", r"\1m", normalized)
+        normalized = re.sub(r"^(?:hey|ok|okay)\s+(?:jarvis|pulse)\s+", "", normalized)
+        normalized = re.sub(r"^(?:jarvis|pulse)\s+", "", normalized)
         normalized = re.sub(r"\s+", " ", normalized).strip()
         timer_start = self._extract_timer_start_intent(normalized)
         if timer_start:
@@ -1137,7 +1139,13 @@ class PulseAssistant:
         }
         if lowered in stop_phrases:
             return True
-        return lowered.startswith("stop alarm") or lowered.startswith("stop the alarm")
+        alarm_stop_pattern = r"\b(cancel|stop|turn off)\b.*\balarm\b"
+        timer_stop_pattern = r"\b(cancel|stop|turn off)\b.*\btimer\b"
+        if re.search(alarm_stop_pattern, lowered):
+            return True
+        if re.search(timer_stop_pattern, lowered):
+            return True
+        return False
 
     async def _stop_active_schedule(self, lowered: str) -> bool:
         alarm = self.schedule_service.active_event("alarm")
@@ -1315,7 +1323,7 @@ class PulseAssistant:
         if "alarm" not in text:
             return None
         time_match = re.search(
-            r"(?:alarm\s+(?:for|at)\s+)?(\d{1,4}(?::\d{2})?)\s*(am|pm)?",
+            r"(?:alarm\s+(?:for|at)\s+)?((?:\d{1,2}\s+\d{2})|\d{1,4}(?::\d{2})?)\s*(am|pm)?",
             text,
         )
         if not time_match:
