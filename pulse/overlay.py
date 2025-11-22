@@ -575,7 +575,7 @@ def _build_clock_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
         label = html_escape(clock.label or "Clock")
         tz_attr_escaped = html_escape(tz_attr, quote=True)
         card = f"""
-<div class="overlay-card overlay-card--ambient overlay-card--clock" data-clock data-tz="{tz_attr_escaped}">
+<div class="overlay-card overlay-card--clock" data-clock data-tz="{tz_attr_escaped}">
   <div class="overlay-card__title">{label}</div>
   <div class="overlay-clock__time" data-clock-time>--:--</div>
   <div class="overlay-clock__date" data-clock-date></div>
