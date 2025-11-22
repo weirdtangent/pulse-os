@@ -1,3 +1,10 @@
+## [0.52.2](https://github.com/weirdtangent/pulse-os/compare/v0.52.1...v0.52.2) (2025-11-22)
+
+
+### Bug Fixes
+
+* transparent background for overlay ([b133582](https://github.com/weirdtangent/pulse-os/commit/b1335829a0988f49902147395efb95cbbc0baf27))
+
 ## [0.52.1](https://github.com/weirdtangent/pulse-os/compare/v0.52.0...v0.52.1) (2025-11-22)
 
 # [0.52.0](https://github.com/weirdtangent/pulse-os/compare/v0.51.1...v0.52.0) (2025-11-22)
