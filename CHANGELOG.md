@@ -1,3 +1,15 @@
+# [0.50.0](https://github.com/weirdtangent/pulse-os/compare/v0.49.7...v0.50.0) (2025-11-22)
+
+
+### Bug Fixes
+
+* reorder alarm cancel shortcut ([af55eb1](https://github.com/weirdtangent/pulse-os/commit/af55eb1bd97c73a7df31fa70b92b17a1e48bf76f))
+
+
+### Features
+
+* added restart-services.sh to restart pulse services; add restart as last step in setup.sh ([d9340c0](https://github.com/weirdtangent/pulse-os/commit/d9340c0bd1483d2ce3d6daa8267523f387791268))
+
 ## [0.49.7](https://github.com/weirdtangent/pulse-os/compare/v0.49.6...v0.49.7) (2025-11-22)
 
 
