@@ -316,8 +316,10 @@ OVERLAY_JS = """
   }
   const clockNodes = root.querySelectorAll('[data-clock]');
   const timerNodes = root.querySelectorAll('[data-timer]');
-  const timeOptions = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
-  const dateOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+  const hour12Attr = root.dataset.clockHour12;
+  const hour12 = hour12Attr !== 'false';
+  const timeOptions = { hour: 'numeric', minute: '2-digit', hour12 };
+  const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
 
   const formatWithZone = (date, tz, options) => {
     try {
@@ -375,7 +377,12 @@ OVERLAY_JS = """
 """.strip()
 
 
-def render_overlay_html(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
+def render_overlay_html(
+    snapshot: OverlaySnapshot,
+    theme: OverlayTheme,
+    *,
+    clock_hour12: bool = True,
+) -> str:
     """Render the overlay snapshot into an HTML document."""
 
     cells: dict[str, list[str]] = {cell: [] for cell in CELL_ORDER}
@@ -402,7 +409,8 @@ def render_overlay_html(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
         f'id="pulse-overlay-root" '
         f'class="overlay-root" '
         f'data-version="{snapshot.version}" '
-        f'data-generated-at="{int(snapshot.generated_at * 1000)}"'
+        f'data-generated-at="{int(snapshot.generated_at * 1000)}" '
+        f'data-clock-hour12="{"true" if clock_hour12 else "false"}"'
     )
 
     html_document = f"""<!DOCTYPE html>
@@ -478,6 +486,12 @@ body {{
   color: inherit;
   box-shadow: 0 0.6rem 1.8rem rgba(0, 0, 0, 0.35);
 }}
+.overlay-card--clock {{
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  backdrop-filter: none;
+}}
 .overlay-card__title {{
   font-size: 0.95rem;
   text-transform: uppercase;
@@ -486,11 +500,13 @@ body {{
   color: {theme.accent_color};
 }}
 .overlay-clock__time {{
-  font-size: 2.75rem;
-  font-weight: 600;
+  font-size: clamp(3.5rem, 8vw, 6.5rem);
+  font-weight: 300;
+  letter-spacing: -0.03em;
 }}
 .overlay-clock__date {{
-  font-size: 0.95rem;
+  font-size: clamp(1.3rem, 3vw, 2.2rem);
+  font-weight: 400;
   opacity: 0.85;
 }}
 .overlay-card--ambient {{

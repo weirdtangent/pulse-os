@@ -74,6 +74,9 @@ PULSE_OVERLAY_ACCENT_COLOR="#88C0D0"
 # PULSE_OVERLAY_NOTIFICATION_BAR — show the icon bar at the top of the overlay.
 PULSE_OVERLAY_NOTIFICATION_BAR="true"
 
+# PULSE_OVERLAY_CLOCK_24H — set to "true" for 24-hour clock display (default 12-hour).
+PULSE_OVERLAY_CLOCK_24H="false"
+
 # ============================================================================
 # Telemetry & MQTT
 # ============================================================================

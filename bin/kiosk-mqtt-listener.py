@@ -75,6 +75,7 @@ class OverlayConfig:
     text_color: str
     accent_color: str
     show_notification_bar: bool
+    clock_24h: bool
 
 
 @dataclass(frozen=True)
@@ -285,6 +286,7 @@ def load_config() -> EnvConfig:
         text_color=os.environ.get("PULSE_OVERLAY_TEXT_COLOR", "#FFFFFF"),
         accent_color=os.environ.get("PULSE_OVERLAY_ACCENT_COLOR", "#88C0D0"),
         show_notification_bar=_as_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
+        clock_24h=_as_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -795,7 +797,11 @@ class KioskMqttListener:
                     self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
                     return
                 snapshot = state.snapshot()
-                body = render_overlay_html(snapshot, theme).encode("utf-8")
+                body = render_overlay_html(
+                    snapshot,
+                    theme,
+                    clock_hour12=not listener.overlay_config.clock_24h,
+                ).encode("utf-8")
                 self.send_response(HTTPStatus.OK)
                 self._set_common_headers()
                 self.send_header("Content-Type", "text/html; charset=utf-8")
