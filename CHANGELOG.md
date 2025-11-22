@@ -1,3 +1,10 @@
+# [0.43.0](https://github.com/weirdtangent/pulse-os/compare/v0.42.2...v0.43.0) (2025-11-22)
+
+
+### Features
+
+* add Gemini support to voice assistant; update README, pulse.conf.sample, and docs ([b02a1f7](https://github.com/weirdtangent/pulse-os/commit/b02a1f766547a891c034ae3182a1e11c45eb8f74))
+
 ## [0.42.2](https://github.com/weirdtangent/pulse-os/compare/v0.42.1...v0.42.2) (2025-11-22)
 
 
