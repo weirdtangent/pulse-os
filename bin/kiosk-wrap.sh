@@ -161,6 +161,8 @@ while true; do
     --v=0 \
     --remote-debugging-port=9222 \
     --remote-debugging-address=0.0.0.0 \
+    --disable-application-cache \
+    --disk-cache-size=1 \
     --allow-running-insecure-content \
     --remote-allow-origins=http://localhost:9222 \
     --disable-extensions-except="$HOME/cursorless" \
