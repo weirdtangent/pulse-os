@@ -4,7 +4,7 @@
 
 # Pulse Kiosk — Complete Setup Guide
 
-### Raspberry Pi 5 + Pi 7" Touch Display 2
+## Raspberry Pi 5 + Pi 7" Touch Display 2
 
 A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a scripted setup flow per device. It bundles watchdog/backlight management, MQTT telemetry and actions, Snapcast output, remote logging, and an optional Wyoming voice assistant that can switch between OpenAI and Gemini LLMs on demand.
 
@@ -27,7 +27,7 @@ A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a s
 <details>
   <summary><strong>Supported hardware, recommended parts, and printable accessories</strong></summary>
 
-As of Nov 2025, $317 plus 3d printed parts (or buy/figure out a case) to build a single Pulse. Or choose your own components - anything that will work with Linux.
+#### As of Nov 2025, $317 plus 3d printed parts (or buy/figure out a case) to build a single Pulse. Or choose your own components - anything that will work with Linux.
 
 ### Raspberry Pi 5 — 16GB
 * Specs: <https://www.raspberrypi.com/products/raspberry-pi-5/>
