@@ -1,3 +1,10 @@
+# [0.45.0](https://github.com/weirdtangent/pulse-os/compare/v0.44.3...v0.45.0) (2025-11-22)
+
+
+### Features
+
+* add schedule service ([7557ac3](https://github.com/weirdtangent/pulse-os/commit/7557ac31163721b3a17de25a639a2bb9317b9096))
+
 ## [0.44.3](https://github.com/weirdtangent/pulse-os/compare/v0.44.2...v0.44.3) (2025-11-22)
 
 ## [0.44.2](https://github.com/weirdtangent/pulse-os/compare/v0.44.1...v0.44.2) (2025-11-22)
