@@ -1255,9 +1255,12 @@ class PulseAssistant:
             await ha_client.call_service("media_player", service, {"entity_id": entity})
         except HomeAssistantError as exc:
             LOGGER.debug("Music control %s failed for %s: %s", service, entity, exc)
-            await self._speak("I couldn't control the music right now.")
+            spoken = "I couldn't control the music right now."
+            await self._speak(spoken)
+            self._log_assistant_response("music", spoken, pipeline="pulse")
             return True
         await self._speak(success_text)
+        self._log_assistant_response("music", success_text, pipeline="pulse")
         return True
 
     async def _describe_current_track(self, emphasize_artist: bool) -> bool:
@@ -1269,7 +1272,9 @@ class PulseAssistant:
             state = await ha_client.get_state(entity)
         except HomeAssistantError as exc:
             LOGGER.debug("Unable to read media_player %s: %s", entity, exc)
-            await self._speak("I couldn't reach the player for that info.")
+            spoken = "I couldn't reach the player for that info."
+            await self._speak(spoken)
+            self._log_assistant_response("music", spoken, pipeline="pulse")
             return True
         status = str(state.get("state") or "")
         attributes = state.get("attributes") or {}
@@ -1280,7 +1285,9 @@ class PulseAssistant:
             or attributes.get("media_series_title")
         )
         if status not in {"playing", "paused"} or not (title or artist):
-            await self._speak("Nothing is playing right now.")
+            spoken = "Nothing is playing right now."
+            await self._speak(spoken)
+            self._log_assistant_response("music", spoken, pipeline="pulse")
             return True
         if title and artist:
             message = f"This is {artist} — {title}."
@@ -1291,6 +1298,7 @@ class PulseAssistant:
         if emphasize_artist and artist and not title:
             message = f"This is {artist}."
         await self._speak(message)
+        self._log_assistant_response("music", message, pipeline="pulse")
         return True
 
     def _handle_ha_pipeline_command(self, payload: str) -> None:
