@@ -973,7 +973,9 @@ class PulseAssistant:
         if not self.schedule_service:
             return False
         lowered = transcript.strip().lower()
-        timer_start = self._extract_timer_start_intent(lowered)
+        normalized = re.sub(r"[^\w\s]", " ", lowered)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        timer_start = self._extract_timer_start_intent(normalized)
         if timer_start:
             duration, label = timer_start
             await self.schedule_service.create_timer(duration_seconds=duration, label=label)
@@ -983,7 +985,7 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
-        if "next alarm" in lowered or lowered.startswith("when is my alarm"):
+        if "next alarm" in normalized or normalized.startswith("when is my alarm"):
             info = self.schedule_service.get_next_alarm()
             if info:
                 message = self._format_alarm_summary(info)
@@ -992,7 +994,7 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", message, pipeline="pulse")
             await self._speak(message)
             return True
-        if "cancel all timers" in lowered:
+        if "cancel all timers" in normalized:
             count = await self.schedule_service.cancel_all_timers()
             if count > 0:
                 spoken = f"Cancelled {count} timer{'s' if count != 1 else ''}."
@@ -1001,23 +1003,23 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
-        if self._is_stop_phrase(lowered):
-            handled = await self._stop_active_schedule(lowered)
+        if self._is_stop_phrase(normalized):
+            handled = await self._stop_active_schedule(normalized)
             if handled:
                 return True
-        add_match = re.search(r"(add|plus)\s+(\d+)\s*(minute|min|minutes|mins)", lowered)
+        add_match = re.search(r"(add|plus)\s+(\d+)\s*(minute|min|minutes|mins)", normalized)
         if add_match:
             minutes = int(add_match.group(2))
             seconds = minutes * 60
-            label = self._extract_timer_label(lowered)
+            label = self._extract_timer_label(normalized)
             if await self._extend_timer_shortcut(seconds, label):
                 label_text = f" to the {label} timer" if label else ""
                 spoken = f"Added {minutes} minutes{label_text}."
                 self._log_assistant_response("shortcut", spoken, pipeline="pulse")
                 await self._speak(spoken)
                 return True
-        if "cancel my timer" in lowered or "cancel the timer" in lowered:
-            label = self._extract_timer_label(lowered)
+        if "cancel my timer" in normalized or "cancel the timer" in normalized:
+            label = self._extract_timer_label(normalized)
             if await self._cancel_timer_shortcut(label):
                 spoken = "Timer cancelled."
                 self._log_assistant_response("shortcut", spoken, pipeline="pulse")

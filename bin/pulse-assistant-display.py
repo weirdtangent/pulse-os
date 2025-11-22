@@ -51,6 +51,7 @@ class AssistantDisplay:
         alarms_topic: str,
         timers_topic: str,
         command_topic: str,
+        schedules_topic: str,
         timeout: int,
         font_size: int,
         client_id: str | None = None,
@@ -59,10 +60,12 @@ class AssistantDisplay:
         self._alarm_topic = alarms_topic
         self._timer_topic = timers_topic
         self._command_topic = command_topic
-        self._subscribed_topics = [topic, alarms_topic, timers_topic]
+        self._schedules_topic = schedules_topic
+        self._subscribed_topics = [topic, alarms_topic, timers_topic, schedules_topic]
         self.timeout_ms = max(1000, timeout * 1000)
         self.queue: queue.Queue[str] = queue.Queue()
         self._schedule_queue: queue.Queue[tuple[str, dict[str, object]]] = queue.Queue()
+        self._state_queue: queue.Queue[dict[str, object]] = queue.Queue()
         self._now_playing_queue: queue.Queue[str] | None = None
         self._hide_job: str | None = None
         callback_kwargs: dict[str, object] = {}
@@ -100,6 +103,7 @@ class AssistantDisplay:
         self.label.pack(expand=True, fill=tk.BOTH, padx=40, pady=40)
         self.root.after(250, self._poll_queue)
         self.root.after(250, self._poll_schedule_queue)
+        self.root.after(250, self._poll_state_queue)
 
         self.now_playing_window: tk.Toplevel | None = None
         self.now_playing_canvas: tk.Canvas | None = None
@@ -114,6 +118,7 @@ class AssistantDisplay:
         self._now_playing_geometry: str | None = None
         self._init_now_playing(font_size)
         self.alarm_overlay = AlarmOverlay(self.root, self._client, command_topic)
+        self.timer_panel = TimerPanel(self.root)
 
     def _on_connect(self, client, _userdata, _flags, reason_code, properties=None):  # type: ignore[no-untyped-def]
         if self._is_connect_success(reason_code):
@@ -159,6 +164,11 @@ class AssistantDisplay:
                 if data is not None:
                     self._schedule_queue.put(("timer", data))
                 return
+            if topic == self._schedules_topic:
+                data = self._decode_schedule_payload(payload)
+                if data is not None:
+                    self._state_queue.put(data)
+                return
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.debug("Failed to process assistant message: %s", exc)
 
@@ -179,6 +189,17 @@ class AssistantDisplay:
         except queue.Empty:
             pass
         self.root.after(200, self._poll_schedule_queue)
+
+    def _poll_state_queue(self) -> None:
+        try:
+            while True:
+                state = self._state_queue.get_nowait()
+                timers = state.get("timers") if isinstance(state, dict) else None
+                if isinstance(timers, list):
+                    self.timer_panel.update(timers)
+        except queue.Empty:
+            pass
+        self.root.after(500, self._poll_state_queue)
 
     @staticmethod
     def _decode_schedule_payload(payload: str) -> dict[str, object] | None:
@@ -489,6 +510,84 @@ class AlarmOverlay:
         return f"{dt.strftime('%A %I:%M %p').lstrip('0')}"
 
 
+class TimerPanel:
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.window = tk.Toplevel(self.root)
+        self.window.withdraw()
+        self.window.overrideredirect(True)
+        self.window.attributes("-topmost", True)
+        self.window.configure(bg="#050505")
+        width = 360
+        height = 160
+        self.window.geometry(f"{width}x{height}+20+20")
+
+        self.header = tk.Label(
+            self.window,
+            text="Timers",
+            font=("Helvetica", 16, "bold"),
+            fg="#88C0D0",
+            bg="#050505",
+            anchor="w",
+        )
+        self.header.pack(fill=tk.X, padx=12, pady=(8, 4))
+
+        self.list_label = tk.Label(
+            self.window,
+            text="No timers running",
+            font=("Helvetica", 18),
+            fg="#FFFFFF",
+            bg="#050505",
+            justify=tk.LEFT,
+            anchor="w",
+        )
+        self.list_label.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
+        self._timers: list[dict[str, object]] = []
+        self._tick()
+
+    def update(self, timers: list[dict[str, object]]) -> None:
+        self._timers = timers
+        self._render()
+
+    def _tick(self) -> None:
+        self._render()
+        self.root.after(1000, self._tick)
+
+    def _render(self) -> None:
+        if not self._timers:
+            self.list_label.config(text="No timers running")
+            self.window.withdraw()
+            return
+        lines: list[str] = []
+        now = datetime.now().astimezone()
+        for timer in self._timers[:3]:
+            label = str(timer.get("label") or "Timer")
+            next_fire = timer.get("next_fire") or timer.get("target")
+            time_left = self._format_remaining(next_fire, now)
+            lines.append(f"{label}: {time_left}")
+        text = "\n".join(lines)
+        self.list_label.config(text=text)
+        self.window.deiconify()
+        self.window.lift()
+
+    @staticmethod
+    def _format_remaining(next_fire: object, now: datetime) -> str:
+        try:
+            dt = datetime.fromisoformat(str(next_fire))
+        except (TypeError, ValueError):
+            return "--:--"
+        if dt.tzinfo is None:
+            dt = dt.astimezone()
+        remaining = int((dt - now).total_seconds())
+        if remaining <= 0:
+            return "00:00"
+        minutes, seconds = divmod(remaining, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--log-level", default="INFO")
@@ -507,6 +606,7 @@ def main() -> None:
     alarms_topic = f"{base_topic}/alarms/active"
     timers_topic = f"{base_topic}/timers/active"
     command_topic = f"{base_topic}/schedules/command"
+    schedules_topic = f"{base_topic}/schedules/state"
 
     client_id = f"pulse-assistant-display-{hostname}"
     display = AssistantDisplay(
@@ -516,6 +616,7 @@ def main() -> None:
         alarms_topic,
         timers_topic,
         command_topic,
+        schedules_topic,
         timeout=args.timeout,
         font_size=args.font_size,
         client_id=client_id,
