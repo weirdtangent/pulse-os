@@ -1,3 +1,10 @@
+## [0.42.1](https://github.com/weirdtangent/pulse-os/compare/v0.42.0...v0.42.1) (2025-11-22)
+
+
+### Bug Fixes
+
+* rename cpu_percent BACK to cpu_usage; same for memory_percent ([34f9aa7](https://github.com/weirdtangent/pulse-os/commit/34f9aa77a3f13335f5d83972701e1505a61ee269))
+
 # [0.42.0](https://github.com/weirdtangent/pulse-os/compare/v0.41.4...v0.42.0) (2025-11-21)
 
 
