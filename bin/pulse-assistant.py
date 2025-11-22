@@ -1164,9 +1164,7 @@ class PulseAssistant:
         cancel_words = ("cancel", "delete", "remove", "clear", "turn off")
         return any(word in text for word in cancel_words)
 
-    async def _cancel_alarm_shortcut(
-        self, alarm_intent: tuple[str, list[int] | None, str | None] | None
-    ) -> bool:
+    async def _cancel_alarm_shortcut(self, alarm_intent: tuple[str, list[int] | None, str | None] | None) -> bool:
         if not self.schedule_service or not alarm_intent:
             return False
         time_of_day, _, label = alarm_intent
