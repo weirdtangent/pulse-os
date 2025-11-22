@@ -1,3 +1,10 @@
+## [0.51.1](https://github.com/weirdtangent/pulse-os/compare/v0.51.0...v0.51.1) (2025-11-22)
+
+
+### Bug Fixes
+
+* clock position and timer map ([b8c969b](https://github.com/weirdtangent/pulse-os/commit/b8c969b213e191213f1995e1feeacd4c1f399af3))
+
 # [0.51.0](https://github.com/weirdtangent/pulse-os/compare/v0.50.1...v0.51.0) (2025-11-22)
 
 
