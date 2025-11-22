@@ -1,3 +1,10 @@
+## [0.49.1](https://github.com/weirdtangent/pulse-os/compare/v0.49.0...v0.49.1) (2025-11-22)
+
+
+### Bug Fixes
+
+* pause active audio when assistant is running ([48c22cf](https://github.com/weirdtangent/pulse-os/commit/48c22cf6c0c54f3c3ba537383289fca3ae168df2))
+
 # [0.49.0](https://github.com/weirdtangent/pulse-os/compare/v0.48.5...v0.49.0) (2025-11-22)
 
 
