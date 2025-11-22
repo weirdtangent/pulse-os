@@ -27,6 +27,8 @@ A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a s
 <details>
   <summary><strong>Supported hardware, recommended parts, and printable accessories</strong></summary>
 
+As of Nov 2025, $317 plus 3d printed parts (or buy/figure out a case) to build a single Pulse. Or choose your own components - anything that will work with Linux.
+
 ### Raspberry Pi 5 — 16GB
 * Specs: <https://www.raspberrypi.com/products/raspberry-pi-5/>
 * Retailer: <https://www.pishop.us/product/raspberry-pi-5-16gb/?src=raspberrypi>
