@@ -683,7 +683,7 @@ enable_services() {
     sudo systemctl enable --now pulse-daily-reboot.timer
 
     if [ "$PULSE_DAY_NIGHT_AUTO" = "true" ]; then
-        log "Enabling day/night auto-adjustment (screen brightness and audio volume)..."
+        log "Enabling day/night auto-adjustment (screen brightness)..."
         sudo systemctl enable --now pulse-backlight-sun.service
     else
         log "Disabling day/night auto-adjustment..."
@@ -884,7 +884,7 @@ print_feature_summary() {
         kv_block \
             "Day/Night Auto (PULSE_DAY_NIGHT_AUTO)" \
             "$( [ "$pulse_day_night_auto" = "true" ] && echo "enabled" || echo "disabled" )" \
-            "Auto-adjust screen brightness and audio volume based on sunrise/sunset, default: true"
+            "Auto-adjust screen brightness based on sunrise/sunset, default: true"
         kv_block \
             "Bluetooth Autoconnect (PULSE_BLUETOOTH_AUTOCONNECT)" \
             "$( [ "$pulse_bluetooth_autoconnect" = "true" ] && echo "enabled" || echo "disabled" )" \

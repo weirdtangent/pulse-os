@@ -59,7 +59,7 @@ PULSE_TELEMETRY_INTERVAL_SECONDS=15
 # Device Preferences & Toggles
 # ============================================================================
 
-# PULSE_DAY_NIGHT_AUTO — automatically adjust brightness + volume for sunrise/sunset; set to "false" for manual control.
+# PULSE_DAY_NIGHT_AUTO — automatically adjust screen brightness for sunrise/sunset; set to "false" for manual control.
 PULSE_DAY_NIGHT_AUTO="true"
 
 # PULSE_VOLUME_TEST_SOUND — plays the heartbeat "thump-thump" after MQTT volume changes.

@@ -161,7 +161,7 @@ Chromium’s live watchdog:
     PULSE_WATCHDOG_LIMIT=5       # failures before restarting browser
 
 ### Hardware feature toggles
-Automatically adjust screen brightness and audio volume based on sunrise/sunset. When enabled, the screen and speaker adjust to day/night levels automatically. When disabled, you can control brightness and volume manually (via MQTT or system controls).
+Automatically adjust screen brightness based on sunrise/sunset. When enabled, the display moves between day/night levels automatically while audio volume stays wherever you set it. When disabled, you can control brightness manually (via MQTT or system controls).
 
     PULSE_DAY_NIGHT_AUTO="true"
 

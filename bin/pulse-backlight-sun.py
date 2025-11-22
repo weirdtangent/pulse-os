@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adjust Pulse kiosk screen brightness and audio volume based on sunrise/sunset."""
+"""Adjust Pulse kiosk screen brightness based on sunrise/sunset."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - fallback for Python < 3.9
 
 from astral import LocationInfo
 from astral.sun import dawn, dusk, sun
-from pulse import audio, display
+from pulse import display
 
 CONF_PATH = Path("/etc/pulse-backlight.conf")
 DEFAULT_CONF: dict[str, str] = {
@@ -23,15 +23,13 @@ DEFAULT_CONF: dict[str, str] = {
     "LON": "0",
     "DAY_BRIGHTNESS": "85",
     "NIGHT_BRIGHTNESS": "25",
-    "DAY_VOLUME": "70",
-    "NIGHT_VOLUME": "30",
     "TWILIGHT": "OFFICIAL",
     "BACKLIGHT": "/sys/class/backlight/11-0045",
 }
 VALID_TWILIGHT = {"OFFICIAL", "CIVIL", "NAUTICAL", "ASTRONOMICAL"}
 
 
-def read_conf(path: Path) -> tuple[float, float, int, int, int, int, str, str]:
+def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
     """Read the config file and return parsed values."""
     cfg = DEFAULT_CONF.copy()
     try:
@@ -50,13 +48,11 @@ def read_conf(path: Path) -> tuple[float, float, int, int, int, int, str, str]:
     # Support legacy DAY/NIGHT for backward compatibility
     day_brightness = max(0, min(100, int(cfg.get("DAY_BRIGHTNESS", cfg.get("DAY", "85")))))
     night_brightness = max(0, min(100, int(cfg.get("NIGHT_BRIGHTNESS", cfg.get("NIGHT", "25")))))
-    day_volume = max(0, min(100, int(cfg.get("DAY_VOLUME", "70"))))
-    night_volume = max(0, min(100, int(cfg.get("NIGHT_VOLUME", "30"))))
     twilight = cfg["TWILIGHT"].upper()
     if twilight not in VALID_TWILIGHT:
         twilight = "OFFICIAL"
     backlight = cfg["BACKLIGHT"]
-    return lat, lon, day_brightness, night_brightness, day_volume, night_volume, twilight, backlight
+    return lat, lon, day_brightness, night_brightness, twilight, backlight
 
 
 def detect_tz() -> timezone | ZoneInfo:
@@ -94,11 +90,6 @@ def detect_tz() -> timezone | ZoneInfo:
 def set_backlight(device_dir: str, percent: int) -> None:
     """Write the scaled brightness value to the backlight device."""
     display.set_brightness(percent, device_path=device_dir)
-
-
-def set_volume(percent: int) -> None:
-    """Set audio volume using pactl."""
-    audio.set_volume(percent, play_feedback=False)  # Fails silently if audio not available
 
 
 def _twilight_boundaries(
@@ -144,9 +135,7 @@ def next_events(
 
 
 def main() -> None:
-    lat, lon, day_brightness, night_brightness, day_volume, night_volume, twilight, backlight_device = read_conf(
-        CONF_PATH
-    )
+    lat, lon, day_brightness, night_brightness, twilight, backlight_device = read_conf(CONF_PATH)
     tzinfo = detect_tz()
     is_daytime: bool | None = None
 
@@ -154,15 +143,12 @@ def main() -> None:
         now = datetime.now(tzinfo)
         currently_daylight, next_transition = next_events(lat, lon, tzinfo, twilight, now)
         target_brightness = day_brightness if currently_daylight else night_brightness
-        target_volume = day_volume if currently_daylight else night_volume
         if is_daytime != currently_daylight:
             try:
                 set_backlight(backlight_device, target_brightness)
             except OSError:
                 # Backlight not ready; retry soon.
                 pass
-            # Set volume (fails silently if audio not available)
-            set_volume(target_volume)
             is_daytime = currently_daylight
         sleep_seconds = max(30, min(24 * 3600, int((next_transition - now).total_seconds()) + 2))
         time.sleep(sleep_seconds)

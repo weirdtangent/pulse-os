@@ -1,5 +1,5 @@
 [Unit]
-Description=Pulse day/night auto-adjustment (screen brightness and audio volume)
+Description=Pulse day/night auto-adjustment (screen brightness)
 After=multi-user.target
 
 [Service]
