@@ -121,6 +121,9 @@ PULSE_ASSISTANT_SPEAKING_STYLE="normal"
 # PULSE_ASSISTANT_WAKE_SENSITIVITY — maps to openWakeWord trigger levels (low=5, normal=3, high=2).
 PULSE_ASSISTANT_WAKE_SENSITIVITY="normal"
 
+# PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL — enforced trigger level while self audio is active (minimum 2).
+PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
+
 # --- Wyoming endpoints ------------------------------------------------------
 # WYOMING_WHISPER_HOST — hostname/IP of your wyoming-whisper (speech-to-text) server.
 WYOMING_WHISPER_HOST=""
@@ -215,7 +218,8 @@ PULSE_DISPLAY_NOW_PLAYING_ENTITY=""
 PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS=5
 
 # PULSE_MEDIA_PLAYER_ENTITY — HA media_player (or sensor) that represents this kiosk’s audio output.
-# Used by both the on-screen overlay and the MQTT telemetry sensor; defaults to media_player.<hostname>_2 when left blank.
+# Used by the on-screen overlay, MQTT telemetry, and to auto-pause/resume Music Assistant during wake-word interactions.
+# Defaults to media_player.<hostname>_2 when left blank.
 PULSE_MEDIA_PLAYER_ENTITY=""
 
 # ============================================================================

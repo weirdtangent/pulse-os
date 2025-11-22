@@ -91,7 +91,7 @@ views:
 
 Options:
 - `fade_ms` sets the cross-fade length in milliseconds.
-- `now_playing_entity` (optional) mirrors any Home Assistant `media_player` (Music Assistant, Snapcast, Sonos, etc.) or sensor that exposes artist/title text. When the entity reports `playing`, a Now Playing badge animates in above the clock. Set it to `auto` to follow `sensor.<pulse_host>_now_playing`, which PulseOS now publishes per kiosk.
+- `now_playing_entity` (optional) mirrors any Home Assistant `media_player` (Music Assistant, Snapcast, Sonos, etc.) or sensor that exposes artist/title text. When the entity reports `playing`, a Now Playing badge animates in above the clock. Set it to `auto` to follow `sensor.<pulse_host>_now_playing`, which PulseOS publishes per kiosk.
 - `secondary_urls` (optional) is an array of navigation paths. When set, tapping anywhere on **any dashboard** (not just the photo frame) cycles through these URLs and back to the home screen. Each tap advances to the next URL in the array, wrapping back to home after the last one. This works globally across all dashboards, so you can tap on `/dashboard-pulse/0` to return to the photo frame, even if that dashboard doesn't have the pulse-photo-card.
 - The overlay clock automatically follows HA's locale/time zone (12h/24h).
 - Because the card double-buffers images, it never shows a white flash between photos—even on slow networks.

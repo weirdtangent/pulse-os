@@ -186,6 +186,8 @@ class AssistantConfig:
     action_topic: str
     home_assistant: HomeAssistantConfig
     preferences: AssistantPreferences
+    media_player_entity: str | None
+    self_audio_trigger_level: int
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -324,6 +326,10 @@ class AssistantConfig:
             ),
         )
 
+        media_player_entity = _resolve_media_player_entity(hostname, source.get("PULSE_MEDIA_PLAYER_ENTITY"))
+        self_audio_trigger_level = _as_int(source.get("PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL"), 7)
+        self_audio_trigger_level = max(2, self_audio_trigger_level)
+
         transcript_topic = f"{mqtt.topic_base}/transcript"
         response_topic = f"{mqtt.topic_base}/response"
         state_topic = f"{mqtt.topic_base}/state"
@@ -351,6 +357,8 @@ class AssistantConfig:
             action_topic=action_topic,
             home_assistant=home_assistant,
             preferences=preferences,
+            media_player_entity=media_player_entity,
+            self_audio_trigger_level=self_audio_trigger_level,
         )
 
 
@@ -399,3 +407,11 @@ def _normalize_choice(value: str | None, allowed: set[str], default: str) -> str
     if lowered in allowed:
         return lowered
     return default
+
+
+def _resolve_media_player_entity(hostname: str, override: str | None) -> str | None:
+    candidate = (override or "").strip()
+    if candidate:
+        return candidate
+    sanitized = hostname.lower().replace("-", "_").replace(".", "_")
+    return f"media_player.{sanitized}_2"

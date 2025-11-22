@@ -256,6 +256,14 @@ Map each wake word to the local pipeline or the Home Assistant pipeline:
 
 `assistant/state` always includes the active pipeline so dashboards can display which route handled the request.
 
+#### Wake trigger level while Pulse is speaking
+
+When the kiosk is already playing audio we enforce a higher openWakeWord trigger level so it does not react to its own speech. Tune `PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL` (default **7**) if you need to balance false positives vs. responsiveness:
+
+- Raise the value if music at moderate volume still wakes Jarvis.
+- Lower it (minimum **2**) if you often say the wake word softly while the kiosk is making noise.
+- When Home Assistant access is configured and `PULSE_MEDIA_PLAYER_ENTITY` points at your Music Assistant player, the assistant auto-pauses that entity as soon as you say the wake word and resumes playback ~2 s after the spoken response finishes.
+
 #### Home Assistant actions, timers, and reminders
 
 Set `HOME_ASSISTANT_BASE_URL` and `HOME_ASSISTANT_TOKEN`, then add `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` if you use those helpers. The assistant can then:
@@ -323,7 +331,7 @@ homeassistant:
 
 <details>
   <summary><strong>MQTT buttons & telemetry sensors</strong></summary>
-  PulseOS can optionally expose Home/Update/Reboot buttons and a full health sensor suite over MQTT discovery. The setup, sudo requirements, topics, and tuning tips now live in [mqtt-and-telemetry](docs/mqtt-and-telemetry.md) so you can keep the README short and still have all the detail when needed.
+  PulseOS can optionally expose Home/Update/Reboot buttons and a full health sensor suite over MQTT discovery. The setup, sudo requirements, topics, and tuning tips live in [mqtt-and-telemetry](docs/mqtt-and-telemetry.md) so you can keep the README short and still have all the detail when needed.
 </details>
 
 <details>
@@ -353,7 +361,7 @@ Update either asset and rerun `./setup.sh <location>` to refresh the splash on a
 
 <details>
   <summary><strong>Touch Display boot config pins</strong></summary>
-`setup.sh` now also pins the Raspberry Pi Touch Display defaults so you don’t have to edit boot files by hand:
+`setup.sh` also pins the Raspberry Pi Touch Display defaults so you don’t have to edit boot files by hand:
 * Adds `dtparam=i2c_arm=on` and `display_auto_detect=0` inside `/boot/firmware/config.txt`.
 * Ensures the overlay `dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx` is present.
 * Appends `video=DSI-2:720x1280M@60` to `/boot/firmware/cmdline.txt`.

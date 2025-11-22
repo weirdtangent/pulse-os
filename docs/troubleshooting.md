@@ -102,7 +102,7 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
 
 **Problem**: The device keeps rebooting as soon as it finishes booting (watchdogs or the MQTT update button keep firing).
 
-**Solution**: Automatic reboots now route through `/opt/pulse-os/bin/safe-reboot.sh`, which enforces:
+**Solution**: Automatic reboots route through `/opt/pulse-os/bin/safe-reboot.sh`, which enforces:
 
 1. A minimum uptime (`PULSE_REBOOT_MIN_UPTIME_SECONDS`, default 300 s) before any auto-reboot is honored.
 2. A rolling window limit (`PULSE_REBOOT_MAX_COUNT` inside `PULSE_REBOOT_WINDOW_SECONDS`, default 3 attempts per 900 s).

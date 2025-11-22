@@ -14,6 +14,7 @@ import os
 import re
 import signal
 import sys
+import threading
 import time
 from array import array
 from collections.abc import Iterable
@@ -67,6 +68,10 @@ class AssistRunTracker:
             "total_ms": int((now - self.start) * 1000),
             "stages": self.stage_durations,
         }
+
+
+class WakeContextChanged(Exception):
+    """Internal signal used to restart wake detection when context shifts."""
 
 
 def _compute_rms(chunk: bytes, sample_width: int) -> int:
@@ -138,12 +143,24 @@ class PulseAssistant:
         self._assist_pipeline: str | None = None
         self._current_tracker: AssistRunTracker | None = None
         self._ha_pipeline_override: str | None = None
+        self._self_audio_lock = threading.Lock()
+        self._self_audio_remote_active = False
+        self._local_audio_depth = 0
+        self._wake_context_lock = threading.Lock()
+        self._wake_context_version = 0
+        self._self_audio_trigger_level = max(2, self.config.self_audio_trigger_level)
+        self._playback_topic = f"pulse/{self.config.hostname}/telemetry/now_playing"
+        self._media_player_entity = self.config.media_player_entity
+        self._media_pause_pending = False
+        self._media_resume_task: asyncio.Task | None = None
+        self._media_resume_delay = 2.0
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self.mqtt.connect()
         self._subscribe_preference_topics()
         self._subscribe_schedule_topics()
+        self._subscribe_playback_topic()
         self._publish_preferences()
         self._publish_assistant_discovery()
         await self.schedule_service.start()
@@ -172,16 +189,27 @@ class PulseAssistant:
         await self.schedule_service.stop()
         self.mqtt.disconnect()
         await self.player.stop()
+        self._cancel_media_resume_task()
+        self._media_pause_pending = False
         if self.home_assistant:
             await self.home_assistant.close()
 
     async def _wait_for_wake_word(self) -> str | None:
+        while not self._shutdown.is_set():
+            try:
+                return await self._run_wake_detector_session()
+            except WakeContextChanged:
+                LOGGER.debug("Wake context updated; restarting wake detector")
+                continue
+        return None
+
+    async def _run_wake_detector_session(self) -> str | None:
+        detect_context, context_version = self._stable_detect_context()
         client = AsyncTcpClient(self.config.wake_endpoint.host, self.config.wake_endpoint.port)
         await client.connect()
         timestamp = 0
         detection_task: asyncio.Task[str | None] | None = None
         try:
-            detect_context = self._context_for_detect()
             detect_message = Detect(names=self.config.wake_models, context=detect_context or None)
             await client.write_event(detect_message.event())
             await client.write_event(
@@ -193,8 +221,13 @@ class PulseAssistant:
                 ).event()
             )
             detection_task = asyncio.create_task(self._read_wake_events(client))
+            chunk_ms = self.config.mic.chunk_ms
             while not detection_task.done():
+                if context_version != self._wake_context_version:
+                    raise WakeContextChanged
                 chunk_bytes = await self.mic.read_chunk()
+                if context_version != self._wake_context_version:
+                    raise WakeContextChanged
                 LOGGER.debug("Captured audio chunk (timestamp=%sms, size=%d)", timestamp, len(chunk_bytes))
                 chunk_event = AudioChunk(
                     rate=self.config.mic.rate,
@@ -204,10 +237,9 @@ class PulseAssistant:
                     timestamp=timestamp,
                 )
                 await client.write_event(chunk_event.event())
-                timestamp += self.config.mic.chunk_ms
+                timestamp += chunk_ms
             if detection_task.done():
-                detection = detection_task.result()
-                return detection
+                return detection_task.result()
             return None
         finally:
             await client.write_event(AudioStop(timestamp=timestamp).event())
@@ -229,6 +261,112 @@ class PulseAssistant:
             if NotDetected.is_type(event.type):
                 LOGGER.debug("OpenWakeWord reported NotDetected")
                 return None
+
+    def _self_audio_is_active(self) -> bool:
+        with self._self_audio_lock:
+            return self._local_audio_depth > 0 or self._self_audio_remote_active
+
+    def _remote_audio_is_active(self) -> bool:
+        with self._self_audio_lock:
+            return self._self_audio_remote_active
+
+    def _increment_local_audio_depth(self) -> None:
+        notify = False
+        with self._self_audio_lock:
+            self._local_audio_depth += 1
+            if self._local_audio_depth == 1:
+                notify = True
+        if notify:
+            self._mark_wake_context_dirty()
+
+    def _decrement_local_audio_depth(self) -> None:
+        notify = False
+        with self._self_audio_lock:
+            if self._local_audio_depth > 0:
+                self._local_audio_depth -= 1
+                if self._local_audio_depth == 0:
+                    notify = True
+        if notify:
+            self._mark_wake_context_dirty()
+
+    def _mark_wake_context_dirty(self) -> None:
+        with self._wake_context_lock:
+            self._wake_context_version = (self._wake_context_version + 1) % 1_000_000
+
+    @contextlib.asynccontextmanager
+    async def _local_audio_block(self):
+        self._increment_local_audio_depth()
+        try:
+            yield
+        finally:
+            self._decrement_local_audio_depth()
+
+    def _cancel_media_resume_task(self) -> None:
+        task = self._media_resume_task
+        if not task:
+            return
+        task.cancel()
+
+        def _cleanup(done: asyncio.Task) -> None:
+            with contextlib.suppress(asyncio.CancelledError):
+                done.result()
+
+        task.add_done_callback(_cleanup)
+        self._media_resume_task = None
+
+    async def _maybe_pause_media_playback(self) -> None:
+        if (
+            self._media_pause_pending
+            or not self.home_assistant
+            or not self._media_player_entity
+            or not self._remote_audio_is_active()
+        ):
+            return
+        try:
+            await self.home_assistant.call_service(
+                "media_player",
+                "media_pause",
+                {"entity_id": self._media_player_entity},
+            )
+            self._media_pause_pending = True
+            LOGGER.debug("Paused media player %s for wake word", self._media_player_entity)
+        except HomeAssistantError as exc:
+            LOGGER.debug("Unable to pause media player %s: %s", self._media_player_entity, exc)
+
+    def _trigger_media_resume_after_response(self) -> None:
+        self._schedule_media_resume(self._media_resume_delay)
+
+    def _ensure_media_resume(self) -> None:
+        if self._media_pause_pending and not self._media_resume_task:
+            self._schedule_media_resume(0.0)
+
+    def _schedule_media_resume(self, delay: float) -> None:
+        if (
+            not self._media_pause_pending
+            or self._media_resume_task
+            or not self.home_assistant
+            or not self._media_player_entity
+        ):
+            return
+        loop = self._loop or asyncio.get_running_loop()
+        self._media_resume_task = loop.create_task(self._resume_media_after_delay(max(0.0, delay)))
+
+    async def _resume_media_after_delay(self, delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+            await self.home_assistant.call_service(
+                "media_player",
+                "media_play",
+                {"entity_id": self._media_player_entity},
+            )
+            LOGGER.debug("Resumed media player %s", self._media_player_entity)
+        except asyncio.CancelledError:
+            raise
+        except HomeAssistantError as exc:
+            LOGGER.debug("Unable to resume media player %s: %s", self._media_player_entity, exc)
+        finally:
+            self._media_pause_pending = False
+            self._media_resume_task = None
 
     async def _record_phrase(self) -> bytes | None:
         min_chunks = int(max(1, (self.config.phrase.min_seconds * 1000) / self.config.mic.chunk_ms))
@@ -319,22 +457,23 @@ class PulseAssistant:
             await client.disconnect()
 
     async def _consume_tts_audio(self, client: AsyncTcpClient) -> None:
-        started = False
-        while True:
-            event = await client.read_event()
-            if event is None:
-                break
-            if AudioStart.is_type(event.type):
-                audio_start = AudioStart.from_event(event)
-                await self.player.start(audio_start.rate, audio_start.width, audio_start.channels)
-                started = True
-            elif AudioChunk.is_type(event.type):
-                chunk = AudioChunk.from_event(event)
-                await self.player.write(chunk.audio)
-            elif AudioStop.is_type(event.type):
-                break
-        if started:
-            await self.player.stop()
+        async with self._local_audio_block():
+            started = False
+            while True:
+                event = await client.read_event()
+                if event is None:
+                    break
+                if AudioStart.is_type(event.type):
+                    audio_start = AudioStart.from_event(event)
+                    await self.player.start(audio_start.rate, audio_start.width, audio_start.channels)
+                    started = True
+                elif AudioChunk.is_type(event.type):
+                    chunk = AudioChunk.from_event(event)
+                    await self.player.write(chunk.audio)
+                elif AudioStop.is_type(event.type):
+                    break
+            if started:
+                await self.player.stop()
 
     def _publish_state(self, state: str, extra: dict | None = None) -> None:
         payload = {"state": state}
@@ -356,64 +495,74 @@ class PulseAssistant:
     async def _maybe_play_wake_sound(self) -> None:
         if not self.preferences.wake_sound:
             return
-        try:
-            await asyncio.to_thread(play_volume_feedback)
-        except Exception:  # pylint: disable=broad-except
-            LOGGER.debug("Wake sound playback failed", exc_info=True)
+        async with self._local_audio_block():
+            try:
+                await asyncio.to_thread(play_volume_feedback)
+            except Exception:  # pylint: disable=broad-except
+                LOGGER.debug("Wake sound playback failed", exc_info=True)
 
     async def _run_pulse_pipeline(self, wake_word: str) -> None:
+        self._cancel_media_resume_task()
         tracker = AssistRunTracker("pulse", wake_word)
         tracker.begin_stage("listening")
         self._current_tracker = tracker
         self._set_assist_stage("pulse", "listening", {"wake_word": wake_word})
         await self._maybe_play_wake_sound()
-        audio_bytes = await self._record_phrase()
-        if not audio_bytes:
-            LOGGER.debug("No speech captured for wake word %s", wake_word)
-            self._finalize_assist_run(status="no_audio")
-            return
-        tracker.begin_stage("thinking")
-        self._set_assist_stage("pulse", "thinking", {"wake_word": wake_word})
-        transcript = await self._transcribe(audio_bytes)
-        if not transcript:
-            self._finalize_assist_run(status="no_transcript")
-            return
-        LOGGER.info("Transcript (%s): %s", wake_word, transcript)
-        self._publish_message(self.config.transcript_topic, json.dumps({"text": transcript, "wake_word": wake_word}))
-        if await self._maybe_handle_schedule_shortcut(transcript):
+        await self._maybe_pause_media_playback()
+        try:
+            audio_bytes = await self._record_phrase()
+            if not audio_bytes:
+                LOGGER.debug("No speech captured for wake word %s", wake_word)
+                self._finalize_assist_run(status="no_audio")
+                return
+            tracker.begin_stage("thinking")
+            self._set_assist_stage("pulse", "thinking", {"wake_word": wake_word})
+            transcript = await self._transcribe(audio_bytes)
+            if not transcript:
+                self._finalize_assist_run(status="no_transcript")
+                return
+            LOGGER.info("Transcript (%s): %s", wake_word, transcript)
+            transcript_payload = {"text": transcript, "wake_word": wake_word}
+            self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
+            if await self._maybe_handle_schedule_shortcut(transcript):
+                self._finalize_assist_run(status="success")
+                return
+            prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
+            llm_result = await self.llm.generate(transcript, prompt_actions)
+            LOGGER.debug("LLM response: %s", llm_result)
+            executed_actions = await self.actions.execute(
+                llm_result.actions,
+                self.mqtt if llm_result.actions else None,
+                self.home_assistant,
+                self.scheduler,
+                self.schedule_service,
+            )
+            if executed_actions:
+                self._publish_message(
+                    self.config.action_topic,
+                    json.dumps({"executed": executed_actions, "wake_word": wake_word}),
+                )
+            if llm_result.response:
+                tracker.begin_stage("speaking")
+                self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word})
+                self._publish_message(
+                    self.config.response_topic,
+                    json.dumps({"text": llm_result.response, "wake_word": wake_word}),
+                )
+                await self._speak(llm_result.response)
+                self._trigger_media_resume_after_response()
             self._finalize_assist_run(status="success")
-            return
-        prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
-        llm_result = await self.llm.generate(transcript, prompt_actions)
-        LOGGER.debug("LLM response: %s", llm_result)
-        executed_actions = await self.actions.execute(
-            llm_result.actions,
-            self.mqtt if llm_result.actions else None,
-            self.home_assistant,
-            self.scheduler,
-            self.schedule_service,
-        )
-        if executed_actions:
-            self._publish_message(
-                self.config.action_topic,
-                json.dumps({"executed": executed_actions, "wake_word": wake_word}),
-            )
-        if llm_result.response:
-            tracker.begin_stage("speaking")
-            self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word})
-            self._publish_message(
-                self.config.response_topic,
-                json.dumps({"text": llm_result.response, "wake_word": wake_word}),
-            )
-            await self._speak(llm_result.response)
-        self._finalize_assist_run(status="success")
+        finally:
+            self._ensure_media_resume()
 
     async def _run_home_assistant_pipeline(self, wake_word: str) -> None:
+        self._cancel_media_resume_task()
         tracker = AssistRunTracker("home_assistant", wake_word)
         tracker.begin_stage("listening")
         self._current_tracker = tracker
         self._set_assist_stage("home_assistant", "listening", {"wake_word": wake_word})
         await self._maybe_play_wake_sound()
+        await self._maybe_pause_media_playback()
         ha_config = self.config.home_assistant
         ha_client = self.home_assistant
         if not ha_config.base_url or not ha_config.token:
@@ -427,59 +576,69 @@ class PulseAssistant:
             LOGGER.warning("Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
             self._finalize_assist_run(status="config_error")
             return
-        audio_bytes = await self._record_phrase()
-        if not audio_bytes:
-            LOGGER.debug("No speech captured for Home Assistant wake word %s", wake_word)
-            self._finalize_assist_run(status="no_audio")
-            return
-        tracker.begin_stage("thinking")
-        self._set_assist_stage("home_assistant", "thinking", {"wake_word": wake_word})
         try:
-            ha_result = await ha_client.assist_audio(
-                audio_bytes,
-                sample_rate=self.config.mic.rate,
-                sample_width=self.config.mic.width,
-                channels=self.config.mic.channels,
-                pipeline_id=ha_config.assist_pipeline,
-                language=self.config.language,
-            )
-        except HomeAssistantError as exc:
-            LOGGER.warning("Home Assistant Assist call failed: %s", exc)
-            self._set_assist_stage(
-                "home_assistant",
-                "error",
-                {"wake_word": wake_word, "pipeline": "home_assistant", "reason": str(exc)},
-            )
-            self._finalize_assist_run(status="error")
-            return
-        transcript = self._extract_ha_transcript(ha_result)
-        if transcript:
-            LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
+            audio_bytes = await self._record_phrase()
+            if not audio_bytes:
+                LOGGER.debug("No speech captured for Home Assistant wake word %s", wake_word)
+                self._finalize_assist_run(status="no_audio")
+                return
+            tracker.begin_stage("thinking")
+            self._set_assist_stage("home_assistant", "thinking", {"wake_word": wake_word})
+            try:
+                ha_result = await ha_client.assist_audio(
+                    audio_bytes,
+                    sample_rate=self.config.mic.rate,
+                    sample_width=self.config.mic.width,
+                    channels=self.config.mic.channels,
+                    pipeline_id=ha_config.assist_pipeline,
+                    language=self.config.language,
+                )
+            except HomeAssistantError as exc:
+                LOGGER.warning("Home Assistant Assist call failed: %s", exc)
+                self._set_assist_stage(
+                    "home_assistant",
+                    "error",
+                    {"wake_word": wake_word, "pipeline": "home_assistant", "reason": str(exc)},
+                )
+                self._finalize_assist_run(status="error")
+                return
+            transcript = self._extract_ha_transcript(ha_result)
+            if transcript:
+                LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
+                self._publish_message(
+                    self.config.transcript_topic,
+                    json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
+                )
+            speech_text = self._extract_ha_speech(ha_result) or "Okay."
+            tracker.begin_stage("speaking")
+            self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
             self._publish_message(
-                self.config.transcript_topic,
-                json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
+                self.config.response_topic,
+                json.dumps(
+                    {
+                        "text": speech_text,
+                        "wake_word": wake_word,
+                        "pipeline": "home_assistant",
+                        "conversation_id": ha_result.get("conversation_id"),
+                    }
+                ),
             )
-        speech_text = self._extract_ha_speech(ha_result) or "Okay."
-        tracker.begin_stage("speaking")
-        self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
-        self._publish_message(
-            self.config.response_topic,
-            json.dumps(
-                {
-                    "text": speech_text,
-                    "wake_word": wake_word,
-                    "pipeline": "home_assistant",
-                    "conversation_id": ha_result.get("conversation_id"),
-                }
-            ),
-        )
-        tts_audio = self._extract_ha_tts_audio(ha_result)
-        if tts_audio:
-            await self._play_pcm_audio(tts_audio["audio"], tts_audio["rate"], tts_audio["width"], tts_audio["channels"])
-        else:
-            tts_endpoint = ha_config.tts_endpoint or self.config.tts_endpoint
-            await self._speak_via_endpoint(speech_text, tts_endpoint, self.config.tts_voice)
-        self._finalize_assist_run(status="success")
+            tts_audio = self._extract_ha_tts_audio(ha_result)
+            if tts_audio:
+                await self._play_pcm_audio(
+                    tts_audio["audio"],
+                    tts_audio["rate"],
+                    tts_audio["width"],
+                    tts_audio["channels"],
+                )
+                self._trigger_media_resume_after_response()
+            else:
+                tts_endpoint = ha_config.tts_endpoint or self.config.tts_endpoint
+                await self._speak_via_endpoint(speech_text, tts_endpoint, self.config.tts_voice)
+                self._trigger_media_resume_after_response()
+            self._finalize_assist_run(status="success")
+        finally:
+            self._ensure_media_resume()
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
@@ -560,11 +719,12 @@ class PulseAssistant:
         return {"audio": audio_bytes, "rate": rate, "width": width, "channels": channels}
 
     async def _play_pcm_audio(self, audio_bytes: bytes, rate: int, width: int, channels: int) -> None:
-        await self.player.start(rate, width, channels)
-        try:
-            await self.player.write(audio_bytes)
-        finally:
-            await self.player.stop()
+        async with self._local_audio_block():
+            await self.player.start(rate, width, channels)
+            try:
+                await self.player.write(audio_bytes)
+            finally:
+                await self.player.stop()
 
     def _subscribe_preference_topics(self) -> None:
         base = self._preferences_topic
@@ -583,11 +743,30 @@ class PulseAssistant:
         except RuntimeError:
             LOGGER.debug("MQTT client not ready for schedule command subscription")
 
+    def _subscribe_playback_topic(self) -> None:
+        try:
+            self.mqtt.subscribe(self._playback_topic, self._handle_now_playing_message)
+        except RuntimeError:
+            LOGGER.debug("MQTT client not ready for playback telemetry subscription")
+
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes"}
         self.preferences = replace(self.preferences, wake_sound=enabled)
         self._publish_preference_state("wake_sound", "on" if enabled else "off")
+
+    def _handle_now_playing_message(self, payload: str) -> None:
+        normalized = payload.strip()
+        active = bool(normalized)
+        changed = False
+        with self._self_audio_lock:
+            if self._self_audio_remote_active != active:
+                self._self_audio_remote_active = active
+                changed = True
+        if changed:
+            detail = normalized[:80] or "idle"
+            LOGGER.debug("Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail)
+            self._mark_wake_context_dirty()
 
     def _handle_speaking_style_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -602,8 +781,11 @@ class PulseAssistant:
         if value not in {"low", "normal", "high"}:
             LOGGER.debug("Ignoring invalid wake sensitivity: %s", payload)
             return
+        if value == self.preferences.wake_sensitivity:
+            return
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
         self._publish_preference_state("wake_sensitivity", value)
+        self._mark_wake_context_dirty()
 
     def _publish_preferences(self) -> None:
         self._publish_preference_state("wake_sound", "on" if self.preferences.wake_sound else "off")
@@ -1075,18 +1257,28 @@ class PulseAssistant:
             retain=True,
         )
 
-    def _context_for_detect(self) -> dict[str, int] | None:
-        sensitivity = self.preferences.wake_sensitivity
-        if sensitivity == "normal":
-            return None
-        trigger_level_map = {
+    def _preferred_trigger_level(self) -> int | None:
+        mapping = {
             "low": 5,
             "high": 2,
         }
-        trigger_level = trigger_level_map.get(sensitivity)
+        return mapping.get(self.preferences.wake_sensitivity)
+
+    def _context_for_detect(self) -> dict[str, int] | None:
+        trigger_level = self._preferred_trigger_level()
+        if self._self_audio_is_active():
+            enforced = self._self_audio_trigger_level
+            trigger_level = enforced if trigger_level is None else max(trigger_level, enforced)
         if trigger_level is None:
             return None
         return {"trigger_level": trigger_level}
+
+    def _stable_detect_context(self) -> tuple[dict[str, int] | None, int]:
+        while True:
+            start_version = self._wake_context_version
+            context = self._context_for_detect()
+            if start_version == self._wake_context_version:
+                return context, start_version
 
 
 def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:

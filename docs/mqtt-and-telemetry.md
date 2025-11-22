@@ -96,7 +96,7 @@ Because the MQTT message is retained, Home Assistant will immediately show the m
 
 ## Assistant Alarms, Timers & Commands
 
-Voice alarms and timers now surface their state over MQTT so Home Assistant dashboards (and the new on-device overlay) can stay in sync:
+Voice alarms and timers surface their state over MQTT so Home Assistant dashboards (and the on-device overlay) stay in sync:
 
 | Topic | Description |
 | ----- | ----------- |
@@ -123,5 +123,5 @@ Responses are implicit—the kiosk publishes the updated state snapshot immediat
 
 ### On-screen overlay
 
-`bin/pulse-assistant-display.py` now listens to the `alarms/active` and `timers/active` topics. When something is ringing a fullscreen overlay appears with a stop button plus a context action (SNOOZE for alarms, ADD 3 MIN for timers). Each button posts the matching command JSON back to the `schedules/command` topic, so your physical display, automations, and voice assistant all stay coordinated.
+`bin/pulse-assistant-display.py` listens to the `alarms/active` and `timers/active` topics. When something is ringing a fullscreen overlay appears with a stop button plus a context action (SNOOZE for alarms, ADD 3 MIN for timers). Each button posts the matching command JSON back to the `schedules/command` topic, so your physical display, automations, and voice assistant all stay coordinated.
 
