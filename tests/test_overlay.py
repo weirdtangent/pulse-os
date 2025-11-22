@@ -61,8 +61,15 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-target-ms="', html)
 
     def test_notification_bar_icons(self) -> None:
-        alarms = ({"id": "alarm1", "label": "Wake Up"},)
-        timers = ({"id": "timer1", "label": "Tea", "next_fire": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat()},)
+        future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        alarms = ({"id": "alarm1", "label": "Wake Up", "next_fire": future},)
+        timers = (
+            {
+                "id": "timer1",
+                "label": "Tea",
+                "next_fire": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
+            },
+        )
         snapshot = self._snapshot(alarms=alarms, timers=timers, now_playing="Artist — Title")
         html = render_overlay_html(snapshot, self.theme)
         self.assertIn("overlay-notification-bar", html)

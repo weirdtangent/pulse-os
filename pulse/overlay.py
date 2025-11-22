@@ -300,7 +300,7 @@ TIMER_POSITION_MAP = {
 }
 
 ICON_MAP = {
-    "alarm": "&#128340;",
+    "alarm": "&#128276;",  # 🔔
     "alarm_ringing": "&#128276;",
     "timer": "&#9201;",
     "music": "&#9835;",
@@ -639,14 +639,16 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
 
 def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
     badges: list[str] = []
+    upcoming = _filter_upcoming_alarms(snapshot.alarms)
     if snapshot.active_alarm:
         badges.append(_render_badge("alarm_ringing", "Alarm ringing"))
-    elif snapshot.alarms:
-        count = len(snapshot.alarms)
+    elif upcoming:
+        count = len(upcoming)
         label = f"{count} alarm{'s' if count != 1 else ''}"
         badges.append(_render_badge("alarm", label))
-    if snapshot.timers:
-        count = len(snapshot.timers)
+    active_timers = _extract_active_timers(snapshot)
+    if active_timers:
+        count = len(active_timers)
         label = f"{count} timer{'s' if count != 1 else ''}"
         badges.append(_render_badge("timer", label))
     if snapshot.now_playing.strip():
@@ -683,6 +685,25 @@ def _extract_active_timers(snapshot: OverlaySnapshot, limit: int = 4) -> list[di
         timers.append({"label": label, "target": target_ts})
     timers.sort(key=lambda entry: entry["target"])
     return timers[:limit]
+
+
+def _filter_upcoming_alarms(alarms: Iterable[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    if not alarms:
+        return []
+    now = time.time()
+    upcoming: list[dict[str, Any]] = []
+    for item in alarms:
+        if not isinstance(item, dict):
+            continue
+        next_fire = item.get("next_fire")
+        ts = _parse_timestamp(next_fire)
+        if ts is None:
+            continue
+        if ts <= now:
+            continue
+        upcoming.append(item)
+    upcoming.sort(key=lambda entry: _parse_timestamp(entry.get("next_fire")) or 0)
+    return upcoming
 
 
 def _parse_timestamp(value: Any) -> float | None:
