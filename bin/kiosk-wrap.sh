@@ -160,6 +160,8 @@ while true; do
   "$BROWSER" \
     --v=0 \
     --remote-debugging-port=9222 \
+    --remote-debugging-address=0.0.0.0 \
+    --allow-running-insecure-content \
     --remote-allow-origins=http://localhost:9222 \
     --disable-extensions-except="$HOME/cursorless" \
     --load-extension="$HOME/cursorless" \

@@ -39,6 +39,12 @@ PULSE_WATCHDOG_LIMIT=5
 # PULSE_WATCHDOG_INTERVAL — seconds between watchdog fetches.
 PULSE_WATCHDOG_INTERVAL=60
 
+# CHROMIUM_DEVTOOLS_URL — DevTools discovery endpoint for kiosk navigation/debug (default points to local Chromium).
+CHROMIUM_DEVTOOLS_URL="http://localhost:9222/json"
+
+# CHROMIUM_DEVTOOLS_TIMEOUT — timeout (seconds) for DevTools HTTP/WebSocket calls.
+CHROMIUM_DEVTOOLS_TIMEOUT=3
+
 # ============================================================================
 # Overlay & Photo Frame
 # ============================================================================

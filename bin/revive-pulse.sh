@@ -31,7 +31,7 @@ else
   pkill -f 'chromium.*--kiosk' || true
   sleep 5
   systemctl restart kiosk.service 2>/dev/null || \
-  chromium --kiosk "$PULSE_URL" --remote-debugging-port=9222 &
+  chromium --kiosk "$PULSE_URL" --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --allow-running-insecure-content &
   exit 0
 fi
 
