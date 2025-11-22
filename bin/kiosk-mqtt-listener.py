@@ -87,7 +87,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
     TelemetryDescriptor(
         key="uptime_seconds",
         name="Uptime",
-        unit="s",
+        unit=None,
         device_class="duration",
         state_class="total_increasing",
         icon="mdi:timer",
