@@ -44,14 +44,18 @@ A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a s
 * Retailer: <https://www.seeedstudio.com/ReSpeaker-Mic-Array-v3-0.html>
 * Price (11/2025): $64
 
+### BoomPod Zero mini speaker
+* Specs: <https://boompodsusa.com/products/boompods-zero-mini-wireless-bluetooth-5-pocket-size-speaker>
+* Retailer: same
+* Price (11/2025): $40
+
 ### Desktop Case + Pi 5 Stand
 * MakerWorld: <https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2>
 
-### ReSpeaker Mic Array Plate + Cover (3D printed)
-**Plate (PETG green)**
-**Cover (PETG translucent)**
-* both included in `models/`.
-
+### 3d Print Models (see models/ directory)
+* ReSpeaker Mic Array Plate (which I glue to the Pi case cover)
+* ReSpeaker Mic Array Cover
+* BoomPod Zero Cup (which I glue to one of the display leg stands - or both for two pods!)
 </details>
 
 ---
