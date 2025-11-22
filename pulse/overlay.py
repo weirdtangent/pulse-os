@@ -422,6 +422,9 @@ def render_overlay_html(
 :root {{
   color-scheme: dark;
 }}
+html {{
+  background: transparent;
+}}
 body {{
   margin: 0;
   width: 100vw;
