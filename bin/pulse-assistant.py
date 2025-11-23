@@ -26,6 +26,7 @@ from typing import Any
 from pulse.assistant.actions import ActionEngine, _parse_duration_seconds, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
+from pulse.assistant.info_service import InfoService
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
@@ -115,6 +116,7 @@ class PulseAssistant:
                 self.home_assistant = HomeAssistantClient(config.home_assistant)
             except ValueError as exc:
                 LOGGER.warning("Home Assistant config invalid: %s", exc)
+        self.info_service = InfoService(config.info, logger=LOGGER)
         self.scheduler = AssistantScheduler(
             self.home_assistant, config.home_assistant, self._handle_scheduler_notification
         )
@@ -530,6 +532,9 @@ class PulseAssistant:
             if await self._maybe_handle_schedule_shortcut(transcript):
                 self._finalize_assist_run(status="success")
                 return
+            if await self._maybe_handle_information_query(transcript, wake_word):
+                self._finalize_assist_run(status="success")
+                return
             llm_result = await self._execute_llm_turn(transcript, wake_word, tracker)
             follow_up_needed = self._should_listen_for_follow_up(llm_result)
             while follow_up_needed:
@@ -551,6 +556,13 @@ class PulseAssistant:
                     follow_up_needed = False
                     continue
                 if await self._maybe_handle_schedule_shortcut(follow_up_transcript):
+                    follow_up_needed = False
+                    continue
+                if await self._maybe_handle_information_query(
+                    follow_up_transcript,
+                    wake_word,
+                    follow_up=True,
+                ):
                     follow_up_needed = False
                     continue
                 llm_result = await self._execute_llm_turn(follow_up_transcript, wake_word, tracker, follow_up=True)
@@ -1135,6 +1147,39 @@ class PulseAssistant:
                 await self._speak(spoken)
                 return True
         return False
+
+    async def _maybe_handle_information_query(
+        self,
+        transcript: str,
+        wake_word: str,
+        *,
+        follow_up: bool = False,
+    ) -> bool:
+        if not self.info_service:
+            return False
+        response = await self.info_service.maybe_answer(transcript)
+        if not response:
+            return False
+        tracker = self._current_tracker
+        if tracker:
+            tracker.begin_stage("speaking")
+        stage_extra = {"wake_word": wake_word, "info_category": response.category}
+        if follow_up:
+            stage_extra["follow_up"] = True
+        self._set_assist_stage("pulse", "speaking", stage_extra)
+        payload = {
+            "text": response.text,
+            "wake_word": wake_word,
+            "info_category": response.category,
+        }
+        if follow_up:
+            payload["follow_up"] = True
+        self._publish_message(self.config.response_topic, json.dumps(payload))
+        tag = f"info:{response.category}"
+        self._log_assistant_response(tag, response.text, pipeline="pulse")
+        await self._speak(response.text)
+        self._trigger_media_resume_after_response()
+        return True
 
     @staticmethod
     def _is_stop_phrase(lowered: str) -> bool:

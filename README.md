@@ -21,6 +21,7 @@ A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a s
 ### Reference Docs
 - [home-assistant-photo-frame](docs/home-assistant-photo-frame.md) — Nest-style Lovelace photo frame + custom card
 - [mqtt-and-telemetry](docs/mqtt-and-telemetry.md) — MQTT buttons (Home/Update/Reboot) & diagnostic sensors
+- [voice-assistant](docs/voice-assistant.md) — Wyoming pipelines, LLM providers, and real-time news/weather/sports intents
 - [troubleshooting](docs/troubleshooting.md) — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
 
 ## Hardware Guide
@@ -245,6 +246,16 @@ Wyoming OpenWakeWord (Wake Word Detection) server configuration:
 ### Voice Assistant (Preview)
 
 The `pulse-assistant` daemon streams wake audio to your Wyoming servers, calls the configured LLM, then speaks and displays the reply. Configure `PULSE_ASSISTANT_*`, `WYOMING_*`, and `OPENAI_*`/`GEMINI_*` in `pulse.conf`, rerun `./setup.sh`, and review [`docs/voice-assistant.md`](docs/voice-assistant.md) for deployment diagrams.
+
+#### Real-time headlines, forecasts, and sports updates
+
+Short prompts such as “What’s the news?”, “What’s the weather tomorrow?”, “What are the NFL standings?”, or “When do the Penguins play next?” are intercepted before they reach the LLM. The assistant uses:
+
+- **NewsAPI.org** (or any compatible endpoint) for the latest US/global headlines — set `PULSE_NEWS_API_KEY`, country, category, and language in `pulse.conf`.
+- **Open-Meteo** forecasts for any location (`PULSE_WEATHER_LOCATION` accepts lat/lon, ZIP, city, Google Plus Code, or what3words with `WHAT3WORDS_API_KEY`). Adjust units/language/day count via `PULSE_WEATHER_UNITS`, `PULSE_WEATHER_LANGUAGE`, and `PULSE_WEATHER_FORECAST_DAYS`.
+- **ESPN public feeds** for general sports headlines, league summaries, standings, and favorite teams. Configure default countries/leagues with `PULSE_SPORTS_DEFAULT_COUNTRY`, `PULSE_SPORTS_DEFAULT_LEAGUES`, and seed `PULSE_SPORTS_FAVORITE_TEAMS` so prompts like “When is the next Steelers game?” have context.
+
+Responses are spoken immediately (and published on the MQTT response topic) even if the LLM is offline. See the “Real-time news, weather, and sports” section in [`docs/voice-assistant.md`](docs/voice-assistant.md#real-time-news-weather-and-sports) for the full variable list and format examples.
 
 #### Dual wake-word pipelines
 

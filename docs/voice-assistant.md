@@ -138,6 +138,60 @@ You can keep both credential sets in `pulse.conf` and flip between them at runti
 
 You can override the persona via `PULSE_ASSISTANT_SYSTEM_PROMPT` or supply a path in `PULSE_ASSISTANT_SYSTEM_PROMPT_FILE`.
 
+---
+
+## Real-time news, weather, and sports
+
+When the assistant hears short requests such as “What’s the news?”, “What’s the forecast today?”, or “What are the NFL headlines?”, the Pulse pipeline now answers directly without sending those prompts to the generic LLM. Responses are stitched together from public APIs so the kiosk can deliver fresh information even when the LLM prompt or cache would otherwise push toward short, vague answers.
+
+### News (NewsAPI.org)
+
+Set `PULSE_NEWS_API_KEY` with a free NewsAPI.org key (or a compatible proxy endpoint) and optionally override:
+
+```
+PULSE_NEWS_COUNTRY="us"      # two-letter ISO country
+PULSE_NEWS_CATEGORY="general"
+PULSE_NEWS_LANGUAGE="en"
+PULSE_NEWS_MAX_ARTICLES="5"  # used to build the 3–5 sentence summary
+```
+
+News prompts (“What’s the latest news?”, “Give me the headlines.”) summarize the newest top-headlines feed for the configured country/category. The assistant caches each fetch for ~5 minutes so consecutive questions don’t thrash the API quota.
+
+### Weather (Open-Meteo)
+
+The weather service relies on Open-Meteo’s free forecast endpoint. Provide any of the following in `PULSE_WEATHER_LOCATION`:
+
+- Latitude/longitude pair (`37.7749,-122.4194`)
+- ZIP/postal code (`30301`)
+- City name (`"Pittsburgh, PA"`)
+- Google Plus Code (`"849VCWC8+R9"`)
+- what3words (`"index.home.raft"` + `WHAT3WORDS_API_KEY`)
+
+Optional helpers:
+
+```
+PULSE_WEATHER_UNITS="auto"   # auto | imperial | metric
+PULSE_WEATHER_LANGUAGE="en"
+PULSE_WEATHER_FORECAST_DAYS="3"  # 1–3 day spoken summary
+```
+
+Open-Meteo is geo-only (no API key). If you provide a what3words string, drop the key in `WHAT3WORDS_API_KEY` and the assistant will translate it to coordinates before calling the forecast API.
+
+### Sports (ESPN public endpoints)
+
+Pulse uses ESPN’s public JSON feeds for both general sports updates and league/team drill-downs. Configure the defaults with:
+
+```
+PULSE_SPORTS_DEFAULT_COUNTRY="us"
+PULSE_SPORTS_HEADLINE_COUNTRY="us"
+PULSE_SPORTS_DEFAULT_LEAGUES="nfl,nba,mlb,nhl"
+PULSE_SPORTS_FAVORITE_TEAMS="nfl:steelers,nhl:penguins"
+```
+
+The assistant recognizes phrases like “What’s happening in sports?”, “What are the NHL standings?”, “When is the next Steelers game?”, or “Give me the NASCAR headlines.” Favorite teams influence phrasing (“your Penguins play tomorrow night…”) but the service works without them. No key is required for the ESPN feeds.
+
+All three services time out quickly and fall back to the LLM if an API is down. When everything is configured, the answers feel instantaneous (~1–2 seconds faster than routing through the LLM) and—most importantly—always reflect the latest public data.
+
 ### MQTT Actions
 
 Actions are described once (file or inline JSON) and referenced by slug in conversations. Example:

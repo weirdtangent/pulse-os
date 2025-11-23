@@ -164,6 +164,42 @@ class AssistantPreferences:
 
 
 @dataclass(frozen=True)
+class NewsConfig:
+    api_key: str | None
+    base_url: str
+    country: str
+    category: str
+    language: str
+    max_articles: int
+
+
+@dataclass(frozen=True)
+class WeatherConfig:
+    location: str | None
+    units: Literal["auto", "imperial", "metric"]
+    language: str
+    forecast_days: int
+    base_url: str
+
+
+@dataclass(frozen=True)
+class SportsConfig:
+    default_country: str
+    headline_country: str
+    favorite_teams: tuple[str, ...]
+    default_leagues: tuple[str, ...]
+    base_url: str
+
+
+@dataclass(frozen=True)
+class InfoConfig:
+    news: NewsConfig
+    weather: WeatherConfig
+    sports: SportsConfig
+    what3words_api_key: str | None
+
+
+@dataclass(frozen=True)
 class AssistantConfig:
     hostname: str
     device_name: str
@@ -189,6 +225,7 @@ class AssistantConfig:
     media_player_entity: str | None
     self_audio_trigger_level: int
     log_llm_messages: bool
+    info: InfoConfig
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -338,6 +375,44 @@ class AssistantConfig:
 
         log_llm_messages = _as_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
 
+        news_config = NewsConfig(
+            api_key=source.get("PULSE_NEWS_API_KEY"),
+            base_url=(source.get("PULSE_NEWS_BASE_URL") or "https://newsapi.org/v2").rstrip("/"),
+            country=(source.get("PULSE_NEWS_COUNTRY") or "us").strip().lower() or "us",
+            category=(source.get("PULSE_NEWS_CATEGORY") or "general").strip().lower() or "general",
+            language=(source.get("PULSE_NEWS_LANGUAGE") or "en").strip().lower() or "en",
+            max_articles=max(1, _as_int(source.get("PULSE_NEWS_MAX_ARTICLES"), 5)),
+        )
+        weather_config = WeatherConfig(
+            location=(source.get("PULSE_WEATHER_LOCATION") or "").strip() or None,
+            units=_normalize_choice(
+                source.get("PULSE_WEATHER_UNITS"),
+                {"auto", "imperial", "metric"},
+                "auto",
+            ),
+            language=(source.get("PULSE_WEATHER_LANGUAGE") or "en").strip().lower() or "en",
+            forecast_days=max(1, min(5, _as_int(source.get("PULSE_WEATHER_FORECAST_DAYS"), 3))),
+            base_url=(source.get("PULSE_WEATHER_BASE_URL") or "https://api.open-meteo.com/v1/forecast").rstrip("/"),
+        )
+        favorite_teams = tuple(team.strip() for team in _split_csv(source.get("PULSE_SPORTS_FAVORITE_TEAMS")))
+        default_leagues = tuple(
+            league.strip().lower()
+            for league in _split_csv(source.get("PULSE_SPORTS_DEFAULT_LEAGUES") or "nfl,nba,mlb,nhl")
+        )
+        sports_config = SportsConfig(
+            default_country=(source.get("PULSE_SPORTS_DEFAULT_COUNTRY") or "us").strip().lower() or "us",
+            headline_country=(source.get("PULSE_SPORTS_HEADLINE_COUNTRY") or "us").strip().lower() or "us",
+            favorite_teams=favorite_teams,
+            default_leagues=default_leagues,
+            base_url=(source.get("PULSE_SPORTS_BASE_URL") or "https://site.api.espn.com/apis").rstrip("/"),
+        )
+        info_config = InfoConfig(
+            news=news_config,
+            weather=weather_config,
+            sports=sports_config,
+            what3words_api_key=(source.get("WHAT3WORDS_API_KEY") or "").strip() or None,
+        )
+
         return AssistantConfig(
             hostname=hostname,
             device_name=device_name,
@@ -363,6 +438,7 @@ class AssistantConfig:
             media_player_entity=media_player_entity,
             self_audio_trigger_level=self_audio_trigger_level,
             log_llm_messages=log_llm_messages,
+            info=info_config,
         )
 
 
