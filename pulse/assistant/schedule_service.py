@@ -77,6 +77,27 @@ def _parse_time_string(value: str) -> tuple[int, int]:
     return hour, minute
 
 
+def _format_duration_label(duration_seconds: float) -> str:
+    """Format a duration in seconds into a human-readable timer label.
+
+    Examples:
+        - 180 seconds -> "3 MIN TIMER"
+        - 3600 seconds -> "60 MIN TIMER"
+        - 90 seconds -> "90 SEC TIMER"
+    """
+    total_seconds = int(duration_seconds)
+    if total_seconds < 60:
+        return f"{total_seconds} SEC TIMER"
+    total_minutes = total_seconds // 60
+    if total_minutes < 60:
+        return f"{total_minutes} MIN TIMER"
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    if minutes == 0:
+        return f"{hours} HR TIMER"
+    return f"{hours} HR {minutes} MIN TIMER"
+
+
 DAY_NAME_MAP = {
     "mon": 0,
     "monday": 0,
@@ -530,10 +551,15 @@ class ScheduleService:
     ) -> ScheduledEvent:
         duration_seconds = max(1.0, duration_seconds)
         fire_time = _now() + timedelta(seconds=duration_seconds)
+        # Use duration-based label if no label provided
+        if label and label.strip():
+            timer_label = label.strip()
+        else:
+            timer_label = _format_duration_label(duration_seconds)
         event = ScheduledEvent(
             event_id=uuid4().hex,
             event_type="timer",
-            label=label,
+            label=timer_label,
             time_of_day=None,
             repeat_days=None,
             single_shot=True,
