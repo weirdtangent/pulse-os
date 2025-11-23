@@ -546,7 +546,7 @@ body {{
   padding: 2.5rem;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 1.2rem;
   box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.45);
 }}
