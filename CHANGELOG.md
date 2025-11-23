@@ -1,3 +1,10 @@
+## [0.53.1](https://github.com/weirdtangent/pulse-os/compare/v0.53.0...v0.53.1) (2025-11-23)
+
+
+### Bug Fixes
+
+* add openlocationcode to voice assistant python dependencies ([b386d78](https://github.com/weirdtangent/pulse-os/commit/b386d7844010bef54435b9f9fb90f69708f47ab3))
+
 # [0.53.0](https://github.com/weirdtangent/pulse-os/compare/v0.52.8...v0.53.0) (2025-11-23)
 
 
