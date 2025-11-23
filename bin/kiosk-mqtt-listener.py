@@ -776,7 +776,7 @@ class KioskMqttListener:
                     self.send_header("Access-Control-Allow-Origin", allowed_origin)
                     if allowed_origin != "*":
                         self.send_header("Vary", "Origin")
-                self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+                self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, POST")
                 self.send_header("Access-Control-Allow-Headers", "Accept, Content-Type")
                 self.send_header("Cache-Control", "no-store, max-age=0")
 
@@ -793,6 +793,40 @@ class KioskMqttListener:
 
             def do_GET(self) -> None:  # noqa: N802
                 self._serve_overlay(include_body=True)
+
+            def do_POST(self) -> None:  # noqa: N802
+                path = self.path.split("?", 1)[0]
+                if path == "/overlay/stop":
+                    self._handle_stop_command()
+                else:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
+
+            def _handle_stop_command(self) -> None:
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    if content_length == 0:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Empty body")
+                        return
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body.decode("utf-8"))
+                    action = data.get("action")
+                    event_id = data.get("event_id")
+                    if action != "stop" or not event_id:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Invalid request")
+                        return
+                    # Publish stop command to MQTT
+                    command_topic = listener.assistant_topics.command
+                    payload = json.dumps({"action": "stop", "event_id": event_id})
+                    listener._safe_publish(None, command_topic, payload, qos=1, retain=False)
+                    self.send_response(HTTPStatus.NO_CONTENT)
+                    self._set_common_headers()
+                    self.end_headers()
+                except (json.JSONDecodeError, ValueError, KeyError) as exc:
+                    listener.log(f"overlay stop: invalid request: {exc}")
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
+                except Exception as exc:  # pylint: disable=broad-except
+                    listener.log(f"overlay stop: error: {exc}")
+                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Server error")
 
             def _serve_overlay(self, *, include_body: bool) -> None:
                 state = listener.overlay_state

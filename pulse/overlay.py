@@ -359,6 +359,32 @@ OVERLAY_JS = """
 
   tick();
   window.setInterval(tick, 1000);
+
+  // Handle stop timer button clicks
+  root.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-stop-timer]');
+    if (!button) {
+      return;
+    }
+    const eventId = button.dataset.eventId;
+    if (!eventId) {
+      return;
+    }
+    // Disable button to prevent double-clicks
+    button.disabled = true;
+    button.textContent = 'Stopping...';
+
+    // POST to overlay stop endpoint
+    fetch('/overlay/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop', event_id: eventId })
+    }).catch(() => {
+      // Silently fail - overlay will refresh via MQTT anyway
+      button.disabled = false;
+      button.textContent = 'OK';
+    });
+  });
 })();
 </script>
 """.strip()
@@ -519,6 +545,25 @@ body {{
 .overlay-now-playing__body {{
   font-size: 1.1rem;
 }}
+.overlay-button {{
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.5rem;
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}}
+.overlay-button:hover {{
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+}}
+.overlay-button:active {{
+  background: rgba(255, 255, 255, 0.25);
+}}
 @keyframes overlayPulse {{
   from {{
     box-shadow: 0 0 0 rgba(255, 0, 0, 0.35);
@@ -595,19 +640,32 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
     cards: list[tuple[str, str]] = []
     if snapshot.active_alarm:
         label = _event_label(snapshot.active_alarm, default="Alarm ringing")
+        event_data = snapshot.active_alarm.get("event") if isinstance(snapshot.active_alarm, dict) else None
+        event_id = event_data.get("id") if isinstance(event_data, dict) else None
+        button_html = ""
+        if event_id:
+            event_id_escaped = html_escape(str(event_id), quote=True)
+            button_html = f'<button class="overlay-button" data-stop-timer data-event-id="{event_id_escaped}">OK</button>'
         cards.append(
             (
                 "center",
                 f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
-  <div>Tap the physical controls or say “Stop” to dismiss.</div>
+  <div>Tap the physical controls or say "Stop" to dismiss.</div>
+  {button_html}
 </div>
 """.strip(),
             )
         )
     if snapshot.active_timer:
         label = _event_label(snapshot.active_timer, default="Timer complete")
+        event_data = snapshot.active_timer.get("event") if isinstance(snapshot.active_timer, dict) else None
+        event_id = event_data.get("id") if isinstance(event_data, dict) else None
+        button_html = ""
+        if event_id:
+            event_id_escaped = html_escape(str(event_id), quote=True)
+            button_html = f'<button class="overlay-button" data-stop-timer data-event-id="{event_id_escaped}">OK</button>'
         cards.append(
             (
                 "bottom-center",
@@ -615,6 +673,7 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
   <div>Timer finished.</div>
+  {button_html}
 </div>
 """.strip(),
             )
