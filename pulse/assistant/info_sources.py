@@ -15,6 +15,8 @@ from .config import InfoConfig, NewsConfig, SportsConfig, WeatherConfig
 
 LAT_LON_PATTERN = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 WHAT3WORDS_PATTERN = re.compile(r"^[a-z]+(?:\.[a-z]+){2}$")
+POSTAL_CODE_PATTERN = re.compile(r"^\s*(\d{5})(?:-\d{4})?\s*$")
+STATE_CODE_PATTERN = re.compile(r"^[A-Za-z]{2}$")
 
 LEAGUE_PATHS: dict[str, tuple[str, str]] = {
     "nfl": ("football", "nfl"),
@@ -193,48 +195,57 @@ class WeatherClient:
         return forecast
 
     async def _resolve_location(self, raw: str):
-        cached = self._location_cache.get(raw)
+        normalized = raw.strip()
+        cached = self._location_cache.get(normalized)
         if cached:
             return cached
-        match = LAT_LON_PATTERN.match(raw)
+        match = LAT_LON_PATTERN.match(normalized)
         if match:
             lat = float(match.group(1))
             lon = float(match.group(2))
             result = _Location(latitude=lat, longitude=lon, display_name=f"{lat:.2f}, {lon:.2f}")
-            self._location_cache.set(raw, result)
+            self._location_cache.set(normalized, result)
             return result
-        if WHAT3WORDS_PATTERN.match(raw.lower()) and self.what3words_api_key:
-            coords = await self._resolve_what3words(raw)
+        if WHAT3WORDS_PATTERN.match(normalized.lower()) and self.what3words_api_key:
+            coords = await self._resolve_what3words(normalized)
             if coords:
-                self._location_cache.set(raw, coords)
+                self._location_cache.set(normalized, coords)
                 return coords
-        if "+" in raw and not raw.strip().startswith("http"):
-            coords = _decode_plus_code(raw)
+        postal_match = POSTAL_CODE_PATTERN.match(normalized)
+        if postal_match:
+            coords = await self._resolve_postal_code(postal_match.group(1))
             if coords:
-                self._location_cache.set(raw, coords)
+                self._location_cache.set(normalized, coords)
                 return coords
-        geocoded = await self._geocode_text(raw)
+        if "+" in normalized and not normalized.startswith("http"):
+            coords = _decode_plus_code(normalized)
+            if coords:
+                self._location_cache.set(normalized, coords)
+                return coords
+        geocoded = await self._geocode_text(normalized)
         if geocoded:
-            self._location_cache.set(raw, geocoded)
+            self._location_cache.set(normalized, geocoded)
             return geocoded
         return None
 
     async def _geocode_text(self, query: str):
-        payload = await _get_json(
-            "https://geocoding-api.open-meteo.com/v1/search",
-            params={"name": query, "count": 1, "language": self.config.language},
-        )
-        if not payload:
-            return None
-        results = payload.get("results") or []
-        if not results:
-            return None
-        entry = results[0]
-        return _Location(
-            latitude=float(entry.get("latitude")),
-            longitude=float(entry.get("longitude")),
-            display_name=entry.get("name") or query,
-        )
+        for candidate in _expand_geocode_queries(query):
+            payload = await _get_json(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={"name": candidate, "count": 1, "language": self.config.language},
+            )
+            if not payload:
+                continue
+            results = payload.get("results") or []
+            if not results:
+                continue
+            entry = results[0]
+            return _Location(
+                latitude=float(entry.get("latitude")),
+                longitude=float(entry.get("longitude")),
+                display_name=entry.get("name") or candidate,
+            )
+        return None
 
     async def _resolve_what3words(self, words: str):
         payload = await _get_json(
@@ -251,6 +262,24 @@ class WeatherClient:
             longitude=float(coords["lng"]),
             display_name=words,
         )
+
+    async def _resolve_postal_code(self, postal_code: str):
+        payload = await _get_json(f"https://api.zippopotam.us/us/{postal_code}")
+        if not payload:
+            return None
+        places = payload.get("places") or []
+        if not places:
+            return None
+        place = places[0]
+        try:
+            lat = float(place["latitude"])
+            lon = float(place["longitude"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        city = place.get("place name") or postal_code
+        state = place.get("state abbreviation")
+        display = f"{city}, {state}" if state else city
+        return _Location(latitude=lat, longitude=lon, display_name=display)
 
 
 @dataclass(slots=True)
@@ -455,6 +484,43 @@ def _safe_list_float(values: Sequence[Any], idx: int) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _expand_geocode_queries(query: str) -> list[str]:
+    cleaned = query.strip()
+    if not cleaned:
+        return []
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: str) -> None:
+        normalized = " ".join(value.split())
+        if not normalized:
+            return
+        key = normalized.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append(normalized)
+
+    add(cleaned)
+
+    if "," in cleaned:
+        parts = [part.strip() for part in cleaned.split(",") if part.strip()]
+        if parts:
+            city = parts[0]
+            remainder = parts[1:]
+            add(" ".join(parts))
+            add(city)
+            if remainder:
+                state = remainder[0].split()[0]
+                if STATE_CODE_PATTERN.match(state):
+                    add(f"{city} {state}")
+                    add(f"{city}, {state}")
+                    add(f"{city}, {state} USA")
+                    add(f"{city}, {state}, USA")
+    add(cleaned.replace(",", " "))
+    return candidates
 
 
 def _decode_plus_code(code: str) -> _Location | None:
