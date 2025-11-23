@@ -146,7 +146,6 @@ class InfoService:
         if not forecast or not forecast.days:
             return None
         units = self.config.weather.units
-        speak_label = "degrees Fahrenheit" if units in {"imperial", "auto"} else "degrees Celsius"
         display_label = "°F" if units in {"imperial", "auto"} else "°C"
         phrases: list[str] = []
         for idx, day in enumerate(forecast.days[: self.config.weather.forecast_days]):
@@ -155,11 +154,11 @@ class InfoService:
             low = _format_temp(day.temp_low)
             rain = f"{int(day.precipitation_chance)}% chance of precip" if day.precipitation_chance is not None else ""
             if high and low:
-                sentence = f"{label} tops out near {high} {speak_label} with lows around {low} {speak_label}"
+                sentence = f"{label} tops out near {high}° with lows around {low}°"
             elif high:
-                sentence = f"{label} reaches roughly {high} {speak_label}"
+                sentence = f"{label} reaches roughly {high}°"
             elif low:
-                sentence = f"{label} dips to about {low} {speak_label}"
+                sentence = f"{label} dips to about {low}°"
             else:
                 continue
             if rain:
