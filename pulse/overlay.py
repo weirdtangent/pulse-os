@@ -49,21 +49,17 @@ class OverlayChange:
     reason: str
 
 
-DEFAULT_MAX_CLOCKS = 4
-
-
 def parse_clock_config(
     spec: str | None,
     *,
     default_label: str,
     log: Callable[[str], None] | None = None,
-    max_clocks: int = DEFAULT_MAX_CLOCKS,
 ) -> tuple[ClockConfig, ...]:
     """Parse the overlay clock specification from an environment string.
 
-    Format: comma-separated entries where each entry is either `timezone`
-    or `timezone=Custom Label`. The special timezone value `local` (or `system`)
-    maps to the kiosk's local timezone.
+    Only a single clock is supported. Format: `local` (or `system`) for the kiosk's
+    local timezone, or `timezone=Custom Label` for a specific timezone with a label.
+    If multiple entries are provided, only the first one is used.
     """
 
     def _log(message: str) -> None:
@@ -94,21 +90,17 @@ def parse_clock_config(
             tz_name = zone
             label = label or zone
             if not _is_timezone_valid(tz_name):
-                _log(f"skipping invalid timezone '{zone}' in PULSE_OVERLAY_CLOCKS")
+                _log(f"skipping invalid timezone '{zone}' in PULSE_OVERLAY_CLOCK")
                 continue
         entries.append((tz_name, label))
-        if len(entries) >= max_clocks:
-            break
-    if not seen_local and len(entries) < max_clocks:
+        # Only use the first entry (single clock support)
+        break
+    if not seen_local and not entries:
         entries.insert(0, (None, default_label))
-    final_entries = entries[:max_clocks]
-    if not final_entries:
-        final_entries = [(None, default_label)]
-    configs = tuple(
-        ClockConfig(key=f"clock{idx}", label=label, timezone=tz_name)
-        for idx, (tz_name, label) in enumerate(final_entries)
-    )
-    return configs
+    # Ensure we have exactly one clock
+    final_entry = entries[0] if entries else (None, default_label)
+    config = ClockConfig(key="clock0", label=final_entry[1], timezone=final_entry[0])
+    return (config,)
 
 
 class OverlayStateManager:
@@ -141,13 +133,13 @@ class OverlayStateManager:
     def clocks(self) -> tuple[ClockConfig, ...]:
         return self._clocks
 
-    def configure_clocks(self, clocks: Sequence[ClockConfig]) -> OverlayChange:
+    def configure_clock(self, clocks: Sequence[ClockConfig]) -> OverlayChange:
         new_clocks = tuple(clocks) if clocks else self._clocks
         with self._lock:
             if new_clocks == self._clocks:
-                return OverlayChange(False, self._version, "clocks")
+                return OverlayChange(False, self._version, "clock")
             self._clocks = new_clocks
-            return self._bump("clocks")
+            return self._bump("clock")
 
     def update_now_playing(self, text: str) -> OverlayChange:
         normalized = text.strip()
@@ -286,12 +278,7 @@ CELL_ORDER = (
     "bottom-right",
 )
 
-CLOCK_POSITION_MAP = {
-    1: ("bottom-left",),
-    2: ("middle-left", "middle-right"),
-    3: ("top-left", "top-right", "middle-left"),
-    4: ("top-left", "top-right", "middle-left", "middle-right"),
-}
+CLOCK_POSITION = "bottom-left"
 
 TIMER_POSITION_MAP = {
     1: ("center",),
@@ -387,7 +374,7 @@ def render_overlay_html(
 
     cells: dict[str, list[str]] = {cell: [] for cell in CELL_ORDER}
 
-    for cell, card in _build_clock_cards(snapshot):
+    for cell, card in _build_clock_card(snapshot):
         cells[cell].append(card)
     for cell, card in _build_timer_cards(snapshot):
         cells[cell].append(card)
@@ -564,25 +551,23 @@ body {{
     return html_document
 
 
-def _build_clock_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
+def _build_clock_card(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
     clocks = snapshot.clocks or ()
-    count = min(len(clocks), max(CLOCK_POSITION_MAP))
-    positions = CLOCK_POSITION_MAP.get(count, CLOCK_POSITION_MAP[max(CLOCK_POSITION_MAP)])
-    cards: list[tuple[str, str]] = []
-    for idx, clock in enumerate(clocks[: len(positions)]):
-        position = positions[idx]
-        tz_attr = clock.timezone or ""
-        label = html_escape(clock.label or "Clock")
-        tz_attr_escaped = html_escape(tz_attr, quote=True)
-        card = f"""
+    if not clocks:
+        return []
+    # Only support single clock
+    clock = clocks[0]
+    tz_attr = clock.timezone or ""
+    label = html_escape(clock.label or "Clock")
+    tz_attr_escaped = html_escape(tz_attr, quote=True)
+    card = f"""
 <div class="overlay-card overlay-card--clock" data-clock data-tz="{tz_attr_escaped}">
   <div class="overlay-card__title">{label}</div>
   <div class="overlay-clock__time" data-clock-time>--:--</div>
   <div class="overlay-clock__date" data-clock-date></div>
 </div>
 """.strip()
-        cards.append((position, card))
-    return cards
+    return [(CLOCK_POSITION, card)]
 
 
 def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:

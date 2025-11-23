@@ -61,9 +61,10 @@ PULSE_OVERLAY_BIND="0.0.0.0"
 # PULSE_OVERLAY_ALLOWED_ORIGINS — comma-separated list of allowed CORS origins (“*” allows all).
 PULSE_OVERLAY_ALLOWED_ORIGINS="*"
 
-# PULSE_OVERLAY_CLOCKS — optional comma-separated timezone list for the grid clocks.
-# Example: PULSE_OVERLAY_CLOCKS="local=Home,America/New_York=NYC,Europe/London=LDN"
-PULSE_OVERLAY_CLOCKS=""
+# PULSE_OVERLAY_CLOCK — optional clock timezone and label
+# Example: PULSE_OVERLAY_CLOCK="local=💓 Bedroom" or "America/Chicago=Office"
+# If unset, defaults to local timezone with the device friendly name as label.
+PULSE_OVERLAY_CLOCK=""
 
 # PULSE_OVERLAY_AMBIENT_BG — CSS color for persistent cards (clocks, now playing).
 PULSE_OVERLAY_AMBIENT_BG="rgba(0, 0, 0, 0.32)"

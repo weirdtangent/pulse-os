@@ -269,7 +269,7 @@ def load_config() -> EnvConfig:
     overlay_allowed_origins = tuple(origin.strip() for origin in overlay_allowed_raw.split(",") if origin.strip()) or (
         "*",
     )
-    overlay_clock_spec = os.environ.get("PULSE_OVERLAY_CLOCKS")
+    overlay_clock_spec = os.environ.get("PULSE_OVERLAY_CLOCK")
     overlay_clocks = parse_clock_config(
         overlay_clock_spec,
         default_label=friendly_name,

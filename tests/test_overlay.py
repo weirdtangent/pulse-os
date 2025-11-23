@@ -44,14 +44,18 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-cell="bottom-left"', html)
         self.assertIn("Local", html)
 
-    def test_two_clocks_split_left_right(self) -> None:
+    def test_only_first_clock_used_if_multiple_provided(self) -> None:
+        # Even if multiple clocks are provided, only the first one is rendered
         clocks = (
             ClockConfig("clock0", "Home", None),
             ClockConfig("clock1", "NYC", "America/New_York"),
         )
         html = render_overlay_html(self._snapshot(clocks=clocks), self.theme)
-        self.assertIn('data-cell="middle-left"', html)
-        self.assertIn('data-cell="middle-right"', html)
+        # Should only show bottom-left (single clock position)
+        self.assertIn('data-cell="bottom-left"', html)
+        self.assertIn("Home", html)
+        # Second clock should not appear
+        self.assertNotIn("NYC", html)
 
     def test_timer_card_rendered(self) -> None:
         target = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
@@ -77,9 +81,17 @@ class OverlayRenderTests(unittest.TestCase):
 
     def test_parse_clock_config_inserts_local_by_default(self) -> None:
         clocks = parse_clock_config("America/Chicago=HQ", default_label="Home", log=None)
+        # Should only return 1 clock (local timezone inserted first)
+        self.assertEqual(len(clocks), 1)
         self.assertEqual(clocks[0].label, "Home")
         self.assertIsNone(clocks[0].timezone)
-        self.assertEqual(clocks[1].timezone, "America/Chicago")
+
+    def test_parse_clock_config_only_uses_first_entry(self) -> None:
+        # Multiple entries provided, but only first is used
+        clocks = parse_clock_config("local=Home,America/Chicago=HQ,Europe/London=LDN", default_label="Default", log=None)
+        self.assertEqual(len(clocks), 1)
+        self.assertEqual(clocks[0].label, "Home")
+        self.assertIsNone(clocks[0].timezone)
 
 
 if __name__ == "__main__":

@@ -108,16 +108,22 @@ The kiosk renders the clock/timer/notification overlay itself and serves it at `
 
 1. Make sure `PULSE_OVERLAY_ENABLED="true"` (default) and that Home Assistant can reach TCP port `8800` on the kiosk. Adjust `PULSE_OVERLAY_BIND`, `PULSE_OVERLAY_PORT`, and `PULSE_OVERLAY_ALLOWED_ORIGINS` if you need to lock it down.
 2. Subscribe to `pulse/<hostname>/overlay/refresh`. Anytime the kiosk clocks, timers, alarms, now playing text, or notification bar changes, it publishes a tiny JSON hint (`{"version":12,"reason":"timers","ts":...}`). Treat the version as a cache key: when it bumps, fetch `/overlay` once. Keep a slow periodic refresh (e.g., every 2 minutes) just in case an MQTT message drops.
-3. Inject the returned HTML into the overlay layer of `pulse-photo-card`. The markup already includes JS to keep clocks/timers ticking locally and uses CSS grid slots (top-left, center, etc.) so urgent cards (timers/alarms) shade the center of the screen while ambient clocks stay transparent near the corners. If the fetch fails, immediately fall back to the card's built-in lower-left clock so the user always sees the local time.
+3. Inject the returned HTML into the overlay layer of `pulse-photo-card`. The markup already includes JS to keep the clock/timers ticking locally and uses CSS grid slots so urgent cards (timers/alarms) shade the center of the screen while the clock stays transparent in the bottom-left corner. If the fetch fails, immediately fall back to the card's built-in lower-left clock so the user always sees the local time.
 4. (Optional) Set `PULSE_OVERLAY_CLOCK_24H="true"` if you prefer a 24‑hour clock; otherwise the overlay renders in 12‑hour format to match the original card.
 
-You can customize the layout colors and clock list per kiosk via the new `PULSE_OVERLAY_*` knobs in `pulse.conf`. A sample clock list might look like:
+You can customize the layout colors and clock label per kiosk via the `PULSE_OVERLAY_*` knobs in `pulse.conf`. A sample clock configuration might look like:
 
 ```
-PULSE_OVERLAY_CLOCKS="local=Home,America/Chicago=HQ,Europe/London=LDN,Asia/Tokyo=TYO"
+PULSE_OVERLAY_CLOCK="local=💓 Bedroom"
 ```
 
-Those entries fill the top-left, top-right, middle-left, and middle-right cells respectively. Timers/alarms automatically occupy the remaining center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled”, “timer running”, and “Now Playing”.
+Or for a different timezone:
+
+```
+PULSE_OVERLAY_CLOCK="America/Chicago=💓 Office"
+```
+
+The clock appears in the bottom-left corner. Timers/alarms automatically occupy the center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled”, “timer running”, and “Now Playing”.
 
 ---
 
