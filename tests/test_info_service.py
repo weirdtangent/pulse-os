@@ -98,10 +98,17 @@ class InfoServiceTests(unittest.TestCase):
         self.assertIsInstance(response, InfoResponse)
         self.assertEqual(response.category, "weather")
         self.assertIn("Today", response.text)
+        self.assertIsNotNone(response.display)
+        assert response.display is not None
+        self.assertIn("Today", response.display)
 
     def test_news_intent_tracks_topic(self) -> None:
-        asyncio.run(self.service.maybe_answer("What are the sports news headlines?"))
+        response = asyncio.run(self.service.maybe_answer("What are the sports news headlines?"))
         self.assertEqual(self.fake_news.last_topic, "sports")
+        self.assertIsNotNone(response)
+        assert response is not None
+        self.assertIn("headlines", response.text.lower())
+        self.assertIn("•", response.display or "")
 
     def test_team_query_reports_next_game(self) -> None:
         response = asyncio.run(self.service.maybe_answer("When is the next Steelers game?"))
@@ -109,6 +116,7 @@ class InfoServiceTests(unittest.TestCase):
         assert response is not None
         self.assertEqual(response.category, "sports")
         self.assertIn("Next up", response.text)
+        self.assertIn("Next up", response.display or "")
 
 
 if __name__ == "__main__":

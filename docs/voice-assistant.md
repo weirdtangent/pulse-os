@@ -144,6 +144,8 @@ You can override the persona via `PULSE_ASSISTANT_SYSTEM_PROMPT` or supply a pat
 
 When the assistant hears short requests such as “What’s the news?”, “What’s the forecast today?”, or “What are the NFL headlines?”, the Pulse pipeline now answers directly without sending those prompts to the generic LLM. Responses are stitched together from public APIs so the kiosk can deliver fresh information even when the LLM prompt or cache would otherwise push toward short, vague answers.
 
+While the answer is spoken, the kiosk overlay temporarily dedicates the six right-hand cells (top-center → bottom-right) to a large info card that mirrors the summary text. As soon as TTS finishes, the overlay clears the card and the regular timers/now-playing tiles slide back into place.
+
 ### News (NewsAPI.org)
 
 Set `PULSE_NEWS_API_KEY` with a free NewsAPI.org key (or a compatible proxy endpoint) and optionally override:
@@ -191,6 +193,8 @@ PULSE_SPORTS_FAVORITE_TEAMS="nfl:steelers,nhl:penguins"
 The assistant recognizes phrases like “What’s happening in sports?”, “What are the NHL standings?”, “When is the next Steelers game?”, or “Give me the NASCAR headlines.” Favorite teams influence phrasing (“your Penguins play tomorrow night…”) but the service works without them. No key is required for the ESPN feeds.
 
 All three services time out quickly and fall back to the LLM if an API is down. When everything is configured, the answers feel instantaneous (~1–2 seconds faster than routing through the LLM) and—most importantly—always reflect the latest public data.
+
+While the assistant is speaking one of these summaries, the kiosk overlay temporarily replaces the six tiles from `top-center` through `bottom-right` with a large “Assistant” card that shows the exact text being read. As soon as speech finishes, the overlay reverts to the previous cards (timers, now playing, etc.) automatically.
 
 ### MQTT Actions
 

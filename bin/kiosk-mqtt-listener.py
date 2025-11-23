@@ -61,6 +61,7 @@ class AssistantTopics:
     alarms_active: str
     timers_active: str
     command: str
+    info_card: str
 
 
 @dataclass(frozen=True)
@@ -325,6 +326,7 @@ def load_config() -> EnvConfig:
         alarms_active=f"{assistant_base}/alarms/active",
         timers_active=f"{assistant_base}/timers/active",
         command=f"{assistant_base}/schedules/command",
+        info_card=f"{assistant_base}/info_card",
     )
 
     return EnvConfig(
@@ -717,6 +719,24 @@ class KioskMqttListener:
             return
         data = self._decode_json_bytes(payload)
         change = self.overlay_state.update_active_event(event_type, data if isinstance(data, dict) else None)
+        self._handle_overlay_change(change)
+
+    def _handle_overlay_info_card(self, payload: bytes) -> None:
+        if not self.overlay_state:
+            return
+        data = self._decode_json_bytes(payload)
+        if not isinstance(data, dict):
+            return
+        state = str(data.get("state") or "").lower()
+        if state == "clear":
+            change = self.overlay_state.update_info_card(None)
+        else:
+            card_payload = {
+                "text": data.get("text"),
+                "category": data.get("category"),
+                "ts": data.get("ts") or time.time(),
+            }
+            change = self.overlay_state.update_info_card(card_payload)
         self._handle_overlay_change(change)
 
     @staticmethod
@@ -1327,6 +1347,7 @@ class KioskMqttListener:
             client.subscribe(self.assistant_topics.schedules_state)
             client.subscribe(self.assistant_topics.alarms_active)
             client.subscribe(self.assistant_topics.timers_active)
+            client.subscribe(self.assistant_topics.info_card)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_version_metadata()
@@ -1357,6 +1378,8 @@ class KioskMqttListener:
             self.handle_volume(msg.payload)
         elif msg.topic == self.config.topics.brightness:
             self.handle_brightness(msg.payload)
+        elif self.overlay_state and msg.topic == self.assistant_topics.info_card:
+            self._handle_overlay_info_card(msg.payload)
         elif self.overlay_state and msg.topic in self._overlay_topic_handlers:
             handler = self._overlay_topic_handlers.get(msg.topic)
             if handler:

@@ -90,6 +90,7 @@ SPORTS_KEYWORDS = {
 class InfoResponse:
     category: str
     text: str
+    display: str | None = None
 
 
 class InfoService:
@@ -110,17 +111,22 @@ class InfoService:
         simple = _normalize_text(normalized)
 
         if self._is_weather(simple):
-            text = await self._handle_weather()
-            return InfoResponse("weather", text) if text else None
+            result = await self._handle_weather()
+            if result:
+                spoken, display = result
+                return InfoResponse("weather", spoken, display)
 
         if self._is_news(simple):
             topic = self._extract_news_topic(simple)
-            text = await self._handle_news(topic)
-            return InfoResponse("news", text) if text else None
+            result = await self._handle_news(topic)
+            if result:
+                spoken, display = result
+                return InfoResponse("news", spoken, display)
 
         sport_intent = await self._handle_sports(simple)
         if sport_intent:
-            return InfoResponse("sports", sport_intent)
+            spoken, display = sport_intent
+            return InfoResponse("sports", spoken, display)
         return None
 
     def _is_weather(self, text: str) -> bool:
@@ -135,7 +141,7 @@ class InfoService:
                 return alias
         return None
 
-    async def _handle_weather(self) -> str | None:
+    async def _handle_weather(self) -> tuple[str, str] | None:
         forecast = await self.sources.weather.forecast()
         if not forecast or not forecast.days:
             return None
@@ -164,9 +170,15 @@ class InfoService:
             return None
         location_name = forecast.location_name
         intro = f"In {location_name}, " if location_name else ""
-        return intro + " ".join(phrases)
+        spoken = intro + " ".join(phrases)
+        display_parts: list[str] = []
+        if location_name:
+            display_parts.append(f"In {location_name}")
+        display_parts.extend(phrases)
+        display = "\n\n".join(display_parts)
+        return spoken, display
 
-    async def _handle_news(self, topic: str | None) -> str | None:
+    async def _handle_news(self, topic: str | None) -> tuple[str, str] | None:
         headlines = await self.sources.news.latest(topic)
         if not headlines:
             return None
@@ -178,9 +190,11 @@ class InfoService:
             intro = f"Here are the latest {topic} headlines: "
         else:
             intro = "Here are the latest headlines: "
-        return intro + " ".join(snippets)
+        spoken = intro + " ".join(snippets)
+        display = "\n\n".join(f"• {snippet}" for snippet in snippets)
+        return spoken, display
 
-    async def _handle_sports(self, text: str) -> str | None:
+    async def _handle_sports(self, text: str) -> tuple[str, str] | None:
         league = _extract_league(text)
         wants_standings = "standing" in text or "standings" in text
         wants_headlines = "headline" in text or "news" in text or "happening" in text
@@ -191,7 +205,10 @@ class InfoService:
             standings = await self.sources.sports.league_standings(league, limit=5)
             if standings:
                 lines = [f"{item['name']} ({item.get('record') or 'record pending'})" for item in standings[:5]]
-                return f"In {league.upper()}, the top teams are: {', '.join(lines)}."
+                spoken = f"In {league.upper()}, the top teams are: {', '.join(lines)}."
+                display_lines = "\n".join(f"• {line}" for line in lines)
+                display = f"{league.upper()} standings:\n{display_lines}"
+                return spoken, display
 
         if league and wants_headlines:
             headlines = await self.sources.sports.league_headlines(league)
@@ -227,7 +244,7 @@ class InfoService:
                     return snapshot
         return None
 
-    def _format_team_snapshot(self, snapshot: TeamSnapshot, emphasize_next: bool) -> str | None:
+    def _format_team_snapshot(self, snapshot: TeamSnapshot, emphasize_next: bool) -> tuple[str, str] | None:
         parts: list[str] = []
         record = snapshot.record or "record unavailable"
         parts.append(f"The {snapshot.name} are {record}.")
@@ -243,7 +260,9 @@ class InfoService:
             prev_text = _describe_event("Last game", snapshot.previous_event)
             if prev_text:
                 parts.append(prev_text)
-        return " ".join(parts)
+        spoken = " ".join(parts)
+        display = "\n\n".join(parts)
+        return spoken, display
 
 
 def _normalize_text(value: str) -> str:
@@ -280,15 +299,17 @@ def _summarize_headline(headline: NewsHeadline) -> str:
     return headline.title
 
 
-def _summarize_sports_headlines(headlines, league: str | None) -> str:
-    summary = []
+def _summarize_sports_headlines(headlines, league: str | None) -> tuple[str, str]:
+    spoken_parts = []
     prefix = f"In {league.upper()}, " if league else ""
+    display_lines: list[str] = []
     for idx, item in enumerate(headlines[:3]):
         if idx == 0:
-            summary.append(f"{prefix}{item.headline}")
+            spoken_parts.append(f"{prefix}{item.headline}")
         else:
-            summary.append(item.headline)
-    return " ".join(summary)
+            spoken_parts.append(item.headline)
+        display_lines.append(f"• {item.headline}")
+    return " ".join(spoken_parts), "\n".join(display_lines)
 
 
 def _extract_league(text: str) -> str | None:

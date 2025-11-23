@@ -35,6 +35,7 @@ class OverlaySnapshot:
     active_alarm: dict[str, Any] | None
     active_timer: dict[str, Any] | None
     notifications: tuple[dict[str, Any], ...]
+    info_card: dict[str, Any] | None
     last_reason: str
     generated_at: float
     schedule_snapshot: dict[str, Any] | None
@@ -116,6 +117,7 @@ class OverlayStateManager:
         self._notifications: tuple[dict[str, Any], ...] = ()
         self._schedule_snapshot: dict[str, Any] | None = None
         self._now_playing = ""
+        self._info_card: dict[str, Any] | None = None
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -127,6 +129,7 @@ class OverlayStateManager:
             "notifications": "",
             "schedule_snapshot": "",
             "now_playing": "",
+            "info_card": "",
         }
 
     @property
@@ -198,6 +201,24 @@ class OverlayStateManager:
             self._signatures["notifications"] = signature
             return self._bump("notifications")
 
+    def update_info_card(self, card: dict[str, Any] | None) -> OverlayChange:
+        normalized: dict[str, Any] | None = None
+        if isinstance(card, dict):
+            text = str(card.get("text") or "").strip()
+            if text:
+                normalized = {
+                    "text": text,
+                    "category": str(card.get("category") or ""),
+                    "ts": float(card.get("ts") or time.time()),
+                }
+        signature = _signature(normalized)
+        with self._lock:
+            if signature == self._signatures["info_card"]:
+                return OverlayChange(False, self._version, "info_card")
+            self._info_card = normalized
+            self._signatures["info_card"] = signature
+            return self._bump("info_card")
+
     def snapshot(self) -> OverlaySnapshot:
         with self._lock:
             return OverlaySnapshot(
@@ -209,6 +230,7 @@ class OverlayStateManager:
                 active_alarm=copy.deepcopy(self._active_alarm),
                 active_timer=copy.deepcopy(self._active_timer),
                 notifications=tuple(copy.deepcopy(item) for item in self._notifications),
+                info_card=copy.deepcopy(self._info_card),
                 last_reason=self._last_reason,
                 generated_at=time.time(),
                 schedule_snapshot=copy.deepcopy(self._schedule_snapshot),
@@ -279,6 +301,15 @@ CELL_ORDER = (
 )
 
 CLOCK_POSITION = "bottom-left"
+
+INFO_CARD_BLOCKED_CELLS = {
+    "top-center",
+    "top-right",
+    "center",
+    "middle-right",
+    "bottom-center",
+    "bottom-right",
+}
 
 TIMER_POSITION_MAP = {
     1: ("center",),
@@ -429,11 +460,19 @@ def render_overlay_html(
     if now_playing_card:
         cells[now_playing_card[0]].append(now_playing_card[1])
 
+    info_card_markup = ""
+    if snapshot.info_card and snapshot.info_card.get("text"):
+        for cell in INFO_CARD_BLOCKED_CELLS:
+            cells[cell] = []
+        info_card_markup = _build_info_overlay(snapshot)
+
     grid_markup = "".join(
         f'<div class="overlay-cell cell-{cell}" data-cell="{cell}">{"".join(cards)}</div>'
         for cell, cards in cells.items()
         if cards
     )
+    if info_card_markup:
+        grid_markup += info_card_markup
 
     notification_html = _build_notification_bar(snapshot) if theme.show_notification_bar else ""
 
@@ -497,6 +536,38 @@ body {{
   gap: 2vh;
   width: 100%;
   height: 100%;
+}}
+.overlay-info-card {{
+  grid-column: 2 / 4;
+  grid-row: 1 / 4;
+  background: {theme.ambient_background};
+  backdrop-filter: blur(18px);
+  border-radius: 1.5rem;
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.2rem;
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.45);
+}}
+.overlay-info-card__title {{
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: {theme.accent_color};
+  opacity: 0.9;
+}}
+.overlay-info-card__text {{
+  font-size: clamp(1.6rem, 2.4vw, 2.8rem);
+  line-height: 1.45;
+  font-weight: 400;
+  white-space: pre-line;
+}}
+.overlay-info-card__text strong {{
+  font-weight: 600;
+}}
+.overlay-info-card__text em {{
+  font-style: italic;
 }}
 .overlay-cell {{
   display: flex;
@@ -739,6 +810,37 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
     if not badges:
         return ""
     return f'<div class="overlay-notification-bar">{"".join(badges)}</div>'
+
+
+def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
+    card = snapshot.info_card or {}
+    text = str(card.get("text") or "").strip()
+    if not text:
+        return ""
+    category = str(card.get("category") or "").strip()
+    label = category.title() or "Assistant"
+    safe_label = html_escape(label)
+    safe_text = _format_info_text(text)
+    return f"""
+<div class="overlay-card overlay-info-card">
+  <div class="overlay-info-card__title">{safe_label}</div>
+  <div class="overlay-info-card__text">{safe_text}</div>
+</div>
+""".strip()
+
+
+def _format_info_text(text: str) -> str:
+    paragraphs: list[str] = []
+    blocks = text.split("\n\n")
+    for block in blocks:
+        lines = [line.strip() for line in block.split("\n") if line.strip()]
+        if not lines:
+            continue
+        safe_block = "<br />".join(html_escape(line) for line in lines)
+        paragraphs.append(f"<p>{safe_block}</p>")
+    if not paragraphs:
+        paragraphs.append(f"<p>{html_escape(text)}</p>")
+    return "".join(paragraphs)
 
 
 def _render_badge(icon_key: str, label: str) -> str:

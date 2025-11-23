@@ -141,6 +141,7 @@ class PulseAssistant:
         self._schedule_command_topic = f"{base_topic}/schedules/command"
         self._alarms_active_topic = f"{base_topic}/alarms/active"
         self._timers_active_topic = f"{base_topic}/timers/active"
+        self._info_card_topic = f"{base_topic}/info_card"
         self._assist_stage = "idle"
         self._assist_pipeline: str | None = None
         self._current_tracker: AssistRunTracker | None = None
@@ -152,6 +153,7 @@ class PulseAssistant:
         self._wake_context_version = 0
         self._self_audio_trigger_level = max(2, self.config.self_audio_trigger_level)
         self._playback_topic = f"pulse/{self.config.hostname}/telemetry/now_playing"
+        self._info_topic = f"{self.config.mqtt.topic_base}/info_card"
         self._media_player_entity = self.config.media_player_entity
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
@@ -484,6 +486,20 @@ class PulseAssistant:
 
     def _publish_message(self, topic: str, payload: str, *, retain: bool = False) -> None:
         self.mqtt.publish(topic, payload=payload, retain=retain)
+
+    def _publish_info_overlay(self, text: str | None = None, category: str | None = None) -> None:
+        if not self._info_topic:
+            return
+        if text and text.strip():
+            payload = {
+                "state": "show",
+                "text": text.strip(),
+                "category": category or "",
+                "ts": time.time(),
+            }
+        else:
+            payload = {"state": "clear"}
+        self._publish_message(self._info_topic, json.dumps(payload))
 
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
@@ -1177,7 +1193,16 @@ class PulseAssistant:
         self._publish_message(self.config.response_topic, json.dumps(payload))
         tag = f"info:{response.category}"
         self._log_assistant_response(tag, response.text, pipeline="pulse")
-        await self._speak(response.text)
+        overlay_active = False
+        overlay_text = response.display or response.text
+        try:
+            if overlay_text:
+                self._publish_info_overlay(text=overlay_text, category=response.category)
+                overlay_active = True
+            await self._speak(response.text)
+        finally:
+            if overlay_active:
+                self._publish_info_overlay()
         self._trigger_media_resume_after_response()
         return True
 

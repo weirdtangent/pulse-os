@@ -7,6 +7,7 @@ from pulse.overlay import (
     ClockConfig,
     OverlaySnapshot,
     OverlayTheme,
+    OverlayStateManager,
     parse_clock_config,
     render_overlay_html,
 )
@@ -94,6 +95,20 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertEqual(len(clocks), 1)
         self.assertEqual(clocks[0].label, "Home")
         self.assertIsNone(clocks[0].timezone)
+
+    def test_info_card_updates_snapshot(self) -> None:
+        manager = OverlayStateManager()
+        change = manager.update_info_card({"text": "Hello world", "category": "news"})
+        self.assertTrue(change.changed)
+        snapshot = manager.snapshot()
+        self.assertIsNotNone(snapshot.info_card)
+        assert snapshot.info_card is not None
+        self.assertEqual(snapshot.info_card["text"], "Hello world")
+        no_change = manager.update_info_card({"text": "Hello world", "category": "news"})
+        self.assertFalse(no_change.changed)
+        cleared = manager.update_info_card(None)
+        self.assertTrue(cleared.changed)
+        self.assertIsNone(manager.snapshot().info_card)
 
 
 if __name__ == "__main__":
