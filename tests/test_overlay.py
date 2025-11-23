@@ -88,7 +88,9 @@ class OverlayRenderTests(unittest.TestCase):
 
     def test_parse_clock_config_only_uses_first_entry(self) -> None:
         # Multiple entries provided, but only first is used
-        clocks = parse_clock_config("local=Home,America/Chicago=HQ,Europe/London=LDN", default_label="Default", log=None)
+        clocks = parse_clock_config(
+            "local=Home,America/Chicago=HQ,Europe/London=LDN", default_label="Default", log=None
+        )
         self.assertEqual(len(clocks), 1)
         self.assertEqual(clocks[0].label, "Home")
         self.assertIsNone(clocks[0].timezone)
