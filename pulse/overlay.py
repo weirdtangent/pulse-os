@@ -645,7 +645,9 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
         button_html = ""
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
-            button_html = f'<button class="overlay-button" data-stop-timer data-event-id="{event_id_escaped}">OK</button>'
+            button_html = (
+                f'<button class="overlay-button" data-stop-timer ' f'data-event-id="{event_id_escaped}">OK</button>'
+            )
         cards.append(
             (
                 "center",
@@ -665,7 +667,9 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
         button_html = ""
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
-            button_html = f'<button class="overlay-button" data-stop-timer data-event-id="{event_id_escaped}">OK</button>'
+            button_html = (
+                f'<button class="overlay-button" data-stop-timer ' f'data-event-id="{event_id_escaped}">OK</button>'
+            )
         cards.append(
             (
                 "bottom-center",

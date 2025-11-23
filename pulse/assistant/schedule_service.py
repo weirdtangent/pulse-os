@@ -423,7 +423,7 @@ class PlaybackHandle:
         if self._sink:
             self._orig_volume = pulse_audio.get_current_volume(self._sink)
         start_volume = _clamp_volume((self._orig_volume or 50) // 2)
-        ramp_duration = 30.0  # Ramp volume over 30 seconds (twice the previous time)
+        ramp_duration = 30.0  # Ramp volume over 30 seconds
         ramp_end = self._loop.time() + ramp_duration
         stop_at = self._loop.time() + 60.0
         try:
