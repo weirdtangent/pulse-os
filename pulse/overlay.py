@@ -562,12 +562,28 @@ body {{
   line-height: 1.45;
   font-weight: 400;
   white-space: pre-line;
+  overflow-y: auto;
+  padding-right: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: {theme.accent_color} transparent;
 }}
 .overlay-info-card__text strong {{
   font-weight: 600;
 }}
 .overlay-info-card__text em {{
   font-style: italic;
+}}
+.overlay-info-card__text::-webkit-scrollbar {{
+  width: 12px;
+}}
+.overlay-info-card__text::-webkit-scrollbar-track {{
+  background: transparent;
+}}
+.overlay-info-card__text::-webkit-scrollbar-thumb {{
+  background-color: {theme.accent_color};
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }}
 .overlay-cell {{
   display: flex;
