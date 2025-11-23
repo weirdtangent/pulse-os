@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 from pulse.overlay import (
     ClockConfig,
     OverlaySnapshot,
-    OverlayTheme,
     OverlayStateManager,
+    OverlayTheme,
     parse_clock_config,
     render_overlay_html,
 )
