@@ -8,22 +8,13 @@ import json
 import logging
 import os
 import queue
-import ssl
 import threading
 import tkinter as tk
-import urllib.error
-import urllib.request
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger("pulse-assistant-display")
-
-
-def _default_media_player_entity() -> str:
-    hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
-    sanitized = hostname.lower().replace("-", "_").replace(".", "_")
-    return f"media_player.{sanitized}_2"
 
 
 def _is_truthy(value: str | None, default: bool = False) -> bool:
@@ -66,7 +57,6 @@ class AssistantDisplay:
         self.queue: queue.Queue[str] = queue.Queue()
         self._schedule_queue: queue.Queue[tuple[str, dict[str, object]]] = queue.Queue()
         self._state_queue: queue.Queue[dict[str, object]] = queue.Queue()
-        self._now_playing_queue: queue.Queue[str] | None = None
         self._hide_job: str | None = None
         callback_kwargs: dict[str, object] = {}
         if hasattr(mqtt, "CallbackAPIVersion"):
@@ -105,18 +95,6 @@ class AssistantDisplay:
         self.root.after(250, self._poll_schedule_queue)
         self.root.after(250, self._poll_state_queue)
 
-        self.now_playing_window: tk.Toplevel | None = None
-        self.now_playing_canvas: tk.Canvas | None = None
-        self.now_playing_text_id: int | None = None
-        self._now_playing_stop = threading.Event()
-        self._now_playing_active = False
-        self._now_playing_interval = 5
-        self._now_playing_entity = ""
-        self._ha_base_url = ""
-        self._ha_token = ""
-        self._ha_ssl_context: ssl.SSLContext | None = None
-        self._now_playing_geometry: str | None = None
-        self._init_now_playing(font_size)
         self.alarm_overlay = AlarmOverlay(self.root, self._client, command_topic)
         self.timer_panel = TimerPanel(self.root)
 
@@ -211,31 +189,6 @@ class AssistantDisplay:
             return data
         return None
 
-    def _poll_now_playing_queue(self) -> None:
-        if not self._now_playing_queue:
-            return
-        try:
-            while True:
-                text = self._now_playing_queue.get_nowait()
-                self._update_now_playing_label(text)
-        except queue.Empty:
-            pass
-        if self._now_playing_active:
-            self.root.after(200, self._poll_now_playing_queue)
-
-    def _update_now_playing_label(self, text: str) -> None:
-        if not self.now_playing_window or not self.now_playing_canvas or self.now_playing_text_id is None:
-            return
-        if text:
-            self.now_playing_canvas.itemconfig(self.now_playing_text_id, text=f"Now Playing:\n  {text}")
-            if self._now_playing_geometry:
-                self.now_playing_window.geometry(self._now_playing_geometry)
-            self.now_playing_window.deiconify()
-            self.now_playing_window.lift()
-        else:
-            self.now_playing_canvas.itemconfig(self.now_playing_text_id, text="")
-            self.now_playing_window.withdraw()
-
     def _show_text(self, text: str) -> None:
         self.label.config(text=text)
         self.root.deiconify()
@@ -253,131 +206,6 @@ class AssistantDisplay:
         finally:
             self._client.loop_stop()
             self._client.disconnect()
-            if self._now_playing_active:
-                self._now_playing_stop.set()
-
-    def _init_now_playing(self, font_size: int) -> None:
-        show = _is_truthy(os.environ.get("PULSE_DISPLAY_SHOW_NOW_PLAYING"))
-        entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
-        if not entity:
-            entity = _default_media_player_entity()
-        base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
-        token = (os.environ.get("HOME_ASSISTANT_TOKEN") or "").strip()
-        interval = _int_from_env(os.environ.get("PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS"), fallback=5, minimum=2)
-        verify_ssl = _is_truthy(os.environ.get("HOME_ASSISTANT_VERIFY_SSL"), default=True)
-
-        if not show:
-            LOGGER.debug("Now-playing overlay disabled (PULSE_DISPLAY_SHOW_NOW_PLAYING=false).")
-            return
-        if not base_url or not token:
-            LOGGER.warning("Now-playing overlay disabled: HOME_ASSISTANT_BASE_URL or HOME_ASSISTANT_TOKEN is not set.")
-            return
-
-        self._now_playing_active = True
-        self._now_playing_interval = interval
-        self._now_playing_entity = entity
-        self._ha_base_url = base_url.rstrip("/")
-        self._ha_token = token
-        if self._ha_base_url.lower().startswith("https"):
-            self._ha_ssl_context = ssl.create_default_context() if verify_ssl else ssl._create_unverified_context()
-        else:
-            self._ha_ssl_context = None
-
-        self.now_playing_window = tk.Toplevel(self.root)
-        self.now_playing_window.withdraw()
-        self.now_playing_window.overrideredirect(True)
-        self.now_playing_window.attributes("-topmost", True)
-        accent_color = "#101820"
-        self.now_playing_window.configure(bg=accent_color)
-        window_width = max(420, self._screen_width // 2)
-        window_height = max(68, int(font_size * 2.2))
-        offset_x = self._screen_width - window_width - 40
-        offset_y = self._screen_height - window_height - 40
-        geometry = f"{window_width}x{window_height}+{offset_x}+{offset_y}"
-        self._now_playing_geometry = geometry
-        self.now_playing_window.geometry(geometry)
-
-        self.now_playing_canvas = tk.Canvas(
-            self.now_playing_window,
-            width=window_width,
-            height=window_height,
-            bg=accent_color,
-            bd=0,
-            highlightthickness=0,
-        )
-        self.now_playing_canvas.pack(fill=tk.BOTH, expand=True)
-        padding = 14
-        self.now_playing_text_id = self.now_playing_canvas.create_text(
-            padding,
-            window_height / 2,
-            text="",
-            font=("Helvetica", max(16, font_size // 2)),
-            fill="#FFFFFF",
-            anchor="w",
-            justify=tk.LEFT,
-            width=window_width - padding * 2,
-        )
-
-        self._now_playing_queue = queue.Queue()
-        self.root.after(500, self._poll_now_playing_queue)
-        thread = threading.Thread(target=self._now_playing_loop, daemon=True)
-        thread.start()
-        LOGGER.info(
-            "Now-playing overlay enabled for %s (interval=%ss)",
-            self._now_playing_entity,
-            self._now_playing_interval,
-        )
-
-    def _now_playing_loop(self) -> None:
-        while not self._now_playing_stop.is_set():
-            text = ""
-            try:
-                payload = self._fetch_now_playing_state()
-                text = self._format_now_playing(payload)
-                LOGGER.debug("Now-playing metadata: %s", text or "<idle>")
-            except Exception as exc:  # pylint: disable=broad-except
-                LOGGER.warning("Failed to fetch now-playing metadata: %s", exc)
-            if self._now_playing_queue:
-                self._now_playing_queue.put(text)
-            if self._now_playing_stop.wait(self._now_playing_interval):
-                break
-
-    def _fetch_now_playing_state(self) -> dict:
-        url = f"{self._ha_base_url}/api/states/{self._now_playing_entity}"
-        request = urllib.request.Request(
-            url,
-            headers={
-                "Authorization": f"Bearer {self._ha_token}",
-                "Accept": "application/json",
-            },
-        )
-        open_kwargs: dict[str, object] = {"timeout": 6}
-        if self._ha_ssl_context is not None:
-            open_kwargs["context"] = self._ha_ssl_context
-        try:
-            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]
-                data = response.read()
-        except urllib.error.HTTPError as exc:
-            LOGGER.warning("HA returned %s when fetching %s: %s", exc.code, url, exc.reason)
-            raise
-        except urllib.error.URLError as exc:
-            LOGGER.warning("HA connection error: %s", exc)
-            raise
-        return json.loads(data.decode("utf-8"))
-
-    def _format_now_playing(self, payload: dict | list | None) -> str:
-        if not isinstance(payload, dict):
-            return ""
-        state = str(payload.get("state") or "").lower()
-        if state not in {"playing", "on"}:
-            return ""
-        attributes = payload.get("attributes") or {}
-        title = attributes.get("media_title") or ""
-        artist = attributes.get("media_artist") or attributes.get("media_album_artist") or ""
-        if title and artist:
-            return f"{artist} — {title}"
-        return title or artist or ""
-
 
 class AlarmOverlay:
     def __init__(self, root: tk.Tk, mqtt_client: mqtt.Client, command_topic: str) -> None:

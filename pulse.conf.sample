@@ -253,13 +253,7 @@ PULSE_ASSISTANT_DISPLAY_SECONDS=8
 # PULSE_ASSISTANT_FONT_SIZE — response overlay font size (pixels).
 PULSE_ASSISTANT_FONT_SIZE=28
 
-# PULSE_DISPLAY_SHOW_NOW_PLAYING — show Home Assistant media metadata on the overlay.
-PULSE_DISPLAY_SHOW_NOW_PLAYING="false"
-
-# PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS — how often to refresh metadata from HA (seconds).
-PULSE_DISPLAY_NOW_PLAYING_INTERVAL_SECONDS=5
-
-# PULSE_MEDIA_PLAYER_ENTITY — HA media_player (or sensor) that represents this kiosk’s audio output.
+# PULSE_MEDIA_PLAYER_ENTITY — HA media_player (or sensor) that represents this kiosk's audio output.
 # Used by the on-screen overlay, MQTT telemetry, and to auto-pause/resume Music Assistant during wake-word interactions.
 # Defaults to media_player.<hostname>_2 when left blank.
 PULSE_MEDIA_PLAYER_ENTITY=""

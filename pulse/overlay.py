@@ -449,6 +449,7 @@ body {{
   padding: 3vh;
   box-sizing: border-box;
   color: {theme.text_color};
+  background: transparent !important;
 }}
 .overlay-notification-bar {{
   display: flex;
