@@ -1,3 +1,18 @@
+# [0.53.0](https://github.com/weirdtangent/pulse-os/compare/v0.52.8...v0.53.0) (2025-11-23)
+
+
+### Bug Fixes
+
+* align Now Playing card to bottom of overlay ([c6bd329](https://github.com/weirdtangent/pulse-os/commit/c6bd329955ba67c1cf5ed8dce32d3c8fa3c09a97))
+* finally find old Now Playing and remove it ([5733a0c](https://github.com/weirdtangent/pulse-os/commit/5733a0ccd7413d8adedd6f2e9d1bd49a92dc3be5))
+* formatting issues ([88b82bb](https://github.com/weirdtangent/pulse-os/commit/88b82bbef80fb5798ce24a3449af3670084231ba))
+* yet another attempt to fix the Now Playing card position ([cedaf49](https://github.com/weirdtangent/pulse-os/commit/cedaf49b51a736076ae41fb157368e05fc74ea1c))
+
+
+### Features
+
+* add real-time news/weather/sports intents to pulse assistant ([a2354be](https://github.com/weirdtangent/pulse-os/commit/a2354be949b2beb908f8a614b2fa263284e76f80))
+
 ## [0.52.8](https://github.com/weirdtangent/pulse-os/compare/v0.52.7...v0.52.8) (2025-11-23)
 
 ## [0.52.7](https://github.com/weirdtangent/pulse-os/compare/v0.52.6...v0.52.7) (2025-11-23)
