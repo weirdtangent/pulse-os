@@ -146,7 +146,8 @@ class InfoService:
         if not forecast or not forecast.days:
             return None
         units = self.config.weather.units
-        unit_label = "°F" if units in {"imperial", "auto"} else "°C"
+        speak_label = "degrees Fahrenheit" if units in {"imperial", "auto"} else "degrees Celsius"
+        display_label = "°F" if units in {"imperial", "auto"} else "°C"
         phrases: list[str] = []
         for idx, day in enumerate(forecast.days[: self.config.weather.forecast_days]):
             label = _describe_day(day.date, idx)
@@ -154,11 +155,11 @@ class InfoService:
             low = _format_temp(day.temp_low)
             rain = f"{int(day.precipitation_chance)}% chance of precip" if day.precipitation_chance is not None else ""
             if high and low:
-                sentence = f"{label} tops out near {high}{unit_label} with lows around {low}{unit_label}"
+                sentence = f"{label} tops out near {high} {speak_label} with lows around {low} {speak_label}"
             elif high:
-                sentence = f"{label} reaches roughly {high}{unit_label}"
+                sentence = f"{label} reaches roughly {high} {speak_label}"
             elif low:
-                sentence = f"{label} dips to about {low}{unit_label}"
+                sentence = f"{label} dips to about {low} {speak_label}"
             else:
                 continue
             if rain:
@@ -174,7 +175,20 @@ class InfoService:
         display_parts: list[str] = []
         if location_name:
             display_parts.append(f"In {location_name}")
-        display_parts.extend(phrases)
+        for idx, day in enumerate(forecast.days[: self.config.weather.forecast_days]):
+            label = _describe_day(day.date, idx)
+            high = _format_temp(day.temp_high)
+            low = _format_temp(day.temp_low)
+            rain = day.precipitation_chance
+            line_parts = []
+            if high is not None:
+                line_parts.append(f"High {high}{display_label}")
+            if low is not None:
+                line_parts.append(f"Low {low}{display_label}")
+            if rain is not None:
+                line_parts.append(f"Precip {int(rain)}%")
+            display_line = f"{label}: " + ", ".join(line_parts)
+            display_parts.append(display_line)
         display = "\n\n".join(display_parts)
         return spoken, display
 
