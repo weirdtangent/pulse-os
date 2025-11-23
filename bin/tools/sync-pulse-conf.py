@@ -24,6 +24,27 @@ LEGACY_REPLACEMENTS: dict[str, str] = {
     "PULSE_ASSISTANT_WAKE_WORDS": "PULSE_ASSISTANT_WAKE_WORDS_PULSE",
 }
 
+INFO_SECTION_HEADER = "Information Services (news, weather, sports)"
+INFO_VAR_DEFAULTS: tuple[tuple[str, str], ...] = (
+    ("PULSE_NEWS_API_KEY", ""),
+    ("PULSE_NEWS_BASE_URL", "https://newsapi.org/v2"),
+    ("PULSE_NEWS_COUNTRY", "us"),
+    ("PULSE_NEWS_CATEGORY", "general"),
+    ("PULSE_NEWS_LANGUAGE", "en"),
+    ("PULSE_NEWS_MAX_ARTICLES", "5"),
+    ("PULSE_WEATHER_LOCATION", ""),
+    ("PULSE_WEATHER_BASE_URL", "https://api.open-meteo.com/v1/forecast"),
+    ("PULSE_WEATHER_UNITS", "auto"),
+    ("PULSE_WEATHER_LANGUAGE", "en"),
+    ("PULSE_WEATHER_FORECAST_DAYS", "3"),
+    ("WHAT3WORDS_API_KEY", ""),
+    ("PULSE_SPORTS_BASE_URL", "https://site.api.espn.com/apis"),
+    ("PULSE_SPORTS_DEFAULT_COUNTRY", "us"),
+    ("PULSE_SPORTS_HEADLINE_COUNTRY", "us"),
+    ("PULSE_SPORTS_DEFAULT_LEAGUES", "nfl,nba,mlb,nhl"),
+    ("PULSE_SPORTS_FAVORITE_TEAMS", ""),
+)
+
 
 def _strip_quotes(value: str) -> str:
     """Remove matching single or double quotes from a value."""
@@ -341,7 +362,37 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
         if current_section is not None:
             sections.append(current_section)
 
+    _ensure_info_section(sections)
     return sections
+
+
+def _ensure_info_section(sections: list[dict[str, Any]]) -> None:
+    """Guarantee the Information Services section exists with all known vars."""
+    target_section = None
+    for section in sections:
+        if section.get("header") == INFO_SECTION_HEADER:
+            target_section = section
+            break
+    if target_section is None:
+        target_section = {"header": INFO_SECTION_HEADER, "comment": "", "vars": []}
+        insert_index = next(
+            (idx for idx, section in enumerate(sections) if section.get("header") == "Snapcast Client (optional)"),
+            len(sections),
+        )
+        sections.insert(insert_index, target_section)
+
+    existing = {var_info.get("name") for var_info in target_section.get("vars", [])}
+    for var_name, default_value in INFO_VAR_DEFAULTS:
+        if var_name in existing:
+            continue
+        target_section.setdefault("vars", []).append(
+            {
+                "name": var_name,
+                "value": default_value,
+                "comment": "",
+                "is_block": False,
+            }
+        )
 
 
 def _annotate_new_comment(comment: str | None, var_name: str) -> str:
