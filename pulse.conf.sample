@@ -263,28 +263,28 @@ PULSE_MEDIA_PLAYER_ENTITY=""
 # ============================================================================
 
 # News headlines (NewsAPI.org or compatible)
-# PULSE_NEWS_API_KEY="your_newsapi_key"
-# PULSE_NEWS_BASE_URL="https://newsapi.org/v2"
-# PULSE_NEWS_COUNTRY="us"
-# PULSE_NEWS_CATEGORY="general"
-# PULSE_NEWS_LANGUAGE="en"
-# PULSE_NEWS_MAX_ARTICLES="5"
+PULSE_NEWS_API_KEY=""
+PULSE_NEWS_BASE_URL="https://newsapi.org/v2"
+PULSE_NEWS_COUNTRY="us"
+PULSE_NEWS_CATEGORY="general"
+PULSE_NEWS_LANGUAGE="en"
+PULSE_NEWS_MAX_ARTICLES="5"
 
 # Weather forecast (Open-Meteo + optional location helpers)
 # Provide lat,lon pairs, city names, ZIP codes, plus codes, or what3words strings.
-# PULSE_WEATHER_LOCATION="37.7749,-122.4194"
-# PULSE_WEATHER_BASE_URL="https://api.open-meteo.com/v1/forecast"
-# PULSE_WEATHER_UNITS="auto"  # auto | imperial | metric
-# PULSE_WEATHER_LANGUAGE="en"
-# PULSE_WEATHER_FORECAST_DAYS="3"
-# WHAT3WORDS_API_KEY=""
+PULSE_WEATHER_LOCATION=""
+PULSE_WEATHER_BASE_URL="https://api.open-meteo.com/v1/forecast"
+PULSE_WEATHER_UNITS="auto"
+PULSE_WEATHER_LANGUAGE="en"
+PULSE_WEATHER_FORECAST_DAYS="3"
+WHAT3WORDS_API_KEY=""
 
 # Sports headlines + standings (ESPN public APIs)
-# PULSE_SPORTS_BASE_URL="https://site.api.espn.com/apis"
-# PULSE_SPORTS_DEFAULT_COUNTRY="us"
-# PULSE_SPORTS_HEADLINE_COUNTRY="us"
-# PULSE_SPORTS_DEFAULT_LEAGUES="nfl,nba,mlb,nhl"
-# PULSE_SPORTS_FAVORITE_TEAMS="nfl:steelers,nhl:penguins"
+PULSE_SPORTS_BASE_URL="https://site.api.espn.com/apis"
+PULSE_SPORTS_DEFAULT_COUNTRY="us"
+PULSE_SPORTS_HEADLINE_COUNTRY="us"
+PULSE_SPORTS_DEFAULT_LEAGUES="nfl,nba,mlb,nhl"
+PULSE_SPORTS_FAVORITE_TEAMS=""
 
 # ============================================================================
 # Snapcast Client (optional)
