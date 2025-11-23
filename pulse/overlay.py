@@ -542,6 +542,7 @@ body {{
 }}
 .overlay-card--now-playing {{
   min-width: 16rem;
+  margin-top: auto;
 }}
 .overlay-now-playing__body {{
   font-size: 1.1rem;
