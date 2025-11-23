@@ -702,7 +702,15 @@ class KioskMqttListener:
             self.log("overlay: ignoring malformed schedules payload")
             return
         change = self.overlay_state.update_schedule_snapshot(data)
-        self._handle_overlay_change(change)
+        # Also update now playing to ensure it's current when overlay refreshes
+        now_playing = self._collect_now_playing_text()
+        now_playing_change = self.overlay_state.update_now_playing(now_playing)
+        # Handle schedule change (always triggers refresh if changed)
+        if change.changed:
+            self._handle_overlay_change(change)
+        # Handle now playing change separately (only if schedule didn't change)
+        elif now_playing_change.changed:
+            self._handle_overlay_change(now_playing_change)
 
     def _handle_overlay_active_event(self, event_type: str, payload: bytes) -> None:
         if not self.overlay_state:
