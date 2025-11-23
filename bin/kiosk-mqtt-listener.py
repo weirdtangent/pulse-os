@@ -1445,16 +1445,15 @@ class KioskMqttListener:
         steps: list[tuple[str, list[str], str | None]] = [
             ("git pull", ["git", "pull", "--ff-only"], repo_dir),
             ("setup.sh", ["./setup.sh"], repo_dir),
-            ("reboot", self._safe_reboot_command("update: reboot"), repo_dir),
         ]
 
         try:
-            self.log("update: starting full update cycle")
+            self.log("update: starting update cycle")
             for description, command, cwd in steps:
                 if not self._run_step(description, command, cwd):
                     self.log(f"update: aborted during {description}")
                     return
-            self.log("update: finished successfully; reboot command issued")
+            self.log("update: finished successfully; services restarted by setup.sh")
         finally:
             self.update_lock.release()
             try:

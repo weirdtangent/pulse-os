@@ -11,7 +11,7 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 | Button | Topic | Action |
 | ------ | ----- | ------ |
 | `Home` | `pulse/<hostname>/kiosk/home` | Reopens the configured `PULSE_URL` in Chromium. |
-| `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, reruns `./setup.sh` (which restarts all Pulse services unless the kiosk was provisioned with `./setup.sh --no-restart`), then calls the safe reboot guard. |
+| `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, then reruns `./setup.sh` (which restarts all Pulse services unless the kiosk was provisioned with `./setup.sh --no-restart`). |
 | `Reboot` | `pulse/<hostname>/kiosk/reboot` | Requests a safe reboot (respecting the guard thresholds). |
 
 ### Update button requirements
