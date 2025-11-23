@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import math
 import re
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import httpx
 from openlocationcode import openlocationcode as olc
@@ -55,7 +54,12 @@ class TTLCache:
         self._values[key] = (time.monotonic() + self.ttl, value)
 
 
-async def _get_json(url: str, *, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> dict | None:
+async def _get_json(
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> dict | None:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, params=params, headers=headers)
@@ -140,7 +144,10 @@ class WeatherClient:
         location = await self._resolve_location(self.config.location)
         if not location:
             return None
-        cache_key = f"{location.latitude:.4f},{location.longitude:.4f}:{self.config.units}:{self.config.language}:{self.config.forecast_days}"
+        cache_key = (
+            f"{location.latitude:.4f},{location.longitude:.4f}:"
+            f"{self.config.units}:{self.config.language}:{self.config.forecast_days}"
+        )
         cached = self._forecast_cache.get(cache_key)
         if cached:
             return cached
@@ -392,7 +399,7 @@ class SportsClient:
         results: list[SportsHeadline] = []
         if not payload:
             return results
-        for item in (payload.get("articles") or payload.get("results") or []):
+        for item in payload.get("articles") or payload.get("results") or []:
             headline = (item.get("headline") or item.get("title") or "").strip()
             if not headline:
                 continue
@@ -522,5 +529,3 @@ class InfoSources:
         self.news = NewsClient(config.news)
         self.weather = WeatherClient(config.weather, config.what3words_api_key)
         self.sports = SportsClient(config.sports)
-
-

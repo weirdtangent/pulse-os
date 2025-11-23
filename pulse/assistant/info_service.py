@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Sequence
 
 from .config import InfoConfig
-from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherForecast
+from .info_sources import InfoSources, NewsHeadline, TeamSnapshot
 
 STOP_WORDS = {
     "what",
@@ -36,7 +35,6 @@ STOP_WORDS = {
     "this",
     "week",
     "latest",
-    "next",
     "play",
     "playing",
     "do",
@@ -192,10 +190,7 @@ class InfoService:
         if league and wants_standings:
             standings = await self.sources.sports.league_standings(league, limit=5)
             if standings:
-                lines = [
-                    f"{item['name']} ({item.get('record') or 'record pending'})"
-                    for item in standings[:5]
-                ]
+                lines = [f"{item['name']} ({item.get('record') or 'record pending'})" for item in standings[:5]]
                 return f"In {league.upper()}, the top teams are: {', '.join(lines)}."
 
         if league and wants_headlines:
@@ -329,5 +324,3 @@ def _friendly_date(value: str | None) -> str | None:
     except ValueError:
         return value
     return dt.astimezone().strftime("%A at %-I:%M %p")
-
-

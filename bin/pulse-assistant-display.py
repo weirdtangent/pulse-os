@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import queue
-import threading
 import tkinter as tk
 from datetime import datetime
 
@@ -206,6 +205,7 @@ class AssistantDisplay:
         finally:
             self._client.loop_stop()
             self._client.disconnect()
+
 
 class AlarmOverlay:
     def __init__(self, root: tk.Tk, mqtt_client: mqtt.Client, command_topic: str) -> None:

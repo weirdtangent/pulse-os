@@ -26,8 +26,8 @@ from typing import Any
 from pulse.assistant.actions import ActionEngine, _parse_duration_seconds, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
-from pulse.assistant.info_service import InfoService
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
+from pulse.assistant.info_service import InfoService
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
