@@ -161,7 +161,7 @@ class WeatherClient:
             "forecast_days": self.config.forecast_days,
             "language": self.config.language,
         }
-        if self.config.units == "imperial":
+        if self.config.units in {"imperial", "auto"}:
             params["temperature_unit"] = "fahrenheit"
             params["windspeed_unit"] = "mph"
             params["precipitation_unit"] = "inch"
