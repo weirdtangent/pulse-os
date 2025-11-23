@@ -308,6 +308,23 @@ OVERLAY_JS = """
   const timeOptions = { hour: 'numeric', minute: '2-digit', hour12 };
   const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
 
+  const alignNowPlayingCard = () => {
+    const clockCard = root.querySelector('.overlay-card--clock');
+    const nowPlayingCard = root.querySelector('.overlay-card--now-playing');
+    if (!clockCard || !nowPlayingCard) {
+      return;
+    }
+    const clockCell = clockCard.closest('.overlay-cell');
+    const nowPlayingCell = nowPlayingCard.closest('.overlay-cell');
+    if (!clockCell || !nowPlayingCell) {
+      return;
+    }
+    const clockRect = clockCard.getBoundingClientRect();
+    const clockCellRect = clockCell.getBoundingClientRect();
+    const offset = Math.max(0, clockCellRect.bottom - clockRect.bottom);
+    nowPlayingCard.style.marginBottom = offset ? `${offset}px` : '';
+  };
+
   const formatWithZone = (date, tz, options) => {
     try {
       return new Intl.DateTimeFormat(undefined, { ...options, timeZone: tz || undefined }).format(date);
@@ -359,6 +376,8 @@ OVERLAY_JS = """
 
   tick();
   window.setInterval(tick, 1000);
+  alignNowPlayingCard();
+  window.addEventListener('resize', alignNowPlayingCard);
 
   // Handle stop timer button clicks
   root.addEventListener('click', (e) => {
@@ -542,11 +561,7 @@ body {{
 }}
 .overlay-card--now-playing {{
   min-width: 16rem;
-}}
-.cell-bottom-left,
-.cell-bottom-center,
-.cell-bottom-right {{
-  justify-content: flex-end;
+  margin-top: auto;
 }}
 .overlay-now-playing__body {{
   font-size: 1.1rem;
