@@ -1,3 +1,22 @@
+# [0.54.0](https://github.com/weirdtangent/pulse-os/compare/v0.53.1...v0.54.0) (2025-11-23)
+
+
+### Bug Fixes
+
+* add postal code and state code patterns to info sources ([d6558f4](https://github.com/weirdtangent/pulse-os/commit/d6558f49ec980f3817ae1bb09cbe1be40a7aa878))
+* don't speek the temp units, the user knows the units they configured to use ([0c3defc](https://github.com/weirdtangent/pulse-os/commit/0c3defc025caa15148683d5b23afee456b04eff7))
+* fix tests for ruff ([a9deb64](https://github.com/weirdtangent/pulse-os/commit/a9deb64381292448ee7df9f5e6053ba09306bca4))
+* more robust pulse.conf sync script ([ab70fc2](https://github.com/weirdtangent/pulse-os/commit/ab70fc22f8ea22c8f545cfd2bbdaf7db81b4ddeb))
+* overflow on info card text ([02a1d69](https://github.com/weirdtangent/pulse-os/commit/02a1d69a56b35a179b0ce7069a1b65a60330b179))
+* update pulse.conf.sample to reflect new features ([2d0662c](https://github.com/weirdtangent/pulse-os/commit/2d0662cc357f4cdcb9d5dc56b788c7751d3e0973))
+* update temp forecast display and speech ([4408297](https://github.com/weirdtangent/pulse-os/commit/44082979aa8ee1c1d99f3a81bfd689589c78d656))
+* update weather client to use auto units correctly ([e777237](https://github.com/weirdtangent/pulse-os/commit/e777237fec4f717e5d8442310beee8a75bb2326e))
+
+
+### Features
+
+* add real-time info card to pulse overlay ([d7d1a58](https://github.com/weirdtangent/pulse-os/commit/d7d1a5838901c13fc11578dcd61c71c6762e0bfd))
+
 ## [0.53.1](https://github.com/weirdtangent/pulse-os/compare/v0.53.0...v0.53.1) (2025-11-23)
 
 
