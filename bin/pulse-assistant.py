@@ -1110,8 +1110,7 @@ class PulseAssistant:
             duration, label = timer_start
             await self.schedule_service.create_timer(duration_seconds=duration, label=label)
             phrase = self._describe_duration(duration)
-            label_text = f" for {label}" if label else ""
-            spoken = f"Starting a {phrase} timer{label_text}."
+            spoken = f"Starting a {phrase} timer."
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
