@@ -1,3 +1,10 @@
+## [0.58.13](https://github.com/weirdtangent/pulse-os/compare/v0.58.12...v0.58.13) (2025-11-24)
+
+
+### Bug Fixes
+
+* make 'Complete' button taller ([154d4d1](https://github.com/weirdtangent/pulse-os/commit/154d4d12986f2eeeadc4ff5bfec188a577d7b608))
+
 ## [0.58.12](https://github.com/weirdtangent/pulse-os/compare/v0.58.11...v0.58.12) (2025-11-24)
 
 
