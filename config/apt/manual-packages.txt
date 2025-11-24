@@ -47,6 +47,7 @@ firmware-libertas
 firmware-mediatek
 firmware-realtek
 fonts-dejavu
+fonts-noto-color-emoji
 gawk
 gcc-14-base
 gdb

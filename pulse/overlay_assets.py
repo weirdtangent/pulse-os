@@ -19,7 +19,7 @@ body {
   width: 100vw;
   height: 100vh;
   background: transparent !important;
-  font-family: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: "Inter", "Noto Color Emoji", "Segoe UI", "Helvetica Neue", sans-serif;
   color: var(--overlay-text-color);
 }
 
