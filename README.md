@@ -6,7 +6,7 @@
 
 ## Raspberry Pi 5 + Pi 7" Touch Display 2
 
-A Raspberry Pi–based kiosk OS that lands on Home Assistant dashboards with a scripted setup flow per device. It bundles watchdog/backlight management, MQTT telemetry and actions, Snapcast output, remote logging, and an optional Wyoming voice assistant that can switch between OpenAI and Gemini LLMs on demand.
+Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assistant dashboards. Each device self-provisions a hardened Chromium display with watchdogs, schedule-aware backlighting, and MQTT telemetry/control. A live overlay surfaces internal timers, alarms, reminders, now-playing info, plus on-demand news, weather, and sports snapshots—with clickable notification badges that stay synced to the backend schedule service. An optional Wyoming voice stack adds wake-word control, STT/TTS, and multi-turn conversations, while the LLM layer can hot-swap between OpenAI and Google Gemini so follow-up questions and automations route through whichever model you prefer, all without leaving the Pulse display
 
 ---
 
