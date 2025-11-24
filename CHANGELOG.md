@@ -1,3 +1,10 @@
+## [0.55.4](https://github.com/weirdtangent/pulse-os/compare/v0.55.3...v0.55.4) (2025-11-24)
+
+
+### Bug Fixes
+
+* listing of alarms in info card ([4e2cdb3](https://github.com/weirdtangent/pulse-os/commit/4e2cdb32f4bea925559b0da2b0a597332065c999))
+
 ## [0.55.3](https://github.com/weirdtangent/pulse-os/compare/v0.55.2...v0.55.3) (2025-11-24)
 
 
