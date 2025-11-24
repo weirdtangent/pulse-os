@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable
+from typing import Any
 
 from . import OverlayChange, OverlayStateManager, OverlayTheme, render_overlay_html
 
@@ -63,10 +64,10 @@ class OverlayHttpServer:
         thread.start()
         self._thread = thread
         if self.logger:
-            self.logger(
-                f"overlay http: serving on http://{self.config.bind_address}:{self.config.port}/overlay (allowed origins: "
-                f"{', '.join(self.config.allowed_origins)})"
-            )
+            host = self.config.bind_address
+            port = self.config.port
+            allowed = ", ".join(self.config.allowed_origins)
+            self.logger(f"overlay http: serving on http://{host}:{port}/overlay (allowed origins: {allowed})")
 
     def stop(self) -> None:
         server = self._server
@@ -201,4 +202,3 @@ class OverlayHttpServer:
         if origin and origin in allowed:
             return origin
         return None
-

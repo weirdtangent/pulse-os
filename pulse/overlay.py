@@ -246,6 +246,11 @@ class OverlayStateManager:
                     normalized["ts"] = float(ts_value)
                 except (TypeError, ValueError):
                     pass
+            alarms_payload = card.get("alarms")
+            if isinstance(alarms_payload, list):
+                alarms_list = [copy.deepcopy(item) for item in alarms_payload if isinstance(item, dict)]
+                if alarms_list:
+                    normalized["alarms"] = alarms_list
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
