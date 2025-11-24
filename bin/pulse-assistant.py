@@ -17,7 +17,6 @@ import sys
 import threading
 import time
 from array import array
-from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -32,11 +31,10 @@ from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
+from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_volume_feedback
-from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.client import AsyncTcpClient
-from wyoming.tts import Synthesize, SynthesizeVoice
 from wyoming.wake import Detect, Detection, NotDetected
 
 LOGGER = logging.getLogger("pulse-assistant")
@@ -395,44 +393,13 @@ class PulseAssistant:
         if not target:
             LOGGER.warning("No STT endpoint configured")
             return None
-        client = AsyncTcpClient(target.host, target.port)
-        await client.connect()
-        try:
-            await client.write_event(
-                Transcribe(
-                    name=target.model,
-                    language=self.config.language,
-                ).event()
-            )
-            await client.write_event(
-                AudioStart(
-                    rate=self.config.mic.rate,
-                    width=self.config.mic.width,
-                    channels=self.config.mic.channels,
-                ).event()
-            )
-            for chunk in _chunk_bytes(audio_bytes, self.config.mic.bytes_per_chunk):
-                await client.write_event(
-                    AudioChunk(
-                        rate=self.config.mic.rate,
-                        width=self.config.mic.width,
-                        channels=self.config.mic.channels,
-                        audio=chunk,
-                    ).event()
-                )
-            await client.write_event(AudioStop().event())
-            return await self._read_transcript_event(client)
-        finally:
-            await client.disconnect()
-
-    async def _read_transcript_event(self, client: AsyncTcpClient) -> str | None:
-        while True:
-            event = await client.read_event()
-            if event is None:
-                return None
-            if Transcript.is_type(event.type):
-                transcript = Transcript.from_event(event)
-                return transcript.text
+        return await transcribe_audio(
+            audio_bytes,
+            endpoint=target,
+            mic=self.config.mic,
+            language=self.config.language,
+            logger=LOGGER,
+        )
 
     async def _speak(self, text: str) -> None:
         await self._speak_via_endpoint(text, self.config.tts_endpoint, self.config.tts_voice)
@@ -447,35 +414,14 @@ class PulseAssistant:
         if not target:
             LOGGER.warning("No TTS endpoint configured; cannot speak response")
             return
-        client = AsyncTcpClient(target.host, target.port)
-        await client.connect()
-        try:
-            voice = None
-            if voice_name:
-                voice = SynthesizeVoice(name=voice_name)
-            await client.write_event(Synthesize(text=text, voice=voice).event())
-            await self._consume_tts_audio(client)
-        finally:
-            await client.disconnect()
-
-    async def _consume_tts_audio(self, client: AsyncTcpClient) -> None:
-        async with self._local_audio_block():
-            started = False
-            while True:
-                event = await client.read_event()
-                if event is None:
-                    break
-                if AudioStart.is_type(event.type):
-                    audio_start = AudioStart.from_event(event)
-                    await self.player.start(audio_start.rate, audio_start.width, audio_start.channels)
-                    started = True
-                elif AudioChunk.is_type(event.type):
-                    chunk = AudioChunk.from_event(event)
-                    await self.player.write(chunk.audio)
-                elif AudioStop.is_type(event.type):
-                    break
-            if started:
-                await self.player.stop()
+        await play_tts_stream(
+            text,
+            endpoint=target,
+            sink=self.player,
+            voice_name=voice_name,
+            audio_guard=self._local_audio_block(),
+            logger=LOGGER,
+        )
 
     def _publish_state(self, state: str, extra: dict | None = None) -> None:
         payload = {"state": state}
@@ -1849,12 +1795,6 @@ class PulseAssistant:
             context = self._context_for_detect()
             if start_version == self._wake_context_version:
                 return context, start_version
-
-
-def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:
-    for start in range(0, len(data), size):
-        end = min(start + size, len(data))
-        yield data[start:end]
 
 
 async def main() -> None:

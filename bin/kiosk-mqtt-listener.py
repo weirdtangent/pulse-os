@@ -12,8 +12,6 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +27,8 @@ from pulse.overlay import (
     OverlayStateManager,
     OverlayTheme,
     parse_clock_config,
-    render_overlay_html,
 )
+from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
 
 
 @dataclass(frozen=True)
@@ -497,8 +495,7 @@ class KioskMqttListener:
         self.overlay_config = config.overlay
         self.overlay_state: OverlayStateManager | None = None
         self._overlay_theme: OverlayTheme | None = None
-        self._overlay_http_server: ThreadingHTTPServer | None = None
-        self._overlay_http_thread: threading.Thread | None = None
+        self._overlay_http: OverlayHttpServer | None = None
         self._overlay_topic_handlers: dict[str, Any] = {}
         overlay_host = self.overlay_config.bind_address
         if overlay_host in {"0.0.0.0", "::"}:
@@ -527,6 +524,23 @@ class KioskMqttListener:
                     "timer", payload
                 ),
             }
+            server_config = OverlayServerConfig(
+                bind_address=self.overlay_config.bind_address,
+                port=self.overlay_config.port,
+                allowed_origins=self.overlay_config.allowed_origins,
+                clock_24h=self.overlay_config.clock_24h,
+                stop_endpoint=self._overlay_stop_endpoint,
+                info_endpoint=self._overlay_info_endpoint,
+            )
+            self._overlay_http = OverlayHttpServer(
+                state=self.overlay_state,
+                theme=self._overlay_theme,
+                config=server_config,
+                logger=self.log,
+                on_state_change=self._handle_overlay_change,
+                on_stop_request=self._handle_overlay_stop_request,
+                on_delete_alarm=self._handle_overlay_delete_alarm_request,
+            )
 
     def log(self, message: str) -> None:
         log(message)
@@ -747,187 +761,24 @@ class KioskMqttListener:
             change = self.overlay_state.update_info_card(card_payload)
         self._handle_overlay_change(change)
 
+    def stop_overlay_server(self) -> None:
+        if self._overlay_http:
+            self._overlay_http.stop()
+
+    def _handle_overlay_stop_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "stop", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_delete_alarm_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "delete_alarm", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
     @staticmethod
     def _decode_json_bytes(payload: bytes) -> Any:
         try:
             return json.loads(payload.decode("utf-8"))
         except json.JSONDecodeError:
             return None
-
-    def _start_overlay_server(self) -> None:
-        if not self.overlay_state or not self._overlay_theme or not self.overlay_config.enabled:
-            return
-        if self._overlay_http_server:
-            return
-        handler_cls = self._build_overlay_http_handler()
-        try:
-            server = ThreadingHTTPServer(
-                (self.overlay_config.bind_address, self.overlay_config.port),
-                handler_cls,
-            )
-        except OSError as exc:
-            self.log(
-                f"overlay http: failed to bind {self.overlay_config.bind_address}:{self.overlay_config.port} ({exc})"
-            )
-            return
-        thread = threading.Thread(target=server.serve_forever, name="pulse-overlay-http", daemon=True)
-        self._overlay_http_server = server
-        self._overlay_http_thread = thread
-        thread.start()
-        self.log(
-            f"overlay http: serving on http://{self.overlay_config.bind_address}:{self.overlay_config.port}/overlay"
-        )
-
-    def stop_overlay_server(self) -> None:
-        server = self._overlay_http_server
-        if not server:
-            return
-        self.log("overlay http: shutting down")
-        server.shutdown()
-        server.server_close()
-        if self._overlay_http_thread:
-            self._overlay_http_thread.join(timeout=2)
-        self._overlay_http_server = None
-        self._overlay_http_thread = None
-
-    def _build_overlay_http_handler(self):
-        listener = self
-
-        class OverlayRequestHandler(BaseHTTPRequestHandler):
-            def log_message(self, _format, *_args):  # noqa: D401 - suppress default logging
-                return
-
-            def _set_common_headers(self) -> None:
-                origin = self.headers.get("Origin")
-                allowed_origin = listener._allowed_overlay_origin(origin)
-                if allowed_origin:
-                    self.send_header("Access-Control-Allow-Origin", allowed_origin)
-                    if allowed_origin != "*":
-                        self.send_header("Vary", "Origin")
-                self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, POST")
-                self.send_header("Access-Control-Allow-Headers", "Accept, Content-Type")
-                self.send_header("Cache-Control", "no-store, max-age=0")
-
-            def do_OPTIONS(self) -> None:  # noqa: N802
-                if not listener.overlay_state:
-                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Overlay disabled")
-                    return
-                self.send_response(HTTPStatus.NO_CONTENT)
-                self._set_common_headers()
-                self.end_headers()
-
-            def do_HEAD(self) -> None:  # noqa: N802
-                self._serve_overlay(include_body=False)
-
-            def do_GET(self) -> None:  # noqa: N802
-                self._serve_overlay(include_body=True)
-
-            def do_POST(self) -> None:  # noqa: N802
-                path = self.path.split("?", 1)[0]
-                if path == "/overlay/stop":
-                    self._handle_stop_command()
-                elif path == "/overlay/info-card":
-                    self._handle_info_card_command()
-                else:
-                    self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
-
-            def _handle_stop_command(self) -> None:
-                try:
-                    content_length = int(self.headers.get("Content-Length", 0))
-                    if content_length == 0:
-                        self.send_error(HTTPStatus.BAD_REQUEST, "Empty body")
-                        return
-                    body = self.rfile.read(content_length)
-                    data = json.loads(body.decode("utf-8"))
-                    action = data.get("action")
-                    event_id = data.get("event_id")
-                    if action != "stop" or not event_id:
-                        self.send_error(HTTPStatus.BAD_REQUEST, "Invalid request")
-                        return
-                    # Publish stop command to MQTT
-                    command_topic = listener.assistant_topics.command
-                    payload = json.dumps({"action": "stop", "event_id": event_id})
-                    listener._safe_publish(None, command_topic, payload, qos=1, retain=False)
-                    self.send_response(HTTPStatus.NO_CONTENT)
-                    self._set_common_headers()
-                    self.end_headers()
-                except (json.JSONDecodeError, ValueError, KeyError) as exc:
-                    listener.log(f"overlay stop: invalid request: {exc}")
-                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
-                except Exception as exc:  # pylint: disable=broad-except
-                    listener.log(f"overlay stop: error: {exc}")
-                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Server error")
-
-            def _handle_info_card_command(self) -> None:
-                if not listener.overlay_state:
-                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Overlay disabled")
-                    return
-                try:
-                    content_length = int(self.headers.get("Content-Length", 0))
-                    if content_length <= 0:
-                        self.send_error(HTTPStatus.BAD_REQUEST, "Empty body")
-                        return
-                    body = self.rfile.read(content_length)
-                    data = json.loads(body.decode("utf-8"))
-                    action = (data.get("action") or "").strip().lower()
-                    if action == "clear":
-                        change = listener.overlay_state.update_info_card(None)
-                        listener._handle_overlay_change(change)
-                    elif action == "delete_alarm":
-                        event_id = data.get("event_id")
-                        if not event_id:
-                            self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
-                            return
-                        payload = json.dumps({"action": "delete_alarm", "event_id": event_id})
-                        listener._safe_publish(None, listener.assistant_topics.command, payload, qos=1, retain=False)
-                    else:
-                        self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
-                        return
-                    self.send_response(HTTPStatus.NO_CONTENT)
-                    self._set_common_headers()
-                    self.end_headers()
-                except (json.JSONDecodeError, ValueError) as exc:
-                    listener.log(f"overlay info card: invalid request: {exc}")
-                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
-                except Exception as exc:  # pylint: disable=broad-except
-                    listener.log(f"overlay info card: error: {exc}")
-                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Server error")
-
-            def _serve_overlay(self, *, include_body: bool) -> None:
-                state = listener.overlay_state
-                theme = listener._overlay_theme
-                if not state or not theme:
-                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Overlay disabled")
-                    return
-                path = self.path.split("?", 1)[0]
-                if path not in {"/overlay", "/overlay/"}:
-                    self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
-                    return
-                snapshot = state.snapshot()
-                body = render_overlay_html(
-                    snapshot,
-                    theme,
-                    clock_hour12=not listener.overlay_config.clock_24h,
-                    stop_endpoint=listener._overlay_stop_endpoint,
-                    info_endpoint=listener._overlay_info_endpoint,
-                ).encode("utf-8")
-                self.send_response(HTTPStatus.OK)
-                self._set_common_headers()
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                if include_body:
-                    self.wfile.write(body)
-
-        return OverlayRequestHandler
-
-    def _allowed_overlay_origin(self, origin: str | None) -> str | None:
-        allowed = self.overlay_config.allowed_origins
-        if not allowed or allowed == ("*",):
-            return "*"
-        if origin and origin in allowed:
-            return origin
-        return None
 
     @staticmethod
     def _format_now_playing(payload: dict[str, Any] | None) -> str:
@@ -1410,7 +1261,8 @@ class KioskMqttListener:
         self.start_telemetry()
         if self.overlay_state:
             self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
-            self._start_overlay_server()
+            if self._overlay_http:
+                self._overlay_http.start()
 
     def on_message(self, _client, _userdata, msg):
         if msg.topic == self.config.topics.home:
