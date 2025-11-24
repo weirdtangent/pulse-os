@@ -1288,7 +1288,10 @@ class PulseAssistant:
             dt = None
         if dt:
             dt = dt.astimezone()
-            time_str = dt.strftime("%I:%M %p").lstrip("0")
+            time_str = dt.strftime("%-I:%M %p")
+            if dt.minute == 0:
+                # Drop ":00" for cleaner TTS output on o'clock times.
+                time_str = dt.strftime("%-I %p")
             day = dt.strftime("%A")
             base = f"Your next alarm is set for {time_str} on {day}"
         else:
