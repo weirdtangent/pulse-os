@@ -30,15 +30,18 @@ body {
   box-sizing: border-box;
   color: var(--overlay-text-color);
   background: transparent !important;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .overlay-notification-bar {
   display: flex;
   gap: 0.6rem;
   align-items: center;
-  margin-bottom: 1rem;
   font-size: 0.95rem;
   min-height: 2.4rem;
+  flex-shrink: 0;
 }
 
 .overlay-notification-bar--empty {
@@ -66,7 +69,9 @@ body {
     "bottom-left bottom-center bottom-right";
   gap: 2vh;
   width: 100%;
-  height: 100%;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .overlay-info-card {
@@ -391,11 +396,6 @@ body {
   padding: 3vh 2vw;
 }
 
-.overlay-card--timer .overlay-card__title {
-  font-size: clamp(1.2rem, 3vw, 2.1rem);
-  margin-bottom: 0;
-}
-
 .overlay-card--timer .overlay-timer__remaining {
   font-size: clamp(3rem, 12vw, 7rem);
   font-weight: 700;
@@ -486,10 +486,6 @@ body {
   .overlay-card__actions--split .overlay-button--primary {
     flex: 1.25;
   }
-}
-
-.overlay-card--ringing .overlay-card__title {
-  font-size: clamp(1.5rem, 4vw, 3rem);
 }
 
 .overlay-card__body--ringing {
