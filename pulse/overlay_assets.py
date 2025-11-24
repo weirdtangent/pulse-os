@@ -398,6 +398,10 @@ body {
   gap: 0.4rem;
 }
 
+.overlay-reminder__actions .overlay-button {
+  margin-top: 0;
+}
+
 .overlay-card--timer {
   display: flex;
   flex-direction: column;
