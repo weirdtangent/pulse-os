@@ -57,6 +57,18 @@ body {
   border-radius: 999px;
   background: var(--overlay-ambient-bg);
   backdrop-filter: blur(12px);
+  cursor: default;
+  user-select: none;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.overlay-badge[role="button"] {
+  cursor: pointer;
+}
+
+.overlay-badge[role="button"]:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
 }
 
 .overlay-grid {
@@ -622,6 +634,25 @@ OVERLAY_JS = """
       }).catch(() => {
         closeCardButton.disabled = false;
       });
+      return;
+    }
+
+    const badgeButton = e.target.closest('[data-badge-action]');
+    if (badgeButton) {
+      const action = badgeButton.dataset.badgeAction;
+      if (action === 'show_alarms') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_alarms' })
+        });
+      } else if (action === 'show_reminders') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_reminders' })
+        });
+      }
       return;
     }
 

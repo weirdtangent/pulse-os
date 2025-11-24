@@ -1013,12 +1013,24 @@ def _format_info_text(text: str) -> str:
 def _render_badge(icon_key: str, label: str) -> str:
     icon = ICON_MAP.get(icon_key, "&#9679;")
     safe_label = html_escape(label)
-    return (
-        f'<span class="overlay-badge" aria-label="{safe_label}">'
+    interactive = icon_key in {"alarm", "alarm_ringing", "reminder", "reminder_active"}
+    action = None
+    if icon_key.startswith("alarm"):
+        action = "show_alarms"
+    elif icon_key.startswith("reminder"):
+        action = "show_reminders"
+    attrs = ['class="overlay-badge"', f'aria-label="{safe_label}"']
+    if interactive and action:
+        attrs.append('role="button"')
+        attrs.append('tabindex="0"')
+        attrs.append(f'data-badge-action="{action}"')
+    badge_html = (
+        f"<span {' '.join(attrs)}>"
         f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
         f"<span>{safe_label}</span>"
         "</span>"
     )
+    return badge_html
 
 
 def _extract_active_timers(snapshot: OverlaySnapshot, limit: int = 4) -> list[dict[str, float | str]]:

@@ -214,6 +214,14 @@ class OverlayHttpServer:
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
                         return
                     outer._on_delete_reminder(str(event_id))
+                elif action == "show_alarms":
+                    change = outer.state.update_info_card({"type": "alarms"})
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "show_reminders":
+                    change = outer.state.update_info_card({"type": "reminders"})
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return
