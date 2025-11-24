@@ -177,7 +177,12 @@ class OverlayStateManager:
             if timer_signature != self._signatures["timers"]:
                 self._timers = tuple(copy.deepcopy(item) for item in timers)
                 self._signatures["timers"] = timer_signature
-                new_positions = _compute_timer_positions(self._timers)
+                reserved_slots = 0
+                if self._active_timer:
+                    reserved_slots += 1
+                if self._active_alarm:
+                    reserved_slots += 1
+                new_positions = _compute_timer_positions(self._timers, reserved_slots=reserved_slots)
                 self._refresh_timer_positions(new_positions)
                 changed = True
             if alarm_signature != self._signatures["alarms"]:
@@ -1046,7 +1051,11 @@ def _extract_event_id(payload: dict[str, Any] | None) -> str | None:
     return str(event_id)
 
 
-def _compute_timer_positions(timers: Sequence[dict[str, Any]]) -> dict[str, str]:
+def _compute_timer_positions(
+    timers: Sequence[dict[str, Any]],
+    *,
+    reserved_slots: int = 0,
+) -> dict[str, str]:
     now = time.time()
     entries: list[tuple[str, float]] = []
     for item in timers:
@@ -1063,7 +1072,8 @@ def _compute_timer_positions(timers: Sequence[dict[str, Any]]) -> dict[str, str]
     if not entries:
         return {}
     entries.sort(key=lambda entry: entry[1])
-    count = min(len(entries), max(TIMER_POSITION_MAP))
+    total_slots = len(entries) + max(0, reserved_slots)
+    count = min(max(total_slots, len(entries)), max(TIMER_POSITION_MAP))
     positions = TIMER_POSITION_MAP.get(count, TIMER_POSITION_MAP[max(TIMER_POSITION_MAP)])
     mapping: dict[str, str] = {}
     for idx, (event_id, _) in enumerate(entries[: len(positions)]):
