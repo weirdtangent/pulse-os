@@ -1,3 +1,10 @@
+# [0.55.0](https://github.com/weirdtangent/pulse-os/compare/v0.54.9...v0.55.0) (2025-11-24)
+
+
+### Features
+
+* show all alarms in list and allow deletion ([bb56d88](https://github.com/weirdtangent/pulse-os/commit/bb56d88693f9b734c2bdc06e5b744a1e1560d97b))
+
 ## [0.54.9](https://github.com/weirdtangent/pulse-os/compare/v0.54.8...v0.54.9) (2025-11-24)
 
 ## [0.54.8](https://github.com/weirdtangent/pulse-os/compare/v0.54.7...v0.54.8) (2025-11-24)
