@@ -1,3 +1,10 @@
+## [0.58.1](https://github.com/weirdtangent/pulse-os/compare/v0.58.0...v0.58.1) (2025-11-24)
+
+
+### Bug Fixes
+
+* fix snooze button in overlay ([82d94e7](https://github.com/weirdtangent/pulse-os/commit/82d94e76187817d95364e8517abe3bcbdb916a01))
+
 # [0.58.0](https://github.com/weirdtangent/pulse-os/compare/v0.57.0...v0.58.0) (2025-11-24)
 
 
