@@ -482,7 +482,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 2.4rem;
+  min-height: 2.4rem;
   padding: 0 1.2rem;
 }
 
