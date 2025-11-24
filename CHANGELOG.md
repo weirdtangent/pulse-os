@@ -1,3 +1,10 @@
+## [0.54.5](https://github.com/weirdtangent/pulse-os/compare/v0.54.4...v0.54.5) (2025-11-24)
+
+
+### Bug Fixes
+
+* hitting OK on timer or alarm needs to hit localhost ([c822956](https://github.com/weirdtangent/pulse-os/commit/c8229566ec30222a9b169a89ff38b53ba45a6fc2))
+
 ## [0.54.4](https://github.com/weirdtangent/pulse-os/compare/v0.54.3...v0.54.4) (2025-11-24)
 
 
