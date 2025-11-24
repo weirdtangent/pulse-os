@@ -1,3 +1,10 @@
+## [0.55.3](https://github.com/weirdtangent/pulse-os/compare/v0.55.2...v0.55.3) (2025-11-24)
+
+
+### Bug Fixes
+
+* import problems after refactor ([70019fa](https://github.com/weirdtangent/pulse-os/commit/70019faf1b1f0dd11fc01670c81a0f340a41a39f))
+
 ## [0.55.2](https://github.com/weirdtangent/pulse-os/compare/v0.55.1...v0.55.2) (2025-11-24)
 
 ## [0.55.1](https://github.com/weirdtangent/pulse-os/compare/v0.55.0...v0.55.1) (2025-11-24)
