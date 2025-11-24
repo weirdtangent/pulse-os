@@ -1,3 +1,10 @@
+## [0.54.4](https://github.com/weirdtangent/pulse-os/compare/v0.54.3...v0.54.4) (2025-11-24)
+
+
+### Bug Fixes
+
+* simplify timer start response ([aeae15d](https://github.com/weirdtangent/pulse-os/commit/aeae15d1eb0f63a3d067109fd795e377833a513a))
+
 ## [0.54.3](https://github.com/weirdtangent/pulse-os/compare/v0.54.2...v0.54.3) (2025-11-24)
 
 
