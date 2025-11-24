@@ -479,6 +479,11 @@ body {
 
 .overlay-reminder__actions .overlay-button {
   margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.4rem;
+  padding: 0 1.2rem;
 }
 
 .overlay-card__actions {
