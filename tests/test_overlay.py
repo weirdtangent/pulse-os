@@ -33,6 +33,7 @@ class OverlayRenderTests(unittest.TestCase):
             "active_alarm": None,
             "active_timer": None,
             "notifications": (),
+            "timer_positions": {},
             "info_card": None,
             "last_reason": "test",
             "generated_at": 0.0,
@@ -110,6 +111,19 @@ class OverlayRenderTests(unittest.TestCase):
         cleared = manager.update_info_card(None)
         self.assertTrue(cleared.changed)
         self.assertIsNone(manager.snapshot().info_card)
+
+    def test_active_timer_card_uses_previous_position(self) -> None:
+        snapshot = self._snapshot(
+            timers=(),
+            timer_positions={"tea": "top-center"},
+            active_timer={"state": "ringing", "event": {"id": "tea", "label": "Tea timer"}},
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        expected = (
+            'cell-top-center" data-cell="top-center"><div class="overlay-card '
+            "overlay-card--alert overlay-card--ringing"
+        )
+        self.assertIn(expected, html)
 
 
 if __name__ == "__main__":

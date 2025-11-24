@@ -35,6 +35,7 @@ class OverlaySnapshot:
     active_alarm: dict[str, Any] | None
     active_timer: dict[str, Any] | None
     notifications: tuple[dict[str, Any], ...]
+    timer_positions: dict[str, str]
     info_card: dict[str, Any] | None
     last_reason: str
     generated_at: float
@@ -118,6 +119,7 @@ class OverlayStateManager:
         self._schedule_snapshot: dict[str, Any] | None = None
         self._now_playing = ""
         self._info_card: dict[str, Any] | None = None
+        self._timer_position_history: dict[str, str] = {}
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -164,6 +166,8 @@ class OverlayStateManager:
             if timer_signature != self._signatures["timers"]:
                 self._timers = tuple(copy.deepcopy(item) for item in timers)
                 self._signatures["timers"] = timer_signature
+                new_positions = _compute_timer_positions(self._timers)
+                self._refresh_timer_positions(new_positions)
                 changed = True
             if alarm_signature != self._signatures["alarms"]:
                 self._alarms = tuple(copy.deepcopy(item) for item in alarms)
@@ -181,6 +185,7 @@ class OverlayStateManager:
         normalized = _normalize_active_payload(payload)
         signature = _signature(normalized)
         field = "active_alarm" if event_type == "alarm" else "active_timer"
+        previous_timer = self._active_timer if event_type == "timer" else None
         with self._lock:
             if signature == self._signatures[field]:
                 return OverlayChange(False, self._version, field)
@@ -188,6 +193,10 @@ class OverlayStateManager:
                 self._active_alarm = normalized
             else:
                 self._active_timer = normalized
+                if normalized is None and previous_timer:
+                    prev_id = _extract_event_id(previous_timer)
+                    if prev_id:
+                        self._timer_position_history.pop(prev_id, None)
             self._signatures[field] = signature
             return self._bump(field)
 
@@ -200,6 +209,14 @@ class OverlayStateManager:
             self._notifications = normalized
             self._signatures["notifications"] = signature
             return self._bump("notifications")
+
+    def _refresh_timer_positions(self, new_positions: dict[str, str]) -> None:
+        active_timer_id = _extract_event_id(self._active_timer)
+        refreshed: dict[str, str] = {}
+        if active_timer_id and active_timer_id in self._timer_position_history:
+            refreshed[active_timer_id] = self._timer_position_history[active_timer_id]
+        refreshed.update(new_positions)
+        self._timer_position_history = refreshed
 
     def update_info_card(self, card: dict[str, Any] | None) -> OverlayChange:
         normalized: dict[str, Any] | None = None
@@ -235,6 +252,7 @@ class OverlayStateManager:
                 active_alarm=copy.deepcopy(self._active_alarm),
                 active_timer=copy.deepcopy(self._active_timer),
                 notifications=tuple(copy.deepcopy(item) for item in self._notifications),
+                timer_positions=copy.deepcopy(self._timer_position_history),
                 info_card=copy.deepcopy(self._info_card),
                 last_reason=self._last_reason,
                 generated_at=time.time(),
@@ -819,6 +837,7 @@ def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
 
 def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
     cards: list[tuple[str, str]] = []
+    timer_positions = snapshot.timer_positions or {}
     if snapshot.active_alarm:
         label = _event_label(snapshot.active_alarm, default="Alarm ringing")
         event_data = snapshot.active_alarm.get("event") if isinstance(snapshot.active_alarm, dict) else None
@@ -854,10 +873,12 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
                 f'<button class="overlay-button overlay-button--primary" data-stop-timer '
                 f'data-event-id="{event_id_escaped}">OK</button>'
             )
+        event_id_key = str(event_id) if event_id is not None else None
+        cell = timer_positions.get(event_id_key, "bottom-center")
         body_text = html_escape("Timer finished.")
         cards.append(
             (
-                "bottom-center",
+                cell,
                 f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
@@ -963,6 +984,43 @@ def _extract_active_timers(snapshot: OverlaySnapshot, limit: int = 4) -> list[di
         timers.append({"label": label, "target": target_ts})
     timers.sort(key=lambda entry: entry["target"])
     return timers[:limit]
+
+
+def _extract_event_id(payload: dict[str, Any] | None) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    event = payload.get("event")
+    if isinstance(event, dict) and event.get("id") is not None:
+        return str(event["id"])
+    event_id = payload.get("id")
+    if event_id is None:
+        return None
+    return str(event_id)
+
+
+def _compute_timer_positions(timers: Sequence[dict[str, Any]]) -> dict[str, str]:
+    now = time.time()
+    entries: list[tuple[str, float]] = []
+    for item in timers:
+        if not isinstance(item, dict):
+            continue
+        target_raw = item.get("next_fire") or item.get("target")
+        target_ts = _parse_timestamp(target_raw)
+        if target_ts is None or target_ts <= now:
+            continue
+        event_id = item.get("id")
+        if event_id is None:
+            continue
+        entries.append((str(event_id), target_ts))
+    if not entries:
+        return {}
+    entries.sort(key=lambda entry: entry[1])
+    count = min(len(entries), max(TIMER_POSITION_MAP))
+    positions = TIMER_POSITION_MAP.get(count, TIMER_POSITION_MAP[max(TIMER_POSITION_MAP)])
+    mapping: dict[str, str] = {}
+    for idx, (event_id, _) in enumerate(entries[: len(positions)]):
+        mapping[event_id] = positions[idx]
+    return mapping
 
 
 def _filter_upcoming_alarms(alarms: Iterable[dict[str, Any]] | None) -> list[dict[str, Any]]:
