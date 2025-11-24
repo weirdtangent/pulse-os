@@ -1,3 +1,10 @@
+## [0.54.3](https://github.com/weirdtangent/pulse-os/compare/v0.54.2...v0.54.3) (2025-11-24)
+
+
+### Bug Fixes
+
+* info card timestamp parsing ([8db2d97](https://github.com/weirdtangent/pulse-os/commit/8db2d97c246542673764189d0db8119e15649dde))
+
 ## [0.54.2](https://github.com/weirdtangent/pulse-os/compare/v0.54.1...v0.54.2) (2025-11-24)
 
 
