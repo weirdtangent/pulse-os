@@ -1,3 +1,10 @@
+## [0.58.10](https://github.com/weirdtangent/pulse-os/compare/v0.58.9...v0.58.10) (2025-11-24)
+
+
+### Bug Fixes
+
+* align buttons on reminder card ([b204386](https://github.com/weirdtangent/pulse-os/commit/b2043860e4bc4d26946641fc8293ef81e3dfdb14))
+
 ## [0.58.9](https://github.com/weirdtangent/pulse-os/compare/v0.58.8...v0.58.9) (2025-11-24)
 
 ## [0.58.8](https://github.com/weirdtangent/pulse-os/compare/v0.58.7...v0.58.8) (2025-11-24)
