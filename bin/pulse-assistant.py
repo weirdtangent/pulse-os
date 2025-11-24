@@ -508,6 +508,7 @@ class PulseAssistant:
             while follow_up_needed:
                 tracker.begin_stage("listening")
                 self._set_assist_stage("pulse", "listening", {"wake_word": wake_word, "follow_up": True})
+                await self._maybe_play_wake_sound()
                 follow_up_audio = await self._record_follow_up_phrase(timeout_seconds=5.0)
                 if not follow_up_audio:
                     break
