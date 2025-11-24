@@ -1493,6 +1493,9 @@ class PulseAssistant:
         try:
             dt = datetime.strptime(time_of_day, "%H:%M").replace(year=1900, month=1, day=1)
             time_phrase = dt.strftime("%-I:%M %p")
+            if dt.minute == 0:
+                # Many TTS voices over-articulate the ":00" segment, so drop it for o'clock times.
+                time_phrase = dt.strftime("%-I %p")
         except ValueError:
             time_phrase = time_of_day
         if days:
