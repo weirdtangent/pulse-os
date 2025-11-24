@@ -111,6 +111,11 @@ class OverlayRenderTests(unittest.TestCase):
         cleared = manager.update_info_card(None)
         self.assertTrue(cleared.changed)
         self.assertIsNone(manager.snapshot().info_card)
+        alarms_change = manager.update_info_card({"type": "alarms", "alarms": [{"id": "alarm1"}]})
+        self.assertTrue(alarms_change.changed)
+        alarm_card = manager.snapshot().info_card
+        assert alarm_card is not None
+        self.assertIn("alarms", alarm_card)
 
     def test_active_timer_card_uses_previous_position(self) -> None:
         snapshot = self._snapshot(
@@ -134,6 +139,20 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(snapshot, self.theme)
         self.assertIn('data-delete-alarm="alarm1"', html)
         self.assertIn("data-info-card-close", html)
+
+    def test_alarm_info_card_can_use_payload_data(self) -> None:
+        manager = OverlayStateManager()
+        manager.update_schedule_snapshot({"alarms": [], "timers": []})
+        manager.update_info_card(
+            {
+                "type": "alarms",
+                "title": "Alarms",
+                "alarms": [{"id": "alarm42", "label": "Test Alarm", "time": "07:30", "repeat_days": [0, 1, 2, 3, 4]}],
+            }
+        )
+        html = render_overlay_html(manager.snapshot(), self.theme, info_endpoint="/overlay/info-card")
+        self.assertIn('data-delete-alarm="alarm42"', html)
+        self.assertIn("Weekdays", html)
 
 
 if __name__ == "__main__":

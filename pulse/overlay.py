@@ -616,7 +616,11 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
 
 
 def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
-    alarms = snapshot.alarms or ()
+    payload_alarms = card.get("alarms")
+    if isinstance(payload_alarms, list) and payload_alarms:
+        alarms: Iterable[dict[str, Any]] = tuple(item for item in payload_alarms if isinstance(item, dict))
+    else:
+        alarms = snapshot.alarms or ()
     entries = _format_alarm_info_entries(alarms)
     title = str(card.get("title") or "Alarms").strip() or "Alarms"
     subtitle = card.get("text") or "Tap the red × to delete an alarm."
@@ -695,18 +699,7 @@ def _format_alarm_time_phrase(alarm: dict[str, Any]) -> str:
 
 
 def _format_alarm_days_phrase(alarm: dict[str, Any]) -> str:
-    repeat_days = alarm.get("repeat_days")
-    days: list[int] = []
-    if isinstance(repeat_days, list):
-        for item in repeat_days:
-            try:
-                days.append(int(item) % 7)
-            except (TypeError, ValueError):
-                continue
-    elif isinstance(repeat_days, str):
-        parsed = parse_day_tokens(repeat_days)
-        if parsed:
-            days.extend(parsed)
+    days = _normalize_repeat_day_indexes(alarm)
     if not days:
         return "One-time"
     normalized = sorted(set(days))
@@ -718,6 +711,36 @@ def _format_alarm_days_phrase(alarm: dict[str, Any]) -> str:
         return "Every day"
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     return ", ".join(names[idx % 7] for idx in normalized)
+
+
+def _normalize_repeat_day_indexes(alarm: dict[str, Any]) -> list[int]:
+    repeat_days = alarm.get("repeat_days")
+    normalized = _coerce_day_index_list(repeat_days)
+    if normalized:
+        return normalized
+    days_value = alarm.get("days")
+    return _coerce_day_index_list(days_value)
+
+
+def _coerce_day_index_list(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        indexes: list[int] = []
+        for item in value:
+            if isinstance(item, int):
+                indexes.append(item % 7)
+            else:
+                parsed = parse_day_tokens(str(item))
+                if parsed:
+                    indexes.extend(parsed)
+        return sorted({idx % 7 for idx in indexes})
+    if isinstance(value, str):
+        parsed = parse_day_tokens(value)
+        return parsed or []
+    if isinstance(value, (int, float)):
+        return [int(value) % 7]
+    return []
 
 
 def _format_info_text(text: str) -> str:

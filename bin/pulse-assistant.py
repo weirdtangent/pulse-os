@@ -1142,10 +1142,27 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             self._publish_info_overlay()
             return
+        alarm_payload = []
+        for alarm in alarms:
+            alarm_id = alarm.get("id")
+            if not alarm_id:
+                continue
+            alarm_payload.append(
+                {
+                    "id": alarm_id,
+                    "label": alarm.get("label") or "Alarm",
+                    "time": alarm.get("time") or alarm.get("time_of_day"),
+                    "time_of_day": alarm.get("time_of_day"),
+                    "repeat_days": alarm.get("repeat_days"),
+                    "days": alarm.get("days"),
+                    "status": alarm.get("status"),
+                    "next_fire": alarm.get("next_fire"),
+                }
+            )
         self._publish_info_overlay(
             text="Tap the red × to delete an alarm.",
             category="alarms",
-            extra={"type": "alarms", "title": "Alarms"},
+            extra={"type": "alarms", "title": "Alarms", "alarms": alarm_payload},
         )
         count = len(alarms)
         spoken = f"You have {count} alarm{'s' if count != 1 else ''}."
