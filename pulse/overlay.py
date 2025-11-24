@@ -677,9 +677,12 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
         badges.append(_render_badge("reminder", label))
     if snapshot.now_playing.strip():
         badges.append(_render_badge("music", "Now playing"))
+    classes = ["overlay-notification-bar"]
     if not badges:
-        return ""
-    return f'<div class="overlay-notification-bar">{"".join(badges)}</div>'
+        classes.append("overlay-notification-bar--empty")
+    class_attr = " ".join(classes)
+    content = "".join(badges)
+    return f'<div class="{class_attr}">{content}</div>'
 
 
 def _build_info_overlay(snapshot: OverlaySnapshot) -> str:

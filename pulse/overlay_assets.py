@@ -38,6 +38,12 @@ body {
   align-items: center;
   margin-bottom: 1rem;
   font-size: 0.95rem;
+  min-height: 2.4rem;
+}
+
+.overlay-notification-bar--empty {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .overlay-badge {
@@ -153,12 +159,12 @@ body {
 }
 
 .overlay-info-card__alarm-label {
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .overlay-info-card__alarm-meta {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   opacity: 0.8;
 }
 
