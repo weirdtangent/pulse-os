@@ -487,16 +487,22 @@ class PulseAssistant:
     def _publish_message(self, topic: str, payload: str, *, retain: bool = False) -> None:
         self.mqtt.publish(topic, payload=payload, retain=retain)
 
-    def _publish_info_overlay(self, text: str | None = None, category: str | None = None) -> None:
+    def _publish_info_overlay(
+        self, text: str | None = None, category: str | None = None, extra: dict | None = None
+    ) -> None:
         if not self._info_topic:
             return
+        payload = dict(extra or {})
         if text and text.strip():
-            payload = {
-                "state": "show",
-                "text": text.strip(),
-                "category": category or "",
-                "ts": time.time(),
-            }
+            payload.setdefault("state", "show")
+            payload.setdefault("category", category or "")
+            payload["text"] = text.strip()
+            payload.setdefault("ts", time.time())
+        elif payload:
+            payload.setdefault("state", "show")
+            payload.setdefault("ts", time.time())
+            if category:
+                payload.setdefault("category", category)
         else:
             payload = {"state": "clear"}
         self._publish_message(self._info_topic, json.dumps(payload))
@@ -1130,6 +1136,20 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", message, pipeline="pulse")
             await self._speak(message)
             return True
+        if any(
+            phrase in normalized
+            for phrase in (
+                "show me my alarms",
+                "show my alarms",
+                "show alarms",
+                "list my alarms",
+                "list alarms",
+                "what alarms do i have",
+                "what are my alarms",
+            )
+        ):
+            await self._show_alarm_list()
+            return True
         if "cancel all timers" in normalized:
             count = await self.schedule_service.cancel_all_timers()
             if count > 0:
@@ -1162,6 +1182,29 @@ class PulseAssistant:
                 await self._speak(spoken)
                 return True
         return False
+
+    async def _show_alarm_list(self) -> None:
+        if not self.schedule_service:
+            spoken = "I can't access your alarms right now."
+            await self._speak(spoken)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            return
+        alarms = self.schedule_service.list_events("alarm")
+        if not alarms:
+            spoken = "You do not have any alarms scheduled."
+            await self._speak(spoken)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            self._publish_info_overlay()
+            return
+        self._publish_info_overlay(
+            text="Tap the red × to delete an alarm.",
+            category="alarms",
+            extra={"type": "alarms", "title": "Alarms"},
+        )
+        count = len(alarms)
+        spoken = f"You have {count} alarm{'s' if count != 1 else ''}."
+        await self._speak("Here are your alarms.")
+        self._log_assistant_response("shortcut", spoken, pipeline="pulse")
 
     async def _maybe_handle_information_query(
         self,

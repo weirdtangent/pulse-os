@@ -500,12 +500,14 @@ class KioskMqttListener:
         self._overlay_http_server: ThreadingHTTPServer | None = None
         self._overlay_http_thread: threading.Thread | None = None
         self._overlay_topic_handlers: dict[str, Any] = {}
-        stop_host = self.overlay_config.bind_address
-        if stop_host in {"0.0.0.0", "::"}:
-            stop_host = "localhost"
-        if ":" in stop_host and not stop_host.startswith("["):
-            stop_host = f"[{stop_host}]"
-        self._overlay_stop_endpoint = f"http://{stop_host}:{self.overlay_config.port}/overlay/stop"
+        overlay_host = self.overlay_config.bind_address
+        if overlay_host in {"0.0.0.0", "::"}:
+            overlay_host = "localhost"
+        if ":" in overlay_host and not overlay_host.startswith("["):
+            overlay_host = f"[{overlay_host}]"
+        base_overlay_url = f"http://{overlay_host}:{self.overlay_config.port}"
+        self._overlay_stop_endpoint = f"{base_overlay_url}/overlay/stop"
+        self._overlay_info_endpoint = f"{base_overlay_url}/overlay/info-card"
 
         if self.overlay_config.enabled:
             self.overlay_state = OverlayStateManager(self.overlay_config.clocks)
@@ -824,6 +826,8 @@ class KioskMqttListener:
                 path = self.path.split("?", 1)[0]
                 if path == "/overlay/stop":
                     self._handle_stop_command()
+                elif path == "/overlay/info-card":
+                    self._handle_info_card_command()
                 else:
                     self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
 
@@ -854,6 +858,41 @@ class KioskMqttListener:
                     listener.log(f"overlay stop: error: {exc}")
                     self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Server error")
 
+            def _handle_info_card_command(self) -> None:
+                if not listener.overlay_state:
+                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Overlay disabled")
+                    return
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    if content_length <= 0:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Empty body")
+                        return
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body.decode("utf-8"))
+                    action = (data.get("action") or "").strip().lower()
+                    if action == "clear":
+                        change = listener.overlay_state.update_info_card(None)
+                        listener._handle_overlay_change(change)
+                    elif action == "delete_alarm":
+                        event_id = data.get("event_id")
+                        if not event_id:
+                            self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
+                            return
+                        payload = json.dumps({"action": "delete_alarm", "event_id": event_id})
+                        listener._safe_publish(None, listener.assistant_topics.command, payload, qos=1, retain=False)
+                    else:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
+                        return
+                    self.send_response(HTTPStatus.NO_CONTENT)
+                    self._set_common_headers()
+                    self.end_headers()
+                except (json.JSONDecodeError, ValueError) as exc:
+                    listener.log(f"overlay info card: invalid request: {exc}")
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
+                except Exception as exc:  # pylint: disable=broad-except
+                    listener.log(f"overlay info card: error: {exc}")
+                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Server error")
+
             def _serve_overlay(self, *, include_body: bool) -> None:
                 state = listener.overlay_state
                 theme = listener._overlay_theme
@@ -870,6 +909,7 @@ class KioskMqttListener:
                     theme,
                     clock_hour12=not listener.overlay_config.clock_24h,
                     stop_endpoint=listener._overlay_stop_endpoint,
+                    info_endpoint=listener._overlay_info_endpoint,
                 ).encode("utf-8")
                 self.send_response(HTTPStatus.OK)
                 self._set_common_headers()

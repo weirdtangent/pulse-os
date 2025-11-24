@@ -13,6 +13,8 @@ from html import escape as html_escape
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from pulse.assistant.schedule_service import parse_day_tokens
+
 
 @dataclass(frozen=True)
 class ClockConfig:
@@ -222,17 +224,29 @@ class OverlayStateManager:
         normalized: dict[str, Any] | None = None
         if isinstance(card, dict):
             text = str(card.get("text") or "").strip()
+            category = str(card.get("category") or "").strip()
+            title = str(card.get("title") or "").strip()
+            card_type = str(card.get("type") or "").strip()
+            state = str(card.get("state") or "").strip()
+            normalized = {}
             if text:
-                normalized = {
-                    "text": text,
-                    "category": str(card.get("category") or ""),
-                }
-                ts_value = card.get("ts")
-                if ts_value is not None:
-                    try:
-                        normalized["ts"] = float(ts_value)
-                    except (TypeError, ValueError):
-                        pass
+                normalized["text"] = text
+            if category:
+                normalized["category"] = category
+            if title:
+                normalized["title"] = title
+            if card_type:
+                normalized["type"] = card_type.lower()
+            if state:
+                normalized["state"] = state.lower()
+            ts_value = card.get("ts")
+            if ts_value is not None:
+                try:
+                    normalized["ts"] = float(ts_value)
+                except (TypeError, ValueError):
+                    pass
+            if not normalized:
+                normalized = None
         signature = _signature(normalized)
         with self._lock:
             if signature == self._signatures["info_card"]:
@@ -358,6 +372,7 @@ OVERLAY_JS = """
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const clockNodes = root.querySelectorAll('[data-clock]');
   const timerNodes = root.querySelectorAll('[data-timer]');
+  const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
   const sizeClassMap = [
     { className: 'overlay-timer__remaining--xlong', active: (len) => len > 8 },
     { className: 'overlay-timer__remaining--long', active: (len) => len > 5 && len <= 8 },
@@ -448,6 +463,39 @@ OVERLAY_JS = """
 
   // Handle stop timer button clicks
   root.addEventListener('click', (e) => {
+    const closeCardButton = e.target.closest('[data-info-card-close]');
+    if (closeCardButton) {
+      closeCardButton.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear' })
+      }).catch(() => {
+        closeCardButton.disabled = false;
+      });
+      return;
+    }
+
+    const deleteAlarmButton = e.target.closest('[data-delete-alarm]');
+    if (deleteAlarmButton) {
+      const alarmId = deleteAlarmButton.dataset.deleteAlarm;
+      if (!alarmId) {
+        return;
+      }
+      const previous = deleteAlarmButton.textContent;
+      deleteAlarmButton.disabled = true;
+      deleteAlarmButton.textContent = '…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_alarm', event_id: alarmId })
+      }).catch(() => {
+        deleteAlarmButton.disabled = false;
+        deleteAlarmButton.textContent = previous;
+      });
+      return;
+    }
+
     const button = e.target.closest('[data-stop-timer]');
     if (!button) {
       return;
@@ -456,17 +504,13 @@ OVERLAY_JS = """
     if (!eventId) {
       return;
     }
-    // Disable button to prevent double-clicks
     button.disabled = true;
     button.textContent = 'Stopping...';
-
-    // POST to overlay stop endpoint
     fetch(stopEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop', event_id: eventId })
     }).catch(() => {
-      // Silently fail - overlay will refresh via MQTT anyway
       button.disabled = false;
       button.textContent = 'OK';
     });
@@ -482,6 +526,7 @@ def render_overlay_html(
     *,
     clock_hour12: bool = True,
     stop_endpoint: str | None = None,
+    info_endpoint: str | None = None,
 ) -> str:
     """Render the overlay snapshot into an HTML document."""
 
@@ -498,10 +543,12 @@ def render_overlay_html(
         cells[now_playing_card[0]].append(now_playing_card[1])
 
     info_card_markup = ""
-    if snapshot.info_card and snapshot.info_card.get("text"):
-        for cell in INFO_CARD_BLOCKED_CELLS:
-            cells[cell] = []
-        info_card_markup = _build_info_overlay(snapshot)
+    if snapshot.info_card:
+        candidate = _build_info_overlay(snapshot)
+        if candidate:
+            for cell in INFO_CARD_BLOCKED_CELLS:
+                cells[cell] = []
+            info_card_markup = candidate
 
     grid_markup = "".join(
         f'<div class="overlay-cell cell-{cell}" data-cell="{cell}">{"".join(cards)}</div>'
@@ -514,14 +561,17 @@ def render_overlay_html(
     notification_html = _build_notification_bar(snapshot) if theme.show_notification_bar else ""
 
     stop_endpoint = stop_endpoint or "/overlay/stop"
+    info_endpoint = info_endpoint or "/overlay/info-card"
     stop_endpoint_attr = html_escape(stop_endpoint, quote=True)
+    info_endpoint_attr = html_escape(info_endpoint, quote=True)
     root_attrs = (
         f'id="pulse-overlay-root" '
         f'class="overlay-root" '
         f'data-version="{snapshot.version}" '
         f'data-generated-at="{int(snapshot.generated_at * 1000)}" '
         f'data-clock-hour12="{"true" if clock_hour12 else "false"}" '
-        f'data-stop-endpoint="{stop_endpoint_attr}"'
+        f'data-stop-endpoint="{stop_endpoint_attr}" '
+        f'data-info-endpoint="{info_endpoint_attr}"'
     )
 
     html_document = f"""<!DOCTYPE html>
@@ -606,6 +656,85 @@ body {{
   padding-right: 1rem;
   scrollbar-width: thin;
   scrollbar-color: {theme.accent_color} transparent;
+}}
+.overlay-info-card__header {{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}}
+.overlay-info-card__subtitle {{
+  font-size: 0.95rem;
+  opacity: 0.85;
+}}
+.overlay-info-card__close {{
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: inherit;
+  border-radius: 999px;
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: 1.2rem;
+  cursor: pointer;
+}}
+.overlay-info-card__close:hover {{
+  background: rgba(255, 255, 255, 0.15);
+}}
+.overlay-info-card__body {{
+  width: 100%;
+}}
+.overlay-info-card__alarm-list {{
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
+}}
+.overlay-info-card__alarm {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.2rem;
+}}
+.overlay-info-card__alarm-body {{
+  flex: 1 1 auto;
+}}
+.overlay-info-card__alarm-label {{
+  font-size: 1.2rem;
+  font-weight: 600;
+}}
+.overlay-info-card__alarm-meta {{
+  font-size: 0.95rem;
+  opacity: 0.8;
+}}
+.overlay-info-card__alarm-status {{
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}}
+.overlay-info-card__alarm-delete {{
+  border: none;
+  background: rgba(255, 59, 48, 0.85);
+  color: #fff;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.6rem;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}}
+.overlay-info-card__alarm-delete:hover {{
+  background: rgba(255, 82, 69, 0.95);
+}}
+.overlay-info-card__empty {{
+  margin-top: 1rem;
+  font-size: 1.1rem;
+  opacity: 0.85;
 }}
 .overlay-info-card__text strong {{
   font-weight: 600;
@@ -928,19 +1057,131 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
 
 def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
     card = snapshot.info_card or {}
+    card_type = str(card.get("type") or "").lower()
+    if card_type == "alarms":
+        return _build_alarm_info_overlay(snapshot, card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
+    title = str(card.get("title") or "").strip()
     category = str(card.get("category") or "").strip()
-    label = category.title() or "Assistant"
+    label = title or category.title() or "Assistant"
     safe_label = html_escape(label)
     safe_text = _format_info_text(text)
     return f"""
 <div class="overlay-card overlay-info-card">
-  <div class="overlay-info-card__title">{safe_label}</div>
+  <div class="overlay-info-card__header">
+    <div class="overlay-info-card__title">{safe_label}</div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close info card">&times;</button>
+  </div>
   <div class="overlay-info-card__text">{safe_text}</div>
 </div>
 """.strip()
+
+
+def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
+    alarms = snapshot.alarms or ()
+    entries = _format_alarm_info_entries(alarms)
+    title = str(card.get("title") or "Alarms").strip() or "Alarms"
+    subtitle = card.get("text") or "Tap the red × to delete an alarm."
+    safe_title = html_escape(title)
+    safe_subtitle = html_escape(subtitle)
+    if not entries:
+        body = '<div class="overlay-info-card__empty">No alarms scheduled.</div>'
+    else:
+        body_rows = []
+        for entry in entries:
+            label = html_escape(entry["label"])
+            meta = html_escape(entry["meta"])
+            delete_id = html_escape(entry["id"], quote=True)
+            status = entry.get("status")
+            status_html = '<span class="overlay-info-card__alarm-status">Active</span>' if status == "active" else ""
+            body_rows.append(
+                f"""
+  <div class="overlay-info-card__alarm">
+    <div class="overlay-info-card__alarm-body">
+      <div class="overlay-info-card__alarm-label">{label}</div>
+      <div class="overlay-info-card__alarm-meta">{meta}{status_html}</div>
+    </div>
+    <button class="overlay-info-card__alarm-delete"
+      data-delete-alarm="{delete_id}"
+      aria-label="Delete {label}">×</button>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--alarms">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      <div class="overlay-info-card__subtitle">{safe_subtitle}</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close alarms list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _format_alarm_info_entries(alarms: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for alarm in alarms:
+        if not isinstance(alarm, dict):
+            continue
+        event_id = alarm.get("id")
+        if not event_id:
+            continue
+        label = str(alarm.get("label") or "Alarm")
+        time_phrase = _format_alarm_time_phrase(alarm)
+        days_phrase = _format_alarm_days_phrase(alarm)
+        meta = f"{time_phrase} · {days_phrase}" if days_phrase else time_phrase
+        status = str(alarm.get("status") or "").lower()
+        entries.append({"id": str(event_id), "label": label, "meta": meta, "status": status})
+    return entries
+
+
+def _format_alarm_time_phrase(alarm: dict[str, Any]) -> str:
+    time_text = str(alarm.get("time_of_day") or alarm.get("time") or "").strip()
+    if time_text:
+        try:
+            dt = datetime.strptime(time_text, "%H:%M").replace(year=1900, month=1, day=1)
+            return dt.strftime("%-I:%M %p")
+        except ValueError:
+            pass
+    next_fire = _parse_timestamp(alarm.get("next_fire"))
+    if next_fire:
+        dt = datetime.fromtimestamp(next_fire)
+        return dt.strftime("%-I:%M %p")
+    return "—"
+
+
+def _format_alarm_days_phrase(alarm: dict[str, Any]) -> str:
+    repeat_days = alarm.get("repeat_days")
+    days: list[int] = []
+    if isinstance(repeat_days, list):
+        for item in repeat_days:
+            try:
+                days.append(int(item) % 7)
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(repeat_days, str):
+        parsed = parse_day_tokens(repeat_days)
+        if parsed:
+            days.extend(parsed)
+    if not days:
+        return "One-time"
+    normalized = sorted(set(days))
+    if normalized == [0, 1, 2, 3, 4]:
+        return "Weekdays"
+    if normalized == [5, 6]:
+        return "Weekends"
+    if normalized == list(range(7)):
+        return "Every day"
+    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    return ", ".join(names[idx % 7] for idx in normalized)
 
 
 def _format_info_text(text: str) -> str:

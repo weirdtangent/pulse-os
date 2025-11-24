@@ -125,6 +125,16 @@ class OverlayRenderTests(unittest.TestCase):
         )
         self.assertIn(expected, html)
 
+    def test_alarm_info_card_renders_delete_buttons(self) -> None:
+        alarms = (
+            {"id": "alarm1", "label": "Wake Up", "time_of_day": "08:00", "repeat_days": [0, 1, 2, 3, 4]},
+            {"id": "alarm2", "label": "Weekend", "time_of_day": "09:30", "repeat_days": [5, 6]},
+        )
+        snapshot = self._snapshot(alarms=alarms, info_card={"type": "alarms", "title": "Alarms"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn('data-delete-alarm="alarm1"', html)
+        self.assertIn("data-info-card-close", html)
+
 
 if __name__ == "__main__":
     unittest.main()
