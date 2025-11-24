@@ -1,3 +1,10 @@
+## [0.54.2](https://github.com/weirdtangent/pulse-os/compare/v0.54.1...v0.54.2) (2025-11-24)
+
+
+### Bug Fixes
+
+* improve timer and alarm overlay styles ([d61355c](https://github.com/weirdtangent/pulse-os/commit/d61355cf1e33c8ca63479b5331cdc5494cda2698))
+
 ## [0.54.1](https://github.com/weirdtangent/pulse-os/compare/v0.54.0...v0.54.1) (2025-11-23)
 
 # [0.54.0](https://github.com/weirdtangent/pulse-os/compare/v0.53.1...v0.54.0) (2025-11-23)
