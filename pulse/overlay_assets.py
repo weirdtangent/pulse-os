@@ -206,6 +206,9 @@ body {
   font-size: 1.25rem;
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .overlay-info-card__alarm-toggle {
