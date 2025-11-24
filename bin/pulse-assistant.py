@@ -1112,7 +1112,7 @@ class PulseAssistant:
             duration, label = timer_start
             await self.schedule_service.create_timer(duration_seconds=duration, label=label)
             phrase = self._describe_duration(duration)
-            spoken = f"Starting a {phrase} timer."
+            spoken = f"Starting a timer for {phrase}."
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
