@@ -1,3 +1,15 @@
+# [0.56.0](https://github.com/weirdtangent/pulse-os/compare/v0.55.5...v0.56.0) (2025-11-24)
+
+
+### Bug Fixes
+
+* play wake sound when follow-up is needed ([85b7c1a](https://github.com/weirdtangent/pulse-os/commit/85b7c1a8b126323991afda512eb8831a671248a9))
+
+
+### Features
+
+* improve time of day phrase generation ([35d9469](https://github.com/weirdtangent/pulse-os/commit/35d9469d282ccd9dfca73c2337e146af93b22a57))
+
 ## [0.55.5](https://github.com/weirdtangent/pulse-os/compare/v0.55.4...v0.55.5) (2025-11-24)
 
 ## [0.55.4](https://github.com/weirdtangent/pulse-os/compare/v0.55.3...v0.55.4) (2025-11-24)
