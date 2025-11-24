@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections.abc import Iterable, Sequence
@@ -9,9 +10,15 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from openlocationcode import openlocationcode as olc
+
+try:
+    from openlocationcode import openlocationcode as olc
+except ImportError:  # pragma: no cover - optional dependency
+    olc = None
 
 from .config import InfoConfig, NewsConfig, SportsConfig, WeatherConfig
+
+LOGGER = logging.getLogger("pulse.info_sources")
 
 LAT_LON_PATTERN = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 WHAT3WORDS_PATTERN = re.compile(r"^[a-z]+(?:\.[a-z]+){2}$")
@@ -524,6 +531,9 @@ def _expand_geocode_queries(query: str) -> list[str]:
 
 
 def _decode_plus_code(code: str) -> _Location | None:
+    if olc is None:
+        LOGGER.debug("Plus Code support unavailable (openlocationcode not installed)")
+        return None
     try:
         decoded = olc.decode(code.strip().upper())
     except ValueError:

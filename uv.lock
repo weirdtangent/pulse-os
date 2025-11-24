@@ -252,6 +252,12 @@ wheels = [
 ]
 
 [[package]]
+name = "openlocationcode"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/50/e8/9fc58ee30f4f7b1befe190005c3d0d50b472df4bb968dcae1db7fbbf0e2a/openlocationcode-1.0.1.tar.gz", hash = "sha256:6fc0108a8214b65d74964105bd69645a8a7529237f0de6aadcfa83cc3373b359", size = 7767, upload-time = "2019-07-20T21:27:40.502Z" }
+
+[[package]]
 name = "packaging"
 version = "25.0"
 source = { registry = "https://pypi.org/simple" }
@@ -329,6 +335,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "astral" },
     { name = "httpx" },
+    { name = "openlocationcode" },
     { name = "packaging" },
     { name = "paho-mqtt" },
     { name = "psutil" },
@@ -354,6 +361,7 @@ requires-dist = [
     { name = "astral", specifier = ">=3.2" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.8.0" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "openlocationcode", specifier = ">=1.0.1" },
     { name = "packaging", specifier = ">=23.2" },
     { name = "paho-mqtt", specifier = ">=2.1.0" },
     { name = "psutil", specifier = ">=6.0.0" },

@@ -10,7 +10,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from . import OverlayChange, OverlayStateManager, OverlayTheme, render_overlay_html
+from .overlay import OverlayChange, OverlayStateManager, OverlayTheme, render_overlay_html
 
 Logger = Callable[[str], None]
 
