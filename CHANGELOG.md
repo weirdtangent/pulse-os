@@ -1,3 +1,10 @@
+## [0.58.3](https://github.com/weirdtangent/pulse-os/compare/v0.58.2...v0.58.3) (2025-11-24)
+
+
+### Bug Fixes
+
+* reorder font family in overlay assets to prioritize Noto Color Emoji ([254b346](https://github.com/weirdtangent/pulse-os/commit/254b3463f0229f9bcec7ac64c842ccf71c0de953))
+
 ## [0.58.2](https://github.com/weirdtangent/pulse-os/compare/v0.58.1...v0.58.2) (2025-11-24)
 
 
