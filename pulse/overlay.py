@@ -538,64 +538,16 @@ def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
 def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str]) -> list[tuple[str, str]]:
     cards: list[tuple[str, str]] = []
     timer_positions = snapshot.timer_positions or {}
+    ringing_cards: list[tuple[str, str | None]] = []
     if snapshot.active_alarm:
-        label = _event_label(snapshot.active_alarm, default="Alarm ringing")
-        event_data = snapshot.active_alarm.get("event") if isinstance(snapshot.active_alarm, dict) else None
-        event_id = event_data.get("id") if isinstance(event_data, dict) else None
-        button_html = ""
-        if event_id:
-            event_id_escaped = html_escape(str(event_id), quote=True)
-            stop_button = (
-                f'<button class="overlay-button overlay-button--primary" data-stop-timer '
-                f'data-event-id="{event_id_escaped}">Stop</button>'
-            )
-            snooze_button = (
-                f'<button class="overlay-button" data-snooze-alarm data-event-id="{event_id_escaped}" '
-                f'data-snooze-minutes="5">Snooze 5 min</button>'
-            )
-            button_html = (
-                '<div class="overlay-card__actions overlay-card__actions--split">'
-                f"{stop_button}{snooze_button}"
-                "</div>"
-            )
-        cards.append(
-            (
-                "center",
-                f"""
-<div class="overlay-card overlay-card--alert overlay-card--ringing">
-  <div class="overlay-card__title">{html_escape(label)}</div>
-  {button_html}
-</div>
-""".strip(),
-            )
-        )
-        occupied_cells.add("center")
+        ringing_cards.append((_build_alarm_ringing_card(snapshot.active_alarm), "center"))
     if snapshot.active_timer:
-        label = _event_label(snapshot.active_timer, default="Timer complete")
         event_data = snapshot.active_timer.get("event") if isinstance(snapshot.active_timer, dict) else None
-        event_id = event_data.get("id") if isinstance(event_data, dict) else None
-        button_html = ""
-        if event_id:
-            event_id_escaped = html_escape(str(event_id), quote=True)
-            stop_button = (
-                f'<button class="overlay-button overlay-button--primary" data-stop-timer '
-                f'data-event-id="{event_id_escaped}">Stop</button>'
-            )
-            button_html = f'<div class="overlay-card__actions">{stop_button}</div>'
-        event_id_key = str(event_id) if event_id is not None else None
-        cell = timer_positions.get(event_id_key, "bottom-center")
-        cards.append(
-            (
-                cell,
-                f"""
-<div class="overlay-card overlay-card--alert overlay-card--ringing">
-  <div class="overlay-card__title">{html_escape(label)}</div>
-  {button_html}
-</div>
-""".strip(),
-            )
+        event_id = (
+            str(event_data.get("id")) if isinstance(event_data, dict) and event_data.get("id") is not None else None
         )
-        occupied_cells.add(cell)
+        preferred_cell = timer_positions.get(event_id) if event_id else None
+        ringing_cards.append((_build_timer_ringing_card(snapshot.active_timer), preferred_cell))
     if snapshot.active_reminder:
         label = _event_label(snapshot.active_reminder, default="Reminder")
         event_data = snapshot.active_reminder.get("event") if isinstance(snapshot.active_reminder, dict) else None
@@ -637,7 +589,107 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
 """.strip(),
             )
         )
+    ringing_layout = _allocate_ringing_cells(occupied_cells, [preferred for _, preferred in ringing_cards])
+    for (card_html, _), target_cell in zip(ringing_cards, ringing_layout, strict=False):
+        cards.append((target_cell, card_html))
+        occupied_cells.add(target_cell)
     return cards
+
+
+def _build_alarm_ringing_card(active_alarm: dict[str, Any]) -> str:
+    label = _event_label(active_alarm, default="Alarm ringing")
+    event_data = active_alarm.get("event") if isinstance(active_alarm, dict) else None
+    event_id = event_data.get("id") if isinstance(event_data, dict) else None
+    button_html = ""
+    if event_id:
+        event_id_escaped = html_escape(str(event_id), quote=True)
+        stop_button = (
+            f'<button class="overlay-button overlay-button--primary" data-stop-timer '
+            f'data-event-id="{event_id_escaped}">Stop</button>'
+        )
+        snooze_button = (
+            f'<button class="overlay-button" data-snooze-alarm data-event-id="{event_id_escaped}" '
+            f'data-snooze-minutes="5">Snooze 5 min</button>'
+        )
+        button_html = (
+            '<div class="overlay-card__actions overlay-card__actions--split">' f"{stop_button}{snooze_button}" "</div>"
+        )
+    return f"""
+<div class="overlay-card overlay-card--alert overlay-card--ringing">
+  <div class="overlay-card__title">{html_escape(label)}</div>
+  {button_html}
+</div>
+""".strip()
+
+
+def _build_timer_ringing_card(active_timer: dict[str, Any]) -> str:
+    label = _event_label(active_timer, default="Timer complete")
+    event_data = active_timer.get("event") if isinstance(active_timer, dict) else None
+    event_id = event_data.get("id") if isinstance(event_data, dict) else None
+    button_html = ""
+    if event_id:
+        event_id_escaped = html_escape(str(event_id), quote=True)
+        stop_button = (
+            f'<button class="overlay-button overlay-button--primary" data-stop-timer '
+            f'data-event-id="{event_id_escaped}">Stop</button>'
+        )
+        button_html = f'<div class="overlay-card__actions">{stop_button}</div>'
+    return f"""
+<div class="overlay-card overlay-card--alert overlay-card--ringing">
+  <div class="overlay-card__title">{html_escape(label)}</div>
+  {button_html}
+</div>
+""".strip()
+
+
+def _allocate_ringing_cells(occupied_cells: set[str], preferred: list[str | None]) -> list[str]:
+    count = len(preferred)
+    if count <= 0:
+        return []
+    layouts = {
+        1: ("center",),
+        2: ("top-center", "bottom-center", "center"),
+        3: ("top-center", "bottom-center", "center", "middle-right"),
+    }
+    fallback_order = list(
+        layouts.get(
+            count,
+            (
+                "top-center",
+                "bottom-center",
+                "center",
+                "middle-right",
+                "top-left",
+                "top-right",
+                "bottom-left",
+                "bottom-right",
+            ),
+        )
+    )
+    assignments: list[str | None] = []
+    occupied = set(occupied_cells)
+    for pref in preferred:
+        if pref and pref not in occupied:
+            assignments.append(pref)
+            occupied.add(pref)
+        else:
+            assignments.append(None)
+    fallback_iter = iter(fallback_order)
+    for idx, cell in enumerate(assignments):
+        if cell:
+            continue
+        chosen = None
+        while True:
+            try:
+                candidate = next(fallback_iter)
+            except StopIteration:
+                candidate = "center"
+            if candidate == "center" or candidate not in occupied:
+                chosen = candidate
+                break
+        assignments[idx] = chosen
+        occupied.add(chosen)
+    return [cell or "center" for cell in assignments]
 
 
 def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None:

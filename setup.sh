@@ -426,6 +426,10 @@ configure_device_identity() {
 
 install_packages() {
     log "Installing APT packages…"
+    log "Refreshing APT package lists..."
+    if ! sudo apt update; then
+        log "Warning: apt update failed; continuing with cached package lists." >&2
+    fi
     local missing_packages=()
     while IFS= read -r pkg; do
         [[ -z "$pkg" || "$pkg" == \#* ]] && continue
