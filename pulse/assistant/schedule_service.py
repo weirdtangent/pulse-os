@@ -126,13 +126,14 @@ def parse_day_tokens(value: str | None) -> list[int] | None:
     if not value:
         return None
     lowered = value.strip().lower()
+    condensed = lowered.replace(" ", "")
     if lowered in {"single", "once", "next"}:
         return None
     if lowered in {"weekdays", "weekday"}:
         return sorted(WEEKDAY_SET)
     if lowered in {"weekend", "weekends"}:
         return sorted(WEEKEND_SET)
-    if lowered in {"everyday", "daily", "all"}:
+    if condensed in {"everyday", "alldays"} or lowered in {"daily", "all"}:
         return list(range(7))
     days: set[int] = set()
     for chunk in re.split(r"[,\s]+", lowered):
