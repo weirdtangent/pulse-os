@@ -776,6 +776,11 @@ class KioskMqttListener:
     def _handle_overlay_delete_alarm_request(self, event_id: str) -> None:
         payload = json.dumps({"action": "delete_alarm", "event_id": event_id})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+        if self.overlay_state:
+            snapshot = self.overlay_state.snapshot()
+            if not snapshot.alarms:
+                change = self.overlay_state.update_info_card(None)
+                self._handle_overlay_change(change)
 
     @staticmethod
     def _decode_json_bytes(payload: bytes) -> Any:
