@@ -398,10 +398,6 @@ body {
   gap: 0.4rem;
 }
 
-.overlay-reminder__actions .overlay-button {
-  margin-top: 0;
-}
-
 .overlay-card--timer {
   display: flex;
   flex-direction: column;
@@ -476,6 +472,10 @@ body {
   font-size: clamp(1.4rem, 3vw, 2.6rem);
   font-weight: 600;
   border-radius: 0.85rem;
+}
+
+.overlay-reminder__actions .overlay-button {
+  margin-top: 0;
 }
 
 .overlay-card__actions {
