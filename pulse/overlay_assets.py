@@ -484,6 +484,8 @@ body {
   justify-content: center;
   min-height: 2.4rem;
   padding: 0 1.2rem;
+  line-height: 1.1;
+  font-size: 0.95rem;
 }
 
 .overlay-card__actions {
