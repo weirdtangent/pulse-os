@@ -51,5 +51,6 @@ docstring-code-format = true
 [dependency-groups]
 dev = [
     "black>=25.11.0",
+    "pytest>=9.0.1",
     "ruff>=0.14.5",
 ]

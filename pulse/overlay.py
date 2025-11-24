@@ -96,7 +96,7 @@ def parse_clock_config(
         entries.append((tz_name, label))
         # Only use the first entry (single clock support)
         break
-    if not seen_local and not entries:
+    if not seen_local:
         entries.insert(0, (None, default_label))
     # Ensure we have exactly one clock
     final_entry = entries[0] if entries else (None, default_label)
@@ -606,6 +606,12 @@ body {{
   color: inherit;
   box-shadow: 0 0.6rem 1.8rem rgba(0, 0, 0, 0.35);
 }}
+.overlay-card--timer,
+.overlay-card--ringing {{
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}}
 .overlay-card--clock {{
   background: transparent;
   box-shadow: none;
@@ -637,11 +643,33 @@ body {{
   border: 1px solid rgba(255, 255, 255, 0.2);
 }}
 .overlay-card--ringing {{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 2vh;
+  padding: 3vh 3vw;
   animation: overlayPulse 1.2s ease-in-out infinite alternate;
 }}
+.overlay-card--timer {{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 1.8vh;
+  padding: 3vh 2vw;
+}}
+.overlay-card--timer .overlay-card__title {{
+  font-size: clamp(1.2rem, 3vw, 2.1rem);
+  margin-bottom: 0;
+}}
 .overlay-card--timer .overlay-timer__remaining {{
-  font-size: 2.4rem;
-  font-weight: 600;
+  font-size: clamp(3rem, 12vw, 7rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
 }}
 .overlay-card--expired {{
   opacity: 0.75;
@@ -671,6 +699,21 @@ body {{
 }}
 .overlay-button:active {{
   background: rgba(255, 255, 255, 0.25);
+}}
+.overlay-card--ringing .overlay-card__title {{
+  font-size: clamp(1.5rem, 4vw, 3rem);
+}}
+.overlay-card__body--ringing {{
+  font-size: clamp(1.1rem, 3vw, 2.2rem);
+  line-height: 1.35;
+}}
+.overlay-button--primary {{
+  display: block;
+  width: 100%;
+  padding: 1.1rem 1.5rem;
+  font-size: clamp(1.4rem, 3vw, 2.6rem);
+  font-weight: 600;
+  border-radius: 0.85rem;
 }}
 @keyframes overlayPulse {{
   from {{
@@ -754,15 +797,17 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
             button_html = (
-                f'<button class="overlay-button" data-stop-timer ' f'data-event-id="{event_id_escaped}">OK</button>'
+                f'<button class="overlay-button overlay-button--primary" data-stop-timer '
+                f'data-event-id="{event_id_escaped}">OK</button>'
             )
+        body_text = html_escape('Tap the physical controls or say "Stop" to dismiss.')
         cards.append(
             (
                 "center",
                 f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
-  <div>Tap the physical controls or say "Stop" to dismiss.</div>
+  <div class="overlay-card__body--ringing">{body_text}</div>
   {button_html}
 </div>
 """.strip(),
@@ -776,15 +821,17 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
             button_html = (
-                f'<button class="overlay-button" data-stop-timer ' f'data-event-id="{event_id_escaped}">OK</button>'
+                f'<button class="overlay-button overlay-button--primary" data-stop-timer '
+                f'data-event-id="{event_id_escaped}">OK</button>'
             )
+        body_text = html_escape("Timer finished.")
         cards.append(
             (
                 "bottom-center",
                 f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
-  <div>Timer finished.</div>
+  <div class="overlay-card__body--ringing">{body_text}</div>
   {button_html}
 </div>
 """.strip(),
