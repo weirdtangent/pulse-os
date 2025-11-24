@@ -337,6 +337,7 @@ OVERLAY_JS = """
   if (!root) {
     return;
   }
+  const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const clockNodes = root.querySelectorAll('[data-clock]');
   const timerNodes = root.querySelectorAll('[data-timer]');
   const hour12Attr = root.dataset.clockHour12;
@@ -430,7 +431,7 @@ OVERLAY_JS = """
     button.textContent = 'Stopping...';
 
     // POST to overlay stop endpoint
-    fetch('/overlay/stop', {
+    fetch(stopEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop', event_id: eventId })
@@ -450,6 +451,7 @@ def render_overlay_html(
     theme: OverlayTheme,
     *,
     clock_hour12: bool = True,
+    stop_endpoint: str | None = None,
 ) -> str:
     """Render the overlay snapshot into an HTML document."""
 
@@ -481,12 +483,15 @@ def render_overlay_html(
 
     notification_html = _build_notification_bar(snapshot) if theme.show_notification_bar else ""
 
+    stop_endpoint = stop_endpoint or "/overlay/stop"
+    stop_endpoint_attr = html_escape(stop_endpoint, quote=True)
     root_attrs = (
         f'id="pulse-overlay-root" '
         f'class="overlay-root" '
         f'data-version="{snapshot.version}" '
         f'data-generated-at="{int(snapshot.generated_at * 1000)}" '
-        f'data-clock-hour12="{"true" if clock_hour12 else "false"}"'
+        f'data-clock-hour12="{"true" if clock_hour12 else "false"}" '
+        f'data-stop-endpoint="{stop_endpoint_attr}"'
     )
 
     html_document = f"""<!DOCTYPE html>

@@ -500,6 +500,12 @@ class KioskMqttListener:
         self._overlay_http_server: ThreadingHTTPServer | None = None
         self._overlay_http_thread: threading.Thread | None = None
         self._overlay_topic_handlers: dict[str, Any] = {}
+        stop_host = self.overlay_config.bind_address
+        if stop_host in {"0.0.0.0", "::"}:
+            stop_host = "localhost"
+        if ":" in stop_host and not stop_host.startswith("["):
+            stop_host = f"[{stop_host}]"
+        self._overlay_stop_endpoint = f"http://{stop_host}:{self.overlay_config.port}/overlay/stop"
 
         if self.overlay_config.enabled:
             self.overlay_state = OverlayStateManager(self.overlay_config.clocks)
@@ -863,6 +869,7 @@ class KioskMqttListener:
                     snapshot,
                     theme,
                     clock_hour12=not listener.overlay_config.clock_24h,
+                    stop_endpoint=listener._overlay_stop_endpoint,
                 ).encode("utf-8")
                 self.send_response(HTTPStatus.OK)
                 self._set_common_headers()
