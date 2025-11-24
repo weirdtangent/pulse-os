@@ -29,10 +29,24 @@ This guide lists the phrases the Pulse display understands immediately—no clou
 | “Cancel all timers.” | Stops every running timer and tells you how many were cleared. |
 | “Stop the timer/Stop the alarm.” | Silences whichever timer or alarm is currently ringing. |
 
-## Alarm & timer overlays
+## Reminders
+
+| Example phrase | What the assistant does |
+| --- | --- |
+| “Remind me on monday at 8am to take out the trash.” | Schedules a one-time reminder for the next matching Monday at 8:00 AM and confirms it aloud. |
+| “Remind me every monday at 8am to take out the trash.” | Creates a weekly reminder with a Monday cadence and shows it under “Show me my reminders.” |
+| “Remind me every monday morning to take out the trash.” | Assumes “morning” means 8:00 AM and builds the same weekly reminder as above. |
+| “Remind me every month to pay the electric bill.” | Starts a monthly reminder beginning today at 8:00 AM (or the next morning if it’s already past 8). |
+| “Remind me every 6 months to replace the HVAC filters.” | Builds a repeating reminder that fires every six months, starting today at 8:00 AM. |
+| “Show me my reminders.” | Opens the reminder list overlay with Complete/Delete buttons for each entry. |
+
+Local reminders beep once, display the message on the overlay, and offer on-screen “Complete” or “Remind me in 1 hour / 1 day / 1 week” buttons. When you omit an exact time, the assistant assumes **morning = 8 AM**, **afternoon = 1 PM**, **evening = 5 PM**, and **night = 8 PM** (otherwise it defaults to 8 AM).
+
+## Alarm, timer & reminder overlays
 
 - Tapping “OK” on a ringing timer/alarm posts `/overlay/stop`, which maps to the MQTT `{"action": "stop"}` command.
 - Saying “Show me my alarms” keeps the overlay open until you close it or delete alarms via the on-screen × buttons (each button issues `{"action": "delete_alarm", "event_id": "<id>"}` over MQTT).
+- Reminder overlays include Complete/+1h/+1d/+1w buttons. Reminder info cards mirror the alarm list so you can delete or complete entries directly from the screen.
 
 ## Real-time info (News, Weather, Sports)
 

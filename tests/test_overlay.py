@@ -30,8 +30,10 @@ class OverlayRenderTests(unittest.TestCase):
             "now_playing": "",
             "timers": (),
             "alarms": (),
+            "reminders": (),
             "active_alarm": None,
             "active_timer": None,
+            "active_reminder": None,
             "notifications": (),
             "timer_positions": {},
             "info_card": None,
@@ -153,6 +155,27 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(manager.snapshot(), self.theme, info_endpoint="/overlay/info-card")
         self.assertIn('data-delete-alarm="alarm42"', html)
         self.assertIn("Weekdays", html)
+
+    def test_notification_bar_shows_reminder_badge(self) -> None:
+        future = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
+        reminders = ({"id": "rem1", "label": "Trash", "next_fire": future},)
+        html = render_overlay_html(self._snapshot(reminders=reminders), self.theme)
+        self.assertIn("reminder", html.lower())
+
+    def test_reminder_info_card_renders_actions(self) -> None:
+        manager = OverlayStateManager()
+        future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+        manager.update_schedule_snapshot(
+            {
+                "alarms": [],
+                "timers": [],
+                "reminders": [{"id": "rem1", "label": "Trash", "next_fire": future}],
+            }
+        )
+        manager.update_info_card({"type": "reminders", "title": "Reminders"})
+        html = render_overlay_html(manager.snapshot(), self.theme, info_endpoint="/overlay/info-card")
+        self.assertIn('data-delete-reminder="rem1"', html)
+        self.assertIn("data-complete-reminder", html)
 
 
 if __name__ == "__main__":

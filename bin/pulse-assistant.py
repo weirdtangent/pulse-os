@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import calendar
 import contextlib
 import json
 import logging
@@ -18,18 +19,18 @@ import threading
 import time
 from array import array
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from pulse.assistant.actions import ActionEngine, _parse_duration_seconds, load_action_definitions
+from pulse.assistant.actions import ActionEngine, _parse_datetime, _parse_duration_seconds, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.info_service import InfoService
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
-from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
+from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_volume_feedback
@@ -67,6 +68,13 @@ class AssistRunTracker:
             "total_ms": int((now - self.start) * 1000),
             "stages": self.stage_durations,
         }
+
+
+@dataclass
+class ReminderIntent:
+    message: str
+    fire_time: datetime
+    repeat_rule: dict[str, Any] | None
 
 
 class WakeContextChanged(Exception):
@@ -139,6 +147,7 @@ class PulseAssistant:
         self._schedule_command_topic = f"{base_topic}/schedules/command"
         self._alarms_active_topic = f"{base_topic}/alarms/active"
         self._timers_active_topic = f"{base_topic}/timers/active"
+        self._reminders_active_topic = f"{base_topic}/reminders/active"
         self._info_card_topic = f"{base_topic}/info_card"
         self._assist_stage = "idle"
         self._assist_pipeline: str | None = None
@@ -881,7 +890,12 @@ class PulseAssistant:
         self._publish_message(self._schedules_state_topic, payload, retain=True)
 
     def _handle_active_schedule_event(self, event_type: str, payload: dict[str, Any] | None) -> None:
-        topic = self._alarms_active_topic if event_type == "alarm" else self._timers_active_topic
+        if event_type == "alarm":
+            topic = self._alarms_active_topic
+        elif event_type == "timer":
+            topic = self._timers_active_topic
+        else:
+            topic = self._reminders_active_topic
         message = payload or {"state": "idle"}
         self._publish_message(topic, json.dumps(message))
 
@@ -994,6 +1008,33 @@ class PulseAssistant:
                 info = self.schedule_service.get_next_alarm()
                 response = {"next_alarm": info}
                 self._publish_message(f"{self._schedules_state_topic}/next_alarm", json.dumps(response))
+            elif action in {"create_reminder", "add_reminder"}:
+                message = payload.get("message") or payload.get("text")
+                when_text = payload.get("when") or payload.get("time")
+                if not message or not when_text:
+                    raise ValueError("reminder message and time are required")
+                fire_time = _parse_datetime(str(when_text))
+                if fire_time is None:
+                    raise ValueError("reminder time is invalid")
+                repeat_rule = payload.get("repeat") if isinstance(payload.get("repeat"), dict) else None
+                await self.schedule_service.create_reminder(
+                    fire_time=fire_time,
+                    message=str(message),
+                    repeat=repeat_rule,
+                )
+            elif action == "delete_reminder":
+                event_id = payload.get("event_id")
+                if event_id:
+                    await self.schedule_service.delete_event(str(event_id))
+            elif action in {"complete_reminder", "finish_reminder"}:
+                event_id = payload.get("event_id")
+                if event_id:
+                    await self.schedule_service.stop_event(str(event_id), reason="complete")
+            elif action == "delay_reminder":
+                event_id = payload.get("event_id")
+                seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration") or "0")
+                if event_id and seconds > 0:
+                    await self.schedule_service.delay_reminder(str(event_id), int(seconds))
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.debug("Schedule command %s failed: %s", action, exc)
 
@@ -1067,6 +1108,17 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
+        reminder_intent = self._extract_reminder_intent(normalized, transcript)
+        if reminder_intent:
+            event = await self.schedule_service.create_reminder(
+                fire_time=reminder_intent.fire_time,
+                message=reminder_intent.message,
+                repeat=reminder_intent.repeat_rule,
+            )
+            spoken = self._format_reminder_confirmation(event)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            await self._speak(spoken)
+            return True
         if alarm_intent:
             time_of_day, days, label = alarm_intent
             await self.schedule_service.create_alarm(time_of_day=time_of_day, days=days, label=label)
@@ -1096,6 +1148,20 @@ class PulseAssistant:
             )
         ):
             await self._show_alarm_list()
+            return True
+        if any(
+            phrase in normalized
+            for phrase in (
+                "show me my reminders",
+                "show my reminders",
+                "show reminders",
+                "list my reminders",
+                "list reminders",
+                "what reminders do i have",
+                "what are my reminders",
+            )
+        ):
+            await self._show_reminder_list()
             return True
         if "cancel all timers" in normalized:
             count = await self.schedule_service.cancel_all_timers()
@@ -1169,6 +1235,78 @@ class PulseAssistant:
         spoken = f"You have {count} alarm{'s' if count != 1 else ''}."
         await self._speak("Here are your alarms.")
         self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+
+    async def _show_reminder_list(self) -> None:
+        if not self.schedule_service:
+            spoken = "I can't access your reminders right now."
+            await self._speak(spoken)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            return
+        reminders = self.schedule_service.list_events("reminder")
+        if not reminders:
+            spoken = "You do not have any reminders scheduled."
+            await self._speak(spoken)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            self._publish_info_overlay()
+            return
+        reminder_payload = []
+        for reminder in reminders:
+            reminder_id = reminder.get("id")
+            if not reminder_id:
+                continue
+            reminder_payload.append(
+                {
+                    "id": reminder_id,
+                    "label": reminder.get("label") or "Reminder",
+                    "meta": self._format_reminder_meta(reminder),
+                    "status": reminder.get("status"),
+                }
+            )
+        self._publish_info_overlay(
+            text="Tap Complete when you're done or choose a delay.",
+            category="reminders",
+            extra={"type": "reminders", "title": "Reminders", "reminders": reminder_payload},
+        )
+        count = len(reminders)
+        spoken = f"You have {count} reminder{'s' if count != 1 else ''}."
+        await self._speak("Here are your reminders.")
+        self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+
+    @staticmethod
+    def _format_reminder_meta(reminder: dict[str, Any]) -> str:
+        next_fire = reminder.get("next_fire")
+        try:
+            dt = datetime.fromisoformat(next_fire).astimezone()
+            time_phrase = dt.strftime("%-I:%M %p")
+            date_phrase = dt.strftime("%b %-d")
+            base = f"{date_phrase} · {time_phrase}"
+        except (TypeError, ValueError):
+            base = "—"
+        repeat = ((reminder.get("metadata") or {}).get("reminder") or {}).get("repeat")
+        if repeat:
+            repeat_type = repeat.get("type")
+            if repeat_type == "weekly":
+                days = repeat.get("days") or []
+                if sorted(days) == list(range(7)):
+                    base = f"{base} · Daily"
+                else:
+                    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                    labels = ", ".join(names[day % 7] for day in days)
+                    base = f"{base} · {labels}"
+            elif repeat_type == "monthly":
+                day = repeat.get("day")
+                if isinstance(day, int):
+                    base = f"{base} · {PulseAssistant._ordinal(day)} monthly"
+                else:
+                    base = f"{base} · Monthly"
+            elif repeat_type == "interval":
+                months = repeat.get("interval_months")
+                days = repeat.get("interval_days")
+                if months:
+                    base = f"{base} · Every {months} mo"
+                elif days:
+                    base = f"{base} · Every {days} d"
+        return base
 
     async def _maybe_handle_information_query(
         self,
@@ -1519,6 +1657,267 @@ class PulseAssistant:
             day_phrase = ""
         label_phrase = f" called {label}" if label else ""
         return f"Setting an alarm for {time_phrase}{day_phrase}{label_phrase}."
+
+    def _extract_reminder_intent(self, normalized: str, original: str) -> ReminderIntent | None:
+        if "remind me" not in normalized or not self.schedule_service:
+            return None
+        idx = normalized.find("remind me")
+        suffix_original = original[idx + len("remind me") :].strip()
+        suffix_lower = normalized[idx + len("remind me") :].strip()
+        if not suffix_original:
+            return None
+        message = suffix_original.strip()
+        schedule_section = suffix_lower
+        to_idx = suffix_lower.find(" to ")
+        if to_idx != -1:
+            message = suffix_original[to_idx + 4 :].strip()
+            schedule_section = suffix_lower[:to_idx].strip()
+        parsed = self._parse_reminder_schedule(schedule_section, suffix_lower)
+        if not parsed:
+            return None
+        fire_time, repeat_rule = parsed
+        message = message or "reminder"
+        return ReminderIntent(message=message, fire_time=fire_time, repeat_rule=repeat_rule)
+
+    def _parse_reminder_schedule(
+        self,
+        schedule_text: str,
+        fallback_text: str,
+    ) -> tuple[datetime, dict[str, Any] | None] | None:
+        text = schedule_text or fallback_text
+        lower = text.strip().lower()
+        if not lower:
+            lower = fallback_text.lower()
+        now = datetime.now().astimezone()
+        duration_seconds = self._extract_duration_seconds_from_text(lower)
+        if duration_seconds > 0:
+            return now + timedelta(seconds=duration_seconds), None
+        time_of_day = self._extract_time_of_day_from_text(lower)
+        has_every = "every" in lower
+        day_indexes = parse_day_tokens(lower)
+        if has_every:
+            interval_months = self._extract_interval_value(lower, ("month", "months"))
+            interval_weeks = self._extract_interval_value(lower, ("week", "weeks"))
+            interval_days = self._extract_interval_value(lower, ("day", "days"))
+            if "month" in lower or "monthly" in lower:
+                if interval_months and interval_months > 1:
+                    start = self._apply_time_of_day(now, time_of_day)
+                    if start <= now:
+                        start = self._add_months_local(start, interval_months)
+                    repeat_rule = {"type": "interval", "interval_months": interval_months, "time": time_of_day}
+                    return start, repeat_rule
+                day_of_month = self._extract_day_of_month(lower) or now.day
+                fire_time = self._next_monthly_datetime(day_of_month, time_of_day, now)
+                repeat_rule = {"type": "monthly", "day": day_of_month, "time": time_of_day}
+                return fire_time, repeat_rule
+            if interval_months:
+                start = self._apply_time_of_day(now, time_of_day)
+                if start <= now:
+                    start = self._add_months_local(start, interval_months)
+                repeat_rule = {"type": "interval", "interval_months": interval_months, "time": time_of_day}
+                return start, repeat_rule
+            if interval_weeks:
+                days_to_add = interval_weeks * 7
+                start = self._apply_time_of_day(now, time_of_day)
+                if start <= now:
+                    start += timedelta(days=days_to_add)
+                repeat_rule = {"type": "interval", "interval_days": days_to_add, "time": time_of_day}
+                return start, repeat_rule
+            if interval_days:
+                start = self._apply_time_of_day(now, time_of_day)
+                if start <= now:
+                    start += timedelta(days=interval_days)
+                repeat_rule = {"type": "interval", "interval_days": interval_days, "time": time_of_day}
+                return start, repeat_rule
+            weekdays = day_indexes or list(range(7))
+            fire_time = self._next_weekly_datetime(weekdays, time_of_day, now)
+            repeat_rule = {"type": "weekly", "days": weekdays, "time": time_of_day}
+            return fire_time, repeat_rule
+        if day_indexes:
+            fire_time = self._next_weekday_datetime(day_indexes[0], time_of_day, now)
+            return fire_time, None
+        if "tomorrow" in lower:
+            return self._apply_time_of_day(now + timedelta(days=1), time_of_day), None
+        if "today" in lower:
+            candidate = self._apply_time_of_day(now, time_of_day)
+            if candidate <= now:
+                candidate += timedelta(days=1)
+            return candidate, None
+        default_time = self._apply_time_of_day(now, time_of_day)
+        if default_time <= now:
+            default_time += timedelta(days=1)
+        return default_time, None
+
+    @staticmethod
+    def _extract_interval_value(text: str, keywords: tuple[str, ...]) -> int | None:
+        joined = "|".join(keywords)
+        match = re.search(rf"every\s+(\d+)\s+({joined})", text)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _extract_day_of_month(text: str) -> int | None:
+        match = re.search(r"\bon\s+the\s+(\d{1,2})", text)
+        if match:
+            return int(match.group(1))
+        return None
+
+    def _extract_duration_seconds_from_text(self, text: str) -> float:
+        match = re.search(r"\bin\s+([0-9][a-z0-9 :]*)", text)
+        if not match:
+            return 0.0
+        candidate = match.group(1)
+        for stop in (" to ", " for ", ",", " and "):
+            idx = candidate.find(stop)
+            if idx != -1:
+                candidate = candidate[:idx]
+        return _parse_duration_seconds(candidate.strip())
+
+    def _extract_time_of_day_from_text(self, text: str) -> str:
+        lower = text.lower()
+        match = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", lower)
+        if match:
+            token = match.group(1)
+            if match.group(2):
+                token = f"{token}:{match.group(2)}"
+            parsed = self._parse_time_token(token, match.group(3))
+            if parsed:
+                return parsed
+        match = re.search(r"\b(\d{1,2}:\d{2})\b", lower)
+        if match:
+            parsed = self._parse_time_token(match.group(1), None)
+            if parsed:
+                return parsed
+        keyword_map = {
+            "morning": "08:00",
+            "afternoon": "13:00",
+            "evening": "17:00",
+            "night": "20:00",
+            "tonight": "20:00",
+            "noon": "12:00",
+            "midnight": "00:00",
+        }
+        for keyword, value in keyword_map.items():
+            if keyword in lower:
+                return value
+        return "08:00"
+
+    @staticmethod
+    def _apply_time_of_day(reference: datetime, time_str: str) -> datetime:
+        hour_str, minute_str = time_str.split(":")
+        hour = int(hour_str)
+        minute = int(minute_str)
+        return reference.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    def _next_weekday_datetime(self, weekday: int, time_str: str, now: datetime) -> datetime:
+        weekday = weekday % 7
+        candidate = self._apply_time_of_day(now, time_str)
+        offset = (weekday - candidate.weekday()) % 7
+        if offset == 0 and candidate <= now:
+            offset = 7
+        return self._apply_time_of_day(now + timedelta(days=offset), time_str)
+
+    def _next_weekly_datetime(self, weekdays: list[int], time_str: str, now: datetime) -> datetime:
+        weekdays = sorted({day % 7 for day in weekdays}) or list(range(7))
+        for offset in range(0, 8):
+            candidate = self._apply_time_of_day(now + timedelta(days=offset), time_str)
+            if candidate <= now:
+                continue
+            if candidate.weekday() in weekdays:
+                return candidate
+        return self._apply_time_of_day(now + timedelta(days=1), time_str)
+
+    def _next_monthly_datetime(self, day: int, time_str: str, now: datetime) -> datetime:
+        day = max(1, min(31, day))
+        candidate = self._apply_time_of_day(now, time_str)
+        last = calendar.monthrange(candidate.year, candidate.month)[1]
+        candidate = candidate.replace(day=min(day, last))
+        if candidate <= now:
+            candidate = self._add_months_local(candidate, 1)
+            last = calendar.monthrange(candidate.year, candidate.month)[1]
+            candidate = candidate.replace(day=min(day, last))
+        return candidate
+
+    @staticmethod
+    def _add_months_local(dt_obj: datetime, months: int) -> datetime:
+        total = dt_obj.month - 1 + months
+        year = dt_obj.year + total // 12
+        month = total % 12 + 1
+        day = min(dt_obj.day, calendar.monthrange(year, month)[1])
+        return dt_obj.replace(year=year, month=month, day=day)
+
+    def _format_reminder_confirmation(self, event: ScheduledEvent) -> str:
+        next_fire = event.next_fire
+        try:
+            dt = datetime.fromisoformat(next_fire).astimezone()
+        except (TypeError, ValueError):
+            dt = datetime.now().astimezone()
+        repeat_meta = event.metadata.get("reminder") if event.event_type == "reminder" else {}
+        repeat_rule = repeat_meta.get("repeat") if isinstance(repeat_meta, dict) else None
+        if repeat_rule:
+            repeat_phrase = self._describe_reminder_repeat(repeat_rule)
+            return f"Okay, I'll remind you {repeat_phrase}."
+        time_phrase = dt.strftime("%-I:%M %p")
+        today = datetime.now().astimezone().date()
+        if dt.date() == today:
+            day_phrase = "today"
+        elif dt.date() == today + timedelta(days=1):
+            day_phrase = "tomorrow"
+        else:
+            day_phrase = f"on {dt.strftime('%A')}"
+        return f"Got it, I'll remind you {day_phrase} at {time_phrase}."
+
+    @staticmethod
+    def _format_time_phrase_from_string(time_str: str) -> str:
+        try:
+            dt = datetime.strptime(time_str, "%H:%M")
+        except ValueError:
+            return time_str
+        return dt.strftime("%-I:%M %p") if dt.minute else dt.strftime("%-I %p")
+
+    @staticmethod
+    def _ordinal(value: int) -> str:
+        if 10 <= value % 100 <= 20:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+        return f"{value}{suffix}"
+
+    def _describe_reminder_repeat(self, repeat: dict[str, Any]) -> str:
+        repeat_type = (repeat.get("type") or "").lower()
+        time_text = repeat.get("time") or "08:00"
+        time_phrase = self._format_time_phrase_from_string(time_text)
+        if repeat_type == "weekly":
+            days = repeat.get("days") or list(range(7))
+            if sorted(days) == list(range(7)):
+                return f"every day at {time_phrase}"
+            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            labels = [day_names[day % 7] for day in days]
+            if len(labels) == 1:
+                day_phrase = labels[0]
+            else:
+                day_phrase = ", ".join(labels[:-1]) + f", and {labels[-1]}"
+            return f"every {day_phrase} at {time_phrase}"
+        if repeat_type == "monthly":
+            day = repeat.get("day")
+            if isinstance(day, int):
+                return f"on the {self._ordinal(day)} of each month at {time_phrase}"
+            return f"each month at {time_phrase}"
+        if repeat_type == "interval":
+            months = repeat.get("interval_months")
+            days = repeat.get("interval_days")
+            if months:
+                return f"every {months} month{'s' if months != 1 else ''} at {time_phrase}"
+            if days:
+                if days % 7 == 0:
+                    weeks = days // 7
+                    return f"every {weeks} week{'s' if weeks != 1 else ''} at {time_phrase}"
+                return f"every {days} day{'s' if days != 1 else ''} at {time_phrase}"
+        return f"at {time_phrase}"
 
     async def _maybe_handle_music_command(self, transcript: str) -> bool:
         query = (transcript or "").strip().lower()

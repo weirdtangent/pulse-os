@@ -183,6 +183,34 @@ body {
   background: rgba(255, 82, 69, 0.95);
 }
 
+.overlay-info-card__reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.2rem;
+}
+
+.overlay-info-card__reminder-body {
+  flex: 1 1 auto;
+}
+
+.overlay-info-card__reminder-label {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.overlay-info-card__reminder-meta {
+  font-size: 0.95rem;
+  opacity: 0.8;
+}
+
+.overlay-info-card__reminder-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .overlay-info-card__empty {
   margin-top: 1rem;
   font-size: 1.1rem;
@@ -290,6 +318,28 @@ body {
   animation: overlayPulse 1.2s ease-in-out infinite alternate;
 }
 
+.overlay-card--reminder {
+  text-align: left;
+}
+
+.overlay-card__body--reminder {
+  margin: 0.8rem 0 1.2rem;
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+
+.overlay-reminder__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.overlay-reminder__delays {
+  display: flex;
+  gap: 0.4rem;
+}
+
 .overlay-card--timer {
   display: flex;
   flex-direction: column;
@@ -357,13 +407,9 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
-.overlay-card--ringing .overlay-card__title {
-  font-size: clamp(1.5rem, 4vw, 3rem);
-}
-
-.overlay-card__body--ringing {
-  font-size: clamp(1.1rem, 3vw, 2.2rem);
-  line-height: 1.35;
+.overlay-button--small {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
 }
 
 .overlay-button--primary {
@@ -373,6 +419,15 @@ body {
   font-size: clamp(1.4rem, 3vw, 2.6rem);
   font-weight: 600;
   border-radius: 0.85rem;
+}
+
+.overlay-card--ringing .overlay-card__title {
+  font-size: clamp(1.5rem, 4vw, 3rem);
+}
+
+.overlay-card__body--ringing {
+  font-size: clamp(1.1rem, 3vw, 2.2rem);
+  line-height: 1.35;
 }
 
 @keyframes overlayPulse {
@@ -523,6 +578,63 @@ OVERLAY_JS = """
       }).catch(() => {
         deleteAlarmButton.disabled = false;
         deleteAlarmButton.textContent = previous;
+      });
+      return;
+    }
+
+    const deleteReminderButton = e.target.closest('[data-delete-reminder]');
+    if (deleteReminderButton) {
+      const reminderId = deleteReminderButton.dataset.deleteReminder;
+      if (!reminderId) {
+        return;
+      }
+      const previous = deleteReminderButton.textContent;
+      deleteReminderButton.disabled = true;
+      deleteReminderButton.textContent = '…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_reminder', event_id: reminderId })
+      }).catch(() => {
+        deleteReminderButton.disabled = false;
+        deleteReminderButton.textContent = previous;
+      });
+      return;
+    }
+
+    const completeReminderButton = e.target.closest('[data-complete-reminder]');
+    if (completeReminderButton) {
+      const eventId = completeReminderButton.dataset.eventId;
+      if (!eventId) {
+        return;
+      }
+      completeReminderButton.disabled = true;
+      completeReminderButton.textContent = '…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete_reminder', event_id: eventId })
+      }).catch(() => {
+        completeReminderButton.disabled = false;
+        completeReminderButton.textContent = 'Complete';
+      });
+      return;
+    }
+
+    const delayReminderButton = e.target.closest('[data-delay-reminder]');
+    if (delayReminderButton) {
+      const eventId = delayReminderButton.dataset.eventId;
+      const seconds = Number(delayReminderButton.dataset.delaySeconds || '0');
+      if (!eventId || !Number.isFinite(seconds) || seconds <= 0) {
+        return;
+      }
+      delayReminderButton.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delay_reminder', event_id: eventId, seconds })
+      }).catch(() => {
+        delayReminderButton.disabled = false;
       });
       return;
     }

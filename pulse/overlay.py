@@ -35,8 +35,10 @@ class OverlaySnapshot:
     now_playing: str
     timers: tuple[dict[str, Any], ...]
     alarms: tuple[dict[str, Any], ...]
+    reminders: tuple[dict[str, Any], ...]
     active_alarm: dict[str, Any] | None
     active_timer: dict[str, Any] | None
+    active_reminder: dict[str, Any] | None
     notifications: tuple[dict[str, Any], ...]
     timer_positions: dict[str, str]
     info_card: dict[str, Any] | None
@@ -116,8 +118,10 @@ class OverlayStateManager:
         self._clocks = tuple(clocks) if clocks else (ClockConfig("clock0", "Local", None),)
         self._timers: tuple[dict[str, Any], ...] = ()
         self._alarms: tuple[dict[str, Any], ...] = ()
+        self._reminders: tuple[dict[str, Any], ...] = ()
         self._active_alarm: dict[str, Any] | None = None
         self._active_timer: dict[str, Any] | None = None
+        self._active_reminder: dict[str, Any] | None = None
         self._notifications: tuple[dict[str, Any], ...] = ()
         self._schedule_snapshot: dict[str, Any] | None = None
         self._now_playing = ""
@@ -129,8 +133,10 @@ class OverlayStateManager:
         self._signatures = {
             "timers": "",
             "alarms": "",
+            "reminders": "",
             "active_alarm": "",
             "active_timer": "",
+            "active_reminder": "",
             "notifications": "",
             "schedule_snapshot": "",
             "now_playing": "",
@@ -161,9 +167,11 @@ class OverlayStateManager:
     def update_schedule_snapshot(self, snapshot: dict[str, Any]) -> OverlayChange:
         timers = _coerce_dict_list(snapshot.get("timers"))
         alarms = _coerce_dict_list(snapshot.get("alarms"))
+        reminders = _coerce_dict_list(snapshot.get("reminders"))
         snapshot_signature = _signature(snapshot)
         timer_signature = _signature(timers)
         alarm_signature = _signature(alarms)
+        reminder_signature = _signature(reminders)
         changed = False
         with self._lock:
             if timer_signature != self._signatures["timers"]:
@@ -176,6 +184,10 @@ class OverlayStateManager:
                 self._alarms = tuple(copy.deepcopy(item) for item in alarms)
                 self._signatures["alarms"] = alarm_signature
                 changed = True
+            if reminder_signature != self._signatures["reminders"]:
+                self._reminders = tuple(copy.deepcopy(item) for item in reminders)
+                self._signatures["reminders"] = reminder_signature
+                changed = True
             if snapshot_signature != self._signatures["schedule_snapshot"]:
                 self._schedule_snapshot = copy.deepcopy(snapshot)
                 self._signatures["schedule_snapshot"] = snapshot_signature
@@ -187,19 +199,26 @@ class OverlayStateManager:
     def update_active_event(self, event_type: str, payload: dict[str, Any] | None) -> OverlayChange:
         normalized = _normalize_active_payload(payload)
         signature = _signature(normalized)
-        field = "active_alarm" if event_type == "alarm" else "active_timer"
+        if event_type == "alarm":
+            field = "active_alarm"
+        elif event_type == "timer":
+            field = "active_timer"
+        else:
+            field = "active_reminder"
         previous_timer = self._active_timer if event_type == "timer" else None
         with self._lock:
             if signature == self._signatures[field]:
                 return OverlayChange(False, self._version, field)
             if event_type == "alarm":
                 self._active_alarm = normalized
-            else:
+            elif event_type == "timer":
                 self._active_timer = normalized
                 if normalized is None and previous_timer:
                     prev_id = _extract_event_id(previous_timer)
                     if prev_id:
                         self._timer_position_history.pop(prev_id, None)
+            else:
+                self._active_reminder = normalized
             self._signatures[field] = signature
             return self._bump(field)
 
@@ -269,8 +288,10 @@ class OverlayStateManager:
                 now_playing=self._now_playing,
                 timers=tuple(copy.deepcopy(item) for item in self._timers),
                 alarms=tuple(copy.deepcopy(item) for item in self._alarms),
+                reminders=tuple(copy.deepcopy(item) for item in self._reminders),
                 active_alarm=copy.deepcopy(self._active_alarm),
                 active_timer=copy.deepcopy(self._active_timer),
+                active_reminder=copy.deepcopy(self._active_reminder),
                 notifications=tuple(copy.deepcopy(item) for item in self._notifications),
                 timer_positions=copy.deepcopy(self._timer_position_history),
                 info_card=copy.deepcopy(self._info_card),
@@ -366,7 +387,15 @@ ICON_MAP = {
     "alarm_ringing": "&#128276;",
     "timer": "&#9201;",
     "music": "&#9835;",
+    "reminder": "&#128221;",
 }
+
+
+def _pick_available_cell(occupied: set[str], preferred: Sequence[str], fallback: str) -> str:
+    for cell in preferred:
+        if cell not in occupied:
+            return cell
+    return fallback
 
 
 def render_overlay_html(
@@ -380,16 +409,21 @@ def render_overlay_html(
     """Render the overlay snapshot into an HTML document."""
 
     cells: dict[str, list[str]] = {cell: [] for cell in CELL_ORDER}
+    occupied_cells: set[str] = set()
+
+    def _add_card(cell: str, markup: str) -> None:
+        cells[cell].append(markup)
+        occupied_cells.add(cell)
 
     for cell, card in _build_clock_card(snapshot):
-        cells[cell].append(card)
+        _add_card(cell, card)
     for cell, card in _build_timer_cards(snapshot):
-        cells[cell].append(card)
-    for card in _build_active_event_cards(snapshot):
-        cells[card[0]].append(card[1])
+        _add_card(cell, card)
+    for cell, card in _build_active_event_cards(snapshot, occupied_cells):
+        _add_card(cell, card)
     now_playing_card = _build_now_playing_card(snapshot)
-    if now_playing_card:
-        cells[now_playing_card[0]].append(now_playing_card[1])
+    if now_playing_card and now_playing_card[0] not in occupied_cells:
+        _add_card(now_playing_card[0], now_playing_card[1])
 
     info_card_markup = ""
     if snapshot.info_card:
@@ -397,6 +431,7 @@ def render_overlay_html(
         if candidate:
             for cell in INFO_CARD_BLOCKED_CELLS:
                 cells[cell] = []
+                occupied_cells.add(cell)
             info_card_markup = candidate
 
     grid_markup = "".join(
@@ -500,7 +535,7 @@ def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
     return cards
 
 
-def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
+def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str]) -> list[tuple[str, str]]:
     cards: list[tuple[str, str]] = []
     timer_positions = snapshot.timer_positions or {}
     if snapshot.active_alarm:
@@ -527,6 +562,7 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
 """.strip(),
             )
         )
+        occupied_cells.add("center")
     if snapshot.active_timer:
         label = _event_label(snapshot.active_timer, default="Timer complete")
         event_data = snapshot.active_timer.get("event") if isinstance(snapshot.active_timer, dict) else None
@@ -548,6 +584,48 @@ def _build_active_event_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
   <div class="overlay-card__body--ringing">{body_text}</div>
+  {button_html}
+</div>
+""".strip(),
+            )
+        )
+        occupied_cells.add(cell)
+    if snapshot.active_reminder:
+        label = _event_label(snapshot.active_reminder, default="Reminder")
+        event_data = snapshot.active_reminder.get("event") if isinstance(snapshot.active_reminder, dict) else None
+        event_id = event_data.get("id") if isinstance(event_data, dict) else None
+        message = ""
+        if isinstance(event_data, dict):
+            metadata = event_data.get("metadata") or {}
+            reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else {}
+            message = str(reminder_meta.get("message") or event_data.get("label") or "Reminder")
+        button_html = ""
+        if event_id:
+            event_id_escaped = html_escape(str(event_id), quote=True)
+            button_html = (
+                f'<div class="overlay-reminder__actions">'
+                f'<button class="overlay-button overlay-button--primary" '
+                f'data-complete-reminder data-event-id="{event_id_escaped}">Complete</button>'
+                f'<div class="overlay-reminder__delays">'
+                f'<button class="overlay-button" data-delay-reminder data-delay-seconds="3600" '
+                f'data-event-id="{event_id_escaped}">+1h</button>'
+                f'<button class="overlay-button" data-delay-reminder data-delay-seconds="86400" '
+                f'data-event-id="{event_id_escaped}">+1d</button>'
+                f'<button class="overlay-button" data-delay-reminder data-delay-seconds="604800" '
+                f'data-event-id="{event_id_escaped}">+1w</button>'
+                f"</div></div>"
+            )
+        body_text = html_escape(message or label)
+        preferred_cells = ("top-center", "middle-right", "bottom-center")
+        reminder_cell = _pick_available_cell(occupied_cells, preferred_cells, "top-center")
+        occupied_cells.add(reminder_cell)
+        cards.append(
+            (
+                reminder_cell,
+                f"""
+<div class="overlay-card overlay-card--alert overlay-card--reminder">
+  <div class="overlay-card__title">{html_escape(label)}</div>
+  <div class="overlay-card__body--reminder">{body_text}</div>
   {button_html}
 </div>
 """.strip(),
@@ -584,6 +662,13 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
         count = len(active_timers)
         label = f"{count} timer{'s' if count != 1 else ''}"
         badges.append(_render_badge("timer", label))
+    reminders = _filter_upcoming_reminders(snapshot.reminders)
+    if snapshot.active_reminder:
+        badges.append(_render_badge("reminder", "Reminder active"))
+    elif reminders:
+        count = len(reminders)
+        label = f"{count} reminder{'s' if count != 1 else ''}"
+        badges.append(_render_badge("reminder", label))
     if snapshot.now_playing.strip():
         badges.append(_render_badge("music", "Now playing"))
     if not badges:
@@ -596,6 +681,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
     card_type = str(card.get("type") or "").lower()
     if card_type == "alarms":
         return _build_alarm_info_overlay(snapshot, card)
+    if card_type == "reminders":
+        return _build_reminder_info_overlay(snapshot, card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -651,13 +738,66 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
             )
         body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
     return f"""
-<div class="overlay-card overlay-info-card overlay-info-card--alarms">
+<div class="overlay-card overlay-info-card overlay-info-card--reminders">
   <div class="overlay-info-card__header">
     <div>
       <div class="overlay-info-card__title">{safe_title}</div>
       <div class="overlay-info-card__subtitle">{safe_subtitle}</div>
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close alarms list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _build_reminder_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
+    payload_reminders = card.get("reminders")
+    if isinstance(payload_reminders, list) and payload_reminders:
+        reminders: Iterable[dict[str, Any]] = tuple(item for item in payload_reminders if isinstance(item, dict))
+    else:
+        reminders = snapshot.reminders or ()
+    entries = _format_reminder_info_entries(reminders)
+    title = str(card.get("title") or "Reminders").strip() or "Reminders"
+    subtitle = card.get("text") or "Complete or delete a reminder."
+    safe_title = html_escape(title)
+    safe_subtitle = html_escape(subtitle)
+    if not entries:
+        body = '<div class="overlay-info-card__empty">No reminders scheduled.</div>'
+    else:
+        body_rows = []
+        for entry in entries:
+            label = html_escape(entry["label"])
+            meta = html_escape(entry["meta"])
+            reminder_id = html_escape(entry["id"], quote=True)
+            body_rows.append(
+                f"""
+  <div class="overlay-info-card__reminder">
+    <div class="overlay-info-card__reminder-body">
+      <div class="overlay-info-card__reminder-label">{label}</div>
+      <div class="overlay-info-card__reminder-meta">{meta}</div>
+    </div>
+    <div class="overlay-info-card__reminder-actions">
+      <button class="overlay-button overlay-button--small"
+        data-complete-reminder data-event-id="{reminder_id}">Complete</button>
+      <button class="overlay-info-card__alarm-delete"
+        data-delete-reminder="{reminder_id}"
+        aria-label="Delete {label}">×</button>
+    </div>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--alarms">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      <div class="overlay-info-card__subtitle">{safe_subtitle}</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close reminders list">&times;</button>
   </div>
   <div class="overlay-info-card__body">
     {body}
@@ -680,6 +820,20 @@ def _format_alarm_info_entries(alarms: Iterable[dict[str, Any]]) -> list[dict[st
         meta = f"{time_phrase} · {days_phrase}" if days_phrase else time_phrase
         status = str(alarm.get("status") or "").lower()
         entries.append({"id": str(event_id), "label": label, "meta": meta, "status": status})
+    return entries
+
+
+def _format_reminder_info_entries(reminders: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for reminder in reminders:
+        if not isinstance(reminder, dict):
+            continue
+        event_id = reminder.get("id")
+        if not event_id:
+            continue
+        label = str(reminder.get("label") or "Reminder")
+        meta = _format_reminder_meta_text(reminder)
+        entries.append({"id": str(event_id), "label": label, "meta": meta})
     return entries
 
 
@@ -711,6 +865,22 @@ def _format_alarm_days_phrase(alarm: dict[str, Any]) -> str:
         return "Every day"
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     return ", ".join(names[idx % 7] for idx in normalized)
+
+
+def _format_reminder_meta_text(reminder: dict[str, Any]) -> str:
+    next_fire = _parse_timestamp(reminder.get("next_fire"))
+    if next_fire:
+        dt = datetime.fromtimestamp(next_fire)
+        meta = dt.strftime("%b %-d · %-I:%M %p")
+    else:
+        meta = "—"
+    metadata = reminder.get("metadata") or {}
+    reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else {}
+    repeat_rule = reminder_meta.get("repeat") if isinstance(reminder_meta, dict) else None
+    if repeat_rule:
+        repeat_type = str(repeat_rule.get("type") or "").title()
+        meta = f"{meta} · {repeat_type}"
+    return meta
 
 
 def _normalize_repeat_day_indexes(alarm: dict[str, Any]) -> list[int]:
@@ -840,6 +1010,23 @@ def _filter_upcoming_alarms(alarms: Iterable[dict[str, Any]] | None) -> list[dic
         upcoming.append(item)
     upcoming.sort(key=lambda entry: _parse_timestamp(entry.get("next_fire")) or 0)
     return upcoming
+
+
+def _filter_upcoming_reminders(reminders: Iterable[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    if not reminders:
+        return []
+    now = time.time()
+    entries: list[dict[str, Any]] = []
+    for item in reminders:
+        if not isinstance(item, dict):
+            continue
+        next_fire = item.get("next_fire")
+        ts = _parse_timestamp(next_fire)
+        if ts is None or ts <= now:
+            continue
+        entries.append(item)
+    entries.sort(key=lambda entry: _parse_timestamp(entry.get("next_fire")) or 0)
+    return entries
 
 
 def _parse_timestamp(value: Any) -> float | None:

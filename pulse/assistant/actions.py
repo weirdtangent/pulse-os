@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .schedule_service import PlaybackConfig, parse_day_tokens
 
@@ -191,19 +192,22 @@ async def _maybe_execute_scheduler_action(
     schedule_service: ScheduleService | None,
 ) -> bool:
     args = _parse_action_args(arg_string)
-    if slug == "reminder.create" and scheduler is not None:
+    if slug == "reminder.create":
         message = args.get("message") or args.get("text") or arg_string
         when_text = args.get("when") or args.get("time")
         if not message:
             return False
-        if not when_text:
-            when = datetime.now(UTC)
-        else:
-            when = _parse_datetime(when_text)
-            if when is None:
-                return False
-        await scheduler.schedule_reminder(when, message)
-        return True
+        target_time = _parse_datetime(when_text) if when_text else datetime.now(UTC)
+        if target_time is None:
+            return False
+        repeat_rule = _reminder_repeat_from_args(args, target_time)
+        if schedule_service is not None:
+            await schedule_service.create_reminder(fire_time=target_time, message=message, repeat=repeat_rule)
+            return True
+        if scheduler is not None:
+            await scheduler.schedule_reminder(target_time, message)
+            return True
+        return False
     if schedule_service is not None:
         if slug == "timer.start":
             duration = _duration_from_args(args, arg_string)
@@ -412,3 +416,53 @@ def _parse_datetime(text: str) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed
+
+
+def _reminder_repeat_from_args(args: dict[str, str], default: datetime) -> dict[str, Any] | None:
+    repeat_value = (args.get("repeat") or args.get("frequency") or "").strip().lower()
+    if repeat_value in {"", "none"}:
+        repeat_value = ""
+    days_arg = args.get("days") or args.get("repeat_days")
+    if repeat_value in {"weekly", "week"} or days_arg:
+        days = parse_day_tokens(days_arg or repeat_value or "")
+        return {"type": "weekly", "days": days} if days else {"type": "weekly", "days": list(range(7))}
+    if repeat_value in {"daily", "day"}:
+        return {"type": "weekly", "days": list(range(7))}
+    if repeat_value in {"weekdays", "weekday"}:
+        return {"type": "weekly", "days": [0, 1, 2, 3, 4]}
+    if repeat_value in {"monthly", "month"}:
+        day_value = args.get("day") or args.get("day_of_month")
+        try:
+            day_number = int(day_value) if day_value else default.day
+        except (TypeError, ValueError):
+            day_number = default.day
+        return {"type": "monthly", "day": max(1, min(31, day_number))}
+    interval_days = args.get("interval_days")
+    interval_months = args.get("interval_months")
+    if interval_months:
+        try:
+            months = int(interval_months)
+        except ValueError:
+            months = 0
+        if months > 0:
+            return {"type": "interval", "interval_months": months}
+    if interval_days:
+        try:
+            days = int(interval_days)
+        except ValueError:
+            days = 0
+        if days > 0:
+            return {"type": "interval", "interval_days": days}
+    numeric_match = re.search(r"(\d+)\s+(months?|month)", repeat_value)
+    if numeric_match:
+        months = int(numeric_match.group(1))
+        return {"type": "interval", "interval_months": months}
+    numeric_match = re.search(r"(\d+)\s+(weeks?|week)", repeat_value)
+    if numeric_match:
+        weeks = int(numeric_match.group(1))
+        return {"type": "interval", "interval_days": weeks * 7}
+    numeric_match = re.search(r"(\d+)\s+(days?|day)", repeat_value)
+    if numeric_match:
+        days = int(numeric_match.group(1))
+        return {"type": "interval", "interval_days": days}
+    return None

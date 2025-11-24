@@ -38,6 +38,9 @@ class OverlayHttpServer:
         on_state_change: Callable[[OverlayChange], None] | None = None,
         on_stop_request: Callable[[str], None] | None = None,
         on_delete_alarm: Callable[[str], None] | None = None,
+        on_complete_reminder: Callable[[str], None] | None = None,
+        on_delay_reminder: Callable[[str, int], None] | None = None,
+        on_delete_reminder: Callable[[str], None] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -46,6 +49,9 @@ class OverlayHttpServer:
         self._on_state_change = on_state_change
         self._on_stop_request = on_stop_request
         self._on_delete_alarm = on_delete_alarm
+        self._on_complete_reminder = on_complete_reminder
+        self._on_delay_reminder = on_delay_reminder
+        self._on_delete_reminder = on_delete_reminder
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -158,6 +164,29 @@ class OverlayHttpServer:
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
                         return
                     outer._on_delete_alarm(str(event_id))
+                elif action == "complete_reminder":
+                    event_id = data.get("event_id")
+                    if not event_id or not outer._on_complete_reminder:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
+                        return
+                    outer._on_complete_reminder(str(event_id))
+                elif action == "delay_reminder":
+                    event_id = data.get("event_id")
+                    seconds = data.get("seconds")
+                    if not event_id or not outer._on_delay_reminder:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
+                        return
+                    try:
+                        delay_seconds = max(1, int(seconds))
+                    except (TypeError, ValueError):
+                        delay_seconds = 3600
+                    outer._on_delay_reminder(str(event_id), delay_seconds)
+                elif action == "delete_reminder":
+                    event_id = data.get("event_id")
+                    if not event_id or not outer._on_delete_reminder:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
+                        return
+                    outer._on_delete_reminder(str(event_id))
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return

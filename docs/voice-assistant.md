@@ -244,6 +244,12 @@ reminder.create:when=2025-01-01T09:00,message=Turn off humidifier
 
 If you provide `HOME_ASSISTANT_TIMER_ENTITY` / `HOME_ASSISTANT_REMINDER_SERVICE` the assistant calls those services; otherwise it falls back to a local scheduler that publishes a response MQTT payload and speaks the reminder aloud.
 
+When the local scheduler handles reminders it assumes:
+
+- “Morning” is 8 AM, “afternoon” is 1 PM, “evening” is 5 PM, and “night/tonight” is 8 PM (if no explicit time is given, it defaults to 8 AM).
+- Phrases like “every month” or “every 6 months” start on the current day; if that time already passed it moves forward to the next interval.
+- “Show me my reminders” opens the on-device overlay with Complete/Delete/+delay buttons that mirror the MQTT commands listed below.
+
 ---
 
 ## Using HA Assist audio end-to-end
@@ -294,7 +300,7 @@ All preference states are retained so dashboards instantly reflect the last-know
 
 `pulse-assistant-display.py` runs as a user-level service whenever `PULSE_VOICE_ASSISTANT="true"`. It subscribes to `pulse/<hostname>/assistant/response`, renders the text in a borderless Tk window, and auto-hides after `PULSE_ASSISTANT_DISPLAY_SECONDS` (default 8s). Tweak the font via `PULSE_ASSISTANT_FONT_SIZE`.
 
-Now-playing metadata is displayed by the PulseOS overlay HTML (see `pulse/<hostname>:8800/overlay`), which automatically shows "Now Playing" information when music is active. The overlay is integrated with the `pulse-photo-card` in Home Assistant and displays timers, alarms, clocks, and now-playing information.
+Now-playing metadata is displayed by the PulseOS overlay HTML (see `pulse/<hostname>:8800/overlay`), which automatically shows "Now Playing" information when music is active. The overlay is integrated with the `pulse-photo-card` in Home Assistant and displays timers, alarms, reminders, clocks, and now-playing information.
 
 ---
 

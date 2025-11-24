@@ -58,6 +58,7 @@ class AssistantTopics:
     schedules_state: str
     alarms_active: str
     timers_active: str
+    reminders_active: str
     command: str
     info_card: str
 
@@ -323,6 +324,7 @@ def load_config() -> EnvConfig:
         schedules_state=f"{assistant_base}/schedules/state",
         alarms_active=f"{assistant_base}/alarms/active",
         timers_active=f"{assistant_base}/timers/active",
+        reminders_active=f"{assistant_base}/reminders/active",
         command=f"{assistant_base}/schedules/command",
         info_card=f"{assistant_base}/info_card",
     )
@@ -523,6 +525,9 @@ class KioskMqttListener:
                 self.assistant_topics.timers_active: lambda payload: self._handle_overlay_active_event(
                     "timer", payload
                 ),
+                self.assistant_topics.reminders_active: lambda payload: self._handle_overlay_active_event(
+                    "reminder", payload
+                ),
             }
             server_config = OverlayServerConfig(
                 bind_address=self.overlay_config.bind_address,
@@ -540,6 +545,9 @@ class KioskMqttListener:
                 on_state_change=self._handle_overlay_change,
                 on_stop_request=self._handle_overlay_stop_request,
                 on_delete_alarm=self._handle_overlay_delete_alarm_request,
+                on_complete_reminder=self._handle_overlay_complete_reminder_request,
+                on_delay_reminder=self._handle_overlay_delay_reminder_request,
+                on_delete_reminder=self._handle_overlay_delete_reminder_request,
             )
 
     def log(self, message: str) -> None:
@@ -781,6 +789,18 @@ class KioskMqttListener:
             if not snapshot.alarms:
                 change = self.overlay_state.update_info_card(None)
                 self._handle_overlay_change(change)
+
+    def _handle_overlay_complete_reminder_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "complete_reminder", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_delay_reminder_request(self, event_id: str, seconds: int) -> None:
+        payload = json.dumps({"action": "delay_reminder", "event_id": event_id, "seconds": seconds})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_delete_reminder_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "delete_reminder", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
     @staticmethod
     def _decode_json_bytes(payload: bytes) -> Any:
@@ -1254,6 +1274,7 @@ class KioskMqttListener:
             client.subscribe(self.assistant_topics.schedules_state)
             client.subscribe(self.assistant_topics.alarms_active)
             client.subscribe(self.assistant_topics.timers_active)
+            client.subscribe(self.assistant_topics.reminders_active)
             client.subscribe(self.assistant_topics.info_card)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")

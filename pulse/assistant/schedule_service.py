@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 import contextlib
 import json
 import logging
@@ -19,7 +20,7 @@ from pulse import audio as pulse_audio
 
 from .home_assistant import HomeAssistantClient
 
-EventType = Literal["alarm", "timer"]
+EventType = Literal["alarm", "timer", "reminder"]
 PlaybackMode = Literal["beep", "music"]
 
 StateCallback = Callable[[dict[str, Any]], None]
@@ -75,6 +76,223 @@ def _parse_time_string(value: str) -> tuple[int, int]:
     if hour >= 24 or minute >= 60:
         raise ValueError("Time outside 24h range")
     return hour, minute
+
+
+def _combine_time(reference: datetime, time_str: str) -> datetime:
+    """Return ``reference`` with the provided HH:MM string."""
+    try:
+        hour, minute = _parse_time_string(time_str)
+    except ValueError:
+        return reference.replace(second=0, microsecond=0)
+    return reference.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def _add_months(dt: datetime, months: int) -> datetime:
+    total = dt.month - 1 + months
+    year = dt.year + total // 12
+    month = total % 12 + 1
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
+
+
+def _next_weekly_occurrence(anchor: datetime, days: list[int], time_str: str, after: datetime) -> datetime:
+    tz_after = after.astimezone(anchor.tzinfo or after.tzinfo)
+    tz_anchor = anchor.tzinfo or tz_after.tzinfo
+    normalized_days = sorted({day % 7 for day in days}) or [anchor.weekday()]
+    start_search = tz_after.replace(hour=0, minute=0, second=0, microsecond=0)
+    for offset in range(0, 14):
+        candidate_date = start_search + timedelta(days=offset)
+        if candidate_date.weekday() not in normalized_days:
+            continue
+        candidate = _combine_time(candidate_date, time_str)
+        if tz_anchor:
+            candidate = candidate.astimezone(tz_anchor)
+        if candidate <= after:
+            continue
+        if candidate >= anchor:
+            return candidate
+    fallback = anchor if anchor > after else anchor + timedelta(days=7)
+    return _combine_time(fallback, time_str)
+
+
+def _next_monthly_occurrence(anchor: datetime, day: int, time_str: str, after: datetime) -> datetime:
+    tzinfo = anchor.tzinfo or after.tzinfo
+    current_year = after.year
+    current_month = after.month
+    desired_day = max(1, min(31, day))
+    for _ in range(0, 24):
+        days_in_month = calendar.monthrange(current_year, current_month)[1]
+        actual_day = min(desired_day, days_in_month)
+        candidate = datetime(
+            current_year,
+            current_month,
+            actual_day,
+            tzinfo=tzinfo,
+        )
+        candidate = _combine_time(candidate, time_str)
+        if candidate <= after:
+            current_month += 1
+            if current_month > 12:
+                current_month = 1
+                current_year += 1
+            continue
+        if candidate >= anchor:
+            return candidate
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
+    fallback = _add_months(anchor, 1)
+    return _combine_time(fallback, time_str)
+
+
+def _next_interval_occurrence(
+    anchor: datetime,
+    *,
+    interval_days: int | None = None,
+    interval_months: int | None = None,
+    after: datetime | None = None,
+) -> datetime:
+    reference = after or _now()
+    if interval_months:
+        months = max(1, interval_months)
+        candidate = anchor
+        while candidate <= reference:
+            candidate = _add_months(candidate, months)
+        return candidate
+    days = max(1, interval_days or 1)
+    if anchor > reference:
+        return anchor
+    delta = reference - anchor
+    steps = int(delta.total_seconds() // (days * 86400)) + 1
+    return anchor + timedelta(days=steps * days)
+
+
+def _ensure_reminder_meta(event: ScheduledEvent) -> dict[str, Any]:
+    if not isinstance(event.metadata, dict):
+        event.metadata = {}
+    reminder = event.metadata.get("reminder")
+    if not isinstance(reminder, dict):
+        reminder = {}
+        event.metadata["reminder"] = reminder
+    return reminder
+
+
+def _reminder_meta(event: ScheduledEvent) -> dict[str, Any]:
+    reminder = event.metadata.get("reminder") if isinstance(event.metadata, dict) else None
+    if isinstance(reminder, dict):
+        return reminder
+    return {}
+
+
+def _reminder_repeat_rule(event: ScheduledEvent) -> dict[str, Any] | None:
+    rule = _reminder_meta(event).get("repeat")
+    if isinstance(rule, dict):
+        return rule
+    return None
+
+
+def _reminder_delay(event: ScheduledEvent) -> datetime | None:
+    meta = _reminder_meta(event)
+    return _deserialize_dt(meta.get("delay_until"))
+
+
+def _set_reminder_delay(event: ScheduledEvent, target: datetime | None) -> None:
+    meta = _ensure_reminder_meta(event)
+    if target is None:
+        meta.pop("delay_until", None)
+    else:
+        meta["delay_until"] = _serialize_dt(target)
+
+
+def _reminder_start(event: ScheduledEvent) -> datetime:
+    meta = _reminder_meta(event)
+    start = _deserialize_dt(meta.get("start"))
+    if start:
+        return start
+    return event.next_fire_dt()
+
+
+def _reminder_message(event: ScheduledEvent) -> str:
+    meta = _reminder_meta(event)
+    message = meta.get("message")
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    return event.label or "Reminder"
+
+
+def _reminder_repeats(event: ScheduledEvent) -> bool:
+    rule = _reminder_repeat_rule(event)
+    return bool(rule)
+
+
+def _compute_next_reminder_fire(event: ScheduledEvent, *, after: datetime | None = None) -> datetime | None:
+    rule = _reminder_repeat_rule(event)
+    if not rule:
+        return None
+    reference = after or _now()
+    start = _reminder_start(event)
+    reference = max(reference, start - timedelta(seconds=1))
+    repeat_type = (rule.get("type") or "").lower()
+    time_str = rule.get("time") or start.strftime("%H:%M")
+    if repeat_type == "weekly":
+        days = rule.get("days") or [start.weekday()]
+        base = _next_weekly_occurrence(start, days, time_str, reference)
+    elif repeat_type == "monthly":
+        day = int(rule.get("day") or start.day)
+        base = _next_monthly_occurrence(start, day, time_str, reference)
+    elif repeat_type == "interval":
+        interval_days = rule.get("interval_days")
+        interval_months = rule.get("interval_months")
+        base = _next_interval_occurrence(
+            start,
+            interval_days=interval_days,
+            interval_months=interval_months,
+            after=reference,
+        )
+    else:
+        # Fallback to daily cadence using provided days/time
+        days = rule.get("days") or list(range(7))
+        base = _next_weekly_occurrence(start, days, time_str, reference)
+    delay = _reminder_delay(event)
+    if delay and (not base or delay <= base):
+        return delay
+    if delay and base and delay > base:
+        _set_reminder_delay(event, None)
+    return base
+
+
+def _normalize_repeat_rule(rule: dict[str, Any] | None, fallback: datetime) -> dict[str, Any] | None:
+    if not isinstance(rule, dict):
+        return None
+    repeat_type = (rule.get("type") or "").lower()
+    if repeat_type not in {"weekly", "monthly", "interval"}:
+        return None
+    normalized: dict[str, Any] = {"type": repeat_type}
+    if repeat_type == "weekly":
+        raw_days = rule.get("days")
+        if isinstance(raw_days, list):
+            days = sorted({int(day) % 7 for day in raw_days if isinstance(day, (int, float))})
+        else:
+            days = [fallback.weekday()]
+        normalized["days"] = days
+        normalized["time"] = rule.get("time") or fallback.strftime("%H:%M")
+    elif repeat_type == "monthly":
+        day = rule.get("day")
+        if isinstance(day, (int, float)):
+            normalized["day"] = max(1, min(31, int(day)))
+        else:
+            normalized["day"] = fallback.day
+        normalized["time"] = rule.get("time") or fallback.strftime("%H:%M")
+    elif repeat_type == "interval":
+        months = rule.get("interval_months")
+        days = rule.get("interval_days")
+        if isinstance(months, (int, float)) and int(months) > 0:
+            normalized["interval_months"] = int(months)
+        else:
+            normalized["interval_days"] = max(1, int(days or 1))
+        normalized["time"] = rule.get("time") or fallback.strftime("%H:%M")
+    return normalized
 
 
 def _format_duration_label(duration_seconds: float) -> str:
@@ -238,13 +456,18 @@ class ScheduledEvent:
         self.target_time = _serialize_dt(dt) if dt else None
 
     def to_public_dict(self, status: str = "scheduled") -> dict[str, Any]:
+        is_repeating = bool(self.repeat_days)
+        if not is_repeating and self.event_type == "reminder":
+            reminder_meta = self.metadata.get("reminder") if isinstance(self.metadata, dict) else None
+            if isinstance(reminder_meta, dict):
+                is_repeating = bool(reminder_meta.get("repeat"))
         data = {
             "id": self.event_id,
             "type": self.event_type,
             "label": self.label,
             "time": self.time_of_day,
             "days": day_indexes_to_names(self.repeat_days),
-            "is_repeating": bool(self.repeat_days),
+            "is_repeating": is_repeating,
             "single_shot": self.single_shot,
             "duration_seconds": self.duration_seconds,
             "target": self.target_time,
@@ -305,10 +528,12 @@ class PlaybackHandle:
         playback: PlaybackConfig,
         hostname: str,
         ha_client: HomeAssistantClient | None,
+        event_type: EventType,
     ) -> None:
         self.playback = playback
         self.hostname = hostname
         self.ha_client = ha_client
+        self.event_type = event_type
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -320,6 +545,9 @@ class PlaybackHandle:
         self._music_paused = False
 
     async def start(self) -> None:
+        if self.event_type == "reminder":
+            await self._play_reminder_tone()
+            return
         if self.playback.mode == "music" and self.ha_client:
             await self._start_music()
         else:
@@ -446,6 +674,9 @@ class PlaybackHandle:
             raise
         finally:
             await self._restore_volume()
+
+    async def _play_reminder_tone(self) -> None:
+        await asyncio.to_thread(pulse_audio.play_volume_feedback)
 
     async def _wait_if_paused(self) -> None:
         while self._pause_flag and not self._stop_event.is_set():
@@ -578,6 +809,45 @@ class ScheduleService:
             await self._publish_state()
         return event
 
+    async def create_reminder(
+        self,
+        *,
+        fire_time: datetime,
+        message: str,
+        repeat: dict[str, Any] | None = None,
+    ) -> ScheduledEvent:
+        fire_time = fire_time.astimezone()
+        repeat_rule = _normalize_repeat_rule(repeat, fire_time)
+        reminder_meta = {
+            "message": message,
+            "repeat": repeat_rule,
+            "start": _serialize_dt(fire_time),
+        }
+        repeat_days = None
+        if repeat_rule and repeat_rule.get("type") == "weekly":
+            normalized_days = sorted({int(day) % 7 for day in repeat_rule.get("days") or []})
+            repeat_days = normalized_days or None
+        event = ScheduledEvent(
+            event_id=uuid4().hex,
+            event_type="reminder",
+            label=message,
+            time_of_day=fire_time.strftime("%H:%M"),
+            repeat_days=repeat_days,
+            single_shot=not bool(repeat_rule),
+            duration_seconds=None,
+            target_time=None,
+            next_fire=_serialize_dt(fire_time),
+            playback=PlaybackConfig(),
+            created_at=_serialize_dt(_now()),
+            metadata={"reminder": reminder_meta},
+        )
+        async with self._lock:
+            self._events[event.event_id] = event
+            self._schedule_event(event)
+            await self._persist_events()
+            await self._publish_state()
+        return event
+
     async def update_alarm(
         self,
         event_id: str,
@@ -644,6 +914,17 @@ class ScheduleService:
                     _compute_next_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
                 )
                 self._reschedule_event(stored_event)
+            elif stored_event.event_type == "reminder" and _reminder_repeats(stored_event):
+                _set_reminder_delay(stored_event, None)
+                next_fire = _compute_next_reminder_fire(stored_event, after=_now())
+                if next_fire:
+                    stored_event.set_next_fire(next_fire)
+                    self._reschedule_event(stored_event)
+                else:
+                    self._events.pop(event_id, None)
+                    task = self._tasks.pop(event_id, None)
+                    if task:
+                        task.cancel()
             else:
                 self._events.pop(event_id, None)
                 task = self._tasks.pop(event_id, None)
@@ -677,6 +958,27 @@ class ScheduleService:
             await self._publish_state()
         self._notify_active("alarm", None)
         return True
+
+    async def delay_reminder(self, event_id: str, seconds: int) -> bool:
+        seconds = max(1, seconds)
+        async with self._lock:
+            event = self._events.get(event_id)
+            if not event or event.event_type != "reminder":
+                return False
+            target = _now() + timedelta(seconds=seconds)
+            if _reminder_repeats(event):
+                _set_reminder_delay(event, target)
+                next_fire = _compute_next_reminder_fire(event, after=_now())
+                event.set_next_fire(next_fire or target)
+            else:
+                _set_reminder_delay(event, None)
+                event.set_next_fire(target)
+                meta = _ensure_reminder_meta(event)
+                meta["start"] = _serialize_dt(target)
+            self._reschedule_event(event)
+            await self._persist_events()
+            await self._publish_state()
+            return True
 
     async def extend_timer(self, event_id: str, seconds: int) -> bool:
         async with self._lock:
@@ -756,7 +1058,9 @@ class ScheduleService:
             if not event:
                 return
             LOGGER.info("Schedule firing %s (%s)", event.event_type, event.label or event.event_id)
-            handle = PlaybackHandle(event.playback, self._hostname, self._ha_client)
+            if event.event_type == "reminder":
+                _set_reminder_delay(event, None)
+            handle = PlaybackHandle(event.playback, self._hostname, self._ha_client, event.event_type)
             playback_task = asyncio.create_task(handle.start())
             active = ActiveEvent(
                 event=event,
@@ -808,10 +1112,15 @@ class ScheduleService:
     async def _publish_state(self) -> None:
         if not self._state_cb:
             return
-        snapshot = {"alarms": [], "timers": [], "updated_at": _serialize_dt(_now())}
+        snapshot = {"alarms": [], "timers": [], "reminders": [], "updated_at": _serialize_dt(_now())}
         for event in self._events.values():
             status = "active" if event.event_id in self._active else "scheduled"
-            snapshot_key = "alarms" if event.event_type == "alarm" else "timers"
+            if event.event_type == "alarm":
+                snapshot_key = "alarms"
+            elif event.event_type == "timer":
+                snapshot_key = "timers"
+            else:
+                snapshot_key = "reminders"
             snapshot[snapshot_key].append(event.to_public_dict(status=status))
         self._state_cb(snapshot)
 
