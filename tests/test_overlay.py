@@ -33,6 +33,7 @@ class OverlayRenderTests(unittest.TestCase):
             "active_alarm": None,
             "active_timer": None,
             "notifications": (),
+            "info_card": None,
             "last_reason": "test",
             "generated_at": 0.0,
             "schedule_snapshot": None,

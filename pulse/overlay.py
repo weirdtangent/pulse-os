@@ -209,8 +209,13 @@ class OverlayStateManager:
                 normalized = {
                     "text": text,
                     "category": str(card.get("category") or ""),
-                    "ts": float(card.get("ts") or time.time()),
                 }
+                ts_value = card.get("ts")
+                if ts_value is not None:
+                    try:
+                        normalized["ts"] = float(ts_value)
+                    except (TypeError, ValueError):
+                        pass
         signature = _signature(normalized)
         with self._lock:
             if signature == self._signatures["info_card"]:
