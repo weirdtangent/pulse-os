@@ -1,3 +1,11 @@
+## [0.58.6](https://github.com/weirdtangent/pulse-os/compare/v0.58.5...v0.58.6) (2025-11-24)
+
+
+### Bug Fixes
+
+* adjust timer confirmation phrase ([00cee63](https://github.com/weirdtangent/pulse-os/commit/00cee63e5074ac31e01424f56aefd617b537e5de))
+* fix layout of multiple timer/alarm/reminder cards ([075e4d7](https://github.com/weirdtangent/pulse-os/commit/075e4d7c63f5afe3486b07eba0fbd227f6f47746))
+
 ## [0.58.5](https://github.com/weirdtangent/pulse-os/compare/v0.58.4...v0.58.5) (2025-11-24)
 
 ## [0.58.4](https://github.com/weirdtangent/pulse-os/compare/v0.58.3...v0.58.4) (2025-11-24)
