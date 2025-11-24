@@ -340,6 +340,10 @@ OVERLAY_JS = """
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const clockNodes = root.querySelectorAll('[data-clock]');
   const timerNodes = root.querySelectorAll('[data-timer]');
+  const sizeClassMap = [
+    { className: 'overlay-timer__remaining--xlong', active: (len) => len > 8 },
+    { className: 'overlay-timer__remaining--long', active: (len) => len > 5 && len <= 8 },
+  ];
   const hour12Attr = root.dataset.clockHour12;
   const hour12 = hour12Attr !== 'false';
   const timeOptions = { hour: 'numeric', minute: '2-digit', hour12 };
@@ -402,6 +406,14 @@ OVERLAY_JS = """
       const remainingEl = node.querySelector('[data-timer-remaining]');
       if (remainingEl) {
         remainingEl.textContent = formatted;
+        const len = formatted.length;
+        sizeClassMap.forEach(({ className, active }) => {
+          if (active(len)) {
+            remainingEl.classList.add(className);
+          } else {
+            remainingEl.classList.remove(className);
+          }
+        });
       }
       if (targetMs - nowMs <= 1000) {
         node.classList.add('overlay-card--expired');
@@ -680,6 +692,14 @@ body {{
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.1;
+}}
+.overlay-card--timer .overlay-timer__remaining--long {{
+  font-size: clamp(2.5rem, 10vw, 5.6rem);
+  letter-spacing: 0.05em;
+}}
+.overlay-card--timer .overlay-timer__remaining--xlong {{
+  font-size: clamp(2.2rem, 8vw, 4.6rem);
+  letter-spacing: 0.03em;
 }}
 .overlay-card--expired {{
   opacity: 0.75;
