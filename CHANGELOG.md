@@ -1,3 +1,10 @@
+## [0.58.8](https://github.com/weirdtangent/pulse-os/compare/v0.58.7...v0.58.8) (2025-11-24)
+
+
+### Bug Fixes
+
+* don't rearrange grid when alarm or timer starts ringing ([affcc2b](https://github.com/weirdtangent/pulse-os/commit/affcc2b03628602bc795f73aec1283aaedb6a085))
+
 ## [0.58.7](https://github.com/weirdtangent/pulse-os/compare/v0.58.6...v0.58.7) (2025-11-24)
 
 
