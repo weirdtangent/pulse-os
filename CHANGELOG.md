@@ -1,3 +1,10 @@
+## [0.58.7](https://github.com/weirdtangent/pulse-os/compare/v0.58.6...v0.58.7) (2025-11-24)
+
+
+### Bug Fixes
+
+* try to get follow-up recording to work ([c4b881e](https://github.com/weirdtangent/pulse-os/commit/c4b881e42bd8c57cfe2b7c4cc1d19aaeaed18730))
+
 ## [0.58.6](https://github.com/weirdtangent/pulse-os/compare/v0.58.5...v0.58.6) (2025-11-24)
 
 
