@@ -1,3 +1,10 @@
+## [0.56.1](https://github.com/weirdtangent/pulse-os/compare/v0.56.0...v0.56.1) (2025-11-24)
+
+
+### Bug Fixes
+
+* also fix readback of o'clock times in next alarm phrase ([7ddacb9](https://github.com/weirdtangent/pulse-os/commit/7ddacb9084c1b03aed218092dca96efe867ab36b))
+
 # [0.56.0](https://github.com/weirdtangent/pulse-os/compare/v0.55.5...v0.56.0) (2025-11-24)
 
 
