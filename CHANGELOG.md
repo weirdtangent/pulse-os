@@ -1,3 +1,10 @@
+# [0.58.0](https://github.com/weirdtangent/pulse-os/compare/v0.57.0...v0.58.0) (2025-11-24)
+
+
+### Features
+
+* allow pausing and resuming alarms from the overlay ([b208601](https://github.com/weirdtangent/pulse-os/commit/b208601a8489c92e278ac411a0872ec7c910079f))
+
 # [0.57.0](https://github.com/weirdtangent/pulse-os/compare/v0.56.2...v0.57.0) (2025-11-24)
 
 
