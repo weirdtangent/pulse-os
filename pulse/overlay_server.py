@@ -41,6 +41,8 @@ class OverlayHttpServer:
         on_complete_reminder: Callable[[str], None] | None = None,
         on_delay_reminder: Callable[[str, int], None] | None = None,
         on_delete_reminder: Callable[[str], None] | None = None,
+        on_pause_alarm: Callable[[str], None] | None = None,
+        on_resume_alarm: Callable[[str], None] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -52,6 +54,8 @@ class OverlayHttpServer:
         self._on_complete_reminder = on_complete_reminder
         self._on_delay_reminder = on_delay_reminder
         self._on_delete_reminder = on_delete_reminder
+        self._on_pause_alarm = on_pause_alarm
+        self._on_resume_alarm = on_resume_alarm
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -164,6 +168,13 @@ class OverlayHttpServer:
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
                         return
                     outer._on_delete_alarm(str(event_id))
+                elif action in {"pause_alarm", "resume_alarm"}:
+                    event_id = data.get("event_id")
+                    handler = outer._on_pause_alarm if action == "pause_alarm" else outer._on_resume_alarm
+                    if not event_id or not handler:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
+                        return
+                    handler(str(event_id))
                 elif action == "complete_reminder":
                     event_id = data.get("event_id")
                     if not event_id or not outer._on_complete_reminder:

@@ -4,6 +4,7 @@
 ### Features
 
 * add reminders to the assistant and overlay ([760bd4b](https://github.com/weirdtangent/pulse-os/commit/760bd4b3ca6ed8aa0814f347ec4fbd6fcc2e90c0))
+* pause/resume or delete alarms from the overlay with emoji controls
 
 ## [0.56.2](https://github.com/weirdtangent/pulse-os/compare/v0.56.1...v0.56.2) (2025-11-24)
 

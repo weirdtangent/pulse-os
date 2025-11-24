@@ -439,6 +439,7 @@ class ScheduledEvent:
     playback: PlaybackConfig
     created_at: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    paused: bool = False
 
     def next_fire_dt(self) -> datetime:
         dt = _deserialize_dt(self.next_fire)
@@ -476,6 +477,7 @@ class ScheduledEvent:
             "created_at": self.created_at,
             "metadata": self.metadata,
             "status": status,
+            "paused": self.paused,
         }
         return data
 
@@ -494,6 +496,7 @@ class ScheduledEvent:
             playback=PlaybackConfig.from_dict(payload.get("playback")),
             created_at=payload.get("created_at") or _serialize_dt(_now()),
             metadata=payload.get("metadata") or {},
+            paused=bool(payload.get("paused", False)),
         )
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -510,6 +513,7 @@ class ScheduledEvent:
             "playback": self.playback.to_dict(),
             "created_at": self.created_at,
             "metadata": self.metadata,
+            "paused": self.paused,
         }
 
 
@@ -877,6 +881,30 @@ class ScheduleService:
             await self._publish_state()
             return True
 
+    async def pause_alarm(self, event_id: str) -> bool:
+        return await self._set_alarm_pause_state(event_id, True)
+
+    async def resume_alarm(self, event_id: str) -> bool:
+        return await self._set_alarm_pause_state(event_id, False)
+
+    async def _set_alarm_pause_state(self, event_id: str, paused: bool) -> bool:
+        async with self._lock:
+            event = self._events.get(event_id)
+            if not event or event.event_type != "alarm":
+                return False
+            if event.paused == paused:
+                return True
+            event.paused = paused
+            task = self._tasks.pop(event_id, None)
+            if task:
+                task.cancel()
+            if not paused and event.time_of_day:
+                event.set_next_fire(_compute_next_alarm_fire(event.time_of_day, event.repeat_days))
+                self._schedule_event(event)
+            await self._persist_events()
+            await self._publish_state()
+            return True
+
     async def delete_event(self, event_id: str) -> bool:
         await self.stop_event(event_id, reason="deleted")
         async with self._lock:
@@ -909,11 +937,21 @@ class ScheduleService:
                 return False
             event_type = stored_event.event_type
             event_payload = stored_event.to_public_dict()
-            if stored_event.event_type == "alarm" and stored_event.repeat_days:
-                stored_event.set_next_fire(
-                    _compute_next_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
-                )
-                self._reschedule_event(stored_event)
+            if stored_event.event_type == "alarm":
+                if stored_event.paused:
+                    task = self._tasks.pop(event_id, None)
+                    if task:
+                        task.cancel()
+                elif stored_event.repeat_days:
+                    stored_event.set_next_fire(
+                        _compute_next_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
+                    )
+                    self._reschedule_event(stored_event)
+                else:
+                    self._events.pop(event_id, None)
+                    task = self._tasks.pop(event_id, None)
+                    if task:
+                        task.cancel()
             elif stored_event.event_type == "reminder" and _reminder_repeats(stored_event):
                 _set_reminder_delay(stored_event, None)
                 next_fire = _compute_next_reminder_fire(stored_event, after=_now())
@@ -1008,13 +1046,18 @@ class ScheduleService:
         for event in self._events.values():
             if event_type and event.event_type != event_type:
                 continue
-            status = "active" if event.event_id in self._active else "scheduled"
+            if event.paused:
+                status = "paused"
+            elif event.event_id in self._active:
+                status = "active"
+            else:
+                status = "scheduled"
             events.append(event.to_public_dict(status=status))
         events.sort(key=lambda item: item.get("next_fire") or "")
         return events
 
     def get_next_alarm(self) -> dict[str, Any] | None:
-        alarms = [event for event in self._events.values() if event.event_type == "alarm"]
+        alarms = [event for event in self._events.values() if event.event_type == "alarm" and not event.paused]
         if not alarms:
             return None
         alarms.sort(key=lambda ev: ev.next_fire_dt())
@@ -1027,8 +1070,11 @@ class ScheduleService:
         return None
 
     def _schedule_event(self, event: ScheduledEvent) -> None:
-        if event.event_id in self._tasks:
-            self._tasks[event.event_id].cancel()
+        task = self._tasks.pop(event.event_id, None)
+        if task:
+            task.cancel()
+        if event.event_type == "alarm" and event.paused:
+            return
         self._tasks[event.event_id] = asyncio.create_task(self._wait_for_event(event.event_id))
 
     def _reschedule_event(self, event: ScheduledEvent) -> None:
@@ -1043,6 +1089,8 @@ class ScheduleService:
                 event = self._events.get(event_id)
                 if not event:
                     return
+                if event.event_type == "alarm" and event.paused:
+                    return
                 delay = (event.next_fire_dt() - _now()).total_seconds()
             if delay > 0:
                 try:
@@ -1056,6 +1104,8 @@ class ScheduleService:
         async with self._lock:
             event = self._events.get(event_id)
             if not event:
+                return
+            if event.event_type == "alarm" and event.paused:
                 return
             LOGGER.info("Schedule firing %s (%s)", event.event_type, event.label or event.event_id)
             if event.event_type == "reminder":
@@ -1114,7 +1164,12 @@ class ScheduleService:
             return
         snapshot = {"alarms": [], "timers": [], "reminders": [], "updated_at": _serialize_dt(_now())}
         for event in self._events.values():
-            status = "active" if event.event_id in self._active else "scheduled"
+            if event.paused:
+                status = "paused"
+            elif event.event_id in self._active:
+                status = "active"
+            else:
+                status = "scheduled"
             if event.event_type == "alarm":
                 snapshot_key = "alarms"
             elif event.event_type == "timer":

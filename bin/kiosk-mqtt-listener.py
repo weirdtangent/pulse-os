@@ -545,6 +545,8 @@ class KioskMqttListener:
                 on_state_change=self._handle_overlay_change,
                 on_stop_request=self._handle_overlay_stop_request,
                 on_delete_alarm=self._handle_overlay_delete_alarm_request,
+                on_pause_alarm=self._handle_overlay_pause_alarm_request,
+                on_resume_alarm=self._handle_overlay_resume_alarm_request,
                 on_complete_reminder=self._handle_overlay_complete_reminder_request,
                 on_delay_reminder=self._handle_overlay_delay_reminder_request,
                 on_delete_reminder=self._handle_overlay_delete_reminder_request,
@@ -789,6 +791,14 @@ class KioskMqttListener:
             if not snapshot.alarms:
                 change = self.overlay_state.update_info_card(None)
                 self._handle_overlay_change(change)
+
+    def _handle_overlay_pause_alarm_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "pause_alarm", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_resume_alarm_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "resume_alarm", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
     def _handle_overlay_complete_reminder_request(self, event_id: str) -> None:
         payload = json.dumps({"action": "complete_reminder", "event_id": event_id})

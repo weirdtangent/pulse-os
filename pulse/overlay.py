@@ -710,7 +710,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         alarms = snapshot.alarms or ()
     entries = _format_alarm_info_entries(alarms)
     title = str(card.get("title") or "Alarms").strip() or "Alarms"
-    subtitle = card.get("text") or "Tap the red × to delete an alarm."
+    subtitle = card.get("text") or "Use the buttons to pause, resume, or delete an alarm."
     safe_title = html_escape(title)
     safe_subtitle = html_escape(subtitle)
     if not entries:
@@ -718,11 +718,22 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
     else:
         body_rows = []
         for entry in entries:
-            label = html_escape(entry["label"])
+            raw_label = entry["label"]
+            label = html_escape(raw_label)
             meta = html_escape(entry["meta"])
             delete_id = html_escape(entry["id"], quote=True)
             status = entry.get("status")
-            status_html = '<span class="overlay-info-card__alarm-status">Active</span>' if status == "active" else ""
+            if status == "active":
+                status_text = "Active"
+            elif status == "paused":
+                status_text = "Paused"
+            else:
+                status_text = ""
+            status_html = f'<span class="overlay-info-card__alarm-status">{status_text}</span>' if status_text else ""
+            toggle_action = "resume" if status == "paused" else "pause"
+            toggle_label = "Resume" if toggle_action == "resume" else "Pause"
+            toggle_emoji = "▶️" if toggle_action == "resume" else "⏸️"
+            aria_label = html_escape(raw_label, quote=True)
             body_rows.append(
                 f"""
   <div class="overlay-info-card__alarm">
@@ -730,9 +741,15 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
       <div class="overlay-info-card__alarm-label">{label}</div>
       <div class="overlay-info-card__alarm-meta">{meta}{status_html}</div>
     </div>
-    <button class="overlay-info-card__alarm-delete"
-      data-delete-alarm="{delete_id}"
-      aria-label="Delete {label}">×</button>
+    <div class="overlay-info-card__alarm-actions">
+      <button class="overlay-info-card__alarm-toggle"
+        data-toggle-alarm="{toggle_action}"
+        data-event-id="{delete_id}"
+        aria-label="{toggle_label} {aria_label}">{toggle_emoji}</button>
+      <button class="overlay-info-card__alarm-delete"
+        data-delete-alarm="{delete_id}"
+        aria-label="Delete {aria_label}">🗑️</button>
+    </div>
   </div>
                 """.strip()
             )
@@ -784,7 +801,7 @@ def _build_reminder_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
         data-complete-reminder data-event-id="{reminder_id}">Complete</button>
       <button class="overlay-info-card__alarm-delete"
         data-delete-reminder="{reminder_id}"
-        aria-label="Delete {label}">×</button>
+        aria-label="Delete {label}">🗑️</button>
     </div>
   </div>
                 """.strip()
@@ -1000,6 +1017,9 @@ def _filter_upcoming_alarms(alarms: Iterable[dict[str, Any]] | None) -> list[dic
     upcoming: list[dict[str, Any]] = []
     for item in alarms:
         if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "").lower()
+        if status == "paused":
             continue
         next_fire = item.get("next_fire")
         ts = _parse_timestamp(next_fire)

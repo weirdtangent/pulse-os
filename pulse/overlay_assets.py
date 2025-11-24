@@ -146,6 +146,12 @@ body {
   flex: 1 1 auto;
 }
 
+.overlay-info-card__alarm-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .overlay-info-card__alarm-label {
   font-size: 1.2rem;
   font-weight: 600;
@@ -169,18 +175,47 @@ body {
 
 .overlay-info-card__alarm-delete {
   border: none;
-  background: rgba(255, 59, 48, 0.85);
+  background: rgba(255, 59, 48, 0.25);
   color: #fff;
-  width: 2.2rem;
-  height: 2.2rem;
-  border-radius: 0.6rem;
-  font-size: 1.2rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.8rem;
+  font-size: 1.25rem;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.overlay-info-card__alarm-toggle {
+  border: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.8rem;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 214, 10, 0.25);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.overlay-info-card__alarm-toggle[data-toggle-alarm="resume"] {
+  background: rgba(52, 199, 89, 0.3);
+}
+
+.overlay-info-card__alarm-delete:hover,
+.overlay-info-card__alarm-toggle:hover {
+  transform: translateY(-1px);
 }
 
 .overlay-info-card__alarm-delete:hover {
-  background: rgba(255, 82, 69, 0.95);
+  background: rgba(255, 82, 69, 0.35);
+}
+
+.overlay-info-card__alarm-toggle:hover[data-toggle-alarm="resume"] {
+  background: rgba(52, 199, 89, 0.45);
+}
+
+.overlay-info-card__alarm-toggle:hover[data-toggle-alarm="pause"] {
+  background: rgba(255, 214, 10, 0.4);
 }
 
 .overlay-info-card__reminder {
@@ -578,6 +613,28 @@ OVERLAY_JS = """
       }).catch(() => {
         deleteAlarmButton.disabled = false;
         deleteAlarmButton.textContent = previous;
+      });
+      return;
+    }
+
+    const toggleAlarmButton = e.target.closest('[data-toggle-alarm]');
+    if (toggleAlarmButton) {
+      const eventId = toggleAlarmButton.dataset.eventId;
+      const toggleAction = toggleAlarmButton.dataset.toggleAlarm || 'pause';
+      if (!eventId) {
+        return;
+      }
+      const previous = toggleAlarmButton.textContent;
+      toggleAlarmButton.disabled = true;
+      toggleAlarmButton.textContent = '…';
+      const command = toggleAction === 'resume' ? 'resume_alarm' : 'pause_alarm';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: command, event_id: eventId })
+      }).catch(() => {
+        toggleAlarmButton.disabled = false;
+        toggleAlarmButton.textContent = previous;
       });
       return;
     }

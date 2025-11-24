@@ -117,6 +117,8 @@ Publish JSON commands to `pulse/<hostname>/assistant/schedules/command` to contr
 | `{"action": "create_alarm", "time": "8:30am", "label": "Weekdays", "days": "weekdays", "playback": {"mode": "music", "source": "tidal:playlist:123"}}` | `time` | `days` accepts `weekdays`, `weekends`, `daily`, or comma-separated day names (`mon,wed`). `playback.mode` defaults to `beep`; set to `music` to trigger Music Assistant via `music_entity`/`source`. |
 | `{"action": "update_alarm", "event_id": "<id>", "time": "7:00", "days": "mon,tue,wed"}` | `event_id` | Any omitted field stays unchanged. |
 | `{"action": "delete_alarm", "event_id": "<id>"}` | `event_id` | Removes the alarm entirely. |
+| `{"action": "pause_alarm", "event_id": "<id>"}` | `event_id` | Disables the alarm without deleting it. The overlay’s ⏸️ button issues this command. |
+| `{"action": "resume_alarm", "event_id": "<id>"}` | `event_id` | Re-enables a paused alarm. The overlay’s ▶️ button issues this command. |
 | `{"action": "start_timer", "duration": "15m", "label": "Bread"}` | `duration` | Duration accepts `90s`, `15m`, `2h`, or raw seconds. |
 | `{"action": "add_time", "event_id": "<id>", "seconds": 180}` | `event_id`, `seconds` | Adds time to an existing timer (overlay uses +3 min by default). |
 | `{"action": "stop", "event_id": "<id>"}` | `event_id` | Works for either alarms or timers. |

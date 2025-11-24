@@ -978,6 +978,14 @@ class PulseAssistant:
                 event_id = payload.get("event_id")
                 if event_id:
                     await self.schedule_service.delete_event(str(event_id))
+            elif action == "pause_alarm":
+                event_id = payload.get("event_id")
+                if event_id:
+                    await self.schedule_service.pause_alarm(str(event_id))
+            elif action in {"resume_alarm", "play_alarm"}:
+                event_id = payload.get("event_id")
+                if event_id:
+                    await self.schedule_service.resume_alarm(str(event_id))
             elif action in {"start_timer", "create_timer"}:
                 seconds = self._coerce_duration_seconds(payload.get("duration") or payload.get("seconds"))
                 playback = self._playback_from_payload(payload.get("playback"))
@@ -1227,7 +1235,7 @@ class PulseAssistant:
                 }
             )
         self._publish_info_overlay(
-            text="Tap the red × to delete an alarm.",
+            text="Use ⏸️ to pause, ▶️ to resume, or 🗑️ to delete an alarm.",
             category="alarms",
             extra={"type": "alarms", "title": "Alarms", "alarms": alarm_payload},
         )

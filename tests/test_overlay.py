@@ -132,7 +132,7 @@ class OverlayRenderTests(unittest.TestCase):
         )
         self.assertIn(expected, html)
 
-    def test_alarm_info_card_renders_delete_buttons(self) -> None:
+    def test_alarm_info_card_renders_action_buttons(self) -> None:
         alarms = (
             {"id": "alarm1", "label": "Wake Up", "time_of_day": "08:00", "repeat_days": [0, 1, 2, 3, 4]},
             {"id": "alarm2", "label": "Weekend", "time_of_day": "09:30", "repeat_days": [5, 6]},
@@ -140,6 +140,7 @@ class OverlayRenderTests(unittest.TestCase):
         snapshot = self._snapshot(alarms=alarms, info_card={"type": "alarms", "title": "Alarms"})
         html = render_overlay_html(snapshot, self.theme)
         self.assertIn('data-delete-alarm="alarm1"', html)
+        self.assertIn('data-toggle-alarm="pause"', html)
         self.assertIn("data-info-card-close", html)
 
     def test_alarm_info_card_can_use_payload_data(self) -> None:
@@ -155,6 +156,22 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(manager.snapshot(), self.theme, info_endpoint="/overlay/info-card")
         self.assertIn('data-delete-alarm="alarm42"', html)
         self.assertIn("Weekdays", html)
+        self.assertIn('data-toggle-alarm="pause"', html)
+
+    def test_alarm_info_card_renders_resume_for_paused_alarm(self) -> None:
+        alarms = (
+            {
+                "id": "alarm-paused",
+                "label": "Vacation",
+                "time_of_day": "07:00",
+                "repeat_days": [0, 1, 2, 3, 4],
+                "status": "paused",
+            },
+        )
+        snapshot = self._snapshot(alarms=alarms, info_card={"type": "alarms", "title": "Alarms"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn('data-toggle-alarm="resume"', html)
+        self.assertIn("Paused", html)
 
     def test_notification_bar_shows_reminder_badge(self) -> None:
         future = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
