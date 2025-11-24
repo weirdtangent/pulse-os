@@ -44,7 +44,7 @@ Local reminders beep once, display the message on the overlay, and offer on-scre
 
 ## Alarm, timer & reminder overlays
 
-- Tapping “OK” on a ringing timer/alarm posts `/overlay/stop`, which maps to the MQTT `{"action": "stop"}` command.
+- Tapping “Stop” on a ringing timer or alarm posts `/overlay/stop`, which maps to the MQTT `{"action": "stop"}` command. Snooze sends `{"action": "snooze", "minutes": 5}` for alarms.
 - Saying “Show me my alarms” keeps the overlay open until you close it or use the on-screen ⏸️ / ▶️ / 🗑️ buttons. They send `{"action": "pause_alarm"}`, `{"action": "resume_alarm"}`, or `{"action": "delete_alarm"}` (with the alarm `event_id`) over MQTT.
 - Reminder overlays include Complete/+1h/+1d/+1w buttons. Reminder info cards mirror the alarm list so you can delete or complete entries directly from the screen.
 

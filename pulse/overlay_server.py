@@ -37,6 +37,7 @@ class OverlayHttpServer:
         logger: Logger | None = None,
         on_state_change: Callable[[OverlayChange], None] | None = None,
         on_stop_request: Callable[[str], None] | None = None,
+        on_snooze_request: Callable[[str, int], None] | None = None,
         on_delete_alarm: Callable[[str], None] | None = None,
         on_complete_reminder: Callable[[str], None] | None = None,
         on_delay_reminder: Callable[[str, int], None] | None = None,
@@ -50,6 +51,7 @@ class OverlayHttpServer:
         self.logger = logger
         self._on_state_change = on_state_change
         self._on_stop_request = on_stop_request
+        self._on_snooze_request = on_snooze_request
         self._on_delete_alarm = on_delete_alarm
         self._on_complete_reminder = on_complete_reminder
         self._on_delay_reminder = on_delay_reminder
@@ -131,21 +133,35 @@ class OverlayHttpServer:
                     self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
 
             def _handle_stop(self) -> None:
-                if not outer._on_stop_request:
-                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Stop command unavailable")
-                    return
                 try:
                     data = self._read_json()
                 except ValueError as exc:
                     self._log(f"overlay stop: invalid request: {exc}")
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
                     return
-                action = data.get("action")
+                action = (data.get("action") or "").strip().lower()
                 event_id = data.get("event_id")
-                if action != "stop" or not event_id:
+                if not event_id:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
+                    return
+                if action == "stop":
+                    if not outer._on_stop_request:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Stop command unavailable")
+                        return
+                    outer._on_stop_request(str(event_id))
+                elif action == "snooze":
+                    if not outer._on_snooze_request:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Snooze command unavailable")
+                        return
+                    minutes = data.get("minutes")
+                    try:
+                        snooze_minutes = max(1, int(minutes))
+                    except (TypeError, ValueError):
+                        snooze_minutes = 5
+                    outer._on_snooze_request(str(event_id), snooze_minutes)
+                else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid request")
                     return
-                outer._on_stop_request(str(event_id))
                 self.send_response(HTTPStatus.NO_CONTENT)
                 self._set_common_headers()
                 self.end_headers()

@@ -544,6 +544,7 @@ class KioskMqttListener:
                 logger=self.log,
                 on_state_change=self._handle_overlay_change,
                 on_stop_request=self._handle_overlay_stop_request,
+                on_snooze_request=self._handle_overlay_snooze_request,
                 on_delete_alarm=self._handle_overlay_delete_alarm_request,
                 on_pause_alarm=self._handle_overlay_pause_alarm_request,
                 on_resume_alarm=self._handle_overlay_resume_alarm_request,
@@ -781,6 +782,10 @@ class KioskMqttListener:
 
     def _handle_overlay_stop_request(self, event_id: str) -> None:
         payload = json.dumps({"action": "stop", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_snooze_request(self, event_id: str, minutes: int) -> None:
+        payload = json.dumps({"action": "snooze", "event_id": event_id, "minutes": minutes})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
     def _handle_overlay_delete_alarm_request(self, event_id: str) -> None:

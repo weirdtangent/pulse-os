@@ -545,18 +545,25 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
         button_html = ""
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
-            button_html = (
+            stop_button = (
                 f'<button class="overlay-button overlay-button--primary" data-stop-timer '
-                f'data-event-id="{event_id_escaped}">OK</button>'
+                f'data-event-id="{event_id_escaped}">Stop</button>'
             )
-        body_text = html_escape('Tap the physical controls or say "Stop" to dismiss.')
+            snooze_button = (
+                f'<button class="overlay-button" data-snooze-alarm data-event-id="{event_id_escaped}" '
+                f'data-snooze-minutes="5">Snooze 5 min</button>'
+            )
+            button_html = (
+                '<div class="overlay-card__actions overlay-card__actions--split">'
+                f"{stop_button}{snooze_button}"
+                "</div>"
+            )
         cards.append(
             (
                 "center",
                 f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
-  <div class="overlay-card__body--ringing">{body_text}</div>
   {button_html}
 </div>
 """.strip(),
@@ -570,20 +577,19 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
         button_html = ""
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
-            button_html = (
+            stop_button = (
                 f'<button class="overlay-button overlay-button--primary" data-stop-timer '
-                f'data-event-id="{event_id_escaped}">OK</button>'
+                f'data-event-id="{event_id_escaped}">Stop</button>'
             )
+            button_html = f'<div class="overlay-card__actions">{stop_button}</div>'
         event_id_key = str(event_id) if event_id is not None else None
         cell = timer_positions.get(event_id_key, "bottom-center")
-        body_text = html_escape("Timer finished.")
         cards.append(
             (
                 cell,
                 f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
-  <div class="overlay-card__body--ringing">{body_text}</div>
   {button_html}
 </div>
 """.strip(),

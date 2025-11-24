@@ -456,6 +456,32 @@ body {
   border-radius: 0.85rem;
 }
 
+.overlay-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.overlay-card__actions .overlay-button {
+  margin-top: 0;
+  width: 100%;
+}
+
+@media (min-width: 520px) {
+  .overlay-card__actions--split {
+    flex-direction: row;
+  }
+
+  .overlay-card__actions--split .overlay-button {
+    flex: 1;
+  }
+
+  .overlay-card__actions--split .overlay-button--primary {
+    flex: 1.25;
+  }
+}
+
 .overlay-card--ringing .overlay-card__title {
   font-size: clamp(1.5rem, 4vw, 3rem);
 }
@@ -696,6 +722,31 @@ OVERLAY_JS = """
       return;
     }
 
+    const snoozeButton = e.target.closest('[data-snooze-alarm]');
+    if (snoozeButton) {
+      const eventId = snoozeButton.dataset.eventId;
+      if (!eventId) {
+        return;
+      }
+      let minutes = Number(snoozeButton.dataset.snoozeMinutes || '5');
+      if (!Number.isFinite(minutes) || minutes <= 0) {
+        minutes = 5;
+      }
+      minutes = Math.max(1, Math.round(minutes));
+      const previous = snoozeButton.textContent;
+      snoozeButton.disabled = true;
+      snoozeButton.textContent = 'Snoozing...';
+      fetch(stopEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'snooze', event_id: eventId, minutes })
+      }).catch(() => {
+        snoozeButton.disabled = false;
+        snoozeButton.textContent = previous;
+      });
+      return;
+    }
+
     const button = e.target.closest('[data-stop-timer]');
     if (!button) {
       return;
@@ -704,6 +755,7 @@ OVERLAY_JS = """
     if (!eventId) {
       return;
     }
+    const previous = button.textContent;
     button.disabled = true;
     button.textContent = 'Stopping...';
     fetch(stopEndpoint, {
@@ -712,7 +764,7 @@ OVERLAY_JS = """
       body: JSON.stringify({ action: 'stop', event_id: eventId })
     }).catch(() => {
       button.disabled = false;
-      button.textContent = 'OK';
+      button.textContent = previous || 'Stop';
     });
   });
 })();
