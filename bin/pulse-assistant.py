@@ -166,6 +166,8 @@ class PulseAssistant:
         self._media_resume_task: asyncio.Task | None = None
         self._media_resume_delay = 2.0
         self._log_llm_messages = config.log_llm_messages
+        self._last_response_end: float | None = None
+        self._follow_up_start_delay = 0.4
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -377,10 +379,20 @@ class PulseAssistant:
             self._media_pause_pending = False
             self._media_resume_task = None
 
-    async def _record_phrase(self) -> bytes | None:
-        min_chunks = int(max(1, (self.config.phrase.min_seconds * 1000) / self.config.mic.chunk_ms))
-        max_chunks = int(max(1, (self.config.phrase.max_seconds * 1000) / self.config.mic.chunk_ms))
-        silence_chunks = int(max(1, self.config.phrase.silence_ms / self.config.mic.chunk_ms))
+    async def _record_phrase(
+        self,
+        *,
+        min_seconds: float | None = None,
+        max_seconds: float | None = None,
+        silence_ms: int | None = None,
+    ) -> bytes | None:
+        chunk_ms = self.config.mic.chunk_ms
+        min_duration = self.config.phrase.min_seconds if min_seconds is None else min_seconds
+        max_duration = self.config.phrase.max_seconds if max_seconds is None else max_seconds
+        silence_window = self.config.phrase.silence_ms if silence_ms is None else silence_ms
+        min_chunks = int(max(1, (min_duration * 1000) / chunk_ms))
+        max_chunks = int(max(1, (max_duration * 1000) / chunk_ms))
+        silence_chunks = int(max(1, silence_window / chunk_ms))
         buffer = bytearray()
         silence_run = 0
         chunks = 0
@@ -514,18 +526,36 @@ class PulseAssistant:
                 return
             llm_result = await self._execute_llm_turn(transcript, wake_word, tracker)
             follow_up_needed = self._should_listen_for_follow_up(llm_result)
+            follow_up_attempts = 0
+            max_follow_up_attempts = 2
             while follow_up_needed:
                 tracker.begin_stage("listening")
                 self._set_assist_stage("pulse", "listening", {"wake_word": wake_word, "follow_up": True})
+                await self._wait_for_speech_tail()
                 await self._maybe_play_wake_sound()
-                follow_up_audio = await self._record_follow_up_phrase(timeout_seconds=5.0)
+                follow_up_audio = await self._record_follow_up_phrase()
                 if not follow_up_audio:
-                    break
+                    follow_up_attempts += 1
+                    LOGGER.info("Follow-up attempt %d captured no audio", follow_up_attempts)
+                    if follow_up_attempts >= max_follow_up_attempts:
+                        tracker.begin_stage("speaking")
+                        self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word, "follow_up": True})
+                        await self._speak("I didn't hear anything, so let's try again later.")
+                        break
+                    continue
                 tracker.begin_stage("thinking")
                 self._set_assist_stage("pulse", "thinking", {"wake_word": wake_word, "follow_up": True})
                 follow_up_transcript = await self._transcribe(follow_up_audio)
                 if not follow_up_transcript:
-                    break
+                    follow_up_attempts += 1
+                    LOGGER.info("Follow-up attempt %d produced no transcript", follow_up_attempts)
+                    if follow_up_attempts >= max_follow_up_attempts:
+                        tracker.begin_stage("speaking")
+                        self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word, "follow_up": True})
+                        await self._speak("Sorry, I didn't catch that.")
+                        break
+                    continue
+                follow_up_attempts = 0
                 if self._log_llm_messages:
                     LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
                 payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
@@ -678,6 +708,8 @@ class PulseAssistant:
             tag = "follow_up" if follow_up else wake_word
             self._log_assistant_response(tag, llm_result.response, pipeline="pulse")
             await self._speak(llm_result.response)
+            speech_finished_at = time.monotonic()
+            self._last_response_end = speech_finished_at
             self._trigger_media_resume_after_response()
         return llm_result
 
@@ -690,28 +722,20 @@ class PulseAssistant:
         response = (llm_result.response or "").strip()
         return bool(response.endswith("?"))
 
-    async def _record_follow_up_phrase(self, timeout_seconds: float) -> bytes | None:
-        chunk_ms = self.config.mic.chunk_ms
-        max_chunks = max(1, int((timeout_seconds * 1000) / chunk_ms))
-        silence_chunks = max(1, int(self.config.phrase.silence_ms / chunk_ms))
-        buffer = bytearray()
-        silence_run = 0
-        chunks = 0
-        while chunks < max_chunks:
-            try:
-                chunk = await asyncio.wait_for(self.mic.read_chunk(), timeout=timeout_seconds)
-            except TimeoutError:
-                break
-            buffer.extend(chunk)
-            rms = _compute_rms(chunk, self.config.mic.width)
-            if rms < self.config.phrase.rms_floor and chunks >= 1:
-                silence_run += 1
-                if silence_run >= silence_chunks:
-                    break
-            else:
-                silence_run = 0
-            chunks += 1
-        return bytes(buffer) if buffer else None
+    async def _record_follow_up_phrase(self) -> bytes | None:
+        listen_window = max(self.config.phrase.max_seconds, 10.0)
+        return await self._record_phrase(
+            min_seconds=0.4,
+            max_seconds=listen_window,
+            silence_ms=self.config.phrase.silence_ms,
+        )
+
+    async def _wait_for_speech_tail(self) -> None:
+        if self._last_response_end is None:
+            return
+        remaining = self._follow_up_start_delay - (time.monotonic() - self._last_response_end)
+        if remaining > 0:
+            await asyncio.sleep(remaining)
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
