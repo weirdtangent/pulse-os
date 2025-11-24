@@ -1,3 +1,10 @@
+## [0.58.14](https://github.com/weirdtangent/pulse-os/compare/v0.58.13...v0.58.14) (2025-11-24)
+
+
+### Bug Fixes
+
+* computers fixing computers, how perverse ([84edf4d](https://github.com/weirdtangent/pulse-os/commit/84edf4df34fcc94c03c988ac7576822218da9042))
+
 ## [0.58.13](https://github.com/weirdtangent/pulse-os/compare/v0.58.12...v0.58.13) (2025-11-24)
 
 
