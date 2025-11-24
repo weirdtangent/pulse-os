@@ -92,6 +92,22 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
 
 **Solution**: Snapclient uses the PulseAudio/PipeWire backend (`--player pulse`). If the `pipewire-pulse` user services aren’t running, Snapclient silently falls back to ALSA and no audio reaches the kiosk sink.
 
+> **Heads-up about extra IPv6 errors:** Installing the Debian/Ubuntu `snapclient` package auto-enables the distro’s generic `snapclient.service`, which immediately tries to connect to whatever host string it finds (often an IPv6 address you don’t use) and floods the logs with lines like:
+>
+> ```
+> (Connection) Resolving host IP for: fd4b:9231:5453:fb5d:...
+> (Connection) Connecting to [fd4b:...]:1704
+> (Connection) Failed to connect ..., error: Connection refused
+> ```
+>
+> That noise isn’t our managed service—it’s the stock unit that ships with the package. Disable it once (or rerun `./setup.sh`) so only `pulse-snapclient.service` stays active:
+>
+> ```bash
+> sudo systemctl disable --now snapclient.service
+> ./setup.sh <location>   # optional, re-enables pulse-snapclient.service
+> ```
+> After that, only the Pulse-managed Snapclient will run.
+
 1. **Rerun** `./setup.sh <location>` so the new `configure_snapclient()` path calls `ensure_user_systemd_session`, which starts `pipewire.service`, `pipewire-pulse.service`, and `wireplumber.service` for the `pulse` user even when Bluetooth autoconnect is disabled.
 2. **Manual fix** (if you can’t rerun setup right away):
    ```bash
