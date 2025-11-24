@@ -1,3 +1,10 @@
+## [0.58.4](https://github.com/weirdtangent/pulse-os/compare/v0.58.3...v0.58.4) (2025-11-24)
+
+
+### Bug Fixes
+
+* add min-height to notification bar and hide it when empty ([627cdfd](https://github.com/weirdtangent/pulse-os/commit/627cdfdc7356651efe421c989d085617a6f14da4))
+
 ## [0.58.3](https://github.com/weirdtangent/pulse-os/compare/v0.58.2...v0.58.3) (2025-11-24)
 
 
