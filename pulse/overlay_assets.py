@@ -272,6 +272,18 @@ body {
   gap: 0.4rem;
 }
 
+.overlay-info-card__reminder-actions .overlay-button {
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.4rem;
+  padding: 0 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
 .overlay-info-card__empty {
   margin-top: 1rem;
   font-size: 1.1rem;
@@ -392,8 +404,10 @@ body {
 .overlay-reminder__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  column-gap: 0.6rem;
+  row-gap: 0.4rem;
   align-items: center;
+  align-content: center;
 }
 
 .overlay-reminder__delays {
@@ -482,10 +496,11 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.4rem;
-  padding: 0 1.2rem;
-  line-height: 1.1;
+  height: 2.4rem;
+  padding: 0 1.1rem;
+  line-height: 1.05;
   font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .overlay-card__actions {
