@@ -1,3 +1,10 @@
+## [0.58.2](https://github.com/weirdtangent/pulse-os/compare/v0.58.1...v0.58.2) (2025-11-24)
+
+
+### Bug Fixes
+
+* add Noto Color Emoji font to install and to font family in overlay assets ([3efc749](https://github.com/weirdtangent/pulse-os/commit/3efc749e03ca969394a7afc1a71fdbb122c0e0c0))
+
 ## [0.58.1](https://github.com/weirdtangent/pulse-os/compare/v0.58.0...v0.58.1) (2025-11-24)
 
 
