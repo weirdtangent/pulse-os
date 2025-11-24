@@ -1,3 +1,10 @@
+## [0.55.1](https://github.com/weirdtangent/pulse-os/compare/v0.55.0...v0.55.1) (2025-11-24)
+
+
+### Bug Fixes
+
+* make overlay server work again ([b445ec2](https://github.com/weirdtangent/pulse-os/commit/b445ec2110cb17c4a61840ca0e1209d280ab0926))
+
 # [0.55.0](https://github.com/weirdtangent/pulse-os/compare/v0.54.9...v0.55.0) (2025-11-24)
 
 
