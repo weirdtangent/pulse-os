@@ -1,3 +1,10 @@
+## [0.58.21](https://github.com/weirdtangent/pulse-os/compare/v0.58.20...v0.58.21) (2025-11-25)
+
+
+### Bug Fixes
+
+* handle 4-digit AM/PM times in assistant shortcuts ([db097b8](https://github.com/weirdtangent/pulse-os/commit/db097b83b02205204acb139e87c2b00ba9205e2b))
+
 ## [0.58.20](https://github.com/weirdtangent/pulse-os/compare/v0.58.19...v0.58.20) (2025-11-25)
 
 
