@@ -1,3 +1,10 @@
+## [0.58.19](https://github.com/weirdtangent/pulse-os/compare/v0.58.18...v0.58.19) (2025-11-25)
+
+
+### Bug Fixes
+
+* forward blank taps to parent window ([c17ed1e](https://github.com/weirdtangent/pulse-os/commit/c17ed1e83b9c901c9784f6b045ad67ac8ebd309f))
+
 ## [0.58.18](https://github.com/weirdtangent/pulse-os/compare/v0.58.17...v0.58.18) (2025-11-25)
 
 
