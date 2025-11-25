@@ -34,6 +34,17 @@ with wave.open(sys.argv[1], 'wb') as wav_file:
   fi
 }
 
+# Read the current sink volume percentage, if available
+current_sink_volume() {
+  local sink="$1"
+  local volume
+  volume=$(pactl get-sink-volume "$sink" 2>/dev/null | grep -m1 -oE "([0-9]+)%" || true)
+  volume=${volume%\%}
+  if [ -n "$volume" ]; then
+    echo "$volume"
+  fi
+}
+
 # If PipeWire isn't ready yet, just bail quietly and let the next run handle it
 if ! pw-cli info &>/dev/null; then
   exit 0
@@ -67,6 +78,7 @@ CARD=$(pactl list cards short 2>/dev/null | grep -m1 "bluez_card" | awk '{print 
 
 # Check if the BT sink exists
 if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
+  CURRENT_VOL=$(current_sink_volume "$SINK" || true)
   # Prefer high-quality audio profile when available
   if [ -n "$CARD" ]; then
     if pactl list cards | grep -A10 "$CARD" | grep -q "Profiles:.*a2dp-sink"; then
@@ -81,7 +93,11 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
 
   DEFAULT_VOL="${PULSE_BT_DEFAULT_VOLUME:-50}"
   pactl set-sink-mute "$SINK" 0 >/dev/null 2>&1 || true
-  pactl set-sink-volume "$SINK" "${DEFAULT_VOL}%" >/dev/null 2>&1 || true
+  TARGET_VOL="$DEFAULT_VOL"
+  if [ -n "${CURRENT_VOL:-}" ]; then
+    TARGET_VOL="$CURRENT_VOL"
+  fi
+  pactl set-sink-volume "$SINK" "${TARGET_VOL}%" >/dev/null 2>&1 || true
 
   # Play boot sound exactly once per boot, through BT sink
   if [ -f "$BOOT_SOUND" ] && [ ! -e "$FLAG" ]; then
@@ -98,7 +114,7 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
       last_time=$(cat "$LAST_KEEPALIVE" 2>/dev/null || echo "0")
     fi
     time_diff=$((current_time - last_time))
-    
+
     # Send keepalive if enough time has passed
     if [ "$time_diff" -ge "$KEEPALIVE_INTERVAL" ]; then
       # Play silent keepalive to prevent speaker from auto-powering off
