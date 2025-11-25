@@ -651,6 +651,12 @@ OVERLAY_JS = """
   alignNowPlayingCard();
   window.addEventListener('resize', alignNowPlayingCard);
 
+  const forwardBlankTapToParent = () => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ source: 'pulse-overlay', type: 'blank-tap' }, '*');
+    }
+  };
+
   // Handle stop timer button clicks
   root.addEventListener('click', (e) => {
     const closeCardButton = e.target.closest('[data-info-card-close]');
@@ -811,6 +817,7 @@ OVERLAY_JS = """
 
     const button = e.target.closest('[data-stop-timer]');
     if (!button) {
+      forwardBlankTapToParent();
       return;
     }
     const eventId = button.dataset.eventId;
