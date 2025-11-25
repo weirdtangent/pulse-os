@@ -1,3 +1,10 @@
+## [0.58.20](https://github.com/weirdtangent/pulse-os/compare/v0.58.19...v0.58.20) (2025-11-25)
+
+
+### Bug Fixes
+
+* update README.md ([71a202e](https://github.com/weirdtangent/pulse-os/commit/71a202ec56dfb61bf5ea8f914abaf55e1e1f9c54))
+
 ## [0.58.19](https://github.com/weirdtangent/pulse-os/compare/v0.58.18...v0.58.19) (2025-11-25)
 
 
