@@ -1,3 +1,10 @@
+## [0.58.18](https://github.com/weirdtangent/pulse-os/compare/v0.58.17...v0.58.18) (2025-11-25)
+
+
+### Bug Fixes
+
+* don't reset BT speaker volume every 15 seconds ([f071973](https://github.com/weirdtangent/pulse-os/commit/f0719735acde296123b483203bd912bfa692f8a1))
+
 ## [0.58.17](https://github.com/weirdtangent/pulse-os/compare/v0.58.16...v0.58.17) (2025-11-24)
 
 ## [0.58.16](https://github.com/weirdtangent/pulse-os/compare/v0.58.15...v0.58.16) (2025-11-24)
