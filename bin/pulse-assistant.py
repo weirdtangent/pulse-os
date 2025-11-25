@@ -1811,12 +1811,17 @@ class PulseAssistant:
 
     def _extract_time_of_day_from_text(self, text: str) -> str:
         lower = text.lower()
-        match = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", lower)
+        match = re.search(r"(?<!\d)(\d{1,2})(?::(\d{2}))?\s*(am|pm)", lower)
         if match:
             token = match.group(1)
             if match.group(2):
                 token = f"{token}:{match.group(2)}"
             parsed = self._parse_time_token(token, match.group(3))
+            if parsed:
+                return parsed
+        match = re.search(r"\b(\d{3,4})\s*(am|pm)\b", lower)
+        if match:
+            parsed = self._parse_time_token(match.group(1), match.group(2))
             if parsed:
                 return parsed
         match = re.search(r"\b(\d{1,2}:\d{2})\b", lower)
