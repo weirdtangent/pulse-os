@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import atexit
 import json
 import os
@@ -29,6 +30,7 @@ from pulse.overlay import (
     parse_clock_config,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
+from pulse.utils import parse_bool, sanitize_hostname_for_entity_id
 
 
 @dataclass(frozen=True)
@@ -229,12 +231,6 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
 ]
 
 
-def _as_bool(value: str | None, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def log(message: str) -> None:
     print(f"[kiosk-mqtt] {message}", flush=True)
 
@@ -276,7 +272,7 @@ def load_config() -> EnvConfig:
         timeout=float(os.environ.get("CHROMIUM_DEVTOOLS_TIMEOUT", "3")),
     )
 
-    overlay_enabled = _as_bool(os.environ.get("PULSE_OVERLAY_ENABLED"), True)
+    overlay_enabled = parse_bool(os.environ.get("PULSE_OVERLAY_ENABLED"), True)
     overlay_port = int(os.environ.get("PULSE_OVERLAY_PORT", "8800"))
     overlay_bind = (os.environ.get("PULSE_OVERLAY_BIND") or "0.0.0.0").strip() or "0.0.0.0"
     overlay_allowed_raw = os.environ.get("PULSE_OVERLAY_ALLOWED_ORIGINS", "*")
@@ -299,8 +295,8 @@ def load_config() -> EnvConfig:
         alert_background=os.environ.get("PULSE_OVERLAY_ALERT_BG", "rgba(0, 0, 0, 0.65)"),
         text_color=os.environ.get("PULSE_OVERLAY_TEXT_COLOR", "#FFFFFF"),
         accent_color=os.environ.get("PULSE_OVERLAY_ACCENT_COLOR", "#88C0D0"),
-        show_notification_bar=_as_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
-        clock_24h=_as_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
+        show_notification_bar=parse_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
+        clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -319,16 +315,16 @@ def load_config() -> EnvConfig:
         int(os.environ.get("PULSE_TELEMETRY_INTERVAL_SECONDS", DEFAULT_TELEMETRY_INTERVAL_SECONDS)),
     )
 
-    volume_feedback_enabled = _as_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"), default=True)
+    volume_feedback_enabled = parse_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"), default=True)
 
     media_player_entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
     if not media_player_entity:
-        sanitized = hostname.lower().replace("-", "_").replace(".", "_")
-        media_player_entity = f"media_player.{sanitized}_2"
+        sanitized = sanitize_hostname_for_entity_id(hostname)
+        media_player_entity = f"media_player.{sanitized}"
 
     ha_base_url = (os.environ.get("HOME_ASSISTANT_BASE_URL") or "").strip()
     ha_token = (os.environ.get("HOME_ASSISTANT_TOKEN") or "").strip()
-    ha_verify_ssl = _as_bool(os.environ.get("HOME_ASSISTANT_VERIFY_SSL"), default=True)
+    ha_verify_ssl = parse_bool(os.environ.get("HOME_ASSISTANT_VERIFY_SSL"), default=True)
     if not ha_base_url or not ha_token:
         media_player_entity = None
 
@@ -584,14 +580,6 @@ class KioskMqttListener:
         if self.config.sw_version:
             origin["sw"] = self.config.sw_version
         return origin
-
-    def _sanitize_hostname_for_entity_id(self, hostname: str) -> str:
-        """Convert hostname to a format suitable for Home Assistant entity IDs.
-
-        Converts to lowercase and replaces hyphens/dots with underscores.
-        Example: 'pulse-office' -> 'pulse_office'
-        """
-        return hostname.lower().replace("-", "_").replace(".", "_")
 
     def start_telemetry(self) -> None:
         with self._telemetry_lock:
@@ -1174,7 +1162,7 @@ class KioskMqttListener:
             "pl_avail": "online",
             "pl_not_avail": "offline",
         }
-        sanitized_hostname = self._sanitize_hostname_for_entity_id(self.config.hostname)
+        sanitized_hostname = sanitize_hostname_for_entity_id(self.config.hostname)
         home_button = build_button_entity(
             "Home",
             f"{self.config.hostname}_home",
@@ -1260,7 +1248,7 @@ class KioskMqttListener:
     def _build_telemetry_components(self) -> dict[str, dict[str, Any]]:
         base_topic = self.config.topics.telemetry
         expire_after = max(self.config.telemetry_interval_seconds * 3, self.config.telemetry_interval_seconds + 5)
-        sanitized_hostname = self._sanitize_hostname_for_entity_id(self.config.hostname)
+        sanitized_hostname = sanitize_hostname_for_entity_id(self.config.hostname)
         components: dict[str, dict[str, Any]] = {}
         for descriptor in TELEMETRY_SENSORS:
             if not descriptor.expose_sensor:

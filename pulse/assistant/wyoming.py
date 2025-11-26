@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import AbstractAsyncContextManager
 
 from wyoming.asr import Transcribe, Transcript
@@ -12,6 +11,8 @@ from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.client import AsyncTcpClient
 from wyoming.tts import Synthesize, SynthesizeVoice
 from wyoming.wake import Detect, Detection, NotDetected
+
+from pulse.utils import await_with_timeout, chunk_bytes
 
 from .audio import AplaySink
 from .config import MicConfig, WyomingEndpoint
@@ -32,10 +33,10 @@ async def transcribe_audio(
     """Send PCM audio to a Wyoming STT endpoint and return the transcript text."""
 
     client = AsyncTcpClient(endpoint.host, endpoint.port)
-    await _await_with_timeout(client.connect(), timeout)
+    await await_with_timeout(client.connect(), timeout)
     requested_model = model or endpoint.model
     try:
-        await _await_with_timeout(
+        await await_with_timeout(
             client.write_event(
                 Transcribe(
                     name=requested_model,
@@ -44,7 +45,7 @@ async def transcribe_audio(
             ),
             timeout,
         )
-        await _await_with_timeout(
+        await await_with_timeout(
             client.write_event(
                 AudioStart(
                     rate=mic.rate,
@@ -54,8 +55,8 @@ async def transcribe_audio(
             ),
             timeout,
         )
-        for chunk in _chunk_bytes(audio_bytes, mic.bytes_per_chunk):
-            await _await_with_timeout(
+        for chunk in chunk_bytes(audio_bytes, mic.bytes_per_chunk):
+            await await_with_timeout(
                 client.write_event(
                     AudioChunk(
                         rate=mic.rate,
@@ -66,9 +67,9 @@ async def transcribe_audio(
                 ),
                 timeout,
             )
-        await _await_with_timeout(client.write_event(AudioStop().event()), timeout)
+        await await_with_timeout(client.write_event(AudioStop().event()), timeout)
         while True:
-            event = await _await_with_timeout(client.read_event(), timeout)
+            event = await await_with_timeout(client.read_event(), timeout)
             if event is None:
                 if logger:
                     logger.debug("Wyoming STT connection closed before transcript returned")
@@ -152,12 +153,12 @@ async def probe_wake_detection(
     """Send a short audio sample to Wyoming OpenWakeWord and return detection info."""
 
     client = AsyncTcpClient(endpoint.host, endpoint.port)
-    await _await_with_timeout(client.connect(), timeout)
+    await await_with_timeout(client.connect(), timeout)
     timestamp = 0
     sample = audio or silence_bytes(mic.chunk_ms, mic)
     try:
-        await _await_with_timeout(client.write_event(Detect(names=list(models)).event()), timeout)
-        await _await_with_timeout(
+        await await_with_timeout(client.write_event(Detect(names=list(models)).event()), timeout)
+        await await_with_timeout(
             client.write_event(
                 AudioStart(
                     rate=mic.rate,
@@ -168,7 +169,7 @@ async def probe_wake_detection(
             ),
             timeout,
         )
-        await _await_with_timeout(
+        await await_with_timeout(
             client.write_event(
                 AudioChunk(
                     rate=mic.rate,
@@ -181,9 +182,9 @@ async def probe_wake_detection(
             timeout,
         )
         timestamp += mic.chunk_ms
-        await _await_with_timeout(client.write_event(AudioStop(timestamp=timestamp).event()), timeout)
+        await await_with_timeout(client.write_event(AudioStop(timestamp=timestamp).event()), timeout)
         while True:
-            event = await _await_with_timeout(client.read_event(), timeout)
+            event = await await_with_timeout(client.read_event(), timeout)
             if event is None:
                 return None
             if Detection.is_type(event.type):
@@ -212,12 +213,12 @@ async def _tts_event_stream(
     timeout: float | None = None,
 ) -> AsyncIterator[object]:
     client = AsyncTcpClient(endpoint.host, endpoint.port)
-    await _await_with_timeout(client.connect(), timeout)
+    await await_with_timeout(client.connect(), timeout)
     voice = SynthesizeVoice(name=voice_name) if voice_name else None
-    await _await_with_timeout(client.write_event(Synthesize(text=text, voice=voice).event()), timeout)
+    await await_with_timeout(client.write_event(Synthesize(text=text, voice=voice).event()), timeout)
     try:
         while True:
-            event = await _await_with_timeout(client.read_event(), timeout)
+            event = await await_with_timeout(client.read_event(), timeout)
             if event is None:
                 break
             yield event
@@ -225,15 +226,3 @@ async def _tts_event_stream(
                 break
     finally:
         await client.disconnect()
-
-
-async def _await_with_timeout(awaitable, timeout: float | None):
-    if timeout is None:
-        return await awaitable
-    return await asyncio.wait_for(awaitable, timeout=timeout)
-
-
-def _chunk_bytes(data: bytes, size: int) -> Iterable[bytes]:
-    for start in range(0, len(data), size):
-        end = min(start + size, len(data))
-        yield data[start:end]

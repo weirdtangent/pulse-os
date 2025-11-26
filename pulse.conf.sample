@@ -273,7 +273,8 @@ PULSE_ASSISTANT_FONT_SIZE=28
 
 # PULSE_MEDIA_PLAYER_ENTITY — HA media_player (or sensor) that represents this kiosk's audio output.
 # Used by the on-screen overlay, MQTT telemetry, and to auto-pause/resume Music Assistant during wake-word interactions.
-# Defaults to media_player.<hostname>_2 when left blank.
+# Defaults to media_player.<hostname> (the Snapcast/Music Assistant player Pulse registers) when left blank.
+# Override if Music Assistant exposes multiple players and you want a specific one.
 PULSE_MEDIA_PLAYER_ENTITY=""
 
 # ============================================================================

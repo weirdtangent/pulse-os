@@ -10,35 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-
-def _as_bool(value: str | None, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _as_int(value: str | None, default: int) -> int:
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
-
-
-def _as_float(value: str | None, default: float) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except ValueError:
-        return default
-
-
-def _split_csv(value: str | None) -> list[str]:
-    if not value:
-        return []
-    return [item.strip() for item in value.split(",") if item.strip()]
+from pulse.utils import (
+    parse_bool,
+    parse_float,
+    parse_int,
+    sanitize_hostname_for_entity_id,
+    split_csv,
+)
 
 
 def _strip_or_none(value: str | None) -> str | None:
@@ -77,9 +55,9 @@ def _parse_wake_route_string(value: str | None) -> dict[str, str]:
 def _parse_wake_profiles(source: dict[str, str]) -> tuple[list[str], dict[str, str]]:
     routes: dict[str, str] = {}
 
-    pulse_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE")) or [DEFAULT_WAKE_MODEL]
+    pulse_words = split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE")) or [DEFAULT_WAKE_MODEL]
 
-    ha_words = _split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_HA"))
+    ha_words = split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_HA"))
     manual_routes = _parse_wake_route_string(source.get("PULSE_ASSISTANT_WAKE_ROUTES"))
 
     for model in pulse_words:
@@ -255,32 +233,32 @@ class AssistantConfig:
 
         mic = MicConfig(
             command=mic_cmd,
-            rate=_as_int(source.get("PULSE_ASSISTANT_MIC_RATE"), 16000),
-            width=_as_int(source.get("PULSE_ASSISTANT_MIC_WIDTH"), 2),
-            channels=_as_int(source.get("PULSE_ASSISTANT_MIC_CHANNELS"), 1),
-            chunk_ms=_as_int(source.get("PULSE_ASSISTANT_MIC_CHUNK_MS"), 30),
+            rate=parse_int(source.get("PULSE_ASSISTANT_MIC_RATE"), 16000),
+            width=parse_int(source.get("PULSE_ASSISTANT_MIC_WIDTH"), 2),
+            channels=parse_int(source.get("PULSE_ASSISTANT_MIC_CHANNELS"), 1),
+            chunk_ms=parse_int(source.get("PULSE_ASSISTANT_MIC_CHUNK_MS"), 30),
         )
 
         phrase = PhraseConfig(
-            min_seconds=_as_float(source.get("PULSE_ASSISTANT_MIN_PHRASE_SECONDS"), 1.5),
-            max_seconds=_as_float(source.get("PULSE_ASSISTANT_MAX_PHRASE_SECONDS"), 8.0),
-            silence_ms=_as_int(source.get("PULSE_ASSISTANT_SILENCE_MS"), 1200),
-            rms_floor=_as_int(source.get("PULSE_ASSISTANT_RMS_THRESHOLD"), 120),
+            min_seconds=parse_float(source.get("PULSE_ASSISTANT_MIN_PHRASE_SECONDS"), 1.5),
+            max_seconds=parse_float(source.get("PULSE_ASSISTANT_MAX_PHRASE_SECONDS"), 8.0),
+            silence_ms=parse_int(source.get("PULSE_ASSISTANT_SILENCE_MS"), 1200),
+            rms_floor=parse_int(source.get("PULSE_ASSISTANT_RMS_THRESHOLD"), 120),
         )
 
         wake_endpoint = WyomingEndpoint(
             host=source.get("WYOMING_OPENWAKEWORD_HOST", "127.0.0.1"),
-            port=_as_int(source.get("WYOMING_OPENWAKEWORD_PORT"), 10400),
+            port=parse_int(source.get("WYOMING_OPENWAKEWORD_PORT"), 10400),
             model=None,
         )
         stt_endpoint = WyomingEndpoint(
             host=source.get("WYOMING_WHISPER_HOST", "127.0.0.1"),
-            port=_as_int(source.get("WYOMING_WHISPER_PORT"), 10300),
+            port=parse_int(source.get("WYOMING_WHISPER_PORT"), 10300),
             model=source.get("PULSE_ASSISTANT_STT_MODEL"),
         )
         tts_endpoint = WyomingEndpoint(
             host=source.get("WYOMING_PIPER_HOST", "127.0.0.1"),
-            port=_as_int(source.get("WYOMING_PIPER_PORT"), 10200),
+            port=parse_int(source.get("WYOMING_PIPER_PORT"), 10200),
             model=None,
         )
 
@@ -299,23 +277,23 @@ class AssistantConfig:
             openai_model=source.get("OPENAI_MODEL", "gpt-4o-mini"),
             openai_api_key=source.get("OPENAI_API_KEY"),
             openai_base_url=source.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            openai_timeout=_as_int(source.get("OPENAI_TIMEOUT_SECONDS"), 45),
+            openai_timeout=parse_int(source.get("OPENAI_TIMEOUT_SECONDS"), 45),
             gemini_model=source.get("GEMINI_MODEL", "gemini-1.5-flash-latest"),
             gemini_api_key=source.get("GEMINI_API_KEY"),
             gemini_base_url=source.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
-            gemini_timeout=_as_int(source.get("GEMINI_TIMEOUT_SECONDS"), 45),
+            gemini_timeout=parse_int(source.get("GEMINI_TIMEOUT_SECONDS"), 45),
         )
 
         topic_base = source.get("PULSE_ASSISTANT_TOPIC_BASE") or f"pulse/{hostname}/assistant"
         mqtt_username = _strip_or_none(source.get("MQTT_USER") or source.get("MQTT_USERNAME"))
         mqtt_password = _strip_or_none(source.get("MQTT_PASS") or source.get("MQTT_PASSWORD"))
-        mqtt_tls_enabled = _as_bool(source.get("MQTT_TLS_ENABLED"), False)
+        mqtt_tls_enabled = parse_bool(source.get("MQTT_TLS_ENABLED"), False)
         mqtt_cert = _strip_or_none(source.get("MQTT_CERT"))
         mqtt_key = _strip_or_none(source.get("MQTT_KEY"))
         mqtt_ca_cert = _strip_or_none(source.get("MQTT_CA_CERT"))
         mqtt = MqttConfig(
             host=source.get("MQTT_HOST"),
-            port=_as_int(source.get("MQTT_PORT"), 1883),
+            port=parse_int(source.get("MQTT_PORT"), 1883),
             username=mqtt_username,
             password=mqtt_password,
             tls_enabled=mqtt_tls_enabled,
@@ -337,7 +315,7 @@ class AssistantConfig:
         if ha_base_url:
             ha_base_url = ha_base_url.rstrip("/")
         ha_token = source.get("HOME_ASSISTANT_TOKEN") or source.get("HOME_ASSISTANT_LONG_LIVED_TOKEN")
-        ha_verify_ssl = _as_bool(source.get("HOME_ASSISTANT_VERIFY_SSL"), True)
+        ha_verify_ssl = parse_bool(source.get("HOME_ASSISTANT_VERIFY_SSL"), True)
         ha_assist_pipeline = source.get("HOME_ASSISTANT_ASSIST_PIPELINE")
         ha_timer_entity = source.get("HOME_ASSISTANT_TIMER_ENTITY")
         ha_reminder_service = source.get("HOME_ASSISTANT_REMINDER_SERVICE")
@@ -372,7 +350,7 @@ class AssistantConfig:
         )
 
         preferences = AssistantPreferences(
-            wake_sound=_as_bool(source.get("PULSE_ASSISTANT_WAKE_SOUND"), True),
+            wake_sound=parse_bool(source.get("PULSE_ASSISTANT_WAKE_SOUND"), True),
             speaking_style=_normalize_choice(
                 source.get("PULSE_ASSISTANT_SPEAKING_STYLE"),
                 {"relaxed", "normal", "aggressive"},
@@ -386,7 +364,7 @@ class AssistantConfig:
         )
 
         media_player_entity = _resolve_media_player_entity(hostname, source.get("PULSE_MEDIA_PLAYER_ENTITY"))
-        self_audio_trigger_level = _as_int(source.get("PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL"), 7)
+        self_audio_trigger_level = parse_int(source.get("PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL"), 7)
         self_audio_trigger_level = max(2, self_audio_trigger_level)
 
         transcript_topic = f"{mqtt.topic_base}/transcript"
@@ -394,7 +372,7 @@ class AssistantConfig:
         state_topic = f"{mqtt.topic_base}/state"
         action_topic = f"{mqtt.topic_base}/actions"
 
-        log_llm_messages = _as_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
+        log_llm_messages = parse_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
 
         news_config = NewsConfig(
             api_key=source.get("PULSE_NEWS_API_KEY"),
@@ -402,7 +380,7 @@ class AssistantConfig:
             country=(source.get("PULSE_NEWS_COUNTRY") or "us").strip().lower() or "us",
             category=(source.get("PULSE_NEWS_CATEGORY") or "general").strip().lower() or "general",
             language=(source.get("PULSE_NEWS_LANGUAGE") or "en").strip().lower() or "en",
-            max_articles=max(1, _as_int(source.get("PULSE_NEWS_MAX_ARTICLES"), 5)),
+            max_articles=max(1, parse_int(source.get("PULSE_NEWS_MAX_ARTICLES"), 5)),
         )
         weather_config = WeatherConfig(
             location=(source.get("PULSE_WEATHER_LOCATION") or "").strip() or None,
@@ -412,13 +390,13 @@ class AssistantConfig:
                 "auto",
             ),
             language=(source.get("PULSE_WEATHER_LANGUAGE") or "en").strip().lower() or "en",
-            forecast_days=max(1, min(5, _as_int(source.get("PULSE_WEATHER_FORECAST_DAYS"), 3))),
+            forecast_days=max(1, min(5, parse_int(source.get("PULSE_WEATHER_FORECAST_DAYS"), 3))),
             base_url=(source.get("PULSE_WEATHER_BASE_URL") or "https://api.open-meteo.com/v1/forecast").rstrip("/"),
         )
-        favorite_teams = tuple(team.strip() for team in _split_csv(source.get("PULSE_SPORTS_FAVORITE_TEAMS")))
+        favorite_teams = tuple(team.strip() for team in split_csv(source.get("PULSE_SPORTS_FAVORITE_TEAMS")))
         default_leagues = tuple(
             league.strip().lower()
-            for league in _split_csv(source.get("PULSE_SPORTS_DEFAULT_LEAGUES") or "nfl,nba,mlb,nhl")
+            for league in split_csv(source.get("PULSE_SPORTS_DEFAULT_LEAGUES") or "nfl,nba,mlb,nhl")
         )
         sports_config = SportsConfig(
             default_country=(source.get("PULSE_SPORTS_DEFAULT_COUNTRY") or "us").strip().lower() or "us",
@@ -494,7 +472,7 @@ def _optional_wyoming_endpoint(
     host = source.get(host_key)
     if not host:
         return None
-    port = _as_int(source.get(port_key), 0)
+    port = parse_int(source.get(port_key), 0)
     if not port:
         return None
     model = source.get(model_key) if model_key else None
@@ -514,5 +492,5 @@ def _resolve_media_player_entity(hostname: str, override: str | None) -> str | N
     candidate = (override or "").strip()
     if candidate:
         return candidate
-    sanitized = hostname.lower().replace("-", "_").replace(".", "_")
-    return f"media_player.{sanitized}_2"
+    sanitized = sanitize_hostname_for_entity_id(hostname)
+    return f"media_player.{sanitized}"

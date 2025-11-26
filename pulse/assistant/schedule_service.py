@@ -17,6 +17,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from pulse import audio as pulse_audio
+from pulse.utils import sanitize_hostname_for_entity_id
 
 from .home_assistant import HomeAssistantClient
 
@@ -52,8 +53,8 @@ def _deserialize_dt(value: str | None) -> datetime | None:
 
 
 def _default_media_player_entity(hostname: str) -> str:
-    sanitized = hostname.lower().replace("-", "_").replace(".", "_")
-    return f"media_player.{sanitized}_2"
+    sanitized = sanitize_hostname_for_entity_id(hostname)
+    return f"media_player.{sanitized}"
 
 
 def _clamp_volume(value: int) -> int:

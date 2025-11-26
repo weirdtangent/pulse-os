@@ -120,6 +120,19 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
    ```
 3. Verify with `pactl list sink-inputs | grep -B3 snapclient` while Music Assistant plays; you should now see a `snapclient` sink input and the speakers will output the stream.
 
+## Duplicate Music Assistant players or blank Now Playing
+
+**Problem**: Music Assistant shows two players for the same Pulse (for example `media_player.pulse_office` and `media_player.pulse_office_2`), and the default Now Playing entity points at the unavailable one so the overlay/MQTT sensor never updates.
+
+**Solution**: The duplication usually happens when Music Assistant’s **Home Assistant MediaPlayers** provider is enabled. That provider re-imports every HA media player— including the Snapcast player that Pulse already exposed—so MA creates a second entity and Home Assistant renames the duplicate with `_2`.
+
+1. Open Music Assistant → Settings → **Player providers** and disable (or delete) the **Home Assistant MediaPlayers** provider.
+2. In Home Assistant → Settings → Devices & Services → Music Assistant, remove any orphaned entities the provider created and keep only the Snapcast player for each kiosk.
+3. Rename the remaining entity back to `media_player.<hostname>` if Home Assistant added `_2`.
+4. If you *want* to keep multiple Music Assistant players (for multi-protocol hardware), set `PULSE_MEDIA_PLAYER_ENTITY="media_player.whichever_one_you_prefer"` in `pulse.conf`. The kiosk overlay, Now Playing sensor, and alarm music playback will use that entity instead of the auto-detected one.
+
+After either disabling the provider loop or overriding `PULSE_MEDIA_PLAYER_ENTITY`, the Now Playing sensor and `pulse-photo-card` will track the expected Music Assistant player again.
+
 ## Display rotation glitches
 
 **Problem**: Display rotation is incorrect or glitchy after boot.

@@ -37,6 +37,7 @@ try:
         HomeAssistantError,
         verify_home_assistant_access,
     )
+    from pulse.utils import parse_bool
 except ModuleNotFoundError:
     repo_dir = Path(__file__).resolve().parents[2]
     if str(repo_dir) not in sys.path:
@@ -47,6 +48,7 @@ except ModuleNotFoundError:
         HomeAssistantError,
         verify_home_assistant_access,
     )
+    from pulse.utils import parse_bool
 
 try:
     from wyoming.client import AsyncTcpClient
@@ -210,12 +212,6 @@ def _apply_config_defaults(env: dict[str, str], config_path: Path | None) -> Non
         env.setdefault(key, value)
 
 
-def _is_truthy(value: str | None, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _int_or_default(value: str | None, fallback: int | None) -> int | None:
     if value is None or value.strip() == "":
         return fallback
@@ -295,7 +291,7 @@ def check_mqtt(config: AssistantConfig, timeout: float) -> CheckResult:
 
 
 def check_remote_logging(env: dict[str, str], hostname: str, timeout: float) -> CheckResult:
-    enabled = _is_truthy(env.get("PULSE_REMOTE_LOGGING"), default=False)
+    enabled = parse_bool(env.get("PULSE_REMOTE_LOGGING"), default=False)
     if not enabled:
         return CheckResult("Remote logging", "skip", "PULSE_REMOTE_LOGGING is disabled.")
 
@@ -324,7 +320,7 @@ def check_remote_logging(env: dict[str, str], hostname: str, timeout: float) -> 
 
 
 def check_snapcast(env: dict[str, str], timeout: float) -> CheckResult:
-    enabled = _is_truthy(env.get("PULSE_SNAPCLIENT"), default=False)
+    enabled = parse_bool(env.get("PULSE_SNAPCLIENT"), default=False)
     if not enabled:
         return CheckResult("Snapcast client", "skip", "PULSE_SNAPCLIENT is disabled.")
 

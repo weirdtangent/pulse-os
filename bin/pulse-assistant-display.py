@@ -17,12 +17,6 @@ import paho.mqtt.client as mqtt
 LOGGER = logging.getLogger("pulse-assistant-display")
 
 
-def _is_truthy(value: str | None, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _int_from_env(value: str | None, fallback: int, minimum: int) -> int:
     if value is None:
         return max(minimum, fallback)
