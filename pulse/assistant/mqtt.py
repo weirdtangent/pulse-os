@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 import threading
 from collections.abc import Callable
 
@@ -35,6 +36,16 @@ class AssistantMqtt:
             )
             if self.config.username:
                 client.username_pw_set(self.config.username, self.config.password or "")
+            if self.config.tls_enabled:
+                tls_kwargs: dict[str, object] = {}
+                if self.config.ca_cert:
+                    tls_kwargs["ca_certs"] = self.config.ca_cert
+                if self.config.cert:
+                    tls_kwargs["certfile"] = self.config.cert
+                if self.config.key:
+                    tls_kwargs["keyfile"] = self.config.key
+                tls_kwargs["tls_version"] = getattr(ssl, "PROTOCOL_TLS_CLIENT", ssl.PROTOCOL_TLS)
+                client.tls_set(**tls_kwargs)
             try:
                 client.connect(self.config.host, self.config.port, keepalive=30)
             except Exception as exc:  # pylint: disable=broad-except

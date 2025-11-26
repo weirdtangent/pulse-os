@@ -100,6 +100,18 @@ MQTT_USER=""
 # MQTT_PASS — optional password for authenticated brokers.
 MQTT_PASS=""
 
+# MQTT_TLS_ENABLED — set to "true" to enable TLS for MQTT connections.
+MQTT_TLS_ENABLED="false"
+
+# MQTT_CERT — optional TLS client certificate path (used when MQTT_TLS_ENABLED is true).
+MQTT_CERT=""
+
+# MQTT_KEY — optional TLS client key path.
+MQTT_KEY=""
+
+# MQTT_CA_CERT — optional CA certificate path for broker validation.
+MQTT_CA_CERT=""
+
 # PULSE_VERSION_CHECKS_PER_DAY — how many times per day we poll for new PulseOS releases (2/4/6/8/12/24).
 PULSE_VERSION_CHECKS_PER_DAY=12
 

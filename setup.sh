@@ -61,6 +61,14 @@ Flags:
 EOF
 }
 
+normalize_bool() {
+    local raw="${1:-}"
+    case "${raw,,}" in
+        1|true|yes|on) echo "true" ;;
+        *) echo "false" ;;
+    esac
+}
+
 read_stored_location() {
     if [ ! -f "$LOCATION_FILE" ]; then
         return 1
@@ -778,6 +786,11 @@ publish_summary_to_mqtt() {
     local mqtt_port="${MQTT_PORT:-1883}"
     local mqtt_user="${MQTT_USER:-${MQTT_USERNAME:-}}"
     local mqtt_pass="${MQTT_PASS:-${MQTT_PASSWORD:-}}"
+    local mqtt_tls_enabled
+    mqtt_tls_enabled=$(normalize_bool "${MQTT_TLS_ENABLED:-false}")
+    local mqtt_cert="${MQTT_CERT:-}"
+    local mqtt_key="${MQTT_KEY:-}"
+    local mqtt_ca_cert="${MQTT_CA_CERT:-}"
 
     if [ -z "$mqtt_host" ] || [ "$mqtt_host" = "<not set>" ]; then
         return 0  # MQTT not configured, skip silently
@@ -793,6 +806,19 @@ publish_summary_to_mqtt() {
     fi
     if [ -n "$mqtt_pass" ]; then
         mosquitto_args+=(-P "$mqtt_pass")
+    fi
+    if [ "$mqtt_tls_enabled" = "true" ]; then
+        if [ -n "$mqtt_ca_cert" ]; then
+            mosquitto_args+=(--cafile "$mqtt_ca_cert")
+        else
+            mosquitto_args+=(--capath "/etc/ssl/certs")
+        fi
+        if [ -n "$mqtt_cert" ]; then
+            mosquitto_args+=(--cert "$mqtt_cert")
+        fi
+        if [ -n "$mqtt_key" ]; then
+            mosquitto_args+=(--key "$mqtt_key")
+        fi
     fi
 
     # mosquitto-clients is installed via manual-packages.txt
@@ -855,6 +881,11 @@ print_feature_summary() {
     if [ -n "$mqtt_pass_raw" ]; then
         mqtt_pass_display="<set>"
     fi
+    local mqtt_tls_enabled
+    mqtt_tls_enabled=$(normalize_bool "${MQTT_TLS_ENABLED:-false}")
+    local mqtt_cert_display="${MQTT_CERT:-<not set>}"
+    local mqtt_key_display="${MQTT_KEY:-<not set>}"
+    local mqtt_ca_cert_display="${MQTT_CA_CERT:-<not set>}"
     local pulse_version_checks_per_day="${PULSE_VERSION_CHECKS_PER_DAY:-12}"
     local pulse_telemetry_interval_seconds="${PULSE_TELEMETRY_INTERVAL_SECONDS:-15}"
     local pulse_voice_assistant="${PULSE_VOICE_ASSISTANT:-false}"
@@ -953,6 +984,22 @@ print_feature_summary() {
             "MQTT Password (MQTT_PASS)" \
             "$mqtt_pass_display" \
             "Optional MQTT password; shown as <set> when provided"
+        kv_block \
+            "MQTT TLS (MQTT_TLS_ENABLED)" \
+            "$( [ "$mqtt_tls_enabled" = "true" ] && echo "enabled" || echo "disabled" )" \
+            "Enable TLS for MQTT connections, default: false"
+        kv_block \
+            "MQTT Client Cert (MQTT_CERT)" \
+            "$mqtt_cert_display" \
+            "Optional TLS client certificate path"
+        kv_block \
+            "MQTT Client Key (MQTT_KEY)" \
+            "$mqtt_key_display" \
+            "Optional TLS client key path"
+        kv_block \
+            "MQTT CA Cert (MQTT_CA_CERT)" \
+            "$mqtt_ca_cert_display" \
+            "Optional CA certificate path for broker validation"
         kv_block \
             "Version Checks (PULSE_VERSION_CHECKS_PER_DAY)" \
             "$pulse_version_checks_per_day checks/day" \

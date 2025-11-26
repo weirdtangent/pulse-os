@@ -147,6 +147,10 @@ class MqttConfig:
     port: int
     username: str | None
     password: str | None
+    tls_enabled: bool
+    cert: str | None
+    key: str | None
+    ca_cert: str | None
     topic_base: str
 
 
@@ -305,11 +309,19 @@ class AssistantConfig:
         topic_base = source.get("PULSE_ASSISTANT_TOPIC_BASE") or f"pulse/{hostname}/assistant"
         mqtt_username = _strip_or_none(source.get("MQTT_USER") or source.get("MQTT_USERNAME"))
         mqtt_password = _strip_or_none(source.get("MQTT_PASS") or source.get("MQTT_PASSWORD"))
+        mqtt_tls_enabled = _as_bool(source.get("MQTT_TLS_ENABLED"), False)
+        mqtt_cert = _strip_or_none(source.get("MQTT_CERT"))
+        mqtt_key = _strip_or_none(source.get("MQTT_KEY"))
+        mqtt_ca_cert = _strip_or_none(source.get("MQTT_CA_CERT"))
         mqtt = MqttConfig(
             host=source.get("MQTT_HOST"),
             port=_as_int(source.get("MQTT_PORT"), 1883),
             username=mqtt_username,
             password=mqtt_password,
+            tls_enabled=mqtt_tls_enabled,
+            cert=mqtt_cert,
+            key=mqtt_key,
+            ca_cert=mqtt_ca_cert,
             topic_base=topic_base.rstrip("/"),
         )
 

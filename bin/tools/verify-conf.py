@@ -250,6 +250,15 @@ def check_mqtt(config: AssistantConfig, timeout: float) -> CheckResult:
     )
     if config.mqtt.username:
         client.username_pw_set(config.mqtt.username, config.mqtt.password or "")
+    if config.mqtt.tls_enabled:
+        tls_kwargs: dict[str, object] = {"tls_version": getattr(ssl, "PROTOCOL_TLS_CLIENT", ssl.PROTOCOL_TLS)}
+        if config.mqtt.ca_cert:
+            tls_kwargs["ca_certs"] = config.mqtt.ca_cert
+        if config.mqtt.cert:
+            tls_kwargs["certfile"] = config.mqtt.cert
+        if config.mqtt.key:
+            tls_kwargs["keyfile"] = config.mqtt.key
+        client.tls_set(**tls_kwargs)
 
     connect_event = threading.Event()
     result_code: dict[str, int | None] = {"rc": None}

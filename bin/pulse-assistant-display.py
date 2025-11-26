@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import queue
+import ssl
 import tkinter as tk
 from datetime import datetime
 
@@ -67,6 +68,19 @@ class AssistantDisplay:
         password = raw_password.strip() if raw_password else ""
         if username:
             self._client.username_pw_set(username, password)
+        tls_enabled = _is_truthy(os.environ.get("MQTT_TLS_ENABLED"), False)
+        certfile = (os.environ.get("MQTT_CERT") or "").strip() or None
+        keyfile = (os.environ.get("MQTT_KEY") or "").strip() or None
+        ca_cert = (os.environ.get("MQTT_CA_CERT") or "").strip() or None
+        if tls_enabled:
+            tls_kwargs: dict[str, object] = {"tls_version": getattr(ssl, "PROTOCOL_TLS_CLIENT", ssl.PROTOCOL_TLS)}
+            if ca_cert:
+                tls_kwargs["ca_certs"] = ca_cert
+            if certfile:
+                tls_kwargs["certfile"] = certfile
+            if keyfile:
+                tls_kwargs["keyfile"] = keyfile
+            self._client.tls_set(**tls_kwargs)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.connect_async(mqtt_host, mqtt_port, keepalive=30)

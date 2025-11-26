@@ -198,12 +198,16 @@ For remote systlog monitoring, only needed if TRUE set for PULSE_REMOTE_LOGGING
     PULSE_REMOTE_LOG_PORT="5514"
 
 ### Mqtt
-Optional, for Pulse to connect to Mqtt server (for HomeAssistant integration). Set `MQTT_USER` / `MQTT_PASS` if your broker requires authentication.
+Optional, for Pulse to connect to Mqtt server (for HomeAssistant integration). Set `MQTT_USER` / `MQTT_PASS` if your broker requires authentication, and `MQTT_TLS_ENABLED="true"` with the matching cert/key paths if the broker requires TLS.
 
     MQTT_HOST="mosquitto.local"
     MQTT_PORT="1883"
     MQTT_USER=""
     MQTT_PASS=""
+    MQTT_TLS_ENABLED="false"
+    MQTT_CERT=""
+    MQTT_KEY=""
+    MQTT_CA_CERT=""
 
 ### Pulse Version Checks
 For Mqtt version checks - to enable the "Upgrade" button when a new version is available

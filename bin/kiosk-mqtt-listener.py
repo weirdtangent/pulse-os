@@ -84,6 +84,10 @@ class EnvConfig:
     mqtt_port: int
     mqtt_username: str | None
     mqtt_password: str | None
+    mqtt_tls_enabled: bool
+    mqtt_cert: str | None
+    mqtt_key: str | None
+    mqtt_ca_cert: str | None
     pulse_url: str
     hostname: str
     friendly_name: str
@@ -242,6 +246,10 @@ def load_config() -> EnvConfig:
     mqtt_username = raw_mqtt_user.strip() if raw_mqtt_user else None
     raw_mqtt_pass = os.environ.get("MQTT_PASS") or os.environ.get("MQTT_PASSWORD")
     mqtt_password = raw_mqtt_pass.strip() if raw_mqtt_pass else None
+    mqtt_tls_enabled = _as_bool(os.environ.get("MQTT_TLS_ENABLED"), False)
+    mqtt_cert = (os.environ.get("MQTT_CERT") or "").strip() or None
+    mqtt_key = (os.environ.get("MQTT_KEY") or "").strip() or None
+    mqtt_ca_cert = (os.environ.get("MQTT_CA_CERT") or "").strip() or None
     hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
     pulse_url = _ensure_pulse_host_param(os.environ.get("PULSE_URL", ""), hostname)
     friendly_name = os.environ.get("PULSE_NAME") or hostname.replace("-", " ").title()
@@ -340,6 +348,10 @@ def load_config() -> EnvConfig:
         mqtt_port=mqtt_port,
         mqtt_username=mqtt_username,
         mqtt_password=mqtt_password,
+        mqtt_tls_enabled=mqtt_tls_enabled,
+        mqtt_cert=mqtt_cert,
+        mqtt_key=mqtt_key,
+        mqtt_ca_cert=mqtt_ca_cert,
         pulse_url=pulse_url,
         hostname=hostname,
         friendly_name=friendly_name,
@@ -1477,6 +1489,16 @@ def main():
 
     if config.mqtt_username:
         client.username_pw_set(config.mqtt_username, config.mqtt_password or "")
+    if config.mqtt_tls_enabled:
+        tls_kwargs: dict[str, object] = {}
+        if config.mqtt_ca_cert:
+            tls_kwargs["ca_certs"] = config.mqtt_ca_cert
+        if config.mqtt_cert:
+            tls_kwargs["certfile"] = config.mqtt_cert
+        if config.mqtt_key:
+            tls_kwargs["keyfile"] = config.mqtt_key
+        tls_kwargs["tls_version"] = getattr(ssl, "PROTOCOL_TLS_CLIENT", ssl.PROTOCOL_TLS)
+        client.tls_set(**tls_kwargs)
 
     listener.log(f"Connecting to MQTT broker {config.mqtt_host}:{config.mqtt_port}")
     client.connect(config.mqtt_host, config.mqtt_port, keepalive=60)
