@@ -1,3 +1,11 @@
+## [0.60.1](https://github.com/weirdtangent/pulse-os/compare/v0.60.0...v0.60.1) (2025-11-26)
+
+
+### Bug Fixes
+
+* fix more uses of new util methods ([81aaac5](https://github.com/weirdtangent/pulse-os/commit/81aaac54bd2bd8cd4f12b36196af2bb208577467))
+* media_player default entity name ([d8c4e73](https://github.com/weirdtangent/pulse-os/commit/d8c4e733af3316e5add4ef5813060cdcc8ded1a7))
+
 # [0.60.0](https://github.com/weirdtangent/pulse-os/compare/v0.59.0...v0.60.0) (2025-11-26)
 
 
