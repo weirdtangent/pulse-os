@@ -1,3 +1,10 @@
+# [0.59.0](https://github.com/weirdtangent/pulse-os/compare/v0.58.22...v0.59.0) (2025-11-26)
+
+
+### Features
+
+* add MQTT_USER and MQTT_PASS support to MQTT buttons and telemetry ([367df0f](https://github.com/weirdtangent/pulse-os/commit/367df0fb52fd4080937637814b0a76f03c5b5c70))
+
 ## [0.58.22](https://github.com/weirdtangent/pulse-os/compare/v0.58.21...v0.58.22) (2025-11-26)
 
 ## [0.58.21](https://github.com/weirdtangent/pulse-os/compare/v0.58.20...v0.58.21) (2025-11-25)
