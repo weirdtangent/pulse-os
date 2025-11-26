@@ -1,3 +1,10 @@
+# [0.60.0](https://github.com/weirdtangent/pulse-os/compare/v0.59.0...v0.60.0) (2025-11-26)
+
+
+### Features
+
+* add MQTT TLS support ([6893324](https://github.com/weirdtangent/pulse-os/commit/6893324f13cf264100a053cf2b2e1074c1bb88ff))
+
 # [0.59.0](https://github.com/weirdtangent/pulse-os/compare/v0.58.22...v0.59.0) (2025-11-26)
 
 
