@@ -776,6 +776,8 @@ publish_summary_to_mqtt() {
     local summary_text="$1"
     local mqtt_host="${MQTT_HOST:-}"
     local mqtt_port="${MQTT_PORT:-1883}"
+    local mqtt_user="${MQTT_USER:-${MQTT_USERNAME:-}}"
+    local mqtt_pass="${MQTT_PASS:-${MQTT_PASSWORD:-}}"
 
     if [ -z "$mqtt_host" ] || [ "$mqtt_host" = "<not set>" ]; then
         return 0  # MQTT not configured, skip silently
@@ -785,9 +787,17 @@ publish_summary_to_mqtt() {
     hostname=$(hostname 2>/dev/null || echo "pulse-unknown")
     local topic="pulse/${hostname}/setup/summary"
 
+    local -a mosquitto_args=(-s -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -r)
+    if [ -n "$mqtt_user" ]; then
+        mosquitto_args+=(-u "$mqtt_user")
+    fi
+    if [ -n "$mqtt_pass" ]; then
+        mosquitto_args+=(-P "$mqtt_pass")
+    fi
+
     # mosquitto-clients is installed via manual-packages.txt
     # Use -s so mosquitto_pub reads the full summary from stdin as a single payload
-    if echo "$summary_text" | mosquitto_pub -s -h "$mqtt_host" -p "$mqtt_port" -t "$topic" -r 2>/dev/null; then
+    if echo "$summary_text" | mosquitto_pub "${mosquitto_args[@]}" 2>/dev/null; then
         log "Published setup summary to MQTT topic: $topic"
     fi
 }
@@ -838,6 +848,13 @@ print_feature_summary() {
     local pulse_remote_log_port="${PULSE_REMOTE_LOG_PORT:-<not set>}"
     local mqtt_host="${MQTT_HOST:-<not set>}"
     local mqtt_port="${MQTT_PORT:-1883}"
+    local mqtt_user_raw="${MQTT_USER:-${MQTT_USERNAME:-}}"
+    local mqtt_pass_raw="${MQTT_PASS:-${MQTT_PASSWORD:-}}"
+    local mqtt_user_display="${mqtt_user_raw:-<not set>}"
+    local mqtt_pass_display="<not set>"
+    if [ -n "$mqtt_pass_raw" ]; then
+        mqtt_pass_display="<set>"
+    fi
     local pulse_version_checks_per_day="${PULSE_VERSION_CHECKS_PER_DAY:-12}"
     local pulse_telemetry_interval_seconds="${PULSE_TELEMETRY_INTERVAL_SECONDS:-15}"
     local pulse_voice_assistant="${PULSE_VOICE_ASSISTANT:-false}"
@@ -928,6 +945,14 @@ print_feature_summary() {
             "MQTT Port (MQTT_PORT)" \
             "$mqtt_port" \
             "MQTT broker port, default: 1883"
+        kv_block \
+            "MQTT User (MQTT_USER)" \
+            "$mqtt_user_display" \
+            "Optional MQTT username (falls back to MQTT_USERNAME)"
+        kv_block \
+            "MQTT Password (MQTT_PASS)" \
+            "$mqtt_pass_display" \
+            "Optional MQTT password; shown as <set> when provided"
         kv_block \
             "Version Checks (PULSE_VERSION_CHECKS_PER_DAY)" \
             "$pulse_version_checks_per_day checks/day" \

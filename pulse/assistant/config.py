@@ -41,6 +41,13 @@ def _split_csv(value: str | None) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _strip_or_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 DEFAULT_WAKE_MODEL = "hey_jarvis"
 WAKE_PIPELINES = {"pulse", "home_assistant"}
 
@@ -296,11 +303,13 @@ class AssistantConfig:
         )
 
         topic_base = source.get("PULSE_ASSISTANT_TOPIC_BASE") or f"pulse/{hostname}/assistant"
+        mqtt_username = _strip_or_none(source.get("MQTT_USER") or source.get("MQTT_USERNAME"))
+        mqtt_password = _strip_or_none(source.get("MQTT_PASS") or source.get("MQTT_PASSWORD"))
         mqtt = MqttConfig(
             host=source.get("MQTT_HOST"),
             port=_as_int(source.get("MQTT_PORT"), 1883),
-            username=source.get("MQTT_USERNAME"),
-            password=source.get("MQTT_PASSWORD"),
+            username=mqtt_username,
+            password=mqtt_password,
             topic_base=topic_base.rstrip("/"),
         )
 

@@ -94,6 +94,12 @@ MQTT_HOST="mosquitto.local"
 # MQTT_PORT — MQTT broker port (defaults to 1883).
 MQTT_PORT="1883"
 
+# MQTT_USER — optional username for authenticated brokers.
+MQTT_USER=""
+
+# MQTT_PASS — optional password for authenticated brokers.
+MQTT_PASS=""
+
 # PULSE_VERSION_CHECKS_PER_DAY — how many times per day we poll for new PulseOS releases (2/4/6/8/12/24).
 PULSE_VERSION_CHECKS_PER_DAY=12
 

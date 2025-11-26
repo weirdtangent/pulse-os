@@ -82,6 +82,8 @@ class OverlayConfig:
 class EnvConfig:
     mqtt_host: str
     mqtt_port: int
+    mqtt_username: str | None
+    mqtt_password: str | None
     pulse_url: str
     hostname: str
     friendly_name: str
@@ -236,6 +238,10 @@ def log(message: str) -> None:
 def load_config() -> EnvConfig:
     mqtt_host = os.environ.get("MQTT_HOST", "localhost")
     mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+    raw_mqtt_user = os.environ.get("MQTT_USER") or os.environ.get("MQTT_USERNAME")
+    mqtt_username = raw_mqtt_user.strip() if raw_mqtt_user else None
+    raw_mqtt_pass = os.environ.get("MQTT_PASS") or os.environ.get("MQTT_PASSWORD")
+    mqtt_password = raw_mqtt_pass.strip() if raw_mqtt_pass else None
     hostname = os.environ.get("PULSE_HOSTNAME") or os.uname().nodename
     pulse_url = _ensure_pulse_host_param(os.environ.get("PULSE_URL", ""), hostname)
     friendly_name = os.environ.get("PULSE_NAME") or hostname.replace("-", " ").title()
@@ -332,6 +338,8 @@ def load_config() -> EnvConfig:
     return EnvConfig(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
+        mqtt_username=mqtt_username,
+        mqtt_password=mqtt_password,
         pulse_url=pulse_url,
         hostname=hostname,
         friendly_name=friendly_name,
@@ -1466,6 +1474,9 @@ def main():
         qos=1,
         retain=True,
     )
+
+    if config.mqtt_username:
+        client.username_pw_set(config.mqtt_username, config.mqtt_password or "")
 
     listener.log(f"Connecting to MQTT broker {config.mqtt_host}:{config.mqtt_port}")
     client.connect(config.mqtt_host, config.mqtt_port, keepalive=60)
