@@ -25,6 +25,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - [assistant-commands](docs/assistant-commands.md) — Built-in “no LLM needed” voice shortcuts (alarms, timers, news, etc.)
 - [troubleshooting](docs/troubleshooting.md) — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
 - [notes-and-extras](docs/notes-and-extras.md) — Voice assistant tips, MQTT knobs, hardware accessories, boot splash notes, and other odds & ends
+- [public-photo-sources](docs/public-photo-sources.md) — Open-licensed image feeds (NASA, Smithsonian, Met, etc.) for `pulse-photo-card`
 
 ## Hardware Guide
 <details>
