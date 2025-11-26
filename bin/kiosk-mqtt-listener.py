@@ -242,7 +242,7 @@ def load_config() -> EnvConfig:
     mqtt_username = raw_mqtt_user.strip() if raw_mqtt_user else None
     raw_mqtt_pass = os.environ.get("MQTT_PASS") or os.environ.get("MQTT_PASSWORD")
     mqtt_password = raw_mqtt_pass.strip() if raw_mqtt_pass else None
-    mqtt_tls_enabled = _as_bool(os.environ.get("MQTT_TLS_ENABLED"), False)
+    mqtt_tls_enabled = parse_bool(os.environ.get("MQTT_TLS_ENABLED"), False)
     mqtt_cert = (os.environ.get("MQTT_CERT") or "").strip() or None
     mqtt_key = (os.environ.get("MQTT_KEY") or "").strip() or None
     mqtt_ca_cert = (os.environ.get("MQTT_CA_CERT") or "").strip() or None

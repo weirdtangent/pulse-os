@@ -13,6 +13,7 @@ import tkinter as tk
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
+from pulse.utils import parse_bool
 
 LOGGER = logging.getLogger("pulse-assistant-display")
 
@@ -62,7 +63,7 @@ class AssistantDisplay:
         password = raw_password.strip() if raw_password else ""
         if username:
             self._client.username_pw_set(username, password)
-        tls_enabled = _is_truthy(os.environ.get("MQTT_TLS_ENABLED"), False)
+        tls_enabled = parse_bool(os.environ.get("MQTT_TLS_ENABLED"), False)
         certfile = (os.environ.get("MQTT_CERT") or "").strip() or None
         keyfile = (os.environ.get("MQTT_KEY") or "").strip() or None
         ca_cert = (os.environ.get("MQTT_CA_CERT") or "").strip() or None
