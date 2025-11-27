@@ -1,3 +1,10 @@
+## [0.65.5](https://github.com/weirdtangent/pulse-os/compare/v0.65.4...v0.65.5) (2025-11-27)
+
+
+### Bug Fixes
+
+* another try at fixing the bt-autoconnect service ([0db5050](https://github.com/weirdtangent/pulse-os/commit/0db5050dd7ff5300032e2af2d9d84c3d7d97c681))
+
 ## [0.65.4](https://github.com/weirdtangent/pulse-os/compare/v0.65.3...v0.65.4) (2025-11-27)
 
 
