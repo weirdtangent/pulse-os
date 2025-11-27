@@ -1,3 +1,11 @@
+## [0.65.8](https://github.com/weirdtangent/pulse-os/compare/v0.65.7...v0.65.8) (2025-11-27)
+
+
+### Bug Fixes
+
+* bluetooth auto-connect service linking ([d7b3f76](https://github.com/weirdtangent/pulse-os/commit/d7b3f76be9e94f49839bce0628ecb38669ff6060))
+* try to stop reporting failure when it actually works ([5d39e0c](https://github.com/weirdtangent/pulse-os/commit/5d39e0cccb3b970ce6abbd2e12db91926d8aba3c))
+
 ## [0.65.7](https://github.com/weirdtangent/pulse-os/compare/v0.65.6...v0.65.7) (2025-11-27)
 
 
