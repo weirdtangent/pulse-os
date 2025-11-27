@@ -21,7 +21,7 @@ import time
 from array import array
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -1135,7 +1135,7 @@ class PulseAssistant:
 
     def _serialize_calendar_event(self, reminder: CalendarReminder) -> dict[str, Any]:
         local_start = reminder.start.astimezone()
-        start_utc = reminder.start.astimezone(timezone.utc)
+        start_utc = reminder.start.astimezone(UTC)
         payload: dict[str, Any] = {
             "uid": reminder.uid,
             "summary": reminder.summary,
