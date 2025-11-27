@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 from array import array
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -104,7 +105,84 @@ def _compute_rms(chunk: bytes, sample_width: int) -> int:
     return int(math.sqrt(mean))
 
 
+def _normalize_conversation_stop_text(
+    text: str,
+    prefixes: Sequence[str] | None = None,
+) -> str:
+    lowered = (text or "").strip().lower()
+    if not lowered:
+        return ""
+    lowered = lowered.replace("’", "'")
+    lowered = re.sub(r"[^\w\s']", " ", lowered)
+    lowered = lowered.replace("'", "")
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    if not lowered:
+        return ""
+    if prefixes:
+        for prefix in prefixes:
+            normalized_prefix = re.sub(r"\s+", " ", prefix.strip().lower())
+            if not normalized_prefix:
+                continue
+            if lowered == normalized_prefix:
+                return ""
+            if lowered.startswith(normalized_prefix + " "):
+                lowered = lowered[len(normalized_prefix) + 1 :].strip()
+                break
+    suffixes = ("please", "thanks", "thank you", "for now", "right now", "today")
+    trimmed = True
+    while trimmed and lowered:
+        trimmed = False
+        for suffix in suffixes:
+            needle = " " + suffix
+            if lowered.endswith(needle):
+                lowered = lowered[: -len(needle)].rstrip()
+                trimmed = True
+    return lowered
+
+
+_CONVERSATION_STOP_PHRASES_RAW = (
+    "nevermind",
+    "never mind",
+    "never mind that",
+    "never mind about that",
+    "forget it",
+    "forget about it",
+    "forget that",
+    "nothing",
+    "nothing else",
+    "nothing for now",
+    "nothing right now",
+    "that's all",
+    "that is all",
+    "that's it",
+    "that is it",
+    "cancel",
+    "cancel that",
+    "cancel it",
+    "no thanks",
+    "no thank you",
+    "no thank you kindly",
+    "stop listening",
+    "you can stop",
+    "all good",
+    "we are good",
+    "were good",
+    "i am good",
+    "im good",
+    "dont worry about it",
+    "don't worry about it",
+)
+
+CONVERSATION_STOP_PHRASES: set[str] = set()
+for phrase in _CONVERSATION_STOP_PHRASES_RAW:
+    normalized_phrase = _normalize_conversation_stop_text(phrase)
+    if normalized_phrase:
+        CONVERSATION_STOP_PHRASES.add(normalized_phrase)
+
+
 class PulseAssistant:
+    _conversation_stop_prefixes: tuple[str, ...] = ()
+
     def __init__(self, config: AssistantConfig) -> None:
         self.config = config
         mic_bytes = config.mic.bytes_per_chunk
@@ -168,6 +246,7 @@ class PulseAssistant:
         self._log_llm_messages = config.log_llm_messages
         self._last_response_end: float | None = None
         self._follow_up_start_delay = 0.4
+        self._conversation_stop_prefixes = self._build_conversation_stop_prefixes()
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -481,6 +560,28 @@ class PulseAssistant:
     def _display_wake_word(name: str) -> str:
         return name.replace("_", " ").strip()
 
+    def _build_conversation_stop_prefixes(self) -> tuple[str, ...]:
+        prefixes: list[str] = []
+        for wake_word in self.config.wake_models:
+            display = self._display_wake_word(wake_word)
+            lowered = re.sub(r"\s+", " ", display.lower()).strip()
+            if not lowered:
+                continue
+            variants = (
+                lowered,
+                f"hey {lowered}",
+                f"ok {lowered}",
+                f"okay {lowered}",
+            )
+            for variant in variants:
+                normalized_variant = re.sub(r"\s+", " ", variant.strip().lower())
+                if normalized_variant:
+                    prefixes.append(normalized_variant)
+        if not prefixes:
+            return ()
+        unique = list(dict.fromkeys(prefixes))
+        return tuple(unique)
+
     async def _maybe_play_wake_sound(self) -> None:
         if not self.preferences.wake_sound:
             return
@@ -515,6 +616,9 @@ class PulseAssistant:
                 LOGGER.info("Transcript (%s): %s", wake_word, transcript)
             transcript_payload = {"text": transcript, "wake_word": wake_word}
             self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
+            if await self._maybe_handle_stop_phrase(transcript, wake_word, tracker):
+                self._finalize_assist_run(status="cancelled")
+                return
             if await self._maybe_handle_music_command(transcript):
                 self._finalize_assist_run(status="success")
                 return
@@ -560,6 +664,14 @@ class PulseAssistant:
                     LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
                 payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
                 self._publish_message(self.config.transcript_topic, json.dumps(payload))
+                if await self._maybe_handle_stop_phrase(
+                    follow_up_transcript,
+                    wake_word,
+                    tracker,
+                    follow_up=True,
+                ):
+                    self._finalize_assist_run(status="cancelled")
+                    return
                 if await self._maybe_handle_music_command(follow_up_transcript):
                     follow_up_needed = False
                     continue
@@ -1381,6 +1493,41 @@ class PulseAssistant:
                 self._publish_info_overlay()
         self._trigger_media_resume_after_response()
         return True
+
+    async def _maybe_handle_stop_phrase(
+        self,
+        transcript: str,
+        wake_word: str,
+        tracker: AssistRunTracker | None,
+        *,
+        follow_up: bool = False,
+    ) -> bool:
+        if not self._is_conversation_stop_command(transcript):
+            return False
+        if tracker:
+            tracker.begin_stage("speaking")
+        stage_extra = {"wake_word": wake_word}
+        if follow_up:
+            stage_extra["follow_up"] = True
+        self._set_assist_stage("pulse", "speaking", stage_extra)
+        response_text = "Okay, no problem."
+        payload = {"text": response_text, "wake_word": wake_word}
+        if follow_up:
+            payload["follow_up"] = True
+        self._publish_message(self.config.response_topic, json.dumps(payload))
+        self._log_assistant_response("stop", response_text, pipeline="pulse")
+        await self._speak(response_text)
+        self._trigger_media_resume_after_response()
+        return True
+
+    def _is_conversation_stop_command(self, transcript: str | None) -> bool:
+        normalized = _normalize_conversation_stop_text(
+            transcript or "",
+            prefixes=self._conversation_stop_prefixes,
+        )
+        if not normalized:
+            return False
+        return normalized in CONVERSATION_STOP_PHRASES
 
     @staticmethod
     def _is_stop_phrase(lowered: str) -> bool:
