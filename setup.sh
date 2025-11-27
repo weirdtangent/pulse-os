@@ -48,6 +48,45 @@ log() {
     echo "[PulseOS] $*"
 }
 
+secure_config_file() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return
+    fi
+
+    local owner_stat desired_owner desired_group
+    owner_stat=$(stat -c '%U:%G' "$CONFIG_FILE" 2>/dev/null || echo "")
+
+    if id -u "$PULSE_USER" >/dev/null 2>&1; then
+        desired_owner="$PULSE_USER"
+        desired_group="$PULSE_USER"
+    else
+        desired_owner=$(printf '%s\n' "$owner_stat" | cut -d':' -f1)
+        desired_group=$(printf '%s\n' "$owner_stat" | cut -d':' -f2)
+    fi
+
+    if [ -n "$desired_owner" ] && [ -n "$desired_group" ] && [ "$owner_stat" != "$desired_owner:$desired_group" ]; then
+        if chown "$desired_owner:$desired_group" "$CONFIG_FILE" 2>/dev/null; then
+            :
+        else
+            sudo chown "$desired_owner:$desired_group" "$CONFIG_FILE"
+        fi
+        log "Set owner on pulse.conf to $desired_owner:$desired_group."
+    fi
+
+    local mode
+    mode=$(stat -c '%a' "$CONFIG_FILE" 2>/dev/null || echo "")
+    if [ "$mode" != "600" ]; then
+        if chmod 600 "$CONFIG_FILE" 2>/dev/null; then
+            :
+        else
+            sudo chmod 600 "$CONFIG_FILE"
+        fi
+        log "Restricted pulse.conf permissions to 600."
+    fi
+}
+
+secure_config_file
+
 usage() {
     cat <<EOF
 Usage: $0 [--no-restart] [location]

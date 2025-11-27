@@ -129,6 +129,8 @@ vi /opt/pulse-os/pulse.conf
 
 All keys are optional, but filling out the relevant sections keeps boot, kiosk, MQTT, and assistant services aligned with your environment. Refer to [docs/config-reference.md](docs/config-reference.md) for every available variable, its default, and practical usage notes.
 
+> 🔒 **Security tip:** `pulse.conf` often contains API keys, MQTT credentials, and private calendar URLs. `setup.sh` automatically sets the file owner to `PULSE_USER` and applies `chmod 600`, but keep the repo staged under `/opt` (not your home directory) and never commit `pulse.conf` back to git or copy it into cloud backups without similar protections.
+
 ### Quick config verification
 
 After editing `pulse.conf`, run the connectivity check to confirm the services you referenced are reachable:

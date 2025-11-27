@@ -2,6 +2,8 @@
 
 This guide lists every `pulse.conf` variable, its default value from `pulse.conf.sample`, and what it controls. Copy the sample file, adjust the keys that apply to your kiosk, then rerun `./setup.sh` so services reload with the new values.
 
+> 🔐 `setup.sh` enforces `chmod 600` and matches ownership to `PULSE_USER`, but keep `pulse.conf` out of version control and any shared backups—the file usually contains MQTT credentials, API tokens, and private URLs.
+
 > **Tip:** anything left blank inherits safe defaults. Only override values that differ on your network (MQTT host, calendar feeds, Wyoming endpoints, etc.).
 
 ## Core Configuration
