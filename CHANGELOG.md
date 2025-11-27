@@ -1,3 +1,21 @@
+# [0.64.0](https://github.com/weirdtangent/pulse-os/compare/v0.63.1...v0.64.0) (2025-11-27)
+
+
+### Bug Fixes
+
+* fix import ([199440a](https://github.com/weirdtangent/pulse-os/commit/199440a4012edc69e48971ab44d6ea6b8c286a2a))
+
+
+### Features
+
+* bump Python version to 3.13 ([6859cf9](https://github.com/weirdtangent/pulse-os/commit/6859cf926a5a73f4ab02bbe958c46485775525c0))
+* bump python version to 3.14 ([94860a6](https://github.com/weirdtangent/pulse-os/commit/94860a612f7cfbc32159812a070aadf14b83d661))
+
+
+### Reverts
+
+* back to python 3.12 ([f9bfef0](https://github.com/weirdtangent/pulse-os/commit/f9bfef0fff267fc427dd3ab1f5da6e4b7a9fae91))
+
 ## [0.63.1](https://github.com/weirdtangent/pulse-os/compare/v0.63.0...v0.63.1) (2025-11-27)
 
 
