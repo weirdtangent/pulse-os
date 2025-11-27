@@ -1,3 +1,10 @@
+## [0.65.4](https://github.com/weirdtangent/pulse-os/compare/v0.65.3...v0.65.4) (2025-11-27)
+
+
+### Bug Fixes
+
+* syntax error in run_user_systemctl function ([07829fa](https://github.com/weirdtangent/pulse-os/commit/07829fa97984018d63068a75f8809828e1213f8d))
+
 ## [0.65.3](https://github.com/weirdtangent/pulse-os/compare/v0.65.2...v0.65.3) (2025-11-27)
 
 
