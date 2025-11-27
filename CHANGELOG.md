@@ -1,3 +1,10 @@
+## [0.63.1](https://github.com/weirdtangent/pulse-os/compare/v0.63.0...v0.63.1) (2025-11-27)
+
+
+### Bug Fixes
+
+* add python3-icalendar to manual-packages.txt ([f6b5c20](https://github.com/weirdtangent/pulse-os/commit/f6b5c20692aa060cc0b156b0d6ea68fd668ba5d5))
+
 # [0.63.0](https://github.com/weirdtangent/pulse-os/compare/v0.62.0...v0.63.0) (2025-11-27)
 
 
