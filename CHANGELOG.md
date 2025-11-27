@@ -1,3 +1,10 @@
+## [0.65.6](https://github.com/weirdtangent/pulse-os/compare/v0.65.5...v0.65.6) (2025-11-27)
+
+
+### Bug Fixes
+
+* handle MQTT connection success codes as strings ([859d7c2](https://github.com/weirdtangent/pulse-os/commit/859d7c2e30041a000b021cb344ebd09c4077fdd5))
+
 ## [0.65.5](https://github.com/weirdtangent/pulse-os/compare/v0.65.4...v0.65.5) (2025-11-27)
 
 
