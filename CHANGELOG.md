@@ -1,3 +1,10 @@
+## [0.65.7](https://github.com/weirdtangent/pulse-os/compare/v0.65.6...v0.65.7) (2025-11-27)
+
+
+### Bug Fixes
+
+* link bt-autoconnect units to user systemd ([6b355bb](https://github.com/weirdtangent/pulse-os/commit/6b355bb494874f1b626945867a11ea23821e39e5))
+
 ## [0.65.6](https://github.com/weirdtangent/pulse-os/compare/v0.65.5...v0.65.6) (2025-11-27)
 
 
