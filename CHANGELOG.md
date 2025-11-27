@@ -1,3 +1,10 @@
+## [0.65.3](https://github.com/weirdtangent/pulse-os/compare/v0.65.2...v0.65.3) (2025-11-27)
+
+
+### Bug Fixes
+
+* ensure user systemd session is created before enabling bt-autoconnect units ([9805764](https://github.com/weirdtangent/pulse-os/commit/9805764274e88648c8a689040127cc2a9eec8546))
+
 ## [0.65.2](https://github.com/weirdtangent/pulse-os/compare/v0.65.1...v0.65.2) (2025-11-27)
 
 
