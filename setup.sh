@@ -798,6 +798,8 @@ enable_services() {
         sudo systemctl --global enable bt-autoconnect.service
         sudo systemctl --global enable bt-autoconnect.timer
         run_user_systemctl daemon-reload >/dev/null 2>&1 || true
+        run_user_systemctl link "$REPO_DIR/config/system-user/bt-autoconnect.service" >/dev/null 2>&1 || true
+        run_user_systemctl link "$REPO_DIR/config/system-user/bt-autoconnect.timer" >/dev/null 2>&1 || true
         if ! run_user_systemctl enable --now bt-autoconnect.service bt-autoconnect.timer >/dev/null 2>&1; then
             log "Warning: failed to enable bt-autoconnect units for $PULSE_USER; they will activate on next login."
         fi
