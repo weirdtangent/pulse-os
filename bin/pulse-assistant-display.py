@@ -120,6 +120,9 @@ class AssistantDisplay:
     @staticmethod
     def _is_connect_success(reason_code) -> bool:
         try:
+            if isinstance(reason_code, str):
+                normalized = reason_code.strip().lower()
+                return normalized in {"success", "accepted", "0"}
             if hasattr(reason_code, "is_success"):
                 return bool(reason_code.is_success())
             if hasattr(reason_code, "is_good"):
