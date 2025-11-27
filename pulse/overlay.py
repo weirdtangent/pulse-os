@@ -16,6 +16,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 
+DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
+
 
 @dataclass(frozen=True)
 class ClockConfig:
@@ -355,6 +357,7 @@ class OverlayTheme:
     text_color: str
     accent_color: str
     show_notification_bar: bool = True
+    font_family: str = DEFAULT_FONT_STACK
 
 
 CELL_ORDER = (
@@ -496,6 +499,7 @@ def _theme_css(theme: OverlayTheme) -> str:
         f"  --overlay-ambient-bg: {theme.ambient_background};\n"
         f"  --overlay-alert-bg: {theme.alert_background};\n"
         f"  --overlay-accent-color: {theme.accent_color};\n"
+        f"  --overlay-font-family: {theme.font_family};\n"
         "}"
     )
 

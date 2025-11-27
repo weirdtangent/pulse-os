@@ -97,6 +97,34 @@ def build_number_entity(
     return entity
 
 
+def build_select_entity(
+    name: str,
+    unique_id: str,
+    command_topic: str,
+    state_topic: str,
+    sanitized_hostname: str,
+    options: list[str],
+    icon: str | None = None,
+    entity_category: str | None = None,
+) -> dict[str, Any]:
+    """Build a Home Assistant select entity definition."""
+
+    entity: dict[str, Any] = {
+        "platform": "select",
+        "name": name,
+        "default_entity_id": f"select.{sanitized_hostname}_{unique_id.split('_')[-1]}",
+        "cmd_t": command_topic,
+        "stat_t": state_topic,
+        "unique_id": unique_id,
+        "options": options,
+    }
+    if icon:
+        entity["icon"] = icon
+    if entity_category:
+        entity["entity_category"] = entity_category
+    return entity
+
+
 def build_sensor_entity(
     name: str,
     unique_id: str,

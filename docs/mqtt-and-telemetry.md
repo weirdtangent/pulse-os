@@ -41,6 +41,10 @@ Home Assistant also discovers two `number` entities published by the same servic
 
 Both sliders publish retained telemetry updates, and the telemetry loop re-sends the live hardware levels every ~15 seconds so brightness changes from other services (like the sunrise scheduler) and any volume adjustments stay reflected in Home Assistant. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
 
+### Overlay font select
+
+`pulse-kiosk-mqtt.service` also publishes a `select` entity named `Overlay Font` so you can change the on-device clock/timer font directly from Home Assistant. The command topic is `pulse/<hostname>/overlay/font/set`, the state topic is `pulse/<hostname>/overlay/font/state`, and the options list is auto-generated from every font reported by `fc-list` plus a `System default` entry that maps back to the `PULSE_OVERLAY_FONT_FAMILY` env var. Installing new fonts on the kiosk (and restarting the MQTT service so discovery is re-published) automatically adds them to the select list. Picking a font triggers an overlay refresh immediately so the change is visible on the kiosk screen within a second or two.
+
 ---
 
 ## Diagnostic Telemetry Sensors

@@ -66,6 +66,11 @@ PULSE_OVERLAY_ALLOWED_ORIGINS="*"
 # If unset, defaults to local timezone with the device friendly name as label.
 PULSE_OVERLAY_CLOCK=""
 
+# PULSE_OVERLAY_FONT_FAMILY — preferred overlay font (CSS font-family syntax).
+# Example: PULSE_OVERLAY_FONT_FAMILY="Roboto"
+# Fallback fonts are appended automatically if not provided.
+PULSE_OVERLAY_FONT_FAMILY="Inter"
+
 # PULSE_OVERLAY_AMBIENT_BG — CSS color for persistent cards (clocks, now playing).
 PULSE_OVERLAY_AMBIENT_BG="rgba(0, 0, 0, 0.32)"
 

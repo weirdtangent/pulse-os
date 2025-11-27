@@ -21,8 +21,9 @@ import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
 from pulse import audio, display
-from pulse.mqtt_discovery import build_button_entity, build_number_entity
+from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_select_entity
 from pulse.overlay import (
+    DEFAULT_FONT_STACK,
     ClockConfig,
     OverlayChange,
     OverlayStateManager,
@@ -46,6 +47,8 @@ class Topics:
     update_availability: str
     telemetry: str
     overlay_refresh: str
+    overlay_font_command: str
+    overlay_font_state: str
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,7 @@ class OverlayConfig:
     accent_color: str
     show_notification_bar: bool
     clock_24h: bool
+    font_family: str
 
 
 @dataclass(frozen=True)
@@ -230,6 +234,54 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
     ),
 ]
 
+OVERLAY_FONT_DEFAULT_OPTION = "System default"
+FONT_DETECT_TIMEOUT_SECONDS = 6
+
+
+def _normalize_font_name(name: str) -> str:
+    cleaned = " ".join(name.strip().split())
+    cleaned = cleaned.strip('"').strip("'")
+    return cleaned
+
+
+def _quote_font_name(name: str) -> str:
+    cleaned = _normalize_font_name(name)
+    escaped = cleaned.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"' if escaped else ""
+
+
+def _extract_primary_font(font_stack: str) -> str | None:
+    for token in font_stack.split(","):
+        candidate = _normalize_font_name(token)
+        if candidate:
+            return candidate
+    return None
+
+
+def _detect_installed_fonts() -> list[str]:
+    try:
+        result = subprocess.run(
+            ["fc-list", ":", "family"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=FONT_DETECT_TIMEOUT_SECONDS,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    fonts: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        for token in raw.split(","):
+            name = _normalize_font_name(token)
+            if not name:
+                continue
+            key = name.casefold()
+            fonts.setdefault(key, name)
+    return sorted(fonts.values(), key=str.casefold)
+
 
 def log(message: str) -> None:
     print(f"[kiosk-mqtt] {message}", flush=True)
@@ -265,6 +317,8 @@ def load_config() -> EnvConfig:
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
         telemetry=f"pulse/{hostname}/telemetry",
         overlay_refresh=f"pulse/{hostname}/overlay/refresh",
+        overlay_font_command=f"pulse/{hostname}/overlay/font/set",
+        overlay_font_state=f"pulse/{hostname}/overlay/font/state",
     )
 
     devtools = DevToolsConfig(
@@ -280,6 +334,7 @@ def load_config() -> EnvConfig:
         "*",
     )
     overlay_clock_spec = os.environ.get("PULSE_OVERLAY_CLOCK")
+    overlay_font_stack = (os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip() or DEFAULT_FONT_STACK
     overlay_clocks = parse_clock_config(
         overlay_clock_spec,
         default_label=friendly_name,
@@ -297,6 +352,7 @@ def load_config() -> EnvConfig:
         accent_color=os.environ.get("PULSE_OVERLAY_ACCENT_COLOR", "#88C0D0"),
         show_notification_bar=parse_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
         clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
+        font_family=overlay_font_stack,
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -515,6 +571,12 @@ class KioskMqttListener:
         self._overlay_theme: OverlayTheme | None = None
         self._overlay_http: OverlayHttpServer | None = None
         self._overlay_topic_handlers: dict[str, Any] = {}
+        self._default_font_stack = (self.overlay_config.font_family or DEFAULT_FONT_STACK).strip() or DEFAULT_FONT_STACK
+        self._overlay_font_override: str | None = None
+        self._current_font_stack = self._default_font_stack
+        self._font_options: list[str] = []
+        self._font_option_set: set[str] = set()
+        self._refresh_font_options()
         overlay_host = self.overlay_config.bind_address
         if overlay_host in {"0.0.0.0", "::"}:
             overlay_host = "localhost"
@@ -532,6 +594,7 @@ class KioskMqttListener:
                 text_color=self.overlay_config.text_color,
                 accent_color=self.overlay_config.accent_color,
                 show_notification_bar=self.overlay_config.show_notification_bar,
+                font_family=self._current_font_stack,
             )
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
@@ -736,6 +799,62 @@ class KioskMqttListener:
             }
         )
         self._safe_publish(client, self.config.topics.overlay_refresh, payload, qos=0, retain=False)
+
+    def _resolve_font_stack(self) -> str:
+        base_stack = self._default_font_stack or DEFAULT_FONT_STACK
+        if self._overlay_font_override:
+            quoted = _quote_font_name(self._overlay_font_override)
+            if quoted:
+                return f"{quoted}, {base_stack}" if base_stack else quoted
+        return base_stack or DEFAULT_FONT_STACK
+
+    def _apply_overlay_font_choice(self, reason: str) -> None:
+        new_stack = self._resolve_font_stack()
+        if new_stack == self._current_font_stack:
+            return
+        self._current_font_stack = new_stack
+        if not self.overlay_config.enabled:
+            return
+        self._overlay_theme = OverlayTheme(
+            ambient_background=self.overlay_config.ambient_background,
+            alert_background=self.overlay_config.alert_background,
+            text_color=self.overlay_config.text_color,
+            accent_color=self.overlay_config.accent_color,
+            show_notification_bar=self.overlay_config.show_notification_bar,
+            font_family=new_stack,
+        )
+        if self._overlay_http:
+            self._overlay_http.theme = self._overlay_theme
+        if self.overlay_state:
+            snapshot = self.overlay_state.snapshot()
+            self._emit_overlay_refresh(snapshot.version, reason)
+
+    def _publish_overlay_font_state(self, client: mqtt.Client | None) -> None:
+        state = self._overlay_font_override or OVERLAY_FONT_DEFAULT_OPTION
+        self._safe_publish(
+            client,
+            self.config.topics.overlay_font_state,
+            state,
+            qos=1,
+            retain=True,
+        )
+
+    def _refresh_font_options(self) -> None:
+        fonts = _detect_installed_fonts()
+        primary = _extract_primary_font(self._default_font_stack)
+        if primary:
+            fonts.append(primary)
+        dedup: dict[str, str] = {}
+        for name in fonts:
+            normalized = _normalize_font_name(name)
+            if not normalized:
+                continue
+            dedup[normalized.casefold()] = normalized
+        sorted_fonts = sorted(dedup.values(), key=str.casefold)
+        self._font_option_set = set(sorted_fonts)
+        self._font_options = (
+            [OVERLAY_FONT_DEFAULT_OPTION, *sorted_fonts] if sorted_fonts else [OVERLAY_FONT_DEFAULT_OPTION]
+        )
 
     def _handle_overlay_schedule_state(self, payload: bytes) -> None:
         if not self.overlay_state:
@@ -1218,6 +1337,18 @@ class KioskMqttListener:
             entity_category="config",
         )
 
+        self._refresh_font_options()
+        font_select = build_select_entity(
+            "Overlay Font",
+            f"{self.config.hostname}_overlay_font",
+            self.config.topics.overlay_font_command,
+            self.config.topics.overlay_font_state,
+            sanitized_hostname,
+            options=self._font_options,
+            icon="mdi:format-font",
+            entity_category="config",
+        )
+
         latest_version_sensor = {
             "platform": "sensor",
             "name": "Latest version",
@@ -1240,6 +1371,7 @@ class KioskMqttListener:
                 "Update": update_button,
                 "Audio Volume": volume_control,
                 "Screen Brightness": brightness_control,
+                "Overlay Font": font_select,
                 "Latest version": latest_version_sensor,
                 **telemetry_components,
             },
@@ -1293,6 +1425,7 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.reboot)
         client.subscribe(self.config.topics.volume)
         client.subscribe(self.config.topics.brightness)
+        client.subscribe(self.config.topics.overlay_font_command)
         if self.overlay_state:
             client.subscribe(self.assistant_topics.schedules_state)
             client.subscribe(self.assistant_topics.alarms_active)
@@ -1301,6 +1434,7 @@ class KioskMqttListener:
             client.subscribe(self.assistant_topics.info_card)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
+        self._publish_overlay_font_state(client)
         self._publish_version_metadata()
         # Publish cached latest version if available
         if self.latest_remote_version:
@@ -1330,6 +1464,8 @@ class KioskMqttListener:
             self.handle_volume(msg.payload)
         elif msg.topic == self.config.topics.brightness:
             self.handle_brightness(msg.payload)
+        elif msg.topic == self.config.topics.overlay_font_command:
+            self.handle_overlay_font(msg.payload)
         elif self.overlay_state and msg.topic == self.assistant_topics.info_card:
             self._handle_overlay_info_card(msg.payload)
         elif self.overlay_state and msg.topic in self._overlay_topic_handlers:
@@ -1402,6 +1538,28 @@ class KioskMqttListener:
             )
         else:
             self.log("brightness: failed to set brightness - no backlight device found")
+
+    def handle_overlay_font(self, payload: bytes) -> None:
+        """Handle overlay font selection from Home Assistant."""
+        choice = payload.decode("utf-8", errors="ignore").strip()
+        if not choice:
+            self.log('overlay-font: ignoring empty payload ""')
+            return
+        normalized_choice: str | None
+        if choice == OVERLAY_FONT_DEFAULT_OPTION:
+            normalized_choice = None
+        else:
+            if choice not in self._font_option_set:
+                self.log(f"overlay-font: '{choice}' is not an available font")
+                return
+            normalized_choice = choice
+        if normalized_choice == self._overlay_font_override:
+            return
+        self._overlay_font_override = normalized_choice
+        label = choice if normalized_choice else OVERLAY_FONT_DEFAULT_OPTION
+        self.log(f"overlay-font: set to '{label}'")
+        self._publish_overlay_font_state(None)
+        self._apply_overlay_font_choice(reason="font")
 
     def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)
