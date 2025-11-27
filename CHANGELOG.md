@@ -1,3 +1,10 @@
+## [0.61.2](https://github.com/weirdtangent/pulse-os/compare/v0.61.1...v0.61.2) (2025-11-27)
+
+
+### Bug Fixes
+
+* more filters to break out of follow-up loops ([71902a8](https://github.com/weirdtangent/pulse-os/commit/71902a83b5bcabc297f31d33ddc9b57fb9790de6))
+
 ## [0.61.1](https://github.com/weirdtangent/pulse-os/compare/v0.61.0...v0.61.1) (2025-11-27)
 
 
