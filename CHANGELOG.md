@@ -1,3 +1,10 @@
+# [0.63.0](https://github.com/weirdtangent/pulse-os/compare/v0.62.0...v0.63.0) (2025-11-27)
+
+
+### Features
+
+* show list of calendar events ([c85a11d](https://github.com/weirdtangent/pulse-os/commit/c85a11d02042fd12a1879ea1ab702d04d7957277))
+
 # [0.62.0](https://github.com/weirdtangent/pulse-os/compare/v0.61.2...v0.62.0) (2025-11-27)
 
 
