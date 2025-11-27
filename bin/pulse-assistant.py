@@ -632,6 +632,7 @@ class PulseAssistant:
             follow_up_needed = self._should_listen_for_follow_up(llm_result)
             follow_up_attempts = 0
             max_follow_up_attempts = 2
+            last_follow_up_normalized: str | None = None
             while follow_up_needed:
                 tracker.begin_stage("listening")
                 self._set_assist_stage("pulse", "listening", {"wake_word": wake_word, "follow_up": True})
@@ -664,6 +665,23 @@ class PulseAssistant:
                     LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
                 payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
                 self._publish_message(self.config.transcript_topic, json.dumps(payload))
+                is_useful_follow_up, normalized_follow_up = self._evaluate_follow_up_transcript(
+                    follow_up_transcript,
+                    last_follow_up_normalized,
+                )
+                if not is_useful_follow_up:
+                    follow_up_transcript = ""
+                else:
+                    last_follow_up_normalized = normalized_follow_up
+                if not follow_up_transcript:
+                    follow_up_attempts += 1
+                    LOGGER.info("Follow-up attempt %d produced no useful transcript", follow_up_attempts)
+                    if follow_up_attempts >= max_follow_up_attempts:
+                        tracker.begin_stage("speaking")
+                        self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word, "follow_up": True})
+                        await self._speak("Sorry, I didn't catch that.")
+                        break
+                    continue
                 if await self._maybe_handle_stop_phrase(
                     follow_up_transcript,
                     wake_word,
@@ -1528,6 +1546,23 @@ class PulseAssistant:
         if not normalized:
             return False
         return normalized in CONVERSATION_STOP_PHRASES
+
+    @staticmethod
+    def _evaluate_follow_up_transcript(
+        transcript: str | None,
+        previous_normalized: str | None = None,
+    ) -> tuple[bool, str | None]:
+        if not transcript or not transcript.strip():
+            return False, None
+        normalized = re.sub(r"[^a-z0-9\s]", " ", transcript.lower()).strip()
+        if not normalized:
+            return False, None
+        if previous_normalized and normalized == previous_normalized:
+            return False, normalized
+        noise_tokens = {"you", "ya", "u"}
+        if normalized in noise_tokens:
+            return False, normalized
+        return True, normalized
 
     @staticmethod
     def _is_stop_phrase(lowered: str) -> bool:

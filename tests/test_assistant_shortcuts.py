@@ -46,3 +46,13 @@ def test_conversation_stop_prefixes_follow_wake_words() -> None:
     assert assistant._is_conversation_stop_command("Hey Gizmo forget it")
     assistant._conversation_stop_prefixes = ("hey other",)
     assert not assistant._is_conversation_stop_command("Hey Gizmo forget it")
+
+
+def test_follow_up_noise_filtering() -> None:
+    assistant = _assistant()
+    ok, normalized = assistant._evaluate_follow_up_transcript("You", None)
+    assert not ok and normalized == "you"
+    ok, normalized = assistant._evaluate_follow_up_transcript("Add tomatoes", None)
+    assert ok and normalized == "add tomatoes"
+    ok, normalized = assistant._evaluate_follow_up_transcript("Add tomatoes", normalized)
+    assert not ok
