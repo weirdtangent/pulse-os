@@ -341,7 +341,7 @@ run_user_systemctl() {
     local user="${PULSE_USER:-pulse}"
     if ! id "$user" >/dev/null 2>&1; then
         return 1
-    }
+    fi
     local uid
     uid=$(id -u "$user") || return 1
     local runtime="/run/user/${uid}"
