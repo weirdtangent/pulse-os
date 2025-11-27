@@ -792,9 +792,9 @@ enable_services() {
     log "Enabling user services (user-global)…"
     # These create symlinks in /etc/systemd/user/
     # The pulse user's per-user systemd instance will load them automatically.
-    ensure_user_systemd_session
     if [ "$PULSE_BLUETOOTH_AUTOCONNECT" = "true" ]; then
         log "Enabling Bluetooth auto-connect..."
+        ensure_user_systemd_session
         sudo systemctl --global enable bt-autoconnect.service
         sudo systemctl --global enable bt-autoconnect.timer
         run_user_systemctl daemon-reload >/dev/null 2>&1 || true
