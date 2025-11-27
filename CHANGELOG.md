@@ -1,3 +1,10 @@
+# [0.62.0](https://github.com/weirdtangent/pulse-os/compare/v0.61.2...v0.62.0) (2025-11-27)
+
+
+### Features
+
+* add webcal/ICS calendar URLs support ([71ccd84](https://github.com/weirdtangent/pulse-os/commit/71ccd84e030020e992cfcc1589a4aa8b42e8ad9c))
+
 ## [0.61.2](https://github.com/weirdtangent/pulse-os/compare/v0.61.1...v0.61.2) (2025-11-27)
 
 
