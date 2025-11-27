@@ -1,3 +1,11 @@
+# [0.65.0](https://github.com/weirdtangent/pulse-os/compare/v0.64.0...v0.65.0) (2025-11-27)
+
+
+### Features
+
+* add calendar lookahead hours and declined event styling ([49686c0](https://github.com/weirdtangent/pulse-os/commit/49686c02bc622f7d886a0427dda3165830929739))
+* add security tips to README and config reference; secure setup.sh with owner and permissions ([97ba216](https://github.com/weirdtangent/pulse-os/commit/97ba216ba5db3a3cf5685e9e741d0e6071b52220))
+
 # [0.64.0](https://github.com/weirdtangent/pulse-os/compare/v0.63.1...v0.64.0) (2025-11-27)
 
 
