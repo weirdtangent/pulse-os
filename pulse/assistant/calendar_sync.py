@@ -8,6 +8,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from urllib.parse import unquote, urlparse
 
 import httpx
 from icalendar import Calendar
@@ -19,6 +20,49 @@ LOGGER = logging.getLogger("pulse.calendar_sync")
 
 def _now() -> datetime:
     return datetime.now().astimezone()
+
+
+def _normalize_attendee_identifier(value) -> str:
+    """Normalize ATTENDEE values and configured emails for comparison."""
+
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    if text.startswith("mailto:"):
+        text = text[len("mailto:") :]
+    return text
+
+
+def _guess_google_calendar_email(feed_url: str) -> str | None:
+    """Best-effort extraction of the calendar owner email from Google ICS URLs."""
+
+    try:
+        parsed = urlparse(feed_url)
+    except ValueError:
+        return None
+    host = (parsed.netloc or "").lower()
+    if "calendar.google.com" not in host:
+        return None
+    segments = [segment for segment in (parsed.path or "").split("/") if segment]
+    try:
+        idx = segments.index("ical")
+    except ValueError:
+        return None
+    if idx + 1 >= len(segments):
+        return None
+    calendar_id = unquote(segments[idx + 1])
+    calendar_id = calendar_id.strip()
+    if not calendar_id:
+        return None
+    return calendar_id.lower()
+
+
+def _owner_tokens_for_feed(url: str, config: CalendarConfig) -> set[str]:
+    tokens = {_normalize_attendee_identifier(email) for email in config.attendee_emails if email}
+    guessed = _guess_google_calendar_email(url)
+    if guessed:
+        tokens.add(_normalize_attendee_identifier(guessed))
+    return {token for token in tokens if token}
 
 
 @dataclass(slots=True, frozen=True)
@@ -37,6 +81,7 @@ class CalendarReminder:
     source_url: str
     url: str | None = None
     sequence: int | None = None
+    declined: bool = False
 
 
 @dataclass(slots=True)
@@ -46,6 +91,7 @@ class _FeedState:
     last_modified: str | None = None
     calendar_name: str | None = None
     active_keys: set[str] = field(default_factory=set)
+    owner_tokens: set[str] = field(default_factory=set)
 
 
 class CalendarSyncService:
@@ -66,7 +112,9 @@ class CalendarSyncService:
         self._client: httpx.AsyncClient | None = None
         self._runner: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
-        self._feed_states = {url: _FeedState(url=url) for url in config.feeds}
+        self._feed_states = {
+            url: _FeedState(url=url, owner_tokens=_owner_tokens_for_feed(url, config)) for url in config.feeds
+        }
         self._scheduled: dict[str, asyncio.Task] = {}
         self._scheduled_reminders: dict[str, CalendarReminder] = {}
         self._key_to_feed: dict[str, str] = {}
@@ -157,6 +205,7 @@ class CalendarSyncService:
             uid = component.get("UID")
             if not uid:
                 continue
+            declined = self._event_declined(component, state.owner_tokens)
             try:
                 start_value = component.decoded("DTSTART")
             except Exception:  # pylint: disable=broad-except
@@ -195,9 +244,32 @@ class CalendarSyncService:
                     source_url=state.url,
                     url=url,
                     sequence=int(sequence) if sequence is not None else None,
+                    declined=declined,
                 )
                 reminders.append(reminder)
         return reminders
+
+    def _event_declined(self, component, owner_tokens: set[str]) -> bool:
+        if not owner_tokens:
+            return False
+        attendees = component.get("ATTENDEE")
+        if not attendees:
+            return False
+        if not isinstance(attendees, list):
+            attendees = [attendees]
+        for attendee in attendees:
+            params = getattr(attendee, "params", {}) or {}
+            email_param = params.get("EMAIL")
+            identifier = _normalize_attendee_identifier(email_param) or _normalize_attendee_identifier(attendee)
+            if not identifier or identifier not in owner_tokens:
+                continue
+            partstat = params.get("PARTSTAT")
+            if isinstance(partstat, bytes):
+                partstat = partstat.decode("utf-8", errors="ignore")
+            partstat = str(partstat or "").strip().upper()
+            if partstat == "DECLINED":
+                return True
+        return False
 
     def _extract_alarm_triggers(
         self,
@@ -298,8 +370,15 @@ class CalendarSyncService:
         if self._stop_event.is_set():
             return
         try:
-            await self._trigger_callback(reminder)
-            self._logger.info("Fired calendar reminder %s (%s)", reminder.uid, reminder.summary)
+            if reminder.declined:
+                self._logger.info(
+                    "Suppressed calendar reminder %s (%s) because attendee declined",
+                    reminder.uid,
+                    reminder.summary,
+                )
+            else:
+                await self._trigger_callback(reminder)
+                self._logger.info("Fired calendar reminder %s (%s)", reminder.uid, reminder.summary)
         except Exception:  # pylint: disable=broad-except
             self._logger.exception(
                 "Failed to trigger calendar reminder %s (%s)",

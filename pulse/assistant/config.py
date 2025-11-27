@@ -206,6 +206,7 @@ class CalendarConfig:
     feeds: tuple[str, ...]
     refresh_minutes: int
     lookahead_hours: int
+    attendee_emails: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -441,11 +442,18 @@ class AssistantConfig:
         )
         refresh_minutes = max(1, parse_int(source.get("PULSE_CALENDAR_REFRESH_MINUTES"), 5))
         lookahead_hours = max(1, parse_int(source.get("PULSE_CALENDAR_LOOKAHEAD_HOURS"), 72))
+        owner_emails = tuple(
+            email.strip().lower()
+            for email in split_csv(source.get("PULSE_CALENDAR_OWNER_EMAILS"))
+            if email and email.strip()
+        )
+
         calendar_config = CalendarConfig(
             enabled=bool(feeds),
             feeds=feeds,
             refresh_minutes=refresh_minutes,
             lookahead_hours=lookahead_hours,
+            attendee_emails=owner_emails,
         )
 
         return AssistantConfig(

@@ -1148,6 +1148,7 @@ class PulseAssistant:
             "trigger": reminder.trigger_time.astimezone().isoformat(),
             "source": reminder.source_url,
             "url": reminder.url,
+            "declined": reminder.declined,
         }
         if reminder.end:
             payload["end"] = reminder.end.astimezone().isoformat()
@@ -1567,7 +1568,12 @@ class PulseAssistant:
         self._publish_info_overlay(
             text=subtitle,
             category="calendar",
-            extra={"type": "calendar", "title": "Calendar", "events": events},
+            extra={
+                "type": "calendar",
+                "title": "Calendar",
+                "events": events,
+                "lookahead_hours": lookahead,
+            },
         )
         count = len(self._calendar_events)
         spoken = f"You have {count} calendar event{'s' if count != 1 else ''} coming up."

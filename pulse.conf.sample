@@ -323,6 +323,11 @@ PULSE_CALENDAR_REFRESH_MINUTES="5"
 # How far ahead (in hours) to schedule reminders (defaults to 72 hours).
 PULSE_CALENDAR_LOOKAHEAD_HOURS="72"
 
+# Optional comma-separated list of attendee email addresses (lowercase) that
+# should be treated as "me" when parsing ICS attendees. Used to detect declined
+# events so they can be shown without firing reminders.
+PULSE_CALENDAR_OWNER_EMAILS=""
+
 # ============================================================================
 # Snapcast Client (optional)
 # ============================================================================

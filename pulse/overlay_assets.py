@@ -266,6 +266,15 @@ body {
   opacity: 0.8;
 }
 
+.overlay-info-card__reminder--declined .overlay-info-card__reminder-label {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.overlay-info-card__reminder--declined .overlay-info-card__reminder-meta {
+  opacity: 0.55;
+}
+
 .overlay-info-card__reminder-actions {
   display: flex;
   align-items: center;

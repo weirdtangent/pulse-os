@@ -17,6 +17,7 @@ from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
+DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
 
 
 @dataclass(frozen=True)
@@ -931,6 +932,19 @@ def _build_reminder_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
 """.strip()
 
 
+def _calendar_lookahead_hours(card: dict[str, Any]) -> int:
+    """Return the look-ahead window (hours) for the calendar info card."""
+
+    value = card.get("lookahead_hours")
+    try:
+        hours = int(value)
+    except (TypeError, ValueError):
+        hours = DEFAULT_CALENDAR_LOOKAHEAD_HOURS
+    if hours <= 0:
+        return DEFAULT_CALENDAR_LOOKAHEAD_HOURS
+    return hours
+
+
 def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
     payload_events = card.get("events")
     if isinstance(payload_events, list) and payload_events:
@@ -939,7 +953,8 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
         events = snapshot.calendar_events or ()
     entries = _format_calendar_event_entries(events)
     title = str(card.get("title") or "Calendar").strip() or "Calendar"
-    subtitle = card.get("text") or "Upcoming events in the configured look-ahead window."
+    lookahead_hours = _calendar_lookahead_hours(card)
+    subtitle = card.get("text") or f"Upcoming events in the next {lookahead_hours} hours."
     safe_title = html_escape(title)
     safe_subtitle = html_escape(subtitle)
     if not entries:
@@ -947,6 +962,9 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
     else:
         body_rows = []
         for entry in entries:
+            row_class = "overlay-info-card__reminder"
+            if entry.get("declined"):
+                row_class += " overlay-info-card__reminder--declined"
             label = html_escape(entry["label"])
             meta = html_escape(entry["meta"])
             subtext = entry.get("subtext")
@@ -955,7 +973,7 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
                 subtext_html = f'<div class="overlay-info-card__reminder-meta">{html_escape(subtext)}</div>'
             body_rows.append(
                 f"""
-  <div class="overlay-info-card__reminder">
+  <div class="{row_class}">
     <div class="overlay-info-card__reminder-body">
       <div class="overlay-info-card__reminder-label">{label}</div>
       <div class="overlay-info-card__reminder-meta">{meta}</div>
@@ -1012,8 +1030,8 @@ def _format_reminder_info_entries(reminders: Iterable[dict[str, Any]]) -> list[d
     return entries
 
 
-def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
-    entries: list[dict[str, str]] = []
+def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
     for event in events:
         if not isinstance(event, dict):
             continue
@@ -1031,8 +1049,11 @@ def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dic
         calendar_name = event.get("calendar_name")
         if calendar_name:
             meta = f"{meta} — {calendar_name}"
+        declined = bool(event.get("declined"))
+        if declined:
+            meta = f"{meta} · Declined"
         location = str(event.get("location") or "").strip()
-        entry: dict[str, str] = {"label": label, "meta": meta}
+        entry: dict[str, Any] = {"label": label, "meta": meta, "declined": declined}
         if location:
             entry["subtext"] = location
         entries.append(entry)

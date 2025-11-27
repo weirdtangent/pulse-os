@@ -245,6 +245,44 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(snapshot, self.theme)
         self.assertIn("Project kickoff", html)
         self.assertIn("Conf room", html)
+        self.assertIn("Upcoming events in the next 72 hours.", html)
+
+    def test_calendar_info_card_uses_custom_lookahead_value(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "calendar",
+                "lookahead_hours": 12,
+                "events": [
+                    {
+                        "summary": "Lunch",
+                        "start": "2025-01-04T15:00:00+00:00",
+                        "start_local": "2025-01-04T10:00:00-05:00",
+                        "all_day": False,
+                    }
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("Upcoming events in the next 12 hours.", html)
+
+    def test_declined_calendar_event_is_styled(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "calendar",
+                "events": [
+                    {
+                        "summary": "Weekly sync",
+                        "start": "2025-01-05T15:00:00+00:00",
+                        "start_local": "2025-01-05T10:00:00-05:00",
+                        "all_day": False,
+                        "declined": True,
+                    }
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("overlay-info-card__reminder--declined", html)
+        self.assertIn("Declined", html)
 
 
 if __name__ == "__main__":
