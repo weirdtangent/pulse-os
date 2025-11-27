@@ -31,6 +31,7 @@ class OverlayRenderTests(unittest.TestCase):
             "timers": (),
             "alarms": (),
             "reminders": (),
+            "calendar_events": (),
             "active_alarm": None,
             "active_timer": None,
             "active_reminder": None,
@@ -212,6 +213,38 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn(">OK<", html)
         self.assertIn("data-complete-reminder", html)
         self.assertNotIn('data-delay-reminder data-event-id="cal-123"', html)
+
+    def test_calendar_badge_renders_when_events_exist(self) -> None:
+        events = (
+            {
+                "summary": "Sync",
+                "start": "2025-01-02T15:00:00+00:00",
+                "start_local": "2025-01-02T10:00:00-05:00",
+                "all_day": False,
+            },
+        )
+        html = render_overlay_html(self._snapshot(calendar_events=events), self.theme)
+        self.assertIn('data-badge-action="show_calendar"', html)
+
+    def test_calendar_info_card_renders_entries(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "calendar",
+                "events": [
+                    {
+                        "summary": "Project kickoff",
+                        "start": "2025-01-04T15:00:00+00:00",
+                        "start_local": "2025-01-04T10:00:00-05:00",
+                        "all_day": False,
+                        "calendar_name": "Work",
+                        "location": "Conf room",
+                    }
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("Project kickoff", html)
+        self.assertIn("Conf room", html)
 
 
 if __name__ == "__main__":

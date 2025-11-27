@@ -6,6 +6,7 @@ __all__ = [
     "config",
     "actions",
     "audio",
+    "calendar_sync",
     "llm",
     "mqtt",
 ]

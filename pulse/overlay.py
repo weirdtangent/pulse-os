@@ -38,6 +38,7 @@ class OverlaySnapshot:
     timers: tuple[dict[str, Any], ...]
     alarms: tuple[dict[str, Any], ...]
     reminders: tuple[dict[str, Any], ...]
+    calendar_events: tuple[dict[str, Any], ...]
     active_alarm: dict[str, Any] | None
     active_timer: dict[str, Any] | None
     active_reminder: dict[str, Any] | None
@@ -121,6 +122,7 @@ class OverlayStateManager:
         self._timers: tuple[dict[str, Any], ...] = ()
         self._alarms: tuple[dict[str, Any], ...] = ()
         self._reminders: tuple[dict[str, Any], ...] = ()
+        self._calendar_events: tuple[dict[str, Any], ...] = ()
         self._active_alarm: dict[str, Any] | None = None
         self._active_timer: dict[str, Any] | None = None
         self._active_reminder: dict[str, Any] | None = None
@@ -136,6 +138,7 @@ class OverlayStateManager:
             "timers": "",
             "alarms": "",
             "reminders": "",
+            "calendar_events": "",
             "active_alarm": "",
             "active_timer": "",
             "active_reminder": "",
@@ -170,10 +173,12 @@ class OverlayStateManager:
         timers = _coerce_dict_list(snapshot.get("timers"))
         alarms = _coerce_dict_list(snapshot.get("alarms"))
         reminders = _coerce_dict_list(snapshot.get("reminders"))
+        calendar_events = _coerce_dict_list(snapshot.get("calendar_events"))
         snapshot_signature = _signature(snapshot)
         timer_signature = _signature(timers)
         alarm_signature = _signature(alarms)
         reminder_signature = _signature(reminders)
+        calendar_signature = _signature(calendar_events)
         changed = False
         with self._lock:
             if timer_signature != self._signatures["timers"]:
@@ -194,6 +199,10 @@ class OverlayStateManager:
             if reminder_signature != self._signatures["reminders"]:
                 self._reminders = tuple(copy.deepcopy(item) for item in reminders)
                 self._signatures["reminders"] = reminder_signature
+                changed = True
+            if calendar_signature != self._signatures["calendar_events"]:
+                self._calendar_events = tuple(copy.deepcopy(item) for item in calendar_events)
+                self._signatures["calendar_events"] = calendar_signature
                 changed = True
             if snapshot_signature != self._signatures["schedule_snapshot"]:
                 self._schedule_snapshot = copy.deepcopy(snapshot)
@@ -277,6 +286,11 @@ class OverlayStateManager:
                 alarms_list = [copy.deepcopy(item) for item in alarms_payload if isinstance(item, dict)]
                 if alarms_list:
                     normalized["alarms"] = alarms_list
+            events_payload = card.get("events")
+            if isinstance(events_payload, list):
+                events_list = [copy.deepcopy(item) for item in events_payload if isinstance(item, dict)]
+                if events_list:
+                    normalized["events"] = events_list
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
@@ -296,6 +310,7 @@ class OverlayStateManager:
                 timers=tuple(copy.deepcopy(item) for item in self._timers),
                 alarms=tuple(copy.deepcopy(item) for item in self._alarms),
                 reminders=tuple(copy.deepcopy(item) for item in self._reminders),
+                calendar_events=tuple(copy.deepcopy(item) for item in self._calendar_events),
                 active_alarm=copy.deepcopy(self._active_alarm),
                 active_timer=copy.deepcopy(self._active_timer),
                 active_reminder=copy.deepcopy(self._active_reminder),
@@ -396,6 +411,7 @@ ICON_MAP = {
     "timer": "&#9201;",
     "music": "&#9835;",
     "reminder": "&#128221;",
+    "calendar": "&#128197;",
 }
 
 
@@ -751,6 +767,11 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
         count = len(reminders)
         label = f"{count} reminder{'s' if count != 1 else ''}"
         badges.append(_render_badge("reminder", label))
+    calendar_events = tuple(snapshot.calendar_events or ())
+    if calendar_events:
+        count = len(calendar_events)
+        label = f"{count} calendar event{'s' if count != 1 else ''}"
+        badges.append(_render_badge("calendar", label))
     if snapshot.now_playing.strip():
         badges.append(_render_badge("music", "Now playing"))
     classes = ["overlay-notification-bar"]
@@ -768,6 +789,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_alarm_info_overlay(snapshot, card)
     if card_type == "reminders":
         return _build_reminder_info_overlay(snapshot, card)
+    if card_type == "calendar":
+        return _build_calendar_info_overlay(snapshot, card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -908,6 +931,56 @@ def _build_reminder_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
 """.strip()
 
 
+def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
+    payload_events = card.get("events")
+    if isinstance(payload_events, list) and payload_events:
+        events: Iterable[dict[str, Any]] = tuple(item for item in payload_events if isinstance(item, dict))
+    else:
+        events = snapshot.calendar_events or ()
+    entries = _format_calendar_event_entries(events)
+    title = str(card.get("title") or "Calendar").strip() or "Calendar"
+    subtitle = card.get("text") or "Upcoming events in the configured look-ahead window."
+    safe_title = html_escape(title)
+    safe_subtitle = html_escape(subtitle)
+    if not entries:
+        body = '<div class="overlay-info-card__empty">No upcoming calendar events.</div>'
+    else:
+        body_rows = []
+        for entry in entries:
+            label = html_escape(entry["label"])
+            meta = html_escape(entry["meta"])
+            subtext = entry.get("subtext")
+            subtext_html = ""
+            if subtext:
+                subtext_html = f'<div class="overlay-info-card__reminder-meta">{html_escape(subtext)}</div>'
+            body_rows.append(
+                f"""
+  <div class="overlay-info-card__reminder">
+    <div class="overlay-info-card__reminder-body">
+      <div class="overlay-info-card__reminder-label">{label}</div>
+      <div class="overlay-info-card__reminder-meta">{meta}</div>
+      {subtext_html}
+    </div>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--alarms">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      <div class="overlay-info-card__subtitle">{safe_subtitle}</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close calendar list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
 def _format_alarm_info_entries(alarms: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for alarm in alarms:
@@ -936,6 +1009,33 @@ def _format_reminder_info_entries(reminders: Iterable[dict[str, Any]]) -> list[d
         label = str(reminder.get("label") or "Reminder")
         meta = _format_reminder_meta_text(reminder)
         entries.append({"id": str(event_id), "label": label, "meta": meta})
+    return entries
+
+
+def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        label = str(event.get("summary") or "Calendar event")
+        start_dt = _parse_datetime_value(event.get("start_local") or event.get("start"))
+        if not start_dt:
+            continue
+        all_day = bool(event.get("all_day"))
+        date_text = start_dt.strftime("%a, %b %-d")
+        if all_day:
+            time_text = "All day"
+        else:
+            time_text = start_dt.strftime("%-I:%M %p")
+        meta = f"{date_text} · {time_text}"
+        calendar_name = event.get("calendar_name")
+        if calendar_name:
+            meta = f"{meta} — {calendar_name}"
+        location = str(event.get("location") or "").strip()
+        entry: dict[str, str] = {"label": label, "meta": meta}
+        if location:
+            entry["subtext"] = location
+        entries.append(entry)
     return entries
 
 
@@ -1032,12 +1132,14 @@ def _format_info_text(text: str) -> str:
 def _render_badge(icon_key: str, label: str) -> str:
     icon = ICON_MAP.get(icon_key, "&#9679;")
     safe_label = html_escape(label)
-    interactive = icon_key in {"alarm", "alarm_ringing", "reminder", "reminder_active"}
+    interactive = icon_key in {"alarm", "alarm_ringing", "reminder", "reminder_active", "calendar"}
     action = None
     if icon_key.startswith("alarm"):
         action = "show_alarms"
     elif icon_key.startswith("reminder"):
         action = "show_reminders"
+    elif icon_key == "calendar":
+        action = "show_calendar"
     attrs = ['class="overlay-badge"', f'aria-label="{safe_label}"']
     if interactive and action:
         attrs.append('role="button"')
@@ -1166,6 +1268,25 @@ def _parse_timestamp(value: Any) -> float | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt.timestamp()
+
+
+def _parse_datetime_value(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt
+    return None
 
 
 def _event_label(payload: dict[str, Any] | None, *, default: str) -> str:

@@ -681,12 +681,18 @@ OVERLAY_JS = """
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'show_alarms' })
         });
-      } else if (action === 'show_reminders') {
+        } else if (action === 'show_reminders') {
         fetch(infoEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'show_reminders' })
         });
+        } else if (action === 'show_calendar') {
+          fetch(infoEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'show_calendar' })
+          });
       }
       return;
     }

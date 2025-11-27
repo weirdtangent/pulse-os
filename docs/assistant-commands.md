@@ -49,6 +49,7 @@ Set `PULSE_CALENDAR_ICS_URLS` to one or more ICS/WebCal links (Google “secret 
 - If an event contains ICS `VALARM` blocks, Pulse fires reminders at the exact DISPLAY triggers defined there (multiple alarms are respected).
 - If no `VALARM` exists, Pulse defaults to 5 minutes before the event start (or noon the day before for all-day entries).
 - Calendar popups reuse the standard reminder tone/MQTT payloads but only show a single **OK** button (no delay options) and auto-dismiss roughly 15 minutes after they appear.
+- Say “show me my calendar”, “show calendar events”, or “show my upcoming events” to pop open the cached list on-screen. A dedicated “Calendar events” badge in the overlay’s notification bar does the same thing if you prefer tapping.
 
 Because feeds are stored per-device (there’s no shared server), removing a URL from `pulse.conf` and rerunning `setup.sh` clears those reminders instantly.
 

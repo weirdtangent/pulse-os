@@ -222,6 +222,10 @@ class OverlayHttpServer:
                     change = outer.state.update_info_card({"type": "reminders"})
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                elif action == "show_calendar":
+                    change = outer.state.update_info_card({"type": "calendar"})
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return

@@ -8,6 +8,7 @@ import asyncio
 import base64
 import calendar
 import contextlib
+import copy
 import json
 import logging
 import math
@@ -181,6 +182,9 @@ for phrase in _CONVERSATION_STOP_PHRASES_RAW:
         CONVERSATION_STOP_PHRASES.add(normalized_phrase)
 
 
+CALENDAR_EVENT_INFO_LIMIT = 25
+
+
 class PulseAssistant:
     _conversation_stop_prefixes: tuple[str, ...] = ()
 
@@ -213,11 +217,15 @@ class PulseAssistant:
             on_state_changed=self._handle_schedule_state_changed,
             on_active_event=self._handle_active_schedule_event,
         )
+        self._calendar_events: list[dict[str, Any]] = []
+        self._calendar_updated_at: float | None = None
+        self._latest_schedule_snapshot: dict[str, Any] | None = None
         self.calendar_sync: CalendarSyncService | None = None
         if self.config.calendar.enabled and self.config.calendar.feeds:
             self.calendar_sync = CalendarSyncService(
                 config=self.config.calendar,
                 trigger_callback=self._trigger_calendar_reminder,
+                snapshot_callback=self._handle_calendar_snapshot,
                 logger=logging.getLogger("pulse.calendar_sync"),
             )
         self._shutdown = asyncio.Event()
@@ -564,6 +572,30 @@ class PulseAssistant:
         else:
             payload = {"state": "clear"}
         self._publish_message(self._info_topic, json.dumps(payload))
+
+    @staticmethod
+    def _clone_schedule_snapshot(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            return json.loads(json.dumps(snapshot))
+        except TypeError:
+            LOGGER.debug("Unable to serialize schedule snapshot: %s", snapshot)
+            return None
+
+    def _publish_schedule_state(self, snapshot: dict[str, Any]) -> None:
+        payload = copy.deepcopy(snapshot)
+        payload["calendar_events"] = [dict(event) for event in self._calendar_events]
+        if self._calendar_updated_at:
+            payload["calendar_updated_at"] = datetime.fromtimestamp(
+                self._calendar_updated_at, tz=datetime.now().astimezone().tzinfo
+            ).isoformat()
+        else:
+            payload.setdefault("calendar_updated_at", None)
+        try:
+            message = json.dumps(payload)
+        except TypeError:
+            LOGGER.debug("Unable to serialize schedule snapshot: %s", payload)
+            return
+        self._publish_message(self._schedules_state_topic, message, retain=True)
 
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
@@ -1048,12 +1080,11 @@ class PulseAssistant:
         self._publish_message(topic, value, retain=True)
 
     def _handle_schedule_state_changed(self, snapshot: dict[str, Any]) -> None:
-        try:
-            payload = json.dumps(snapshot)
-        except TypeError:
-            LOGGER.debug("Unable to serialize schedule snapshot: %s", snapshot)
+        cloned = self._clone_schedule_snapshot(snapshot)
+        if cloned is None:
             return
-        self._publish_message(self._schedules_state_topic, payload, retain=True)
+        self._latest_schedule_snapshot = cloned
+        self._publish_schedule_state(cloned)
 
     def _handle_active_schedule_event(self, event_type: str, payload: dict[str, Any] | None) -> None:
         if event_type == "alarm":
@@ -1094,6 +1125,33 @@ class PulseAssistant:
             )
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.exception("Calendar reminder dispatch failed for %s: %s", label, exc)
+
+    async def _handle_calendar_snapshot(self, reminders: list[CalendarReminder]) -> None:
+        events = [self._serialize_calendar_event(reminder) for reminder in reminders[:CALENDAR_EVENT_INFO_LIMIT]]
+        self._calendar_events = events
+        self._calendar_updated_at = time.time()
+        if self._latest_schedule_snapshot:
+            self._publish_schedule_state(self._latest_schedule_snapshot)
+
+    def _serialize_calendar_event(self, reminder: CalendarReminder) -> dict[str, Any]:
+        local_start = reminder.start.astimezone()
+        start_utc = reminder.start.astimezone(datetime.UTC)
+        payload: dict[str, Any] = {
+            "uid": reminder.uid,
+            "summary": reminder.summary,
+            "description": reminder.description,
+            "location": reminder.location,
+            "calendar_name": reminder.calendar_name,
+            "all_day": reminder.all_day,
+            "start": start_utc.isoformat(),
+            "start_local": local_start.isoformat(),
+            "trigger": reminder.trigger_time.astimezone().isoformat(),
+            "source": reminder.source_url,
+            "url": reminder.url,
+        }
+        if reminder.end:
+            payload["end"] = reminder.end.astimezone().isoformat()
+        return payload
 
     def _handle_schedule_command_message(self, payload: str) -> None:
         if not self._loop:
@@ -1367,6 +1425,21 @@ class PulseAssistant:
         ):
             await self._show_reminder_list()
             return True
+        if any(
+            phrase in normalized
+            for phrase in (
+                "show me my calendar",
+                "show my calendar",
+                "show calendar events",
+                "show my calendar events",
+                "show upcoming events",
+                "show my upcoming events",
+                "list my calendar",
+                "list calendar events",
+            )
+        ):
+            await self._show_calendar_events()
+            return True
         if "cancel all timers" in normalized:
             count = await self.schedule_service.cancel_all_timers()
             if count > 0:
@@ -1474,6 +1547,31 @@ class PulseAssistant:
         count = len(reminders)
         spoken = f"You have {count} reminder{'s' if count != 1 else ''}."
         await self._speak("Here are your reminders.")
+        self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+
+    async def _show_calendar_events(self) -> None:
+        if not (self.calendar_sync and self.config.calendar.enabled):
+            spoken = "Calendar syncing is not enabled on this device."
+            await self._speak(spoken)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            return
+        events = self._calendar_events[:CALENDAR_EVENT_INFO_LIMIT]
+        lookahead = self.config.calendar.lookahead_hours
+        if not events:
+            spoken = f"You don't have any calendar events in the next {lookahead} hours."
+            await self._speak(spoken)
+            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
+            self._publish_info_overlay()
+            return
+        subtitle = f"Upcoming events in the next {lookahead} hours."
+        self._publish_info_overlay(
+            text=subtitle,
+            category="calendar",
+            extra={"type": "calendar", "title": "Calendar", "events": events},
+        )
+        count = len(self._calendar_events)
+        spoken = f"You have {count} calendar event{'s' if count != 1 else ''} coming up."
+        await self._speak("Here are your upcoming events.")
         self._log_assistant_response("shortcut", spoken, pipeline="pulse")
 
     @staticmethod

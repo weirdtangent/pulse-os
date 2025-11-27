@@ -57,9 +57,11 @@ class CalendarSyncService:
         config: CalendarConfig,
         trigger_callback: Callable[[CalendarReminder], Awaitable[None]],
         logger: logging.Logger | None = None,
+        snapshot_callback: Callable[[list[CalendarReminder]], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
         self._trigger_callback = trigger_callback
+        self._snapshot_callback = snapshot_callback
         self._logger = logger or LOGGER
         self._client: httpx.AsyncClient | None = None
         self._runner: asyncio.Task | None = None
@@ -69,6 +71,7 @@ class CalendarSyncService:
         self._scheduled_reminders: dict[str, CalendarReminder] = {}
         self._key_to_feed: dict[str, str] = {}
         self._triggered: dict[str, datetime] = {}
+        self._latest_events: list[CalendarReminder] = []
 
     async def start(self) -> None:
         if not self._config.feeds or self._runner:
@@ -110,6 +113,7 @@ class CalendarSyncService:
         self._prune_triggered(now)
         for state in self._feed_states.values():
             await self._sync_feed(state, now)
+        await self._emit_event_snapshot()
 
     async def _sync_feed(self, state: _FeedState, now: datetime) -> None:
         if not self._client:
@@ -320,3 +324,18 @@ class CalendarSyncService:
 
     def _reminder_key(self, reminder: CalendarReminder) -> str:
         return f"{reminder.source_url}|{reminder.uid}|{reminder.trigger_time.isoformat()}"
+
+    async def _emit_event_snapshot(self) -> None:
+        ordered = sorted(
+            self._scheduled_reminders.values(),
+            key=lambda reminder: (reminder.start, reminder.trigger_time),
+        )
+        self._latest_events = list(ordered)
+        if self._snapshot_callback:
+            try:
+                await self._snapshot_callback(list(ordered))
+            except Exception:  # pylint: disable=broad-except
+                self._logger.exception("Calendar snapshot callback failed")
+
+    def cached_events(self) -> list[CalendarReminder]:
+        return list(self._latest_events)

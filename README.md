@@ -251,6 +251,9 @@ Point a kiosk at any combination of public or secret ICS/WebCal feeds (Home, wor
 
 When an event includes ICS `VALARM` entries, Pulse respects their DISPLAY trigger offsets (including multiple alarms). Events without alarms fall back to a single reminder fired 5 minutes before the start time (or noon the previous day for all-day events). Calendar reminders appear as a normal popup/beep, but the overlay only offers an **OK** button (no delay options) and they auto-dismiss after ~15 minutes if you ignore them.
 
+- Say “show me my calendar”, “show calendar events”, or “show my upcoming events” to open the cached list on the overlay (limited to the configured look-ahead window).
+- A dedicated “Calendar events” pill now lives alongside the alarm/reminder badges—tap it anytime to bring the same list back without asking the assistant.
+
 ```
 PULSE_CALENDAR_ICS_URLS="https://calendar.google.com/.../basic.ics,webcal://example.com/feed.ics"
 PULSE_CALENDAR_REFRESH_MINUTES="5"
