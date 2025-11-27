@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 from pathlib import Path
 from unittest import IsolatedAsyncioTestCase
@@ -38,3 +39,14 @@ class ScheduleServicePauseTests(IsolatedAsyncioTestCase):
         self.assertIn(event.event_id, self.service._tasks)
         events = self.service.list_events("alarm")
         self.assertEqual(events[0]["status"], "scheduled")
+
+    async def test_trigger_ephemeral_reminder_auto_clears(self) -> None:
+        event_id = await self.service.trigger_ephemeral_reminder(
+            label="Calendar event",
+            message="Calendar event",
+            metadata={"calendar": {"allow_delay": False}},
+            auto_clear_seconds=1,
+        )
+        self.assertIn(event_id, self.service._active)
+        await asyncio.sleep(1.2)
+        self.assertNotIn(event_id, self.service._active)

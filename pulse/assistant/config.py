@@ -76,6 +76,18 @@ def _parse_wake_profiles(source: dict[str, str]) -> tuple[list[str], dict[str, s
     return wake_models, routes
 
 
+def _normalize_calendar_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    lowered = trimmed.lower()
+    if lowered.startswith("webcal://"):
+        trimmed = "https://" + trimmed[9:]
+    return trimmed
+
+
 @dataclass(frozen=True)
 class WyomingEndpoint:
     host: str
@@ -189,6 +201,14 @@ class InfoConfig:
 
 
 @dataclass(frozen=True)
+class CalendarConfig:
+    enabled: bool
+    feeds: tuple[str, ...]
+    refresh_minutes: int
+    lookahead_hours: int
+
+
+@dataclass(frozen=True)
 class AssistantConfig:
     hostname: str
     device_name: str
@@ -215,6 +235,7 @@ class AssistantConfig:
     self_audio_trigger_level: int
     log_llm_messages: bool
     info: InfoConfig
+    calendar: CalendarConfig
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -412,6 +433,21 @@ class AssistantConfig:
             what3words_api_key=(source.get("WHAT3WORDS_API_KEY") or "").strip() or None,
         )
 
+        raw_calendar_urls = split_csv(source.get("PULSE_CALENDAR_ICS_URLS"))
+        feeds: tuple[str, ...] = tuple(
+            normalized
+            for normalized in (_normalize_calendar_url(url) for url in (raw_calendar_urls or []))
+            if normalized
+        )
+        refresh_minutes = max(1, parse_int(source.get("PULSE_CALENDAR_REFRESH_MINUTES"), 5))
+        lookahead_hours = max(1, parse_int(source.get("PULSE_CALENDAR_LOOKAHEAD_HOURS"), 72))
+        calendar_config = CalendarConfig(
+            enabled=bool(feeds),
+            feeds=feeds,
+            refresh_minutes=refresh_minutes,
+            lookahead_hours=lookahead_hours,
+        )
+
         return AssistantConfig(
             hostname=hostname,
             device_name=device_name,
@@ -438,6 +474,7 @@ class AssistantConfig:
             self_audio_trigger_level=self_audio_trigger_level,
             log_llm_messages=log_llm_messages,
             info=info_config,
+            calendar=calendar_config,
         )
 
 

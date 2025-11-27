@@ -42,6 +42,16 @@ This guide lists the phrases the Pulse display understands immediately—no clou
 
 Local reminders beep once, display the message on the overlay, and offer on-screen “Complete” or “Remind me in 1 hour / 1 day / 1 week” buttons. When you omit an exact time, the assistant assumes **morning = 8 AM**, **afternoon = 1 PM**, **evening = 5 PM**, and **night = 8 PM** (otherwise it defaults to 8 AM).
 
+### Calendar sync (ICS/WebCal)
+
+Set `PULSE_CALENDAR_ICS_URLS` to one or more ICS/WebCal links (Google “secret address,” iCloud shared calendar, work feed, trash pickup schedule, etc.) and every Pulse device with that config will watch the feed locally. Each kiosk polls its own URLs on a short cadence (`PULSE_CALENDAR_REFRESH_MINUTES`, default 5 min). New events are discovered on the next poll—even if you add them later the same day or reboot the device.
+
+- If an event contains ICS `VALARM` blocks, Pulse fires reminders at the exact DISPLAY triggers defined there (multiple alarms are respected).
+- If no `VALARM` exists, Pulse defaults to 5 minutes before the event start (or noon the day before for all-day entries).
+- Calendar popups reuse the standard reminder tone/MQTT payloads but only show a single **OK** button (no delay options) and auto-dismiss roughly 15 minutes after they appear.
+
+Because feeds are stored per-device (there’s no shared server), removing a URL from `pulse.conf` and rerunning `setup.sh` clears those reminders instantly.
+
 ## Alarm, timer & reminder overlays
 
 - Tapping “Stop” on a ringing timer or alarm posts `/overlay/stop`, which maps to the MQTT `{"action": "stop"}` command. Snooze sends `{"action": "snooze", "minutes": 5}` for alarms.

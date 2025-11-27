@@ -562,26 +562,41 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
         event_data = snapshot.active_reminder.get("event") if isinstance(snapshot.active_reminder, dict) else None
         event_id = event_data.get("id") if isinstance(event_data, dict) else None
         message = ""
+        allow_delay = True
+        button_label = "Complete"
+        calendar_hint = None
         if isinstance(event_data, dict):
             metadata = event_data.get("metadata") or {}
             reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else {}
             message = str(reminder_meta.get("message") or event_data.get("label") or "Reminder")
+            if isinstance(metadata, dict):
+                calendar_hint = metadata.get("calendar")
+        if isinstance(calendar_hint, dict):
+            allow_delay = bool(calendar_hint.get("allow_delay", True))
+            if not allow_delay:
+                button_label = "OK"
         button_html = ""
         if event_id:
             event_id_escaped = html_escape(str(event_id), quote=True)
-            button_html = (
-                f'<div class="overlay-reminder__actions">'
+            primary_button = (
                 f'<button class="overlay-button overlay-button--primary" '
-                f'data-complete-reminder data-event-id="{event_id_escaped}">Complete</button>'
-                f'<div class="overlay-reminder__delays">'
-                f'<button class="overlay-button" data-delay-reminder data-delay-seconds="3600" '
-                f'data-event-id="{event_id_escaped}">+1h</button>'
-                f'<button class="overlay-button" data-delay-reminder data-delay-seconds="86400" '
-                f'data-event-id="{event_id_escaped}">+1d</button>'
-                f'<button class="overlay-button" data-delay-reminder data-delay-seconds="604800" '
-                f'data-event-id="{event_id_escaped}">+1w</button>'
-                f"</div></div>"
+                f'data-complete-reminder data-event-id="{event_id_escaped}">{button_label}</button>'
             )
+            if allow_delay:
+                button_html = (
+                    f'<div class="overlay-reminder__actions">'
+                    f"{primary_button}"
+                    f'<div class="overlay-reminder__delays">'
+                    f'<button class="overlay-button" data-delay-reminder data-delay-seconds="3600" '
+                    f'data-event-id="{event_id_escaped}">+1h</button>'
+                    f'<button class="overlay-button" data-delay-reminder data-delay-seconds="86400" '
+                    f'data-event-id="{event_id_escaped}">+1d</button>'
+                    f'<button class="overlay-button" data-delay-reminder data-delay-seconds="604800" '
+                    f'data-event-id="{event_id_escaped}">+1w</button>'
+                    f"</div></div>"
+                )
+            else:
+                button_html = f'<div class="overlay-reminder__actions">{primary_button}</div>'
         body_text = html_escape(message or label)
         preferred_cells = ("top-center", "middle-right", "bottom-center")
         reminder_cell = _pick_available_cell(occupied_cells, preferred_cells, "top-center")

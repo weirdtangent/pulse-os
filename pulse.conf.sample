@@ -311,6 +311,19 @@ PULSE_SPORTS_DEFAULT_LEAGUES="nfl,nba,mlb,nhl"
 PULSE_SPORTS_FAVORITE_TEAMS=""
 
 # ============================================================================
+# Calendar Sync (ICS/WebCal)
+# ============================================================================
+
+# Provide one or more public/secret ICS/WebCal URLs (webcal:// links are accepted).
+PULSE_CALENDAR_ICS_URLS=""
+
+# Minutes between feed polls (minimum 1, defaults to 5).
+PULSE_CALENDAR_REFRESH_MINUTES="5"
+
+# How far ahead (in hours) to schedule reminders (defaults to 72 hours).
+PULSE_CALENDAR_LOOKAHEAD_HOURS="72"
+
+# ============================================================================
 # Snapcast Client (optional)
 # ============================================================================
 

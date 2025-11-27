@@ -26,6 +26,7 @@ from typing import Any
 
 from pulse.assistant.actions import ActionEngine, _parse_datetime, _parse_duration_seconds, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
+from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.info_service import InfoService
@@ -212,6 +213,13 @@ class PulseAssistant:
             on_state_changed=self._handle_schedule_state_changed,
             on_active_event=self._handle_active_schedule_event,
         )
+        self.calendar_sync: CalendarSyncService | None = None
+        if self.config.calendar.enabled and self.config.calendar.feeds:
+            self.calendar_sync = CalendarSyncService(
+                config=self.config.calendar,
+                trigger_callback=self._trigger_calendar_reminder,
+                logger=logging.getLogger("pulse.calendar_sync"),
+            )
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         base_topic = self.config.mqtt.topic_base
@@ -257,6 +265,8 @@ class PulseAssistant:
         self._publish_preferences()
         self._publish_assistant_discovery()
         await self.schedule_service.start()
+        if self.calendar_sync:
+            await self.calendar_sync.start()
         await self.mic.start()
         self._set_assist_stage("pulse", "idle")
         friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
@@ -278,6 +288,8 @@ class PulseAssistant:
 
     async def shutdown(self) -> None:
         self._shutdown.set()
+        if self.calendar_sync:
+            await self.calendar_sync.stop()
         await self.mic.stop()
         await self.schedule_service.stop()
         self.mqtt.disconnect()
@@ -1052,6 +1064,36 @@ class PulseAssistant:
             topic = self._reminders_active_topic
         message = payload or {"state": "idle"}
         self._publish_message(topic, json.dumps(message))
+
+    async def _trigger_calendar_reminder(self, reminder: CalendarReminder) -> None:
+        label = reminder.summary or "Calendar event"
+        local_start = reminder.start.astimezone()
+        metadata = {
+            "reminder": {"message": label},
+            "calendar": {
+                "allow_delay": False,
+                "calendar_name": reminder.calendar_name,
+                "source": reminder.source_url,
+                "start": reminder.start.isoformat(),
+                "start_local": local_start.isoformat(),
+                "end": reminder.end.isoformat() if reminder.end else None,
+                "all_day": reminder.all_day,
+                "description": reminder.description,
+                "location": reminder.location,
+                "trigger": reminder.trigger_time.isoformat(),
+                "url": reminder.url,
+                "uid": reminder.uid,
+            },
+        }
+        try:
+            await self.schedule_service.trigger_ephemeral_reminder(
+                label=label,
+                message=label,
+                metadata=metadata,
+                auto_clear_seconds=900,
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.exception("Calendar reminder dispatch failed for %s: %s", label, exc)
 
     def _handle_schedule_command_message(self, payload: str) -> None:
         if not self._loop:

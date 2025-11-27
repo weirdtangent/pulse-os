@@ -194,6 +194,25 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-delete-reminder="rem1"', html)
         self.assertIn("data-complete-reminder", html)
 
+    def test_calendar_reminder_shows_ok_only(self) -> None:
+        snapshot = self._snapshot(
+            active_reminder={
+                "state": "ringing",
+                "event": {
+                    "id": "cal-123",
+                    "label": "Team sync",
+                    "metadata": {
+                        "reminder": {"message": "Team sync"},
+                        "calendar": {"allow_delay": False},
+                    },
+                },
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn(">OK<", html)
+        self.assertIn("data-complete-reminder", html)
+        self.assertNotIn('data-delay-reminder data-event-id="cal-123"', html)
+
 
 if __name__ == "__main__":
     unittest.main()

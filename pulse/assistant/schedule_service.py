@@ -1060,6 +1060,50 @@ class ScheduleService:
         events.sort(key=lambda item: item.get("next_fire") or "")
         return events
 
+    async def trigger_ephemeral_reminder(
+        self,
+        *,
+        label: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+        auto_clear_seconds: int = 900,
+    ) -> str:
+        """Play a reminder tone and publish an active reminder without persisting it."""
+        event_metadata: dict[str, Any] = {}
+        if isinstance(metadata, dict):
+            event_metadata = dict(metadata)
+        event = ScheduledEvent(
+            event_id=f"calendar-{uuid4().hex}",
+            event_type="reminder",
+            label=label or message or "Reminder",
+            time_of_day=None,
+            repeat_days=None,
+            single_shot=True,
+            duration_seconds=None,
+            target_time=None,
+            next_fire=_serialize_dt(_now()),
+            playback=PlaybackConfig(),
+            created_at=_serialize_dt(_now()),
+            metadata=event_metadata,
+        )
+        reminder_meta = _ensure_reminder_meta(event)
+        reminder_meta.setdefault("message", message or label or "Reminder")
+        async with self._lock:
+            handle = PlaybackHandle(event.playback, self._hostname, self._ha_client, event.event_type)
+            playback_task = asyncio.create_task(handle.start())
+            active = ActiveEvent(
+                event=event,
+                started_at=_now(),
+                handle=handle,
+                playback_task=playback_task,
+            )
+            self._active[event.event_id] = active
+            auto_stop = asyncio.create_task(self._auto_stop(event.event_id, timeout=float(max(1, auto_clear_seconds))))
+            active.auto_stop_task = auto_stop
+            self._notify_active("reminder", {"state": "ringing", "event": event.to_public_dict(status="active")})
+        LOGGER.info("Ephemeral reminder triggered (%s)", label or message or event.event_id)
+        return event.event_id
+
     def get_next_alarm(self) -> dict[str, Any] | None:
         alarms = [event for event in self._events.values() if event.event_type == "alarm" and not event.paused]
         if not alarms:
@@ -1127,9 +1171,9 @@ class ScheduleService:
             active.auto_stop_task = auto_stop
             self._notify_active(event.event_type, {"state": "ringing", "event": event.to_public_dict(status="active")})
 
-    async def _auto_stop(self, event_id: str) -> None:
+    async def _auto_stop(self, event_id: str, *, timeout: float = 60.0) -> None:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(max(1.0, timeout))
         except asyncio.CancelledError:
             return
         await self.stop_event(event_id, reason="auto_timeout")

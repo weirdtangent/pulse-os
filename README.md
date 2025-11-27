@@ -246,6 +246,19 @@ Wyoming OpenWakeWord (Wake Word Detection) server configuration:
     WYOMING_OPENWAKEWORD_HOST=""
     WYOMING_OPENWAKEWORD_PORT="10400"
 
+### Calendar Sync (ICS/WebCal)
+Point a kiosk at any combination of public or secret ICS/WebCal feeds (Home, work, school, HOA, trash pickup, etc.) and it will poll them locally—no shared server required. Each device maintains its own copy of the feed(s), so removing a URL from `pulse.conf` immediately clears the related reminders on the next `setup.sh` run.
+
+When an event includes ICS `VALARM` entries, Pulse respects their DISPLAY trigger offsets (including multiple alarms). Events without alarms fall back to a single reminder fired 5 minutes before the start time (or noon the previous day for all-day events). Calendar reminders appear as a normal popup/beep, but the overlay only offers an **OK** button (no delay options) and they auto-dismiss after ~15 minutes if you ignore them.
+
+```
+PULSE_CALENDAR_ICS_URLS="https://calendar.google.com/.../basic.ics,webcal://example.com/feed.ics"
+PULSE_CALENDAR_REFRESH_MINUTES="5"
+PULSE_CALENDAR_LOOKAHEAD_HOURS="72"
+```
+
+Feeds accept `webcal://` or `https://` links (Pulse normalizes them automatically). Refresh cadence defaults to 5 minutes, so a brand-new event shows up almost immediately—even after a reboot.
+
 </details>
 
 ---
