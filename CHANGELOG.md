@@ -1,3 +1,10 @@
+## [0.61.1](https://github.com/weirdtangent/pulse-os/compare/v0.61.0...v0.61.1) (2025-11-27)
+
+
+### Bug Fixes
+
+* add stop words to break out of conversation ([c2a5e36](https://github.com/weirdtangent/pulse-os/commit/c2a5e36c6c664e6c1f117a50d0cabf9451a12b36))
+
 # [0.61.0](https://github.com/weirdtangent/pulse-os/compare/v0.60.1...v0.61.0) (2025-11-27)
 
 
