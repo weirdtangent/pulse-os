@@ -8,6 +8,7 @@ and reformats everything to match pulse.conf.sample's structure.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sys
@@ -590,6 +591,34 @@ def apply_legacy_replacements(
     return removed
 
 
+def secure_file(path: Path, reference: Path | None = None) -> None:
+    """Clamp file permissions to 600 and optionally match ownership."""
+
+    if not path.exists():
+        return
+
+    ref_stat = None
+    if reference and reference.exists():
+        try:
+            ref_stat = os.stat(reference)
+        except OSError:
+            ref_stat = None
+
+    if ref_stat:
+        try:
+            os.chown(path, ref_stat.st_uid, ref_stat.st_gid)
+        except PermissionError:
+            pass
+
+    try:
+        path.chmod(0o600)
+    except PermissionError:
+        try:
+            os.chmod(path, 0o600)
+        except PermissionError:
+            pass
+
+
 def main() -> int:
     """Main entry point."""
     repo_dir = Path("/opt/pulse-os")
@@ -631,6 +660,7 @@ def main() -> int:
     if user_config_path.exists():
         print(f"Creating backup: {backup_path}")
         shutil.copy2(user_config_path, backup_path)
+        secure_file(backup_path, user_config_path)
 
     # Generate new config
     new_config = format_config_file(sample_sections, user_vars, user_comments, new_vars)
@@ -638,6 +668,7 @@ def main() -> int:
     # Write new config
     print(f"Writing updated config: {user_config_path}")
     user_config_path.write_text(new_config, encoding="utf-8")
+    secure_file(user_config_path)
 
     # Report changes
     if new_vars:
