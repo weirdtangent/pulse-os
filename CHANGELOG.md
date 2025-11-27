@@ -1,3 +1,10 @@
+# [0.61.0](https://github.com/weirdtangent/pulse-os/compare/v0.60.1...v0.61.0) (2025-11-27)
+
+
+### Features
+
+* add overlay font select entity ([6b643b6](https://github.com/weirdtangent/pulse-os/commit/6b643b63352acd933543b4e0c6fe87607fded1d8))
+
 ## [0.60.1](https://github.com/weirdtangent/pulse-os/compare/v0.60.0...v0.60.1) (2025-11-26)
 
 
