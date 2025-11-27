@@ -3,7 +3,7 @@ name = "pulse-os"
 version = "0.1.0"
 description = "Container project for PulseOS related python scripts"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "astral>=3.2",
     "httpx>=0.27",

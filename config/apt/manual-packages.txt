@@ -204,9 +204,6 @@ python3-packaging
 python3-paho-mqtt
 python3-pip
 python3-psutil
-python3.14
-python3.14-venv
-python3.14-dev
 python3-icalendar
 python3-tk
 python3-rpi-lgpio
