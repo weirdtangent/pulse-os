@@ -6,7 +6,18 @@
 
 ## Raspberry Pi 5 + Pi 7" Touch Display 2
 
-Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assistant dashboards. Each device self-provisions a hardened Chromium display with watchdogs, schedule-aware backlighting, and MQTT telemetry/control. A live overlay surfaces internal timers, alarms, reminders, now-playing info, plus on-demand news, weather, and sports snapshots—with clickable notification badges that stay synced to the backend schedule service. An optional Wyoming voice stack adds wake-word control, STT/TTS, and multi-turn conversations, while the LLM layer can hot-swap between OpenAI and Google Gemini so follow-up questions and automations route through whichever model you prefer, all without leaving the Pulse display
+Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assistant dashboards. Each device self-provisions a hardened Chromium display with watchdogs, schedule-aware backlighting, and MQTT telemetry/control. A live overlay surfaces internal timers, alarms, reminders, now-playing info, plus on-demand news, weather, and sports snapshots—with clickable notification badges that stay synced to the backend schedule service. An optional Wyoming voice stack adds wake-word control, STT/TTS, and multi-turn conversations, while the LLM layer can hot-swap between OpenAI and Google Gemini so follow-up questions and automations route through whichever model you prefer, all without leaving the Pulse display.
+
+**What Pulse can do today**
+
+- Hardened Chromium kiosk with watchdogs, self-healing restarts, and MQTT “home/update/reboot” buttons targeted at photo-frame style Lovelace dashboards.
+- Overlay timeline that keeps alarms, timers, reminders, calendar events, now-playing info, and badge-driven info cards in sync with the backend scheduler.
+- Full alarm/timer/reminder scheduler (manual UI, MQTT, or voice shortcuts) plus remote completion/delay actions from the overlay itself.
+- Local ICS/WebCal polling with multi-`VALARM` support, “declined” attendee detection, on-screen calendar cards, and auto-suppressed pop-ups for meetings you said “No” to.
+- Optional Wyoming voice stack (wake word, Whisper STT, Piper TTS) with shortcut intents for news/weather/sports and LLM routing between OpenAI and Gemini.
+- MQTT telemetry, syslog streaming, and safe-reboot guardrails for remote monitoring, plus built-in OTA-style updates triggered from Home Assistant.
+- Sunrise/sunset-aware backlight control, Bluetooth autoconnect for external speakers, and one-touch audio tests to confirm volume changes.
+- Printable hardware accessories (mic stand, speaker cups, Pi 5 case) and ready-made scripts for kiosk recovery, calendar snapshots, and service restarts.
 
 ---
 
@@ -26,6 +37,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - [troubleshooting](docs/troubleshooting.md) — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
 - [notes-and-extras](docs/notes-and-extras.md) — Voice assistant tips, MQTT knobs, hardware accessories, boot splash notes, and other odds & ends
 - [public-photo-sources](docs/public-photo-sources.md) — Open-licensed image feeds (NASA, Smithsonian, Met, etc.) for `pulse-photo-card`
+- [config-reference](docs/config-reference.md) — Comprehensive `pulse.conf` option list with defaults and usage notes
 
 ## Hardware Guide
 <details>
@@ -115,7 +127,7 @@ cp /opt/pulse-os/pulse.conf.sample /opt/pulse-os/pulse.conf
 vi /opt/pulse-os/pulse.conf
 ```
 
-All keys are optional, but filling out the relevant sections keeps boot, kiosk, MQTT, and assistant services aligned with your environment.
+All keys are optional, but filling out the relevant sections keeps boot, kiosk, MQTT, and assistant services aligned with your environment. Refer to [docs/config-reference.md](docs/config-reference.md) for every available variable, its default, and practical usage notes.
 
 ### Quick config verification
 
@@ -132,137 +144,6 @@ It loads the config (or the path you pass with `--config`) and:
 - Tests `HOME_ASSISTANT_BASE_URL`/`HOME_ASSISTANT_TOKEN` by calling `/api/`.
 
 Any failure is printed with remediation text and the script exits non-zero so you can gate deployments on it if desired.
-
-<details>
-  <summary><strong>Explore pulse.conf options</strong></summary>
-
-### Pulse version
-This lets system tools know what version of Pulse you are on, keep this
-in your pulse.conf so system things will work correctly
-
-  PULSE_VERSION=<from VERSION file in repo>
-
-### System user
-The linux user with auto-login turned on and is running all of the Pulse
-system. Simplier to just to keep this as "pulse"
-
-    PULSE_USER="pulse"
-
-### Kiosk URL
-The web page the Pulse loads on boot. This is also what the "Home" Mqtt button
-will always return your pulse to.
-
-    PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
-
-### Watchdog / self-repair timing
-Cron schedule to watch for a broken network, crashed X11, or dead chormium (Aw, Snap)
-and restart if needed (minutes)
-
-    PULSE_REVIVE_INTERVAL=2
-
-Chromium’s live watchdog:
-
-    PULSE_WATCHDOG_URL="http://homeassistant.local:8123/static/icons/favicon.ico"
-    PULSE_WATCHDOG_INTERVAL=60   # seconds
-    PULSE_WATCHDOG_LIMIT=5       # failures before restarting browser
-
-### Hardware feature toggles
-Automatically adjust screen brightness based on sunrise/sunset. When enabled, the display moves between day/night levels automatically while audio volume stays wherever you set it. When disabled, you can control brightness manually (via MQTT or system controls).
-
-    PULSE_DAY_NIGHT_AUTO="true"
-
-Play a short heartbeat-style double thump after changing the MQTT volume slider. Enabled by default so you can immediately preview the new level; set it to `false` to disable the feedback.
-
-    PULSE_VOLUME_TEST_SOUND="true"
-
-Autoconnect to previously-setup Bluetooth (typically for audio). When enabled, PulseOS automatically connects to your Bluetooth speaker and sends a silent keepalive every 2 minutes to prevent the speaker from auto-powering off.
-
-    PULSE_BLUETOOTH_AUTOCONNECT="true"
-
-See `docs/bluetooth-speakers.md` for a narrated walkthrough of pairing a speaker via `bluetoothctl`.
-
-Send remote syslogs to remote server
-
-    PULSE_REMOTE_LOGGING="true"
-
-Safe reboot guard (prevents infinite reboot loops if multiple watchdogs fire back-to-back). Leave the defaults unless you have very slow boots:
-
-    PULSE_REBOOT_MIN_UPTIME_SECONDS="300"
-    PULSE_REBOOT_WINDOW_SECONDS="900"
-    PULSE_REBOOT_MAX_COUNT="3"
-
-### Remote logging target
-For remote systlog monitoring, only needed if TRUE set for PULSE_REMOTE_LOGGING
-
-    PULSE_REMOTE_LOG_HOST="192.168.1.100"
-    PULSE_REMOTE_LOG_PORT="5514"
-
-### Mqtt
-Optional, for Pulse to connect to Mqtt server (for HomeAssistant integration). Set `MQTT_USER` / `MQTT_PASS` if your broker requires authentication, and `MQTT_TLS_ENABLED="true"` with the matching cert/key paths if the broker requires TLS.
-
-    MQTT_HOST="mosquitto.local"
-    MQTT_PORT="1883"
-    MQTT_USER=""
-    MQTT_PASS=""
-    MQTT_TLS_ENABLED="false"
-    MQTT_CERT=""
-    MQTT_KEY=""
-    MQTT_CA_CERT=""
-
-### Pulse Version Checks
-For Mqtt version checks - to enable the "Upgrade" button when a new version is available
-2,4,6,8,12, or 24 checks per day
-
-    PULSE_VERSION_CHECKS_PER_DAY=12
-
-### Pulse Telemetry Reporting
-For Mqtt telemetry - how often Pulse should send stats to Mqtt for HomeAssistant (seconds)
-
-    PULSE_TELEMETRY_INTERVAL_SECONDS=15
-
-### Voice Assistant (Wyoming Protocol)
-Enable voice assistant features including wake word detection, speech-to-text, and text-to-speech.
-Requires Wyoming protocol servers (typically running as Docker containers on a NAS or server).
-When `PULSE_VOICE_ASSISTANT="true"`, `setup.sh` installs the Python `wyoming` client (via `pip --break-system-packages`) so the assistant service can talk to your remote models. If you install manually, run:
-
-```bash
-sudo -u pulse python3 -m pip install --user --break-system-packages wyoming
-```
-
-    PULSE_VOICE_ASSISTANT="false"
-
-Wyoming Whisper (Speech-to-Text) server configuration:
-
-    WYOMING_WHISPER_HOST=""
-    WYOMING_WHISPER_PORT="10300"
-
-Wyoming Piper (Text-to-Speech) server configuration:
-
-    WYOMING_PIPER_HOST=""
-    WYOMING_PIPER_PORT="10200"
-
-Wyoming OpenWakeWord (Wake Word Detection) server configuration:
-
-    WYOMING_OPENWAKEWORD_HOST=""
-    WYOMING_OPENWAKEWORD_PORT="10400"
-
-### Calendar Sync (ICS/WebCal)
-Point a kiosk at any combination of public or secret ICS/WebCal feeds (Home, work, school, HOA, trash pickup, etc.) and it will poll them locally—no shared server required. Each device maintains its own copy of the feed(s), so removing a URL from `pulse.conf` immediately clears the related reminders on the next `setup.sh` run.
-
-When an event includes ICS `VALARM` entries, Pulse respects their DISPLAY trigger offsets (including multiple alarms). Events without alarms fall back to a single reminder fired 5 minutes before the start time (or noon the previous day for all-day events). Calendar reminders appear as a normal popup/beep, but the overlay only offers an **OK** button (no delay options) and they auto-dismiss after ~15 minutes if you ignore them.
-
-- Say “show me my calendar”, “show calendar events”, or “show my upcoming events” to open the cached list on the overlay (limited to the configured look-ahead window).
-- A dedicated “Calendar events” pill now lives alongside the alarm/reminder badges—tap it anytime to bring the same list back without asking the assistant.
-
-```
-PULSE_CALENDAR_ICS_URLS="https://calendar.google.com/.../basic.ics,webcal://example.com/feed.ics"
-PULSE_CALENDAR_REFRESH_MINUTES="5"
-PULSE_CALENDAR_LOOKAHEAD_HOURS="72"
-```
-
-Feeds accept `webcal://` or `https://` links (Pulse normalizes them automatically). Refresh cadence defaults to 5 minutes, so a brand-new event shows up almost immediately—even after a reboot.
-
-</details>
 
 ---
 
