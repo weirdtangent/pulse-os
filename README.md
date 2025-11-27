@@ -108,7 +108,12 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
    cp pulse.conf.sample pulse.conf
    vi pulse.conf
    ```
-4. **Run the setup script with a location slug (first boot only).**
+4. **Create a Pulse dashboard in Home Assistant (recommended).**
+   - From the HA sidebar, add a new dashboard named “Pulse” using the dashboard URL slug `dashboard-pulse`.
+   - For the first tab/view, set the title to “Home” with the view URL slug `home` and add the Lovelace cards you want displayed.
+   - Pulse defaults to `http://homeassistant.local:8123/dashboard-pulse/home`, so tweak the hostname if needed or point `PULSE_URL` elsewhere in the next step.
+
+5. **Run the setup script with a location slug (first boot only).**
    ```bash
    ./setup.sh <location-name>
    ```

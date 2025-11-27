@@ -25,7 +25,7 @@ PULSE_USER="pulse"
 # ============================================================================
 
 # PULSE_URL — Chromium kiosk landing page opened after boot.
-PULSE_URL="http://homeassistant.local:8123/photo-frame/home?sidebar=hide"
+PULSE_URL="http://homeassistant.local:8123/dashboard-pulse/home"
 
 # PULSE_REVIVE_INTERVAL — minutes between watchdog cron runs that restart the kiosk if needed.
 PULSE_REVIVE_INTERVAL=2
