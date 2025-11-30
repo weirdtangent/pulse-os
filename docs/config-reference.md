@@ -173,6 +173,18 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_SPORTS_DEFAULT_LEAGUES` | `nfl,nba,mlb,nhl` | Comma-separated leagues to pull automatically. |
 | `PULSE_SPORTS_FAVORITE_TEAMS` | *(empty)* | Comma-separated “favorite teams” list for highlight bias. |
 
+### Shopping List (Google Keep)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_SHOPPING_ENABLED` | `true` | Toggles shopping-list intent handling (still requires credentials below). |
+| `PULSE_SHOPPING_KEEP_CLIENT_ID` | *(empty)* | OAuth client ID from the Google Cloud project you created for Keep API access. |
+| `PULSE_SHOPPING_KEEP_CLIENT_SECRET` | *(empty)* | OAuth client secret paired with the client ID above. |
+| `PULSE_SHOPPING_KEEP_REFRESH_TOKEN` | *(empty)* | Refresh token scoped to the Keep API (the assistant trades it for short-lived access tokens). |
+| `PULSE_SHOPPING_LIST_TITLE` | `Shopping list` | Title of the Google Keep note to manage (used when auto-creating the checklist). |
+| `PULSE_SHOPPING_KEEP_NOTE_ID` | *(empty)* | Optional explicit Keep note ID (`notes/<id>`). Leave blank to search/create by title. |
+| `PULSE_SHOPPING_COMPOUND_ITEMS` | *(empty)* | Comma-separated phrases that should always stay together when parsing (e.g., `maple syrup,corn flour`). |
+
 ## Calendar Sync (ICS/WebCal)
 
 | Key | Default | Description |

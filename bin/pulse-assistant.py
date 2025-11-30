@@ -35,6 +35,7 @@ from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
+from pulse.assistant.shopping_list import ShoppingListError, ShoppingListService
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_volume_feedback
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
@@ -205,7 +206,14 @@ class PulseAssistant:
                 self.home_assistant = HomeAssistantClient(config.home_assistant)
             except ValueError as exc:
                 LOGGER.warning("Home Assistant config invalid: %s", exc)
-        self.info_service = InfoService(config.info, logger=LOGGER)
+        self.shopping_list: ShoppingListService | None = None
+        if config.info.shopping.enabled:
+            try:
+                self.shopping_list = ShoppingListService(config.info.shopping, logger=LOGGER)
+            except ShoppingListError as exc:
+                LOGGER.warning("shopping: disabled due to configuration error: %s", exc)
+                self.shopping_list = None
+        self.info_service = InfoService(config.info, logger=LOGGER, shopping=self.shopping_list)
         self.scheduler = AssistantScheduler(
             self.home_assistant, config.home_assistant, self._handle_scheduler_notification
         )
@@ -1342,8 +1350,75 @@ class PulseAssistant:
                 seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration") or "0")
                 if event_id and seconds > 0:
                     await self.schedule_service.delay_reminder(str(event_id), int(seconds))
+            elif action == "shopping_remove":
+                await self._handle_shopping_remove_command(payload)
+            elif action == "shopping_clear":
+                await self._handle_shopping_clear_command()
+            elif action == "shopping_refresh":
+                await self._publish_shopping_overlay_snapshot()
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.debug("Schedule command %s failed: %s", action, exc)
+
+    async def _handle_shopping_remove_command(self, payload: dict[str, Any]) -> None:
+        if not self.shopping_list:
+            return
+        items = self._extract_shopping_items(payload)
+        if not items:
+            single = payload.get("item")
+            if single:
+                items = [str(single)]
+        indexes: list[int] = []
+        index_value = payload.get("index")
+        if index_value is not None:
+            try:
+                indexes.append(int(index_value))
+            except (TypeError, ValueError):
+                pass
+        extra_indexes = payload.get("indexes")
+        if isinstance(extra_indexes, list):
+            for value in extra_indexes:
+                try:
+                    indexes.append(int(value))
+                except (TypeError, ValueError):
+                    continue
+        if not items and not indexes:
+            return
+        try:
+            await self.shopping_list.remove_items(items, indexes=indexes)
+        except ShoppingListError as exc:
+            LOGGER.warning("shopping: remove command failed: %s", exc)
+            return
+        await self._publish_shopping_overlay_snapshot()
+
+    async def _handle_shopping_clear_command(self) -> None:
+        if not self.shopping_list:
+            return
+        try:
+            await self.shopping_list.clear()
+        except ShoppingListError as exc:
+            LOGGER.warning("shopping: clear command failed: %s", exc)
+            return
+        await self._publish_shopping_overlay_snapshot()
+
+    async def _publish_shopping_overlay_snapshot(self) -> None:
+        if not self.shopping_list:
+            return
+        try:
+            view = await self.shopping_list.list_items()
+        except ShoppingListError as exc:
+            LOGGER.warning("shopping: unable to refresh overlay: %s", exc)
+            return
+        card = self.shopping_list.build_card(view)
+        self._publish_info_overlay(extra=card)
+
+    @staticmethod
+    def _extract_shopping_items(payload: dict[str, Any]) -> list[str]:
+        items_field = payload.get("items")
+        if isinstance(items_field, str):
+            return [items_field]
+        if isinstance(items_field, list):
+            return [str(item) for item in items_field if isinstance(item, (str, int, float)) and str(item).strip()]
+        return []
 
     @staticmethod
     def _playback_from_payload(payload: dict[str, Any] | None) -> PlaybackConfig:

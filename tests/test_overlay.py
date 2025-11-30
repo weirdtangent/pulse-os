@@ -325,6 +325,23 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn("overlay-info-card__reminder--declined", html)
         self.assertIn("Declined", html)
 
+    def test_shopping_list_card_renders_delete_buttons(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "shopping_list",
+                "title": "Shopping List",
+                "text": "2 items",
+                "items": [
+                    {"label": "Eggs", "checked": False, "index": 0},
+                    {"label": "Syrup", "checked": True, "index": 1},
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme, info_endpoint="/overlay/info-card")
+        self.assertIn("data-shopping-delete", html)
+        self.assertIn("Eggs", html)
+        self.assertIn("overlay-shopping-list__item--checked", html)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -297,6 +297,11 @@ class OverlayStateManager:
                 events_list = [copy.deepcopy(item) for item in events_payload if isinstance(item, dict)]
                 if events_list:
                     normalized["events"] = events_list
+            items_payload = card.get("items")
+            if isinstance(items_payload, list):
+                item_list = [copy.deepcopy(item) for item in items_payload if isinstance(item, dict)]
+                if item_list:
+                    normalized["items"] = item_list
             if card_type == "weather":
                 days_payload = card.get("days")
                 if isinstance(days_payload, list):
@@ -830,6 +835,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_calendar_info_overlay(snapshot, card)
     if card_type == "weather":
         return _build_weather_info_overlay(snapshot, card)
+    if card_type == "shopping_list":
+        return _build_shopping_list_info_overlay(snapshot, card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -1113,6 +1120,61 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
       {subtitle_html}
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close weather list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _build_shopping_list_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
+    raw_items = card.get("items")
+    entries = [entry for entry in raw_items if isinstance(entry, dict)] if isinstance(raw_items, list) else []
+    title = str(card.get("title") or "Shopping List").strip() or "Shopping List"
+    subtitle = str(card.get("text") or card.get("subtitle") or "").strip()
+    safe_title = html_escape(title)
+    subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+    clear_button = ""
+    if not entries:
+        body = '<div class="overlay-info-card__empty">Your shopping list is empty.</div>'
+    else:
+        clear_button = (
+            '<button class="overlay-shopping-list__clear" data-shopping-clear aria-label="Clear shopping list">'
+            "Clear</button>"
+        )
+        rows = []
+        for entry in entries:
+            label = html_escape(str(entry.get("label") or "—"))
+            index_value = entry.get("index")
+            index_attr = html_escape(str(index_value), quote=True) if index_value is not None else ""
+            row_class = "overlay-shopping-list__item"
+            if entry.get("checked"):
+                row_class += " overlay-shopping-list__item--checked"
+            rows.append(
+                f"""
+  <div class="{row_class}">
+    <div class="overlay-shopping-list__label">{label}</div>
+    <button class="overlay-shopping-list__delete"
+      data-shopping-delete
+      data-shopping-label="{label}"
+      data-shopping-index="{index_attr}"
+      aria-label="Remove {label}">🗑️</button>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-shopping-list">' + "".join(rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--shopping">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      {subtitle_html}
+    </div>
+    <div class="overlay-shopping-list__actions">
+      {clear_button}
+      <button class="overlay-info-card__close" data-info-card-close aria-label="Close shopping list">&times;</button>
+    </div>
   </div>
   <div class="overlay-info-card__body">
     {body}
