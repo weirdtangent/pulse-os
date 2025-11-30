@@ -1,3 +1,10 @@
+## [0.66.2](https://github.com/weirdtangent/pulse-os/compare/v0.66.1...v0.66.2) (2025-11-30)
+
+
+### Bug Fixes
+
+* handle weather info card payload normalization ([b196b30](https://github.com/weirdtangent/pulse-os/commit/b196b308f7acc37eba198b9eb1f94e9d9509a89b))
+
 ## [0.66.1](https://github.com/weirdtangent/pulse-os/compare/v0.66.0...v0.66.1) (2025-11-30)
 
 
