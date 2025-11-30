@@ -1,3 +1,10 @@
+# [0.67.0](https://github.com/weirdtangent/pulse-os/compare/v0.66.3...v0.67.0) (2025-11-30)
+
+
+### Features
+
+* add current conditions to weather forecast and info card ([5d91135](https://github.com/weirdtangent/pulse-os/commit/5d911350e29c31eb493ccd3980c2970ac5b838f5))
+
 ## [0.66.3](https://github.com/weirdtangent/pulse-os/compare/v0.66.2...v0.66.3) (2025-11-30)
 
 
