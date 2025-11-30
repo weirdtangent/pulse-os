@@ -1,3 +1,11 @@
+## [0.68.1](https://github.com/weirdtangent/pulse-os/compare/v0.68.0...v0.68.1) (2025-11-30)
+
+
+### Reverts
+
+* Revert "chore(release): 0.68.0 [skip ci]" ([4309b70](https://github.com/weirdtangent/pulse-os/commit/4309b70fb87d90f4f5d2a5ee52e7f758e631fefc))
+* Revert "feat: add shopping list support to Assistant" ([1db0bc9](https://github.com/weirdtangent/pulse-os/commit/1db0bc9f6bfe85eed8df73804b28e586a9af68a1))
+
 ## [0.67.1](https://github.com/weirdtangent/pulse-os/compare/v0.67.0...v0.67.1) (2025-11-30)
 
 
