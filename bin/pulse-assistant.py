@@ -255,6 +255,13 @@ class PulseAssistant:
         self._self_audio_trigger_level = max(2, self.config.self_audio_trigger_level)
         self._playback_topic = f"pulse/{self.config.hostname}/telemetry/now_playing"
         self._info_topic = f"{self.config.mqtt.topic_base}/info_card"
+        self._info_overlay_clear_task: asyncio.Task | None = None
+        self._info_overlay_min_seconds = max(
+            0.0, float(os.environ.get("PULSE_INFO_CARD_MIN_SECONDS", "1.5"))
+        )
+        self._info_overlay_buffer_seconds = max(
+            0.0, float(os.environ.get("PULSE_INFO_CARD_BUFFER_SECONDS", "0.5"))
+        )
         self._media_player_entity = self.config.media_player_entity
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
@@ -571,7 +578,30 @@ class PulseAssistant:
                 payload.setdefault("category", category)
         else:
             payload = {"state": "clear"}
+        if payload.get("state") != "clear":
+            self._cancel_info_overlay_clear()
         self._publish_message(self._info_topic, json.dumps(payload))
+
+    def _cancel_info_overlay_clear(self) -> None:
+        task = self._info_overlay_clear_task
+        if task:
+            task.cancel()
+            self._info_overlay_clear_task = None
+
+    def _schedule_info_overlay_clear(self, delay: float) -> None:
+        self._cancel_info_overlay_clear()
+        if delay <= 0:
+            self._publish_info_overlay()
+            return
+
+        async def _clear_after() -> None:
+            try:
+                await asyncio.sleep(delay)
+                self._publish_info_overlay()
+            except asyncio.CancelledError:
+                return
+
+        self._info_overlay_clear_task = asyncio.create_task(_clear_after())
 
     @staticmethod
     def _clone_schedule_snapshot(snapshot: dict[str, Any]) -> dict[str, Any] | None:
@@ -1666,6 +1696,7 @@ class PulseAssistant:
         overlay_active = False
         overlay_text = response.display or response.text
         overlay_payload = response.card
+        estimated_clear_delay = self._estimate_speech_duration(response.text) + self._info_overlay_buffer_seconds
         try:
             if overlay_text or overlay_payload:
                 self._publish_info_overlay(text=overlay_text, category=response.category, extra=overlay_payload)
@@ -1673,7 +1704,8 @@ class PulseAssistant:
             await self._speak(response.text)
         finally:
             if overlay_active:
-                self._publish_info_overlay()
+                hold = max(self._info_overlay_min_seconds, estimated_clear_delay)
+                self._schedule_info_overlay_clear(hold)
         self._trigger_media_resume_after_response()
         return True
 
@@ -1866,6 +1898,11 @@ class PulseAssistant:
             return
         snippet = text if len(text) <= 240 else f"{text[:237]}..."
         LOGGER.info("Response (%s/%s): %s", pipeline, wake_word, snippet)
+
+    @staticmethod
+    def _estimate_speech_duration(text: str) -> float:
+        words = max(1, len(text.split()))
+        return words / 2.5
 
     @staticmethod
     def _extract_timer_start_intent(lowered: str) -> tuple[int, str | None] | None:
