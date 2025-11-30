@@ -15,6 +15,22 @@ BOOT_SPLASH="$BOOT_MOUNT/splash.rgb"
 FIRMWARE_LOGO="/lib/firmware/boot-splash.tga"
 LOCATION_FILE="/etc/pulse-location"
 
+VERSION_FILE="$REPO_DIR/VERSION"
+if [ -f "$VERSION_FILE" ]; then
+    VERSION="v$(tr -d '\r\n' <"$VERSION_FILE")"
+else
+    VERSION="unknown"
+fi
+
+echo " ______   __  __     __         ______     ______    ";
+echo "/\  == \ /\ \/\ \   /\ \       /\  ___\   /\  ___\   ";
+echo "\ \  _-/ \ \ \_\ \  \ \ \____  \ \___  \  \ \  __\   ";
+echo " \ \_\    \ \_____\  \ \_____\  \/\_____\  \ \_____\ ";
+echo "  \/_/     \/_____/   \/_____/   \/_____/   \/_____/ ";
+echo "";
+echo "$VERSION";
+echo "";
+
 # Keep pulse.conf in sync with the latest template before sourcing it.
 if [ -x "$SYNC_SCRIPT" ]; then
     echo "[PulseOS] Syncing pulse.conf with template…"
