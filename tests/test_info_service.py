@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from types import SimpleNamespace
 
-from pulse.assistant.config import InfoConfig, NewsConfig, ShoppingListConfig, SportsConfig, WeatherConfig
+from pulse.assistant.config import InfoConfig, NewsConfig, SportsConfig, WeatherConfig
 from pulse.assistant.info_service import InfoResponse, InfoService
-from pulse.assistant.info_sources import NewsHeadline, TeamSnapshot, WeatherCurrent, WeatherDay, WeatherForecast
-from pulse.assistant.shopping_list import ShoppingListEntry, ShoppingListView
+from pulse.assistant.info_sources import (
+    NewsHeadline,
+    TeamSnapshot,
+    WeatherCurrent,
+    WeatherDay,
+    WeatherForecast,
+)
 
 
 class FakeNewsClient:
@@ -57,47 +61,6 @@ class FakeSportsClient:
         return None
 
 
-class FakeShoppingParser:
-    def __init__(self) -> None:
-        self.command: SimpleNamespace | None = None
-
-    def parse(self, transcript: str):
-        return self.command
-
-
-class FakeShoppingService:
-    def __init__(self) -> None:
-        self.enabled = True
-        self.parser = FakeShoppingParser()
-        self.last_action: tuple[str, list[str] | None] | None = None
-
-    async def add_items(self, items: list[str]):
-        self.last_action = ("add", items)
-        return SimpleNamespace(added=items, reactivated=[], duplicates=[])
-
-    async def remove_items(self, items: list[str]):
-        self.last_action = ("remove", items)
-        return SimpleNamespace(removed=items, missing=[])
-
-    async def clear(self):
-        self.last_action = ("clear", None)
-        return SimpleNamespace(cleared=2)
-
-    async def list_items(self):
-        self.last_action = ("show", None)
-        return ShoppingListView(items=[ShoppingListEntry("Eggs", False), ShoppingListEntry("Syrup", True)])
-
-    def build_card(self, view: ShoppingListView, subtitle: str | None = None):
-        return {
-            "type": "shopping_list",
-            "title": "Shopping List",
-            "text": subtitle or "2 items",
-            "items": [
-                {"label": entry.label, "checked": entry.checked, "index": idx} for idx, entry in enumerate(view.items)
-            ],
-        }
-
-
 class InfoServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         config = InfoConfig(
@@ -124,15 +87,6 @@ class InfoServiceTests(unittest.TestCase):
                 base_url="https://sports.example",
             ),
             what3words_api_key=None,
-            shopping=ShoppingListConfig(
-                enabled=False,
-                list_title="Shopping list",
-                keep_client_id=None,
-                keep_client_secret=None,
-                keep_refresh_token=None,
-                note_id=None,
-                compound_items=(),
-            ),
         )
         fake_sources = type(
             "Sources",
@@ -143,8 +97,7 @@ class InfoServiceTests(unittest.TestCase):
                 "sports": FakeSportsClient(),
             },
         )()
-        self.fake_shopping = FakeShoppingService()
-        self.service = InfoService(config, sources=fake_sources, shopping=self.fake_shopping)
+        self.service = InfoService(config, sources=fake_sources)
         self.fake_news: FakeNewsClient = fake_sources.news
 
     def test_weather_intent_triggers_forecast(self) -> None:
@@ -181,25 +134,6 @@ class InfoServiceTests(unittest.TestCase):
         self.assertEqual(response.category, "sports")
         self.assertIn("Next up", response.text)
         self.assertIn("Next up", response.display or "")
-
-    def test_shopping_add_command(self) -> None:
-        self.fake_shopping.parser.command = SimpleNamespace(action="add", items=["eggs"])
-        response = asyncio.run(self.service.maybe_answer("add eggs to my shopping list"))
-        self.assertIsNotNone(response)
-        assert response is not None
-        self.assertEqual(response.category, "shopping")
-        self.assertIn("Added", response.text)
-        self.assertEqual(self.fake_shopping.last_action, ("add", ["eggs"]))
-
-    def test_shopping_show_command_returns_card(self) -> None:
-        self.fake_shopping.parser.command = SimpleNamespace(action="show", items=[])
-        response = asyncio.run(self.service.maybe_answer("show me my shopping list"))
-        self.assertIsNotNone(response)
-        assert response is not None
-        self.assertEqual(response.category, "shopping")
-        self.assertIsNotNone(response.card)
-        assert response.card is not None
-        self.assertEqual(response.card.get("type"), "shopping_list")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ from typing import Any
 
 from .config import InfoConfig
 from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherForecast
-from .shopping_list import ShoppingListError, ShoppingListService, ShoppingListView
 
 STOP_WORDS = {
     "what",
@@ -102,22 +101,16 @@ class InfoService:
         config: InfoConfig,
         logger: logging.Logger | None = None,
         sources: InfoSources | None = None,
-        shopping: ShoppingListService | None = None,
     ) -> None:
         self.config = config
         self.sources = sources or InfoSources(config)
         self.logger = logger or logging.getLogger(__name__)
-        self.shopping = shopping
 
     async def maybe_answer(self, transcript: str) -> InfoResponse | None:
         normalized = transcript.strip()
         if not normalized:
             return None
         simple = _normalize_text(normalized)
-
-        shopping_result = await self._maybe_handle_shopping(transcript)
-        if shopping_result:
-            return shopping_result
 
         if self._is_weather(simple):
             result = await self._handle_weather()
@@ -277,96 +270,6 @@ class InfoService:
         if snapshot:
             return self._format_team_snapshot(snapshot, wants_next_game or wants_schedule)
         return None
-
-    async def _maybe_handle_shopping(self, transcript: str) -> InfoResponse | None:
-        if not self.shopping or not self.shopping.enabled:
-            return None
-        command = self.shopping.parser.parse(transcript)
-        if not command:
-            return None
-        try:
-            if command.action == "add":
-                result = await self.shopping.add_items(command.items)
-                spoken = self._format_addition_response(result.added, result.reactivated, result.duplicates)
-                return InfoResponse("shopping", spoken, spoken)
-            if command.action == "remove":
-                result = await self.shopping.remove_items(command.items)
-                spoken = self._format_removal_response(result.removed, result.missing)
-                return InfoResponse("shopping", spoken, spoken)
-            if command.action == "clear":
-                result = await self.shopping.clear()
-                spoken = (
-                    "Your shopping list is already empty." if result.cleared == 0 else "Cleared your shopping list."
-                )
-                return InfoResponse("shopping", spoken, spoken)
-            if command.action == "show":
-                view = await self.shopping.list_items()
-                spoken, display, card = self._format_shopping_summary(view)
-                return InfoResponse("shopping", spoken, display, card)
-        except ShoppingListError as exc:
-            self.logger.warning("shopping: unable to handle request: %s", exc)
-            apology = "I couldn't reach your shopping list right now."
-            return InfoResponse("shopping", apology, apology)
-        return None
-
-    def _format_addition_response(
-        self,
-        added: Sequence[str],
-        reactivated: Sequence[str],
-        duplicates: Sequence[str],
-    ) -> str:
-        parts: list[str] = []
-        if added:
-            parts.append(f"Added {self._format_nice_list(added)} to your shopping list.")
-        if reactivated:
-            parts.append(f"I unchecked {self._format_nice_list(reactivated)}.")
-        if duplicates and not reactivated:
-            verb = "is" if len(duplicates) == 1 else "are"
-            parts.append(f"{self._format_nice_list(duplicates)} {verb} already on your shopping list.")
-        if not parts:
-            parts.append("I didn't catch any new items for your shopping list.")
-        return " ".join(parts)
-
-    def _format_removal_response(self, removed: Sequence[str], missing: Sequence[str]) -> str:
-        parts: list[str] = []
-        if removed:
-            parts.append(f"Removed {self._format_nice_list(removed)}.")
-        if missing:
-            parts.append(f"I couldn't find {self._format_nice_list(missing)} on your shopping list.")
-        if not parts:
-            parts.append("I couldn't find those items on your shopping list.")
-        return " ".join(parts)
-
-    def _format_shopping_summary(self, view: ShoppingListView) -> tuple[str, str, dict[str, Any]]:
-        if not view.items:
-            card = self.shopping.build_card(view, subtitle="You're all caught up.")
-            spoken = "Your shopping list is empty."
-            return spoken, spoken, card
-        unchecked = [entry.label for entry in view.items if not entry.checked]
-        checked = [entry.label for entry in view.items if entry.checked]
-        total = len(view.items)
-        spoken_parts = [f"You have {total} item{'s' if total != 1 else ''} on your shopping list."]
-        if unchecked:
-            spoken_parts.append(f"You still need {self._format_nice_list(unchecked)}.")
-        if checked:
-            verb = "is" if len(checked) == 1 else "are"
-            spoken_parts.append(f"{self._format_nice_list(checked)} {verb} already checked off.")
-        display_lines = []
-        for entry in view.items:
-            prefix = "☑︎" if entry.checked else "•"
-            display_lines.append(f"{prefix} {entry.label}")
-        subtitle = f"{len(unchecked)} to buy" if unchecked else "All items checked off"
-        card = self.shopping.build_card(view, subtitle=subtitle)
-        return " ".join(spoken_parts), "\n".join(display_lines), card
-
-    @staticmethod
-    def _format_nice_list(items: Sequence[str]) -> str:
-        cleaned = [item.strip() for item in items if item and item.strip()]
-        if not cleaned:
-            return ""
-        if len(cleaned) == 1:
-            return cleaned[0]
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
 
     async def _find_team_snapshot(self, text: str, leagues: Sequence[str] | None) -> TeamSnapshot | None:
         words = [word for word in re.split(r"\s+", text) if word and word not in STOP_WORDS]

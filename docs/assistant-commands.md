@@ -69,37 +69,6 @@ Because feeds are stored per-device (there’s no shared server), removing a URL
 
 If any of the above APIs are offline the assistant still replies (and logs the failure) without involving the LLM so wake word requests stay fast.
 
-## Shopping list
-
-> **Prerequisites**
->
-> - `PULSE_SHOPPING_KEEP_CLIENT_ID`, `PULSE_SHOPPING_KEEP_CLIENT_SECRET`, `PULSE_SHOPPING_KEEP_REFRESH_TOKEN`
-> - Optional: `PULSE_SHOPPING_LIST_TITLE` (defaults to “Shopping list”), `PULSE_SHOPPING_KEEP_NOTE_ID` (if you already know the note ID), `PULSE_SHOPPING_COMPOUND_ITEMS` (comma-separated phrases like `maple syrup,corn flour`)
-
-| Example phrase | What the assistant does |
-| --- | --- |
-| “Add eggs to my shopping list.” | Splits the item name out of your sentence, normalizes it (case/plural insensitive), and appends it to the configured Google Keep checklist. |
-| “Add eggs, peanut butter, sugar, waffles, and syrup to my shopping list.” | Handles multi-item commands (comma, “and,” or even space-delimited) and only inserts items that aren’t already active on the list. Previously checked-off items are reactivated. |
-| “Remove butter from my shopping list.” | Finds the matching entry and deletes it from the Keep note. If it can’t find a match you’ll hear that the item isn’t on the list. |
-| “Erase my shopping list.” / “Clean my shopping list.” / “Start over on my shopping list.” | Clears the entire Keep checklist, letting you start from scratch. |
-| “What’s on my shopping list?” / “Show me my shopping list.” | Reads the total/remaining counts aloud and opens a scrollable info card on the overlay with trash-can icons for each entry. |
-
-The on-screen shopping card mirrors the live Google Keep note, supports scrolling when the list grows long, and includes 🗑️ buttons next to each item. Tapping the trash icon sends a real-time `shopping_remove` command, and the overlay refreshes after each change. A **Clear** button appears when there are entries, which posts `shopping_clear` (the same as saying “erase my shopping list”).
-
-### How to obtain the values
-
-1. **Create/choose a Google Cloud project** and enable the **Google Keep API**. (Cloud Console → APIs & Services → Library → search “Keep API” → Enable.)
-2. **Create an OAuth “Desktop” client ID** under APIs & Services → Credentials. The downloaded JSON contains `client_id` and `client_secret`; copy those into `PULSE_SHOPPING_KEEP_CLIENT_ID` and `PULSE_SHOPPING_KEEP_CLIENT_SECRET`.
-3. **Generate a refresh token** with the installed-app flow:
-   - Either run `oauth2l fetch --scope https://www.googleapis.com/auth/keep --credentials credentials.json` or any small Python script that opens the consent screen for the same scope.
-   - After you sign in and approve access, the tool prints an `access_token` and `refresh_token`. Paste the refresh token into `PULSE_SHOPPING_KEEP_REFRESH_TOKEN`. (Keep the JSON private; it grants full control over your Keep notes.)
-4. **Pick the target Keep note**:
-   - If you already have a checklist note, open it at https://keep.google.com → click the note → copy the “NOTE/xxxxxxxxxxxxxxxx” ID from the URL and set `PULSE_SHOPPING_KEEP_NOTE_ID="notes/<that-id>"`.
-   - Otherwise leave it blank and the assistant will search for (or create) a note whose title matches `PULSE_SHOPPING_LIST_TITLE`.
-5. **Optional parsing tweaks**: set `PULSE_SHOPPING_COMPOUND_ITEMS` to a comma-separated list of phrases (e.g., `maple syrup,corn flour,bacon bits`) when STT tends to smash those words together. The parser treats each phrase as a single item.
-
-Once those values are in `pulse.conf`, rerun `./setup.sh` (or restart `pulse-assistant.service`) so the new credentials are loaded.
-
 ## Music controls
 
 Requires that your Pulse display is linked to Home Assistant.

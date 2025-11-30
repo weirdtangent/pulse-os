@@ -150,72 +150,6 @@ body {
   width: 100%;
 }
 
-.overlay-shopping-list {
-  max-height: 45vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding-right: 0.5rem;
-}
-
-.overlay-shopping-list__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.overlay-shopping-list__label {
-  font-size: 1.4rem;
-  font-weight: 600;
-}
-
-.overlay-shopping-list__item--checked .overlay-shopping-list__label {
-  text-decoration: line-through;
-  opacity: 0.6;
-}
-
-.overlay-shopping-list__delete {
-  border: none;
-  background: rgba(255, 59, 48, 0.25);
-  color: #fff;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 0.8rem;
-  font-size: 1.2rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.overlay-shopping-list__delete:hover {
-  background: rgba(255, 82, 69, 0.35);
-  transform: translateY(-1px);
-}
-
-.overlay-shopping-list__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.overlay-shopping-list__clear {
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: transparent;
-  color: inherit;
-  border-radius: 999px;
-  padding: 0.25rem 0.9rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.overlay-shopping-list__clear:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
 .overlay-info-card__alarm-list {
   display: flex;
   flex-direction: column;
@@ -925,44 +859,6 @@ OVERLAY_JS = """
         body: JSON.stringify({ action: 'delay_reminder', event_id: eventId, seconds })
       }).catch(() => {
         delayReminderButton.disabled = false;
-      });
-      return;
-    }
-
-    const shoppingClearButton = e.target.closest('[data-shopping-clear]');
-    if (shoppingClearButton) {
-      shoppingClearButton.disabled = true;
-      fetch(infoEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'shopping_clear' })
-      }).catch(() => {
-        shoppingClearButton.disabled = false;
-      });
-      return;
-    }
-
-    const shoppingDeleteButton = e.target.closest('[data-shopping-delete]');
-    if (shoppingDeleteButton) {
-      const label = shoppingDeleteButton.dataset.shoppingLabel || '';
-      const indexValue = shoppingDeleteButton.dataset.shoppingIndex;
-      const previous = shoppingDeleteButton.textContent;
-      shoppingDeleteButton.disabled = true;
-      shoppingDeleteButton.textContent = '…';
-      const body = { action: 'shopping_remove' };
-      if (label) {
-        body.item = label;
-      }
-      if (indexValue && Number.isFinite(Number(indexValue))) {
-        body.index = Number(indexValue);
-      }
-      fetch(infoEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }).catch(() => {
-        shoppingDeleteButton.disabled = false;
-        shoppingDeleteButton.textContent = previous;
       });
       return;
     }

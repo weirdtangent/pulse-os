@@ -193,23 +193,11 @@ class SportsConfig:
 
 
 @dataclass(frozen=True)
-class ShoppingListConfig:
-    enabled: bool
-    list_title: str
-    keep_client_id: str | None
-    keep_client_secret: str | None
-    keep_refresh_token: str | None
-    note_id: str | None
-    compound_items: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class InfoConfig:
     news: NewsConfig
     weather: WeatherConfig
     sports: SportsConfig
     what3words_api_key: str | None
-    shopping: ShoppingListConfig
 
 
 @dataclass(frozen=True)
@@ -439,34 +427,11 @@ class AssistantConfig:
             default_leagues=default_leagues,
             base_url=(source.get("PULSE_SPORTS_BASE_URL") or "https://site.api.espn.com/apis").rstrip("/"),
         )
-        compound_items = tuple(
-            item.strip().lower()
-            for item in split_csv(source.get("PULSE_SHOPPING_COMPOUND_ITEMS"))
-            if item and item.strip()
-        )
-        shopping_title = (source.get("PULSE_SHOPPING_LIST_TITLE") or "Shopping list").strip() or "Shopping list"
-        shopping_client_id = _strip_or_none(source.get("PULSE_SHOPPING_KEEP_CLIENT_ID"))
-        shopping_client_secret = _strip_or_none(source.get("PULSE_SHOPPING_KEEP_CLIENT_SECRET"))
-        shopping_refresh_token = _strip_or_none(source.get("PULSE_SHOPPING_KEEP_REFRESH_TOKEN"))
-        shopping_note_id = _strip_or_none(source.get("PULSE_SHOPPING_KEEP_NOTE_ID"))
-        shopping_creds_present = bool(shopping_client_id and shopping_client_secret and shopping_refresh_token)
-        shopping_flag = parse_bool(source.get("PULSE_SHOPPING_ENABLED"), True)
-        shopping_enabled = shopping_creds_present and shopping_flag
-        shopping_config = ShoppingListConfig(
-            enabled=shopping_enabled,
-            list_title=shopping_title,
-            keep_client_id=shopping_client_id,
-            keep_client_secret=shopping_client_secret,
-            keep_refresh_token=shopping_refresh_token,
-            note_id=shopping_note_id,
-            compound_items=compound_items,
-        )
         info_config = InfoConfig(
             news=news_config,
             weather=weather_config,
             sports=sports_config,
             what3words_api_key=(source.get("WHAT3WORDS_API_KEY") or "").strip() or None,
-            shopping=shopping_config,
         )
 
         raw_calendar_urls = split_csv(source.get("PULSE_CALENDAR_ICS_URLS"))

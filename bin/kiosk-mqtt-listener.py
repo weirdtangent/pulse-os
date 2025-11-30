@@ -630,7 +630,6 @@ class KioskMqttListener:
                 on_complete_reminder=self._handle_overlay_complete_reminder_request,
                 on_delay_reminder=self._handle_overlay_delay_reminder_request,
                 on_delete_reminder=self._handle_overlay_delete_reminder_request,
-                on_shopping_command=self._handle_overlay_shopping_command,
             )
 
     def log(self, message: str) -> None:
@@ -939,15 +938,6 @@ class KioskMqttListener:
     def _handle_overlay_delete_reminder_request(self, event_id: str) -> None:
         payload = json.dumps({"action": "delete_reminder", "event_id": event_id})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
-
-    def _handle_overlay_shopping_command(self, action: str, data: dict[str, Any]) -> None:
-        payload = {"action": action}
-        if isinstance(data, dict):
-            for key, value in data.items():
-                if key == "action":
-                    continue
-                payload[key] = value
-        self._safe_publish(None, self.assistant_topics.command, json.dumps(payload), qos=1, retain=False)
 
     @staticmethod
     def _decode_json_bytes(payload: bytes) -> Any:

@@ -44,7 +44,6 @@ class OverlayHttpServer:
         on_delete_reminder: Callable[[str], None] | None = None,
         on_pause_alarm: Callable[[str], None] | None = None,
         on_resume_alarm: Callable[[str], None] | None = None,
-        on_shopping_command: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -59,7 +58,6 @@ class OverlayHttpServer:
         self._on_delete_reminder = on_delete_reminder
         self._on_pause_alarm = on_pause_alarm
         self._on_resume_alarm = on_resume_alarm
-        self._on_shopping_command = on_shopping_command
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -228,12 +226,6 @@ class OverlayHttpServer:
                     change = outer.state.update_info_card({"type": "calendar"})
                     if outer._on_state_change:
                         outer._on_state_change(change)
-                elif action in {"shopping_remove", "shopping_clear", "shopping_refresh"}:
-                    if not outer._on_shopping_command:
-                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Shopping commands unavailable")
-                        return
-                    payload = {key: value for key, value in data.items() if key != "action"}
-                    outer._on_shopping_command(action, payload)
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return

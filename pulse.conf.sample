@@ -310,18 +310,6 @@ PULSE_SPORTS_HEADLINE_COUNTRY="us"
 PULSE_SPORTS_DEFAULT_LEAGUES="nfl,nba,mlb,nhl"
 PULSE_SPORTS_FAVORITE_TEAMS=""
 
-# Shopping list (Google Keep)
-# Set the following to enable voice-controlled shopping lists synced through Google Keep.
-PULSE_SHOPPING_ENABLED="true"
-PULSE_SHOPPING_KEEP_CLIENT_ID=""
-PULSE_SHOPPING_KEEP_CLIENT_SECRET=""
-PULSE_SHOPPING_KEEP_REFRESH_TOKEN=""
-# Optional overrides: change the default list title, point to a specific Keep note ID,
-# or add comma-separated phrases that should stay together when splitting items.
-PULSE_SHOPPING_LIST_TITLE="Shopping list"
-PULSE_SHOPPING_KEEP_NOTE_ID=""
-PULSE_SHOPPING_COMPOUND_ITEMS=""
-
 # ============================================================================
 # Calendar Sync (ICS/WebCal)
 # ============================================================================
