@@ -1,3 +1,10 @@
+# [0.68.0](https://github.com/weirdtangent/pulse-os/compare/v0.67.1...v0.68.0) (2025-11-30)
+
+
+### Features
+
+* add shopping list support to Assistant ([0bd216a](https://github.com/weirdtangent/pulse-os/commit/0bd216a22b5b4c82975a81c28d9308e3715a5767))
+
 ## [0.67.1](https://github.com/weirdtangent/pulse-os/compare/v0.67.0...v0.67.1) (2025-11-30)
 
 
