@@ -1,3 +1,11 @@
+## [0.66.3](https://github.com/weirdtangent/pulse-os/compare/v0.66.2...v0.66.3) (2025-11-30)
+
+
+### Bug Fixes
+
+* reformatting ([0e9c5b9](https://github.com/weirdtangent/pulse-os/commit/0e9c5b93821a89bb1914023f9a0d4ef67fc3fa2f))
+* schedule info card clear after speech duration ([88797b9](https://github.com/weirdtangent/pulse-os/commit/88797b947810fcf69c86b7fca64a646ea16c15e3))
+
 ## [0.66.2](https://github.com/weirdtangent/pulse-os/compare/v0.66.1...v0.66.2) (2025-11-30)
 
 
