@@ -8,6 +8,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from .config import InfoConfig
 from .info_sources import InfoSources, NewsHeadline, TeamSnapshot
@@ -91,6 +92,7 @@ class InfoResponse:
     category: str
     text: str
     display: str | None = None
+    card: dict[str, Any] | None = None
 
 
 class InfoService:
@@ -113,8 +115,8 @@ class InfoService:
         if self._is_weather(simple):
             result = await self._handle_weather()
             if result:
-                spoken, display = result
-                return InfoResponse("weather", spoken, display)
+                spoken, display, card = result
+                return InfoResponse("weather", spoken, display, card)
 
         if self._is_news(simple):
             topic = self._extract_news_topic(simple)
@@ -141,13 +143,14 @@ class InfoService:
                 return alias
         return None
 
-    async def _handle_weather(self) -> tuple[str, str] | None:
+    async def _handle_weather(self) -> tuple[str, str, dict[str, Any]] | None:
         forecast = await self.sources.weather.forecast()
         if not forecast or not forecast.days:
             return None
         units = self.config.weather.units
         display_label = "°F" if units in {"imperial", "auto"} else "°C"
         phrases: list[str] = []
+        card_days: list[dict[str, Any]] = []
         for idx, day in enumerate(forecast.days[: self.config.weather.forecast_days]):
             label = _describe_day(day.date, idx)
             high = _format_temp(day.temp_high)
@@ -166,6 +169,15 @@ class InfoService:
             else:
                 sentence = f"{sentence}."
             phrases.append(sentence)
+            card_days.append(
+                {
+                    "label": label,
+                    "high": high,
+                    "low": low,
+                    "precip": int(day.precipitation_chance) if day.precipitation_chance is not None else None,
+                    "icon": _weather_icon_key(day.weather_code),
+                }
+            )
         if not phrases:
             return None
         location_name = forecast.location_name
@@ -189,7 +201,17 @@ class InfoService:
             display_line = f"{label}: " + ", ".join(line_parts)
             display_parts.append(display_line)
         display = "\n\n".join(display_parts)
-        return spoken, display
+        title = location_name or "Weather"
+        day_count = len(card_days)
+        outlook_text = f"Next {day_count} day{'s' if day_count != 1 else ''}"
+        card_payload = {
+            "type": "weather",
+            "title": title,
+            "subtitle": outlook_text,
+            "units": display_label,
+            "days": card_days,
+        }
+        return spoken, display, card_payload
 
     async def _handle_news(self, topic: str | None) -> tuple[str, str] | None:
         headlines = await self.sources.news.latest(topic)
@@ -302,6 +324,34 @@ def _format_temp(value: float | None) -> str | None:
     if value is None or math.isnan(value):
         return None
     return f"{round(value):d}"
+
+
+def _weather_icon_key(code: int | None) -> str:
+    if code is None:
+        return "cloudy"
+    if code == 0:
+        return "sunny"
+    if code == 1:
+        return "partly_cloudy"
+    if code == 2:
+        return "mostly_cloudy"
+    if code == 3:
+        return "cloudy"
+    if code in {45, 48}:
+        return "fog"
+    if code in {51, 53, 55}:
+        return "drizzle"
+    if code in {56, 57, 66, 67}:
+        return "sleet"
+    if code in {61, 63, 80, 81}:
+        return "rain"
+    if code in {65, 82}:
+        return "downpour"
+    if code in {71, 73, 75, 77, 85, 86}:
+        return "snow"
+    if code in {95, 96, 99}:
+        return "thunder"
+    return "cloudy"
 
 
 def _summarize_headline(headline: NewsHeadline) -> str:

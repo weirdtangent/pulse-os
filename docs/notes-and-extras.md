@@ -129,7 +129,7 @@ The card keeps time/date overlaid, prevents white flashes between photos, and ha
 
 ## Volume feedback thump
 
-The notification tone that plays after each volume change (and when the assistant starts listening) lives in `assets/notification.wav`. Run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix the WAV (for example, to tweak duration or pitch). The script copies the result into `assets/`, and the runtime automatically stages the file under the active user's `XDG_RUNTIME_DIR`.
+The notification tone that plays after each volume change (and when the assistant starts listening) lives in `assets/sounds/notification.wav`. Run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix the WAV (for example, to tweak duration or pitch). The script copies the result into `assets/`, and the runtime automatically stages the file under the active user's `XDG_RUNTIME_DIR`.
 
 ---
 
@@ -146,9 +146,9 @@ The `/models` directory also includes STL/SCAD files for the ReSpeaker stand, pl
 
 `setup.sh` deploys the splash assets automatically:
 
-- `assets/graystorm-pulse_splash.png` becomes the Plymouth theme so Linux boot output stays hidden until X starts.
-- `assets/boot-splash.tga` (24-bit, 1280×720) is copied to `/lib/firmware/boot-splash.tga`, and the bootloader is set to `fullscreen_logo=1 fullscreen_logo_name=boot-splash.tga`.
-- `assets/boot-splash.rgb` (RGB565, 1280×720) is copied to `/boot/firmware/splash.rgb` for firmware builds that still expect the raw framebuffer format.
+- `assets/splash/graystorm-pulse_splash.png` becomes the Plymouth theme so Linux boot output stays hidden until X starts.
+- `assets/splash/boot-splash.tga` (24-bit, 1280×720) is copied to `/lib/firmware/boot-splash.tga`, and the bootloader is set to `fullscreen_logo=1 fullscreen_logo_name=boot-splash.tga`.
+- `assets/splash/boot-splash.rgb` (RGB565, 1280×720) is copied to `/boot/firmware/splash.rgb` for firmware builds that still expect the raw framebuffer format.
 - Kernel args such as `quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles` are enforced so messages and cursors stay out of sight.
 - Plymouth quit units are delayed until `graphical.target`, so the splash stays up until X is ready.
 

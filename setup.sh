@@ -672,8 +672,8 @@ link_system_files() {
 }
 
 install_boot_splash() {
-    local firmware_src="$REPO_DIR/assets/boot-splash.rgb"
-    local firmware_logo_src="$REPO_DIR/assets/boot-splash.tga"
+    local firmware_src="$REPO_DIR/assets/splash/boot-splash.rgb"
+    local firmware_logo_src="$REPO_DIR/assets/splash/boot-splash.tga"
 
     if [ -f "$firmware_src" ] && [ -n "$BOOT_SPLASH" ]; then
         if ! sudo cmp -s "$firmware_src" "$BOOT_SPLASH" 2>/dev/null; then
@@ -710,13 +710,13 @@ install_boot_splash() {
             sudo install -Dm0644 "$theme_src_dir/pulse.script" "$theme_dst_dir/pulse.script"
             theme_updated=1
         fi
-        if [ -f "$REPO_DIR/assets/graystorm-pulse_splash.png" ]; then
-            if ! sudo cmp -s "$REPO_DIR/assets/graystorm-pulse_splash.png" "$theme_dst_dir/splash.png" 2>/dev/null; then
-                sudo install -Dm0644 "$REPO_DIR/assets/graystorm-pulse_splash.png" "$theme_dst_dir/splash.png"
+        if [ -f "$REPO_DIR/assets/splash/graystorm-pulse_splash.png" ]; then
+            if ! sudo cmp -s "$REPO_DIR/assets/splash/graystorm-pulse_splash.png" "$theme_dst_dir/splash.png" 2>/dev/null; then
+                sudo install -Dm0644 "$REPO_DIR/assets/splash/graystorm-pulse_splash.png" "$theme_dst_dir/splash.png"
                 theme_updated=1
             fi
         else
-            log "Warning: splash PNG missing (assets/graystorm-pulse_splash.png)"
+            log "Warning: splash PNG missing (assets/splash/graystorm-pulse_splash.png)"
         fi
 
         sudo update-alternatives --install \

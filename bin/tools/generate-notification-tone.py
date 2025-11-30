@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
         "-o",
         "--output",
         type=Path,
-        default=REPO_ROOT / "assets" / "notification.wav",
+        default=REPO_ROOT / "assets" / "sounds" / "notification.wav",
         help="Destination path for the generated WAV file",
     )
     return parser.parse_args()

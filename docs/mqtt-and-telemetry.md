@@ -39,7 +39,7 @@ Home Assistant also discovers two `number` entities published by the same servic
 - `Audio Volume` → topic `pulse/<hostname>/audio/volume/set`
 - `Screen Brightness` → topic `pulse/<hostname>/display/brightness/set`
 
-Both sliders publish retained telemetry updates, and the telemetry loop re-sends the live hardware levels every ~15 seconds so brightness changes from other services (like the sunrise scheduler) and any volume adjustments stay reflected in Home Assistant. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
+Both sliders publish retained telemetry updates, and the telemetry loop re-sends the live hardware levels every ~15 seconds so brightness changes from other services (like the sunrise scheduler) and any volume adjustments stay reflected in Home Assistant. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/sounds/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
 
 ### Overlay font select
 

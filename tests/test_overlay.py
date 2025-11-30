@@ -195,6 +195,24 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-delete-reminder="rem1"', html)
         self.assertIn("data-complete-reminder", html)
 
+    def test_weather_info_card_renders_icons(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "weather",
+                "title": "Testville",
+                "subtitle": "Next 2 days",
+                "units": "°F",
+                "days": [
+                    {"label": "Today", "high": "72", "low": "58", "precip": 20, "icon": "sunny"},
+                    {"label": "Tomorrow", "high": "70", "low": "55", "precip": None, "icon": "rain"},
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("overlay-weather-row", html)
+        self.assertIn("High 72°F", html)
+        self.assertIn("data:image/png;base64", html)
+
     def test_calendar_reminder_shows_ok_only(self) -> None:
         snapshot = self._snapshot(
             active_reminder={

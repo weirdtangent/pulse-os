@@ -47,7 +47,7 @@ def _notification_sample_path() -> Path:
 
 
 def _bundled_notification_sample() -> Path | None:
-    candidate = Path(__file__).resolve().parent.parent / "assets" / _NOTIFICATION_FILENAME
+    candidate = Path(__file__).resolve().parent.parent / "assets" / "sounds" / _NOTIFICATION_FILENAME
     if candidate.exists():
         return candidate
     return None

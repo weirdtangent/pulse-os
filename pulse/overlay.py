@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 import threading
@@ -9,7 +10,9 @@ import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import lru_cache
 from html import escape as html_escape
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -18,6 +21,7 @@ from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
 DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
+WEATHER_ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "weather" / "icons"
 
 
 @dataclass(frozen=True)
@@ -792,6 +796,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_reminder_info_overlay(snapshot, card)
     if card_type == "calendar":
         return _build_calendar_info_overlay(snapshot, card)
+    if card_type == "weather":
+        return _build_weather_info_overlay(snapshot, card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -999,6 +1005,65 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
 """.strip()
 
 
+def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
+    units = str(card.get("units") or "").strip()
+    raw_days = card.get("days")
+    entries = [entry for entry in raw_days if isinstance(entry, dict)] if isinstance(raw_days, list) else []
+    title = str(card.get("title") or "Weather").strip() or "Weather"
+    subtitle = str(card.get("subtitle") or card.get("text") or "").strip()
+    safe_title = html_escape(title)
+    subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+    if not entries:
+        body = '<div class="overlay-info-card__empty">No forecast available.</div>'
+    else:
+        rows = []
+        for entry in entries:
+            label = html_escape(str(entry.get("label") or "—"))
+            high = entry.get("high")
+            low = entry.get("low")
+            precip = entry.get("precip")
+            icon_key = str(entry.get("icon") or "")
+            icon_uri = _weather_icon_uri(icon_key)
+            if icon_uri:
+                icon_html = f'<img src="{icon_uri}" alt="{html_escape(icon_key)} icon" loading="lazy" />'
+            else:
+                icon_html = '<div class="overlay-weather-row__icon-placeholder" aria-hidden="true">☁️</div>'
+            meta_parts = []
+            if high:
+                meta_parts.append(f"High {html_escape(str(high))}{html_escape(units)}")
+            if low:
+                meta_parts.append(f"Low {html_escape(str(low))}{html_escape(units)}")
+            if precip is not None:
+                meta_parts.append(f"Precip {int(precip)}%")
+            meta_text = " · ".join(meta_parts)
+            rows.append(
+                f"""
+  <div class="overlay-weather-row">
+    <div class="overlay-weather-row__icon">{icon_html}</div>
+    <div class="overlay-weather-row__details">
+      <div class="overlay-weather-row__label">{label}</div>
+      <div class="overlay-weather-row__meta">{meta_text}</div>
+    </div>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-weather">' + "".join(rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--weather">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      {subtitle_html}
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close weather list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
 def _format_alarm_info_entries(alarms: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for alarm in alarms:
@@ -1058,6 +1123,24 @@ def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dic
             entry["subtext"] = location
         entries.append(entry)
     return entries
+
+
+@lru_cache(maxsize=32)
+def _load_weather_icon_data(icon_key: str) -> str | None:
+    if not icon_key:
+        return None
+    path = WEATHER_ICON_DIR / f"{icon_key}.png"
+    if not path.exists():
+        return None
+    try:
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    except OSError:
+        return None
+    return f"data:image/png;base64,{encoded}"
+
+
+def _weather_icon_uri(icon_key: str) -> str | None:
+    return _load_weather_icon_data(icon_key)
 
 
 def _format_alarm_time_phrase(alarm: dict[str, Any]) -> str:

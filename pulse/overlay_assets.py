@@ -157,6 +157,55 @@ body {
   margin-top: 1.2rem;
 }
 
+.overlay-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.overlay-weather-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.overlay-weather-row__icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlay-weather-row__icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.overlay-weather-row__icon-placeholder {
+  font-size: 2rem;
+  opacity: 0.7;
+}
+
+.overlay-weather-row__details {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.overlay-weather-row__label {
+  font-weight: 600;
+}
+
+.overlay-weather-row__meta {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
 .overlay-info-card__alarm {
   display: flex;
   align-items: center;

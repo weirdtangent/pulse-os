@@ -101,6 +101,13 @@ class InfoServiceTests(unittest.TestCase):
         self.assertIsNotNone(response.display)
         assert response.display is not None
         self.assertIn("Today", response.display)
+        self.assertIsNotNone(response.card)
+        assert response.card is not None
+        self.assertEqual(response.card.get("type"), "weather")
+        days = response.card.get("days") or []
+        self.assertGreaterEqual(len(days), 2)
+        first = days[0]
+        self.assertEqual(first.get("icon"), "sunny")
 
     def test_news_intent_tracks_topic(self) -> None:
         response = asyncio.run(self.service.maybe_answer("What are the sports news headlines?"))

@@ -1665,9 +1665,10 @@ class PulseAssistant:
         self._log_assistant_response(tag, response.text, pipeline="pulse")
         overlay_active = False
         overlay_text = response.display or response.text
+        overlay_payload = response.card
         try:
-            if overlay_text:
-                self._publish_info_overlay(text=overlay_text, category=response.category)
+            if overlay_text or overlay_payload:
+                self._publish_info_overlay(text=overlay_text, category=response.category, extra=overlay_payload)
                 overlay_active = True
             await self._speak(response.text)
         finally:
