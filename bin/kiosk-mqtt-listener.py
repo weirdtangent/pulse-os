@@ -891,15 +891,10 @@ class KioskMqttListener:
         if state == "clear":
             change = self.overlay_state.update_info_card(None)
         else:
-            card_payload: dict[str, Any] = {}
-            for key in ("text", "category", "title", "type", "state"):
-                value = data.get(key)
-                if value is not None:
-                    card_payload[key] = value
-            alarms_payload = data.get("alarms")
-            if isinstance(alarms_payload, list):
-                card_payload["alarms"] = alarms_payload
-            card_payload["ts"] = data.get("ts") or time.time()
+            card_payload: dict[str, Any] = {key: value for key, value in data.items() if key != "state" or value}
+            card_payload["state"] = data.get("state")
+            if "ts" not in card_payload or not card_payload["ts"]:
+                card_payload["ts"] = time.time()
             change = self.overlay_state.update_info_card(card_payload)
         self._handle_overlay_change(change)
 
