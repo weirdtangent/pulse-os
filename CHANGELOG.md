@@ -1,3 +1,10 @@
+## [0.66.1](https://github.com/weirdtangent/pulse-os/compare/v0.66.0...v0.66.1) (2025-11-30)
+
+
+### Bug Fixes
+
+* fix weather info_card ([952564e](https://github.com/weirdtangent/pulse-os/commit/952564e43f8e3cb2423c65151d548e0bb3783bd9))
+
 # [0.66.0](https://github.com/weirdtangent/pulse-os/compare/v0.65.9...v0.66.0) (2025-11-30)
 
 
