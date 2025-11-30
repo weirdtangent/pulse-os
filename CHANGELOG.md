@@ -1,3 +1,10 @@
+## [0.65.9](https://github.com/weirdtangent/pulse-os/compare/v0.65.8...v0.65.9) (2025-11-30)
+
+
+### Bug Fixes
+
+* deduplicate calendar events from multiple VALARMs; revive-pulse.sh: log Chromium health status; ([382d393](https://github.com/weirdtangent/pulse-os/commit/382d39304e7d624de80c9941e17722e02bb80c81))
+
 ## [0.65.8](https://github.com/weirdtangent/pulse-os/compare/v0.65.7...v0.65.8) (2025-11-27)
 
 
