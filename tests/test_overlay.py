@@ -213,6 +213,26 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn("High 72°F", html)
         self.assertIn("data:image/png;base64", html)
 
+    def test_state_manager_preserves_weather_payload(self) -> None:
+        manager = OverlayStateManager()
+        manager.update_info_card(
+            {
+                "type": "weather",
+                "title": "Town",
+                "units": "°F",
+                "subtitle": "Next day",
+                "days": [{"label": "Today", "high": "70", "low": "50", "precip": 10, "icon": "sunny"}],
+            }
+        )
+        card = manager.snapshot().info_card
+        assert card is not None
+        self.assertEqual(card.get("type"), "weather")
+        self.assertEqual(card.get("units"), "°F")
+        days = card.get("days")
+        assert isinstance(days, list)
+        self.assertEqual(len(days), 1)
+        self.assertEqual(days[0]["icon"], "sunny")
+
     def test_calendar_reminder_shows_ok_only(self) -> None:
         snapshot = self._snapshot(
             active_reminder={

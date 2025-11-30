@@ -267,7 +267,8 @@ class OverlayStateManager:
             text = str(card.get("text") or "").strip()
             category = str(card.get("category") or "").strip()
             title = str(card.get("title") or "").strip()
-            card_type = str(card.get("type") or "").strip()
+            raw_card_type = str(card.get("type") or "").strip()
+            card_type = raw_card_type.lower()
             state = str(card.get("state") or "").strip()
             normalized = {}
             if text:
@@ -277,7 +278,7 @@ class OverlayStateManager:
             if title:
                 normalized["title"] = title
             if card_type:
-                normalized["type"] = card_type.lower()
+                normalized["type"] = card_type
             if state:
                 normalized["state"] = state.lower()
             ts_value = card.get("ts")
@@ -296,6 +297,28 @@ class OverlayStateManager:
                 events_list = [copy.deepcopy(item) for item in events_payload if isinstance(item, dict)]
                 if events_list:
                     normalized["events"] = events_list
+            if card_type == "weather":
+                days_payload = card.get("days")
+                if isinstance(days_payload, list):
+                    day_entries = [
+                        {
+                            "label": str(day.get("label") or ""),
+                            "high": day.get("high"),
+                            "low": day.get("low"),
+                            "precip": day.get("precip"),
+                            "icon": day.get("icon"),
+                        }
+                        for day in days_payload
+                        if isinstance(day, dict)
+                    ]
+                    if day_entries:
+                        normalized["days"] = day_entries
+                subtitle_value = card.get("subtitle")
+                if subtitle_value:
+                    normalized["subtitle"] = str(subtitle_value)
+                units_value = card.get("units")
+                if units_value is not None:
+                    normalized["units"] = str(units_value)
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
