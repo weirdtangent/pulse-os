@@ -1,3 +1,10 @@
+# [0.66.0](https://github.com/weirdtangent/pulse-os/compare/v0.65.9...v0.66.0) (2025-11-30)
+
+
+### Features
+
+* add weather icons to info card; clean up assets directory ([a0409f8](https://github.com/weirdtangent/pulse-os/commit/a0409f893c1c9174909216c3643696d00a67a0c7))
+
 ## [0.65.9](https://github.com/weirdtangent/pulse-os/compare/v0.65.8...v0.65.9) (2025-11-30)
 
 
