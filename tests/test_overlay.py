@@ -202,6 +202,7 @@ class OverlayRenderTests(unittest.TestCase):
                 "title": "Testville",
                 "subtitle": "Next 2 days",
                 "units": "°F",
+                "current": {"label": "Now", "temp": "70", "units": "°F", "description": "Clear", "icon": "sunny"},
                 "days": [
                     {"label": "Today", "high": "72", "low": "58", "precip": 20, "icon": "sunny"},
                     {"label": "Tomorrow", "high": "70", "low": "55", "precip": None, "icon": "rain"},
@@ -212,6 +213,7 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn("overlay-weather-row", html)
         self.assertIn("High 72°F", html)
         self.assertIn("data:image/png;base64", html)
+        self.assertIn("Now", html)
 
     def test_state_manager_preserves_weather_payload(self) -> None:
         manager = OverlayStateManager()
@@ -221,6 +223,7 @@ class OverlayRenderTests(unittest.TestCase):
                 "title": "Town",
                 "units": "°F",
                 "subtitle": "Next day",
+                "current": {"label": "Now", "temp": "70", "units": "°F", "description": "Clear", "icon": "sunny"},
                 "days": [{"label": "Today", "high": "70", "low": "50", "precip": 10, "icon": "sunny"}],
             }
         )

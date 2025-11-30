@@ -133,11 +133,20 @@ class WeatherDay:
 
 
 @dataclass(slots=True)
+class WeatherCurrent:
+    temperature: float | None
+    weather_code: int | None
+    windspeed: float | None
+    time: str | None
+
+
+@dataclass(slots=True)
 class WeatherForecast:
     location_name: str
     latitude: float
     longitude: float
     days: list[WeatherDay]
+    current: WeatherCurrent | None = None
 
 
 class WeatherClient:
@@ -167,6 +176,7 @@ class WeatherClient:
             "timezone": "auto",
             "forecast_days": self.config.forecast_days,
             "language": self.config.language,
+            "current_weather": True,
         }
         if self.config.units in {"imperial", "auto"}:
             params["temperature_unit"] = "fahrenheit"
@@ -197,7 +207,14 @@ class WeatherClient:
                     weather_code=int(codes[idx]) if idx < len(codes) and isinstance(codes[idx], (int, float)) else None,
                 )
             )
-        forecast = WeatherForecast(location.display_name, location.latitude, location.longitude, days)
+        current_payload = payload.get("current_weather") or {}
+        current = WeatherCurrent(
+            temperature=float(current_payload["temperature"]) if "temperature" in current_payload else None,
+            weather_code=int(current_payload["weathercode"]) if "weathercode" in current_payload else None,
+            windspeed=float(current_payload["windspeed"]) if "windspeed" in current_payload else None,
+            time=str(current_payload.get("time")) if current_payload.get("time") else None,
+        )
+        forecast = WeatherForecast(location.display_name, location.latitude, location.longitude, days, current=current)
         self._forecast_cache.set(cache_key, forecast)
         return forecast
 

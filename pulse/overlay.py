@@ -1040,6 +1040,30 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
         body = '<div class="overlay-info-card__empty">No forecast available.</div>'
     else:
         rows = []
+        current_entry = card.get("current") if isinstance(card.get("current"), dict) else None
+        current_html = ""
+        if current_entry:
+            current_icon = _weather_icon_uri(str(current_entry.get("icon") or ""))
+            if current_icon:
+                current_icon_html = f'<img src="{current_icon}" alt="Current conditions icon" loading="lazy" />'
+            else:
+                current_icon_html = '<div class="overlay-weather-row__icon-placeholder" aria-hidden="true">☁️</div>'
+            current_meta = (
+                f"{html_escape(current_entry.get('temp') or '—')}{html_escape(current_entry.get('units') or '')}"
+            )
+            current_desc = current_entry.get("description")
+            if current_desc:
+                current_meta = f"{current_meta} · {html_escape(str(current_desc))}"
+            current_html = (
+                '<div class="overlay-weather__current">'
+                '<div class="overlay-weather-row">'
+                f'<div class="overlay-weather-row__icon">{current_icon_html}</div>'
+                '<div class="overlay-weather-row__details">'
+                '<div class="overlay-weather-row__label">Now</div>'
+                f'<div class="overlay-weather-row__meta">{current_meta}</div>'
+                "</div></div></div>"
+                '<div class="overlay-weather__divider"></div>'
+            )
         for entry in entries:
             label = html_escape(str(entry.get("label") or "—"))
             high = entry.get("high")
@@ -1070,7 +1094,7 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
   </div>
                 """.strip()
             )
-        body = '<div class="overlay-weather">' + "".join(rows) + "</div>"
+        body = '<div class="overlay-weather">' + current_html + "".join(rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--weather">
   <div class="overlay-info-card__header">

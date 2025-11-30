@@ -164,6 +164,15 @@ body {
   margin-top: 1rem;
 }
 
+.overlay-weather__current {
+  padding-bottom: 0.8rem;
+}
+
+.overlay-weather__divider {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  margin-bottom: 0.8rem;
+}
+
 .overlay-weather-row {
   display: flex;
   align-items: center;

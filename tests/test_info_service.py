@@ -5,7 +5,13 @@ import unittest
 
 from pulse.assistant.config import InfoConfig, NewsConfig, SportsConfig, WeatherConfig
 from pulse.assistant.info_service import InfoResponse, InfoService
-from pulse.assistant.info_sources import NewsHeadline, TeamSnapshot, WeatherDay, WeatherForecast
+from pulse.assistant.info_sources import (
+    NewsHeadline,
+    TeamSnapshot,
+    WeatherCurrent,
+    WeatherDay,
+    WeatherForecast,
+)
 
 
 class FakeNewsClient:
@@ -26,7 +32,8 @@ class FakeWeatherClient:
             WeatherDay(date="2025-01-01", temp_high=72, temp_low=58, precipitation_chance=20, weather_code=0),
             WeatherDay(date="2025-01-02", temp_high=68, temp_low=55, precipitation_chance=10, weather_code=0),
         ]
-        return WeatherForecast("Testville", 0.0, 0.0, days)
+        current = WeatherCurrent(temperature=70, weather_code=0, windspeed=0, time="2025-01-01T12:00:00Z")
+        return WeatherForecast("Testville", 0.0, 0.0, days, current=current)
 
 
 class FakeSportsClient:
@@ -108,6 +115,9 @@ class InfoServiceTests(unittest.TestCase):
         self.assertGreaterEqual(len(days), 2)
         first = days[0]
         self.assertEqual(first.get("icon"), "sunny")
+        current = response.card.get("current")
+        assert isinstance(current, dict)
+        self.assertEqual(current.get("icon"), "sunny")
 
     def test_news_intent_tracks_topic(self) -> None:
         response = asyncio.run(self.service.maybe_answer("What are the sports news headlines?"))

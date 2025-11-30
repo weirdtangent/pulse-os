@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from .config import InfoConfig
-from .info_sources import InfoSources, NewsHeadline, TeamSnapshot
+from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherForecast
 
 STOP_WORDS = {
     "what",
@@ -151,6 +151,9 @@ class InfoService:
         display_label = "°F" if units in {"imperial", "auto"} else "°C"
         phrases: list[str] = []
         card_days: list[dict[str, Any]] = []
+        current_sentence = _build_current_weather_phrase(forecast, units)
+        if current_sentence:
+            phrases.append(current_sentence)
         for idx, day in enumerate(forecast.days[: self.config.weather.forecast_days]):
             label = _describe_day(day.date, idx)
             high = _format_temp(day.temp_high)
@@ -204,12 +207,14 @@ class InfoService:
         title = location_name or "Weather"
         day_count = len(card_days)
         outlook_text = f"Next {day_count} day{'s' if day_count != 1 else ''}"
+        current_block = _format_current_weather_entry(forecast, display_label)
         card_payload = {
             "type": "weather",
             "title": title,
             "subtitle": outlook_text,
             "units": display_label,
             "days": card_days,
+            "current": current_block,
         }
         return spoken, display, card_payload
 
@@ -352,6 +357,52 @@ def _weather_icon_key(code: int | None) -> str:
     if code in {95, 96, 99}:
         return "thunder"
     return "cloudy"
+
+
+def _weather_description(code: int | None) -> str:
+    mapping = {
+        "sunny": "clear skies",
+        "partly_cloudy": "partly cloudy",
+        "mostly_cloudy": "mostly cloudy",
+        "cloudy": "overcast",
+        "fog": "foggy",
+        "drizzle": "light drizzle",
+        "rain": "rainy",
+        "downpour": "heavy rain",
+        "sleet": "sleet",
+        "snow": "snowy",
+        "thunder": "stormy",
+    }
+    icon = _weather_icon_key(code)
+    return mapping.get(icon, "cloudy")
+
+
+def _build_current_weather_phrase(forecast: WeatherForecast, units: str) -> str | None:
+    current = forecast.current
+    if not current or current.temperature is None:
+        return None
+    label = "°F" if units in {"imperial", "auto"} else "°C"
+    temp = _format_temp(current.temperature)
+    description = _weather_description(current.weather_code)
+    if not temp:
+        return None
+    return f"Right now it's around {temp}{label} and {description}."
+
+
+def _format_current_weather_entry(forecast: WeatherForecast, units_label: str) -> dict[str, Any] | None:
+    current = forecast.current
+    if not current:
+        return None
+    temp = _format_temp(current.temperature)
+    if not temp:
+        return None
+    return {
+        "label": "Now",
+        "temp": temp,
+        "units": units_label,
+        "description": _weather_description(current.weather_code).title(),
+        "icon": _weather_icon_key(current.weather_code),
+    }
 
 
 def _summarize_headline(headline: NewsHeadline) -> str:
