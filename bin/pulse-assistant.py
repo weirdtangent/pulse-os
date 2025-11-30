@@ -1127,11 +1127,29 @@ class PulseAssistant:
             LOGGER.exception("Calendar reminder dispatch failed for %s: %s", label, exc)
 
     async def _handle_calendar_snapshot(self, reminders: list[CalendarReminder]) -> None:
-        events = [self._serialize_calendar_event(reminder) for reminder in reminders[:CALENDAR_EVENT_INFO_LIMIT]]
+        unique_reminders = self._deduplicate_calendar_reminders(reminders)
+        events = [self._serialize_calendar_event(reminder) for reminder in unique_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         self._calendar_events = events
         self._calendar_updated_at = time.time()
         if self._latest_schedule_snapshot:
             self._publish_schedule_state(self._latest_schedule_snapshot)
+
+    def _deduplicate_calendar_reminders(self, reminders: Sequence[CalendarReminder]) -> list[CalendarReminder]:
+        """Collapse duplicate events that arise from multiple VALARMs."""
+
+        unique: list[CalendarReminder] = []
+        seen: set[tuple[str, str, str]] = set()
+        for reminder in reminders:
+            key = (
+                reminder.source_url or "",
+                reminder.uid,
+                reminder.start.isoformat(),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(reminder)
+        return unique
 
     def _serialize_calendar_event(self, reminder: CalendarReminder) -> dict[str, Any]:
         local_start = reminder.start.astimezone()

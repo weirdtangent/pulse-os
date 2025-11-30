@@ -10,6 +10,9 @@ export XAUTHORITY=/home/$PULSE_USER/.Xauthority
 SAFE_REBOOT="/opt/pulse-os/bin/safe-reboot.sh"
 LOG="/home/$PULSE_USER/revive.log"
 
+# Capture all stdout/stderr so cron never tries to email it.
+exec >>"$LOG" 2>&1
+
 # quick ping to see if HA itself is reachable
 if ! curl -sf --max-time 10 "$PULSE_URL" >/dev/null; then
   echo "$(date): HA unreachable" >> "$LOG"
@@ -21,7 +24,6 @@ if ! curl -sf --max-time 10 "$PULSE_URL" >/dev/null; then
 fi
 
 # Wayland/X11 agnostic health check
-LOG="/home/$PULSE_USER/revive.log"
 
 # Ask Chromium's DevTools if it's alive
 if curl -sf http://localhost:9222/json/version | grep -q '"Browser"'; then

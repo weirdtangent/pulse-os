@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 _MODULE_SPEC = importlib.util.spec_from_file_location(
     "pulse_assistant_module", Path(__file__).resolve().parents[1] / "bin" / "pulse-assistant.py"
@@ -12,6 +18,7 @@ _MODULE = importlib.util.module_from_spec(_MODULE_SPEC)
 sys.modules[_MODULE_SPEC.name] = _MODULE
 _MODULE_SPEC.loader.exec_module(_MODULE)  # type: ignore[attr-defined]
 PulseAssistant = _MODULE.PulseAssistant  # type: ignore[attr-defined]
+CalendarReminder = _MODULE.CalendarReminder  # type: ignore[attr-defined]
 
 
 def _assistant() -> PulseAssistant:
@@ -56,3 +63,83 @@ def test_follow_up_noise_filtering() -> None:
     assert ok and normalized == "add tomatoes"
     ok, normalized = assistant._evaluate_follow_up_transcript("Add tomatoes", normalized)
     assert not ok
+
+
+def _setup_calendar_test_assistant() -> PulseAssistant:
+    assistant = _assistant()
+    assistant._calendar_events = []
+    assistant._calendar_updated_at = None
+    assistant._latest_schedule_snapshot = None
+    assistant._publish_schedule_state = lambda snapshot: None  # type: ignore[assignment]
+    return assistant
+
+
+def test_calendar_snapshot_deduplicates_multiple_valarms() -> None:
+    assistant = _setup_calendar_test_assistant()
+    start = datetime(2025, 1, 20, 12, 0, tzinfo=UTC)
+    reminders = [
+        CalendarReminder(
+            uid="event-1",
+            summary="Team sync",
+            description=None,
+            location=None,
+            start=start,
+            end=None,
+            all_day=False,
+            trigger_time=start - timedelta(minutes=30),
+            calendar_name="Work",
+            source_url="https://example.com/work.ics",
+            url=None,
+        ),
+        CalendarReminder(
+            uid="event-1",
+            summary="Team sync",
+            description=None,
+            location=None,
+            start=start,
+            end=None,
+            all_day=False,
+            trigger_time=start - timedelta(minutes=5),
+            calendar_name="Work",
+            source_url="https://example.com/work.ics",
+            url=None,
+        ),
+    ]
+    asyncio.run(assistant._handle_calendar_snapshot(reminders))
+    assert len(assistant._calendar_events) == 1
+    assert assistant._calendar_events[0]["summary"] == "Team sync"
+
+
+def test_calendar_snapshot_retains_distinct_sources() -> None:
+    assistant = _setup_calendar_test_assistant()
+    start = datetime(2025, 2, 1, 16, 0, tzinfo=UTC)
+    reminders = [
+        CalendarReminder(
+            uid="event-shared",
+            summary="Project kickoff",
+            description=None,
+            location=None,
+            start=start,
+            end=None,
+            all_day=False,
+            trigger_time=start - timedelta(minutes=15),
+            calendar_name="Work",
+            source_url="https://example.com/work.ics",
+            url=None,
+        ),
+        CalendarReminder(
+            uid="event-shared",
+            summary="Project kickoff",
+            description=None,
+            location=None,
+            start=start,
+            end=None,
+            all_day=False,
+            trigger_time=start - timedelta(minutes=10),
+            calendar_name="Personal",
+            source_url="https://example.com/personal.ics",
+            url=None,
+        ),
+    ]
+    asyncio.run(assistant._handle_calendar_snapshot(reminders))
+    assert len(assistant._calendar_events) == 2
