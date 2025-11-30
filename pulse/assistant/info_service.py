@@ -151,7 +151,7 @@ class InfoService:
         display_label = "°F" if units in {"imperial", "auto"} else "°C"
         phrases: list[str] = []
         card_days: list[dict[str, Any]] = []
-        current_sentence = _build_current_weather_phrase(forecast, units)
+        current_sentence = _build_current_weather_phrase(forecast)
         if current_sentence:
             phrases.append(current_sentence)
         for idx, day in enumerate(forecast.days[: self.config.weather.forecast_days]):
@@ -377,16 +377,15 @@ def _weather_description(code: int | None) -> str:
     return mapping.get(icon, "cloudy")
 
 
-def _build_current_weather_phrase(forecast: WeatherForecast, units: str) -> str | None:
+def _build_current_weather_phrase(forecast: WeatherForecast) -> str | None:
     current = forecast.current
     if not current or current.temperature is None:
         return None
-    label = "°F" if units in {"imperial", "auto"} else "°C"
     temp = _format_temp(current.temperature)
     description = _weather_description(current.weather_code)
     if not temp:
         return None
-    return f"Right now it's around {temp}{label} and {description}."
+    return f"Right now it's around {temp} degrees and {description}."
 
 
 def _format_current_weather_entry(forecast: WeatherForecast, units_label: str) -> dict[str, Any] | None:

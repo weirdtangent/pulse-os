@@ -319,6 +319,15 @@ class OverlayStateManager:
                 units_value = card.get("units")
                 if units_value is not None:
                     normalized["units"] = str(units_value)
+                current_payload = card.get("current")
+                if isinstance(current_payload, dict):
+                    normalized["current"] = {
+                        "label": str(current_payload.get("label") or ""),
+                        "temp": current_payload.get("temp"),
+                        "units": current_payload.get("units"),
+                        "description": current_payload.get("description"),
+                        "icon": current_payload.get("icon"),
+                    }
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
@@ -1054,12 +1063,13 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
             current_desc = current_entry.get("description")
             if current_desc:
                 current_meta = f"{current_meta} · {html_escape(str(current_desc))}"
+            current_label = html_escape(str(current_entry.get("label") or "Now"))
             current_html = (
                 '<div class="overlay-weather__current">'
                 '<div class="overlay-weather-row">'
                 f'<div class="overlay-weather-row__icon">{current_icon_html}</div>'
                 '<div class="overlay-weather-row__details">'
-                '<div class="overlay-weather-row__label">Now</div>'
+                f'<div class="overlay-weather-row__label">{current_label}</div>'
                 f'<div class="overlay-weather-row__meta">{current_meta}</div>'
                 "</div></div></div>"
                 '<div class="overlay-weather__divider"></div>'
