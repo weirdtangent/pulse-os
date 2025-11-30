@@ -256,12 +256,8 @@ class PulseAssistant:
         self._playback_topic = f"pulse/{self.config.hostname}/telemetry/now_playing"
         self._info_topic = f"{self.config.mqtt.topic_base}/info_card"
         self._info_overlay_clear_task: asyncio.Task | None = None
-        self._info_overlay_min_seconds = max(
-            0.0, float(os.environ.get("PULSE_INFO_CARD_MIN_SECONDS", "1.5"))
-        )
-        self._info_overlay_buffer_seconds = max(
-            0.0, float(os.environ.get("PULSE_INFO_CARD_BUFFER_SECONDS", "0.5"))
-        )
+        self._info_overlay_min_seconds = max(0.0, float(os.environ.get("PULSE_INFO_CARD_MIN_SECONDS", "1.5")))
+        self._info_overlay_buffer_seconds = max(0.0, float(os.environ.get("PULSE_INFO_CARD_BUFFER_SECONDS", "0.5")))
         self._media_player_entity = self.config.media_player_entity
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
