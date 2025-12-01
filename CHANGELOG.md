@@ -1,3 +1,10 @@
+## [0.70.3](https://github.com/weirdtangent/pulse-os/compare/v0.70.2...v0.70.3) (2025-12-01)
+
+
+### Bug Fixes
+
+* add clock nodes to overlay assets and server; more logging ([0bc6cc2](https://github.com/weirdtangent/pulse-os/commit/0bc6cc2fd59848728ea103c17a81563355b80288))
+
 ## [0.70.2](https://github.com/weirdtangent/pulse-os/compare/v0.70.1...v0.70.2) (2025-12-01)
 
 
