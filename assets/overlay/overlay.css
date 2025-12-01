@@ -107,6 +107,8 @@ body {
   justify-content: flex-start;
   gap: 1.2rem;
   box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.45);
+  /* Ensure info card doesn't create visual artifacts in other grid cells */
+  contain: layout style paint;
 }
 
 .overlay-info-card__title {

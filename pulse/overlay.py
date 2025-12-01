@@ -504,15 +504,17 @@ def render_overlay_html(
     if snapshot.info_card:
         candidate = _build_info_overlay(snapshot)
         if candidate:
+            # Clear blocked cells before rendering to prevent visual artifacts
             for cell in INFO_CARD_BLOCKED_CELLS:
                 cells[cell] = []
                 occupied_cells.add(cell)
             info_card_markup = candidate
 
+    # Only render cells that have content to avoid empty cell artifacts
     grid_markup = "".join(
         f'<div class="overlay-cell cell-{cell}" data-cell="{cell}">{"".join(cards)}</div>'
         for cell, cards in cells.items()
-        if cards
+        if cards  # Only render cells with actual content
     )
     if info_card_markup:
         grid_markup += info_card_markup
