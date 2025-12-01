@@ -148,6 +148,7 @@ class PulseAssistant:
         self._current_tracker: AssistRunTracker | None = None
         self._ha_pipeline_override: str | None = None
         self._self_audio_trigger_level = max(2, self.config.self_audio_trigger_level)
+        self._media_player_entity = self.config.media_player_entity
 
         # Initialize extracted modules
         self.wake_detector = WakeDetector(
@@ -172,7 +173,6 @@ class PulseAssistant:
         self._info_overlay_clear_task: asyncio.Task | None = None
         self._info_overlay_min_seconds = max(0.0, float(os.environ.get("PULSE_INFO_CARD_MIN_SECONDS", "1.5")))
         self._info_overlay_buffer_seconds = max(0.0, float(os.environ.get("PULSE_INFO_CARD_BUFFER_SECONDS", "0.5")))
-        self._media_player_entity = self.config.media_player_entity
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
         self._media_resume_delay = 2.0
