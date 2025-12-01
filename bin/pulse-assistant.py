@@ -181,6 +181,7 @@ class PulseAssistant:
         self._earmuffs_lock = threading.Lock()
         self._earmuffs_enabled = False
         self._earmuffs_manual_override: bool | None = None
+        self._earmuffs_state_restored = False  # Track if we've restored state from MQTT
         base_topic = self.config.mqtt.topic_base
         self._earmuffs_state_topic = f"{base_topic}/earmuffs/state"
         self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
@@ -194,7 +195,11 @@ class PulseAssistant:
         self._subscribe_playback_topic()
         self._subscribe_earmuffs_topic()
         self._publish_preferences()
-        self._publish_earmuffs_state()
+        # Wait a moment for retained MQTT messages to arrive before publishing state
+        await asyncio.sleep(0.5)
+        if not self._earmuffs_state_restored:
+            # No retained message received, publish current state
+            self._publish_earmuffs_state()
         self._publish_assistant_discovery()
         await self.schedule_service.start()
         if self.calendar_sync:
@@ -764,6 +769,10 @@ class PulseAssistant:
             LOGGER.info("Subscribing to earmuffs set topic: %s", self._earmuffs_set_topic)
             self.mqtt.subscribe(self._earmuffs_set_topic, self._handle_earmuffs_command)
             LOGGER.info("Successfully subscribed to earmuffs set topic")
+            # Also subscribe to state topic to restore retained state on startup
+            LOGGER.info("Subscribing to earmuffs state topic: %s", self._earmuffs_state_topic)
+            self.mqtt.subscribe(self._earmuffs_state_topic, self._handle_earmuffs_state_restore)
+            LOGGER.info("Successfully subscribed to earmuffs state topic")
         except RuntimeError as exc:
             LOGGER.warning("MQTT client not ready for earmuffs subscription: %s", exc)
         except Exception as exc:
@@ -820,6 +829,28 @@ class PulseAssistant:
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
         self._publish_preference_state("wake_sensitivity", value)
         self._mark_wake_context_dirty()
+
+    def _handle_earmuffs_state_restore(self, payload: str) -> None:
+        """Restore earmuffs state from retained MQTT message on startup."""
+        if self._earmuffs_state_restored:
+            # Already restored, ignore subsequent messages (they're just state updates)
+            return
+        value = payload.strip().lower()
+        enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
+        LOGGER.info("Restoring earmuffs state from MQTT: %s (enabled=%s)", value, enabled)
+        # Restore state - if enabled, assume it was manually set (auto-enabled would have been cleared)
+        with self._earmuffs_lock:
+            if enabled != self._earmuffs_enabled:
+                self._earmuffs_enabled = enabled
+                # If enabled, assume manual override (auto-enabled would have been auto-disabled)
+                if enabled:
+                    self._earmuffs_manual_override = True
+                    self.wake_detector.mark_wake_context_dirty()
+                # If disabled, clear manual override to allow auto-enable
+                else:
+                    self._earmuffs_manual_override = None
+        self._earmuffs_state_restored = True
+        # Don't republish - the state is already in MQTT
 
     def _handle_earmuffs_command(self, payload: str) -> None:
         value = payload.strip().lower()
