@@ -999,7 +999,13 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
         body = '<div class="overlay-info-card__empty">No upcoming calendar events.</div>'
     else:
         body_rows = []
+        current_date = None
         for entry in entries:
+            entry_date = entry.get("date_only")
+            if entry_date and entry_date != current_date:
+                if current_date is not None:
+                    body_rows.append('<div class="overlay-info-card__date-divider"></div>')
+                current_date = entry_date
             row_class = "overlay-info-card__reminder"
             if entry.get("declined"):
                 row_class += " overlay-info-card__reminder--declined"
@@ -1009,9 +1015,20 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
             subtext_html = ""
             if subtext:
                 subtext_html = f'<div class="overlay-info-card__reminder-meta">{html_escape(subtext)}</div>'
+            month_abbr = html_escape(entry.get("month_abbr", ""))
+            day_num = html_escape(entry.get("day_num", ""))
+            month = entry.get("month", 1)
+            month_color = _get_month_color(month)
+            icon_html = f"""
+    <div class="overlay-info-card__calendar-icon" style="background: {month_color};">
+      <div class="overlay-info-card__calendar-icon-month">{month_abbr}</div>
+      <div class="overlay-info-card__calendar-icon-day">{day_num}</div>
+    </div>
+            """.strip()
             body_rows.append(
                 f"""
   <div class="{row_class}">
+    {icon_html}
     <div class="overlay-info-card__reminder-body">
       <div class="overlay-info-card__reminder-label">{label}</div>
       <div class="overlay-info-card__reminder-meta">{meta}</div>
@@ -1152,6 +1169,17 @@ def _format_reminder_info_entries(reminders: Iterable[dict[str, Any]]) -> list[d
     return entries
 
 
+def _get_month_color(month: int) -> str:
+    """Return a color for the given month (1-12), rotating through 4 colors."""
+    colors = [
+        "rgba(52, 199, 89, 0.3)",  # Green
+        "rgba(0, 122, 255, 0.3)",  # Blue
+        "rgba(255, 149, 0, 0.3)",  # Orange
+        "rgba(255, 45, 85, 0.3)",  # Red/Pink
+    ]
+    return colors[(month - 1) % len(colors)]
+
+
 def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for event in events:
@@ -1163,6 +1191,8 @@ def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dic
             continue
         all_day = bool(event.get("all_day"))
         date_text = start_dt.strftime("%a, %b %-d")
+        month_abbr = start_dt.strftime("%b")
+        day_num = start_dt.strftime("%-d")
         if all_day:
             time_text = "All day"
         else:
@@ -1175,7 +1205,16 @@ def _format_calendar_event_entries(events: Iterable[dict[str, Any]]) -> list[dic
         if declined:
             meta = f"{meta} · Declined"
         location = str(event.get("location") or "").strip()
-        entry: dict[str, Any] = {"label": label, "meta": meta, "declined": declined}
+        entry: dict[str, Any] = {
+            "label": label,
+            "meta": meta,
+            "declined": declined,
+            "date_only": start_dt.date(),
+            "date_text": date_text,
+            "month_abbr": month_abbr,
+            "day_num": day_num,
+            "month": start_dt.month,
+        }
         if location:
             entry["subtext"] = location
         entries.append(entry)

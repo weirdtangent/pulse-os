@@ -1481,6 +1481,13 @@ class PulseAssistant:
                 "show my upcoming events",
                 "list my calendar",
                 "list calendar events",
+                "what are my calendar events",
+                "what are my calendar",
+                "what calendar events",
+                "what are my upcoming events",
+                "what upcoming events",
+                "tell me about my calendar",
+                "tell me my calendar events",
             )
         ):
             await self._show_calendar_events()

@@ -310,6 +310,42 @@ body {
   padding: 0.7rem 0.2rem;
 }
 
+.overlay-info-card__date-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0.8rem 0.2rem;
+}
+
+.overlay-info-card__calendar-icon {
+  flex: 0 0 auto;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-right: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.overlay-info-card__calendar-icon-month {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.9;
+  line-height: 1;
+  margin-bottom: 0.2rem;
+}
+
+.overlay-info-card__calendar-icon-day {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 1;
+}
+
 .overlay-info-card__reminder-body {
   flex: 1 1 auto;
 }
