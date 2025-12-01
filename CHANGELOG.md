@@ -1,3 +1,10 @@
+## [0.70.6](https://github.com/weirdtangent/pulse-os/compare/v0.70.5...v0.70.6) (2025-12-01)
+
+
+### Bug Fixes
+
+* calendar sync retry logic ([5859933](https://github.com/weirdtangent/pulse-os/commit/5859933deaf9c718580eea18977920084bed9ccc))
+
 ## [0.70.5](https://github.com/weirdtangent/pulse-os/compare/v0.70.4...v0.70.5) (2025-12-01)
 
 
