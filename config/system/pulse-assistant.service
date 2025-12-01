@@ -11,6 +11,10 @@ Environment=PYTHONPATH=/opt/pulse-os
 ExecStart=/opt/pulse-os/bin/pulse-assistant-wrapper.sh
 Restart=on-failure
 RestartSec=3
+TimeoutStopSec=10
+TimeoutStartSec=30
+KillMode=mixed
+KillSignal=SIGTERM
 StandardOutput=journal
 StandardError=journal
 
