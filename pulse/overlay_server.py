@@ -176,6 +176,7 @@ class OverlayHttpServer:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
                     return
                 action = (data.get("action") or "").strip().lower()
+                self._log(f"overlay info card: received action '{action}'")
                 if action == "clear":
                     change = outer.state.update_info_card(None)
                     if outer._on_state_change:
@@ -225,14 +226,19 @@ class OverlayHttpServer:
                     if outer._on_state_change:
                         outer._on_state_change(change)
                 elif action == "show_calendar":
+                    self._log("overlay: show_calendar requested")
                     change = outer.state.update_info_card({"type": "calendar"})
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                    self._log(f"overlay: calendar info card updated (changed={change.changed})")
                 elif action == "toggle_earmuffs":
+                    self._log("overlay: toggle_earmuffs requested")
                     if not outer._on_toggle_earmuffs:
+                        self._log("overlay: earmuffs toggle handler not available")
                         self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Earmuffs toggle unavailable")
                         return
                     outer._on_toggle_earmuffs()
+                    self._log("overlay: earmuffs toggle handler called")
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return

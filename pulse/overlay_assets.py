@@ -685,7 +685,6 @@ OVERLAY_JS = """
     return;
   }
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
-  const clockNodes = root.querySelectorAll('[data-clock]');
   const timerNodes = root.querySelectorAll('[data-timer]');
   const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
   let autoDismissTimer = null;
@@ -726,6 +725,7 @@ OVERLAY_JS = """
 
   const tick = () => {
     const now = new Date();
+    const clockNodes = root.querySelectorAll('[data-clock]');
     clockNodes.forEach((node) => {
       const tz = node.dataset.tz || undefined;
       const timeEl = node.querySelector('[data-clock-time]');
@@ -784,14 +784,6 @@ OVERLAY_JS = """
   // Initial tick to set clock immediately
   tick();
   window.setInterval(tick, 1000);
-  // Retry after a short delay in case DOM isn't ready
-  setTimeout(() => {
-    const retryNodes = root.querySelectorAll('[data-clock]');
-    if (retryNodes.length > clockNodes.length) {
-      // Re-run tick with potentially more nodes found
-      tick();
-    }
-  }, 100);
   alignNowPlayingCard();
   window.addEventListener('resize', alignNowPlayingCard);
 
@@ -868,44 +860,43 @@ OVERLAY_JS = """
 
     const badgeButton = e.target.closest('[data-badge-action]');
     if (badgeButton) {
+      e.preventDefault();
+      e.stopPropagation();
       const action = badgeButton.dataset.badgeAction;
+      const badge = badgeButton;
+      badge.style.opacity = '0.7';
+      const resetOpacity = () => {
+        badge.style.opacity = '';
+      };
       if (action === 'show_alarms') {
         fetch(infoEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'show_alarms' })
-        });
-        } else if (action === 'show_reminders') {
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'show_reminders') {
         fetch(infoEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'show_reminders' })
-        });
-        } else if (action === 'show_calendar') {
-          fetch(infoEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'show_calendar' })
-          });
-        } else if (action === 'toggle_earmuffs') {
-          e.preventDefault();
-          e.stopPropagation();
-          const badge = badgeButton;
-          const originalBg = badge.style.background;
-          badge.style.opacity = '0.7';
-          fetch(infoEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'toggle_earmuffs' })
-          }).then(() => {
-            badge.style.opacity = '';
-          }).catch(() => {
-            badge.style.opacity = '';
-          });
-          return;
-        }
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'show_calendar') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_calendar' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'toggle_earmuffs') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggle_earmuffs' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
       }
-      return;
     }
 
     const deleteAlarmButton = e.target.closest('[data-delete-alarm]');
