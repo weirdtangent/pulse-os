@@ -1,3 +1,10 @@
+## [0.69.2](https://github.com/weirdtangent/pulse-os/compare/v0.69.1...v0.69.2) (2025-12-01)
+
+
+### Bug Fixes
+
+* more calendar assistant prompts ([556574f](https://github.com/weirdtangent/pulse-os/commit/556574f138c75a42a4efe2cbba559989f000e97e))
+
 ## [0.69.1](https://github.com/weirdtangent/pulse-os/compare/v0.69.0...v0.69.1) (2025-12-01)
 
 
