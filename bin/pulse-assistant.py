@@ -1124,7 +1124,11 @@ class PulseAssistant:
 
     def _handle_earmuffs_command(self, payload: str) -> None:
         value = payload.strip().lower()
-        enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
+        if value == "toggle":
+            current = self._get_earmuffs_enabled()
+            enabled = not current
+        else:
+            enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
         self._set_earmuffs_enabled(enabled, manual=True)
 
     def _set_earmuffs_enabled(self, enabled: bool, *, manual: bool = False) -> None:

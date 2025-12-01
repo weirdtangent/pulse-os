@@ -71,12 +71,16 @@ body {
   transform: translateY(-1px);
 }
 
-.overlay-badge--earmuffs-enabled {
-  background: rgba(220, 50, 47, 0.8) !important;
+.overlay-badge.overlay-badge--earmuffs-enabled {
+  background: rgba(220, 50, 47, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
 }
 
-.overlay-badge--earmuffs-enabled:hover {
-  background: rgba(220, 50, 47, 0.9) !important;
+.overlay-badge.overlay-badge--earmuffs-enabled:hover {
+  background: rgba(220, 50, 47, 1) !important;
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .overlay-grid {
@@ -865,11 +869,15 @@ OVERLAY_JS = """
             body: JSON.stringify({ action: 'show_calendar' })
           });
         } else if (action === 'toggle_earmuffs') {
+          e.preventDefault();
+          e.stopPropagation();
           fetch(infoEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'toggle_earmuffs' })
-          });
+          }).catch(() => {});
+          return;
+        }
       }
       return;
     }

@@ -943,13 +943,9 @@ class KioskMqttListener:
 
     def _handle_overlay_toggle_earmuffs_request(self) -> None:
         earmuffs_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/set"
-        if self.overlay_state:
-            snapshot = self.overlay_state.snapshot()
-            current_enabled = snapshot.earmuffs_enabled
-            new_state = "off" if current_enabled else "on"
-        else:
-            new_state = "on"
-        self._safe_publish(None, earmuffs_topic, new_state, qos=1, retain=False)
+        self.log(f"earmuffs: toggle requested")
+        # Send toggle command - assistant will handle the actual state flip
+        self._safe_publish(None, earmuffs_topic, "toggle", qos=1, retain=False)
 
     def _handle_overlay_earmuffs_state(self, payload: bytes) -> None:
         if not self.overlay_state:
@@ -957,10 +953,13 @@ class KioskMqttListener:
         try:
             state_str = payload.decode("utf-8").strip().lower()
             enabled = state_str in {"on", "true", "1", "yes", "enable", "enabled"}
-        except (UnicodeDecodeError, AttributeError):
+            self.log(f"earmuffs: state update received - {state_str} (enabled={enabled})")
+        except (UnicodeDecodeError, AttributeError) as exc:
+            self.log(f"earmuffs: failed to decode state payload: {exc}")
             return
         change = self.overlay_state.update_earmuffs_enabled(enabled)
         if change.changed:
+            self.log(f"earmuffs: overlay state updated to enabled={enabled}")
             self._handle_overlay_change(change)
 
     @staticmethod
