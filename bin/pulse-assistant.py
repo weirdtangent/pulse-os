@@ -1157,8 +1157,9 @@ class PulseAssistant:
         events = [self._serialize_calendar_event(reminder) for reminder in unique_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         self._calendar_events = events
         self._calendar_updated_at = time.time()
-        if self._latest_schedule_snapshot:
-            self._publish_schedule_state(self._latest_schedule_snapshot)
+        # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
+        snapshot = self._latest_schedule_snapshot or {}
+        self._publish_schedule_state(snapshot)
 
     def _deduplicate_calendar_reminders(self, reminders: Sequence[CalendarReminder]) -> list[CalendarReminder]:
         """Collapse duplicate events that arise from multiple VALARMs."""
