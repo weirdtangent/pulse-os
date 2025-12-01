@@ -1,3 +1,10 @@
+## [0.70.1](https://github.com/weirdtangent/pulse-os/compare/v0.70.0...v0.70.1) (2025-12-01)
+
+
+### Bug Fixes
+
+* update earmuffs toggle logic and overlay assets ([cbb1892](https://github.com/weirdtangent/pulse-os/commit/cbb1892daaa972745971431511eddc5d54a0c411))
+
 # [0.70.0](https://github.com/weirdtangent/pulse-os/compare/v0.69.2...v0.70.0) (2025-12-01)
 
 
