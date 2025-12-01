@@ -1,3 +1,11 @@
+## [0.70.10](https://github.com/weirdtangent/pulse-os/compare/v0.70.9...v0.70.10) (2025-12-01)
+
+
+### Bug Fixes
+
+* prevent info card visual artifacts in other grid cells ([0761a83](https://github.com/weirdtangent/pulse-os/commit/0761a83f05bf5e649554bc32fb9bc6385986a919))
+* restore state of Earmuffs on startup from MQTT ([bd4aacb](https://github.com/weirdtangent/pulse-os/commit/bd4aacbd7bc55c9fca01b86ad7ef54376168071e))
+
 ## [0.70.9](https://github.com/weirdtangent/pulse-os/compare/v0.70.8...v0.70.9) (2025-12-01)
 
 
