@@ -270,8 +270,8 @@ class PulseAssistant:
         self._earmuffs_enabled = False
         self._earmuffs_manual_override: bool | None = None
         base_topic = self.config.mqtt.topic_base
-        self._earmuffs_state_topic = f"{base_topic}/assistant/earmuffs/state"
-        self._earmuffs_set_topic = f"{base_topic}/assistant/earmuffs/set"
+        self._earmuffs_state_topic = f"{base_topic}/earmuffs/state"
+        self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
