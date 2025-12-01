@@ -266,6 +266,12 @@ class PulseAssistant:
         self._last_response_end: float | None = None
         self._follow_up_start_delay = 0.4
         self._conversation_stop_prefixes = self._build_conversation_stop_prefixes()
+        self._earmuffs_lock = threading.Lock()
+        self._earmuffs_enabled = False
+        self._earmuffs_manual_override: bool | None = None
+        base_topic = self.config.mqtt.topic_base
+        self._earmuffs_state_topic = f"{base_topic}/assistant/earmuffs/state"
+        self._earmuffs_set_topic = f"{base_topic}/assistant/earmuffs/set"
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -273,7 +279,9 @@ class PulseAssistant:
         self._subscribe_preference_topics()
         self._subscribe_schedule_topics()
         self._subscribe_playback_topic()
+        self._subscribe_earmuffs_topic()
         self._publish_preferences()
+        self._publish_earmuffs_state()
         self._publish_assistant_discovery()
         await self.schedule_service.start()
         if self.calendar_sync:
@@ -312,6 +320,9 @@ class PulseAssistant:
 
     async def _wait_for_wake_word(self) -> str | None:
         while not self._shutdown.is_set():
+            if self._get_earmuffs_enabled():
+                await asyncio.sleep(0.5)
+                continue
             try:
                 return await self._run_wake_detector_session()
             except WakeContextChanged:
@@ -1047,6 +1058,12 @@ class PulseAssistant:
         except RuntimeError:
             LOGGER.debug("MQTT client not ready for playback telemetry subscription")
 
+    def _subscribe_earmuffs_topic(self) -> None:
+        try:
+            self.mqtt.subscribe(self._earmuffs_set_topic, self._handle_earmuffs_command)
+        except RuntimeError:
+            LOGGER.debug("MQTT client not ready for earmuffs subscription")
+
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes"}
@@ -1064,8 +1081,10 @@ class PulseAssistant:
     def _handle_now_playing_message(self, payload: str) -> None:
         normalized = payload.strip()
         active = bool(normalized)
+        previous_active = False
         changed = False
         with self._self_audio_lock:
+            previous_active = self._self_audio_remote_active
             if self._self_audio_remote_active != active:
                 self._self_audio_remote_active = active
                 changed = True
@@ -1073,6 +1092,16 @@ class PulseAssistant:
             detail = normalized[:80] or "idle"
             LOGGER.debug("Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail)
             self._mark_wake_context_dirty()
+            # Auto-enable earmuffs when music starts (unless manually disabled)
+            if active and not previous_active:
+                with self._earmuffs_lock:
+                    if self._earmuffs_manual_override is not False:
+                        self._set_earmuffs_enabled(True, manual=False)
+            # Auto-disable earmuffs when music stops (only if not manually enabled)
+            elif not active and previous_active:
+                with self._earmuffs_lock:
+                    if self._earmuffs_manual_override is not True:
+                        self._set_earmuffs_enabled(False, manual=False)
 
     def _handle_speaking_style_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -1092,6 +1121,39 @@ class PulseAssistant:
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
         self._publish_preference_state("wake_sensitivity", value)
         self._mark_wake_context_dirty()
+
+    def _handle_earmuffs_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
+        self._set_earmuffs_enabled(enabled, manual=True)
+
+    def _set_earmuffs_enabled(self, enabled: bool, *, manual: bool = False) -> None:
+        changed = False
+        with self._earmuffs_lock:
+            if enabled != self._earmuffs_enabled:
+                self._earmuffs_enabled = enabled
+                if manual:
+                    self._earmuffs_manual_override = enabled
+                changed = True
+        if changed:
+            reason = "manual" if manual else "automatic"
+            LOGGER.info("Earmuffs %s (%s)", "enabled" if enabled else "disabled", reason)
+            self._publish_earmuffs_state()
+            if enabled:
+                self._mark_wake_context_dirty()
+
+    def _get_earmuffs_enabled(self) -> bool:
+        with self._earmuffs_lock:
+            return self._earmuffs_enabled
+
+    def _is_earmuffs_manual_override(self) -> bool:
+        with self._earmuffs_lock:
+            return self._earmuffs_manual_override
+
+    def _publish_earmuffs_state(self) -> None:
+        enabled = self._get_earmuffs_enabled()
+        state = "on" if enabled else "off"
+        self._publish_message(self._earmuffs_state_topic, state, retain=True)
 
     def _publish_preferences(self) -> None:
         self._publish_preference_state("wake_sound", "on" if self.preferences.wake_sound else "off")

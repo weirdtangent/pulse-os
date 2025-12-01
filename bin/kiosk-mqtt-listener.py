@@ -607,6 +607,7 @@ class KioskMqttListener:
                 self.assistant_topics.reminders_active: lambda payload: self._handle_overlay_active_event(
                     "reminder", payload
                 ),
+                f"pulse/{self.config.hostname}/assistant/earmuffs/state": self._handle_overlay_earmuffs_state,
             }
             server_config = OverlayServerConfig(
                 bind_address=self.overlay_config.bind_address,
@@ -630,6 +631,7 @@ class KioskMqttListener:
                 on_complete_reminder=self._handle_overlay_complete_reminder_request,
                 on_delay_reminder=self._handle_overlay_delay_reminder_request,
                 on_delete_reminder=self._handle_overlay_delete_reminder_request,
+                on_toggle_earmuffs=self._handle_overlay_toggle_earmuffs_request,
             )
 
     def log(self, message: str) -> None:
@@ -938,6 +940,28 @@ class KioskMqttListener:
     def _handle_overlay_delete_reminder_request(self, event_id: str) -> None:
         payload = json.dumps({"action": "delete_reminder", "event_id": event_id})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_toggle_earmuffs_request(self) -> None:
+        earmuffs_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/set"
+        if self.overlay_state:
+            snapshot = self.overlay_state.snapshot()
+            current_enabled = snapshot.earmuffs_enabled
+            new_state = "off" if current_enabled else "on"
+        else:
+            new_state = "on"
+        self._safe_publish(None, earmuffs_topic, new_state, qos=1, retain=False)
+
+    def _handle_overlay_earmuffs_state(self, payload: bytes) -> None:
+        if not self.overlay_state:
+            return
+        try:
+            state_str = payload.decode("utf-8").strip().lower()
+            enabled = state_str in {"on", "true", "1", "yes", "enable", "enabled"}
+        except (UnicodeDecodeError, AttributeError):
+            return
+        change = self.overlay_state.update_earmuffs_enabled(enabled)
+        if change.changed:
+            self._handle_overlay_change(change)
 
     @staticmethod
     def _decode_json_bytes(payload: bytes) -> Any:
@@ -1427,6 +1451,7 @@ class KioskMqttListener:
             client.subscribe(self.assistant_topics.timers_active)
             client.subscribe(self.assistant_topics.reminders_active)
             client.subscribe(self.assistant_topics.info_card)
+            client.subscribe(f"pulse/{self.config.hostname}/assistant/earmuffs/state")
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_overlay_font_state(client)

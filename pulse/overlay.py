@@ -53,6 +53,7 @@ class OverlaySnapshot:
     last_reason: str
     generated_at: float
     schedule_snapshot: dict[str, Any] | None
+    earmuffs_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,7 @@ class OverlayStateManager:
         self._now_playing = ""
         self._info_card: dict[str, Any] | None = None
         self._timer_position_history: dict[str, str] = {}
+        self._earmuffs_enabled = False
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -151,6 +153,7 @@ class OverlayStateManager:
             "schedule_snapshot": "",
             "now_playing": "",
             "info_card": "",
+            "earmuffs_enabled": "",
         }
 
     @property
@@ -338,6 +341,15 @@ class OverlayStateManager:
             self._signatures["info_card"] = signature
             return self._bump("info_card")
 
+    def update_earmuffs_enabled(self, enabled: bool) -> OverlayChange:
+        signature = str(enabled)
+        with self._lock:
+            if signature == self._signatures["earmuffs_enabled"]:
+                return OverlayChange(False, self._version, "earmuffs_enabled")
+            self._earmuffs_enabled = enabled
+            self._signatures["earmuffs_enabled"] = signature
+            return self._bump("earmuffs_enabled")
+
     def snapshot(self) -> OverlaySnapshot:
         with self._lock:
             return OverlaySnapshot(
@@ -357,6 +369,7 @@ class OverlayStateManager:
                 last_reason=self._last_reason,
                 generated_at=time.time(),
                 schedule_snapshot=copy.deepcopy(self._schedule_snapshot),
+                earmuffs_enabled=self._earmuffs_enabled,
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -449,6 +462,7 @@ ICON_MAP = {
     "music": "&#9835;",
     "reminder": "&#128221;",
     "calendar": "&#128197;",
+    "earmuffs": "&#127911;",  # 🎧
 }
 
 
@@ -811,6 +825,7 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
         badges.append(_render_badge("calendar", label))
     if snapshot.now_playing.strip():
         badges.append(_render_badge("music", "Now playing"))
+    badges.append(_render_earmuffs_badge(snapshot.earmuffs_enabled))
     classes = ["overlay-notification-bar"]
     if not badges:
         classes.append("overlay-notification-bar--empty")
@@ -1347,6 +1362,23 @@ def _render_badge(icon_key: str, label: str) -> str:
         attrs.append(f'data-badge-action="{action}"')
     badge_html = (
         f"<span {' '.join(attrs)}>"
+        f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
+        f"<span>{safe_label}</span>"
+        "</span>"
+    )
+    return badge_html
+
+
+def _render_earmuffs_badge(enabled: bool) -> str:
+    icon = ICON_MAP.get("earmuffs", "&#127911;")
+    safe_label = html_escape("Earmuffs")
+    classes = ["overlay-badge"]
+    if enabled:
+        classes.append("overlay-badge--earmuffs-enabled")
+    class_attr = " ".join(classes)
+    badge_html = (
+        f'<span class="{class_attr}" role="button" tabindex="0" '
+        f'data-badge-action="toggle_earmuffs" aria-label="{safe_label}">'
         f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
         f"<span>{safe_label}</span>"
         "</span>"

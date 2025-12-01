@@ -44,6 +44,7 @@ class OverlayHttpServer:
         on_delete_reminder: Callable[[str], None] | None = None,
         on_pause_alarm: Callable[[str], None] | None = None,
         on_resume_alarm: Callable[[str], None] | None = None,
+        on_toggle_earmuffs: Callable[[], None] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -58,6 +59,7 @@ class OverlayHttpServer:
         self._on_delete_reminder = on_delete_reminder
         self._on_pause_alarm = on_pause_alarm
         self._on_resume_alarm = on_resume_alarm
+        self._on_toggle_earmuffs = on_toggle_earmuffs
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -226,6 +228,11 @@ class OverlayHttpServer:
                     change = outer.state.update_info_card({"type": "calendar"})
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                elif action == "toggle_earmuffs":
+                    if not outer._on_toggle_earmuffs:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Earmuffs toggle unavailable")
+                        return
+                    outer._on_toggle_earmuffs()
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return

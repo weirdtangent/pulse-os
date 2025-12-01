@@ -71,6 +71,14 @@ body {
   transform: translateY(-1px);
 }
 
+.overlay-badge--earmuffs-enabled {
+  background: rgba(220, 50, 47, 0.8) !important;
+}
+
+.overlay-badge--earmuffs-enabled:hover {
+  background: rgba(220, 50, 47, 0.9) !important;
+}
+
 .overlay-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -855,6 +863,12 @@ OVERLAY_JS = """
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'show_calendar' })
+          });
+        } else if (action === 'toggle_earmuffs') {
+          fetch(infoEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle_earmuffs' })
           });
       }
       return;
