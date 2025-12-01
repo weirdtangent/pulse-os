@@ -1,0 +1,230 @@
+"""Wake word detection session management."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import logging
+import math
+import sys
+import threading
+from array import array
+from typing import TYPE_CHECKING
+
+from wyoming.audio import AudioChunk, AudioStart, AudioStop
+from wyoming.client import AsyncTcpClient
+from wyoming.wake import Detect, Detection, NotDetected
+
+if TYPE_CHECKING:
+    from pulse.assistant.audio import ArecordStream
+    from pulse.assistant.config import AssistantConfig, AssistantPreferences
+
+LOGGER = logging.getLogger("pulse-assistant.wake")
+
+
+class WakeContextChanged(Exception):
+    """Internal signal used to restart wake detection when context shifts."""
+
+
+def compute_rms(chunk: bytes, sample_width: int) -> int:
+    """Compute RMS (Root Mean Square) for an audio chunk."""
+    if not chunk or sample_width <= 0:
+        return 0
+    frames = len(chunk) // sample_width
+    if frames <= 0:
+        return 0
+    trimmed = chunk[: frames * sample_width]
+    typecode = {1: "b", 2: "h", 4: "i"}.get(sample_width)
+    if typecode:
+        samples = array(typecode)
+        samples.frombytes(trimmed)
+        if sample_width > 1 and sys.byteorder != "little":
+            samples.byteswap()
+        total = math.fsum(value * value for value in samples)
+    else:
+        total = 0.0
+        for i in range(0, len(trimmed), sample_width):
+            sample = int.from_bytes(trimmed[i : i + sample_width], "little", signed=True)
+            total += sample * sample
+    mean = total / frames
+    return int(math.sqrt(mean))
+
+
+class WakeDetector:
+    """Manages wake word detection sessions and context."""
+
+    def __init__(
+        self,
+        config: AssistantConfig,
+        preferences: AssistantPreferences,
+        mic: ArecordStream,
+        self_audio_trigger_level: int,
+    ) -> None:
+        self.config = config
+        self.preferences = preferences
+        self.mic = mic
+        self._self_audio_trigger_level = self_audio_trigger_level
+        self._self_audio_lock = threading.Lock()
+        self._self_audio_remote_active = False
+        self._local_audio_depth = 0
+        self._wake_context_lock = threading.Lock()
+        self._wake_context_version = 0
+
+    def self_audio_is_active(self) -> bool:
+        """Check if local audio playback is active."""
+        with self._self_audio_lock:
+            return self._local_audio_depth > 0 or self._self_audio_remote_active
+
+    def get_remote_audio_active(self) -> bool:
+        """Get remote audio playback state."""
+        with self._self_audio_lock:
+            return self._self_audio_remote_active
+
+    def set_remote_audio_active(self, active: bool) -> bool:
+        """Set remote audio playback state. Returns True if state changed."""
+        notify = False
+        previous = False
+        with self._self_audio_lock:
+            previous = self._self_audio_remote_active
+            if previous != active:
+                self._self_audio_remote_active = active
+                notify = True
+        if notify:
+            self.mark_wake_context_dirty()
+        return notify
+
+    def increment_local_audio_depth(self) -> None:
+        """Increment local audio depth counter."""
+        notify = False
+        with self._self_audio_lock:
+            self._local_audio_depth += 1
+            if self._local_audio_depth == 1:
+                notify = True
+        if notify:
+            self.mark_wake_context_dirty()
+
+    def decrement_local_audio_depth(self) -> None:
+        """Decrement local audio depth counter."""
+        notify = False
+        with self._self_audio_lock:
+            if self._local_audio_depth > 0:
+                self._local_audio_depth -= 1
+                if self._local_audio_depth == 0:
+                    notify = True
+        if notify:
+            self.mark_wake_context_dirty()
+
+    def mark_wake_context_dirty(self) -> None:
+        """Mark wake context as changed, forcing restart."""
+        with self._wake_context_lock:
+            self._wake_context_version = (self._wake_context_version + 1) % 1_000_000
+
+    @contextlib.asynccontextmanager
+    async def local_audio_block(self):
+        """Context manager to block wake detection during audio playback."""
+        self.increment_local_audio_depth()
+        try:
+            yield
+        finally:
+            self.decrement_local_audio_depth()
+
+    def _preferred_trigger_level(self) -> int | None:
+        """Get preferred trigger level based on wake sensitivity."""
+        mapping = {
+            "low": 5,
+            "high": 2,
+        }
+        return mapping.get(self.preferences.wake_sensitivity)
+
+    def _context_for_detect(self) -> dict[str, int] | None:
+        """Build context dictionary for wake detection."""
+        trigger_level = self._preferred_trigger_level()
+        if self.self_audio_is_active():
+            enforced = self._self_audio_trigger_level
+            trigger_level = enforced if trigger_level is None else max(trigger_level, enforced)
+        if trigger_level is None:
+            return None
+        return {"trigger_level": trigger_level}
+
+    def stable_detect_context(self) -> tuple[dict[str, int] | None, int]:
+        """Get stable wake detection context (waits for version to stabilize)."""
+        while True:
+            start_version = self._wake_context_version
+            context = self._context_for_detect()
+            if start_version == self._wake_context_version:
+                return context, start_version
+
+    async def wait_for_wake_word(self, shutdown: asyncio.Event, get_earmuffs_enabled) -> str | None:
+        """Wait for a wake word to be detected."""
+        while not shutdown.is_set():
+            if get_earmuffs_enabled():
+                LOGGER.debug("Earmuffs enabled, skipping wake word detection")
+                await asyncio.sleep(0.5)
+                continue
+            try:
+                return await self.run_wake_detector_session()
+            except WakeContextChanged:
+                LOGGER.debug("Wake context updated; restarting wake detector")
+                continue
+        return None
+
+    async def run_wake_detector_session(self) -> str | None:
+        """Run a single wake detection session."""
+        detect_context, context_version = self.stable_detect_context()
+        client = AsyncTcpClient(self.config.wake_endpoint.host, self.config.wake_endpoint.port)
+        await client.connect()
+        timestamp = 0
+        detection_task: asyncio.Task[str | None] | None = None
+        try:
+            detect_message = Detect(names=self.config.wake_models, context=detect_context or None)
+            await client.write_event(detect_message.event())
+            await client.write_event(
+                AudioStart(
+                    rate=self.config.mic.rate,
+                    width=self.config.mic.width,
+                    channels=self.config.mic.channels,
+                    timestamp=0,
+                ).event()
+            )
+            detection_task = asyncio.create_task(self._read_wake_events(client))
+            chunk_ms = self.config.mic.chunk_ms
+            while not detection_task.done():
+                if context_version != self._wake_context_version:
+                    raise WakeContextChanged
+                chunk_bytes = await self.mic.read_chunk()
+                if context_version != self._wake_context_version:
+                    raise WakeContextChanged
+                LOGGER.debug("Captured audio chunk (timestamp=%sms, size=%d)", timestamp, len(chunk_bytes))
+                chunk_event = AudioChunk(
+                    rate=self.config.mic.rate,
+                    width=self.config.mic.width,
+                    channels=self.config.mic.channels,
+                    audio=chunk_bytes,
+                    timestamp=timestamp,
+                )
+                await client.write_event(chunk_event.event())
+                timestamp += chunk_ms
+            if detection_task.done():
+                return detection_task.result()
+            return None
+        finally:
+            await client.write_event(AudioStop(timestamp=timestamp).event())
+            if detection_task:
+                detection_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await detection_task
+            await client.disconnect()
+
+    async def _read_wake_events(self, client: AsyncTcpClient) -> str | None:
+        """Read events from wake detection client."""
+        while True:
+            event = await client.read_event()
+            if event is None:
+                return None
+            if Detection.is_type(event.type):
+                detection = Detection.from_event(event)
+                LOGGER.info("Wake word detected: %s", detection.name or self.config.wake_models[0])
+                return detection.name or self.config.wake_models[0]
+            if NotDetected.is_type(event.type):
+                LOGGER.debug("OpenWakeWord reported NotDetected")
+                return None
