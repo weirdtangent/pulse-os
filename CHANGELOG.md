@@ -1,3 +1,10 @@
+# [0.70.0](https://github.com/weirdtangent/pulse-os/compare/v0.69.2...v0.70.0) (2025-12-01)
+
+
+### Features
+
+* add earmuffs toggle to stop LLM from listening and responding ([7695f71](https://github.com/weirdtangent/pulse-os/commit/7695f7172b7858af0ff0b9ede306d94fa66c8262))
+
 ## [0.69.2](https://github.com/weirdtangent/pulse-os/compare/v0.69.1...v0.69.2) (2025-12-01)
 
 
