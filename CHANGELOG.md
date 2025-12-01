@@ -1,3 +1,10 @@
+## [0.70.2](https://github.com/weirdtangent/pulse-os/compare/v0.70.1...v0.70.2) (2025-12-01)
+
+
+### Bug Fixes
+
+* improve earmuffs badge styling and clock initialization ([9419d06](https://github.com/weirdtangent/pulse-os/commit/9419d0650c49d2444661666b444b6cad36f6d874))
+
 ## [0.70.1](https://github.com/weirdtangent/pulse-os/compare/v0.70.0...v0.70.1) (2025-12-01)
 
 
