@@ -943,7 +943,7 @@ class KioskMqttListener:
 
     def _handle_overlay_toggle_earmuffs_request(self) -> None:
         earmuffs_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/set"
-        self.log(f"earmuffs: toggle requested")
+        self.log("earmuffs: toggle requested")
         # Send toggle command - assistant will handle the actual state flip
         self._safe_publish(None, earmuffs_topic, "toggle", qos=1, retain=False)
 
