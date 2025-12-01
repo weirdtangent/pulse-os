@@ -120,6 +120,8 @@ class CalendarSyncService:
         self._key_to_feed: dict[str, str] = {}
         self._triggered: dict[str, datetime] = {}
         self._latest_events: list[CalendarReminder] = []
+        self._retry_tasks: dict[str, asyncio.Task] = {}
+        self._failed_feeds: set[str] = set()
 
     async def start(self) -> None:
         if not self._config.feeds or self._runner:
@@ -142,6 +144,10 @@ class CalendarSyncService:
         self._scheduled.clear()
         self._scheduled_reminders.clear()
         self._key_to_feed.clear()
+        for task in list(self._retry_tasks.values()):
+            task.cancel()
+        self._retry_tasks.clear()
+        self._failed_feeds.clear()
         if self._client:
             await self._client.aclose()
             self._client = None
@@ -175,18 +181,25 @@ class CalendarSyncService:
             response = await self._client.get(state.url, headers=headers)
         except httpx.HTTPError as exc:
             self._logger.warning("Calendar fetch failed for %s: %s", state.url, exc)
+            self._schedule_retry(state.url)
             return
         if response.status_code == 304:
+            # Successful response (not modified) - clear any retry
+            self._cancel_retry(state.url)
             return
         if response.status_code >= 400:
             self._logger.warning("Calendar fetch returned %s for %s", response.status_code, state.url)
+            self._schedule_retry(state.url)
             return
+        # Successful fetch - clear any retry
+        self._cancel_retry(state.url)
         state.etag = response.headers.get("etag") or state.etag
         state.last_modified = response.headers.get("last-modified") or state.last_modified
         try:
             calendar = Calendar.from_ical(response.content)
         except Exception as exc:  # pylint: disable=broad-except
             self._logger.warning("Calendar parse failed for %s: %s", state.url, exc)
+            self._schedule_retry(state.url)
             return
         calendar_name = calendar.get("X-WR-CALNAME")
         if calendar_name:
@@ -418,3 +431,45 @@ class CalendarSyncService:
 
     def cached_events(self) -> list[CalendarReminder]:
         return list(self._latest_events)
+
+    def _schedule_retry(self, feed_url: str) -> None:
+        """Schedule a retry for a failed feed after a short delay."""
+        if feed_url in self._retry_tasks:
+            # Already has a retry scheduled
+            return
+        if feed_url not in self._feed_states:
+            # Feed no longer exists
+            return
+        self._failed_feeds.add(feed_url)
+        retry_delay = 120  # 2 minutes for retry
+        self._logger.info("Scheduling retry for failed calendar feed %s in %d seconds", feed_url, retry_delay)
+        task = asyncio.create_task(self._retry_feed_after_delay(feed_url, retry_delay))
+        self._retry_tasks[feed_url] = task
+
+    def _cancel_retry(self, feed_url: str) -> None:
+        """Cancel any scheduled retry for a feed that just succeeded."""
+        if feed_url in self._retry_tasks:
+            task = self._retry_tasks.pop(feed_url)
+            task.cancel()
+        self._failed_feeds.discard(feed_url)
+
+    async def _retry_feed_after_delay(self, feed_url: str, delay_seconds: float) -> None:
+        """Wait for delay then retry a failed feed."""
+        try:
+            await asyncio.sleep(delay_seconds)
+            if self._stop_event.is_set():
+                return
+            state = self._feed_states.get(feed_url)
+            if not state:
+                return
+            self._logger.info("Retrying calendar fetch for %s after failure", feed_url)
+            now = _now()
+            await self._sync_feed(state, now)
+            # Emit snapshot after retry to update any changes
+            await self._emit_event_snapshot()
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # pylint: disable=broad-except
+            self._logger.exception("Error in calendar feed retry for %s", feed_url)
+        finally:
+            self._retry_tasks.pop(feed_url, None)
