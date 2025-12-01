@@ -148,6 +148,11 @@ body {
 
 .overlay-info-card__body {
   width: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--overlay-accent-color) transparent;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .overlay-info-card__alarm-list {
@@ -401,15 +406,18 @@ body {
   font-style: italic;
 }
 
-.overlay-info-card__text::-webkit-scrollbar {
+.overlay-info-card__text::-webkit-scrollbar,
+.overlay-info-card__body::-webkit-scrollbar {
   width: 12px;
 }
 
-.overlay-info-card__text::-webkit-scrollbar-track {
+.overlay-info-card__text::-webkit-scrollbar-track,
+.overlay-info-card__body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.overlay-info-card__text::-webkit-scrollbar-thumb {
+.overlay-info-card__text::-webkit-scrollbar-thumb,
+.overlay-info-card__body::-webkit-scrollbar-thumb {
   background-color: var(--overlay-accent-color);
   border-radius: 999px;
   border: 3px solid transparent;
@@ -666,6 +674,8 @@ OVERLAY_JS = """
   const clockNodes = root.querySelectorAll('[data-clock]');
   const timerNodes = root.querySelectorAll('[data-timer]');
   const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
+  let autoDismissTimer = null;
+  const AUTO_DISMISS_DELAY = 120000; // 2 minutes in milliseconds
   const sizeClassMap = [
     { className: 'overlay-timer__remaining--xlong', active: (len) => len > 8 },
     { className: 'overlay-timer__remaining--long', active: (len) => len > 5 && len <= 8 },
@@ -760,10 +770,53 @@ OVERLAY_JS = """
     }
   };
 
+  const clearAutoDismissTimer = () => {
+    if (autoDismissTimer) {
+      clearTimeout(autoDismissTimer);
+      autoDismissTimer = null;
+    }
+  };
+
+  const startAutoDismissTimer = () => {
+    clearAutoDismissTimer();
+    autoDismissTimer = setTimeout(() => {
+      const infoCard = root.querySelector('.overlay-info-card');
+      if (infoCard) {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' })
+        }).catch(() => {});
+      }
+      autoDismissTimer = null;
+    }, AUTO_DISMISS_DELAY);
+  };
+
+  // Watch for info card appearance
+  const infoCardObserver = new MutationObserver(() => {
+    const infoCard = root.querySelector('.overlay-info-card');
+    if (infoCard) {
+      startAutoDismissTimer();
+    } else {
+      clearAutoDismissTimer();
+    }
+  });
+
+  infoCardObserver.observe(root, {
+    childList: true,
+    subtree: true
+  });
+
+  // Check on initial load
+  if (root.querySelector('.overlay-info-card')) {
+    startAutoDismissTimer();
+  }
+
   // Handle stop timer button clicks
   root.addEventListener('click', (e) => {
     const closeCardButton = e.target.closest('[data-info-card-close]');
     if (closeCardButton) {
+      clearAutoDismissTimer();
       closeCardButton.disabled = true;
       fetch(infoEndpoint, {
         method: 'POST',
@@ -773,6 +826,13 @@ OVERLAY_JS = """
         closeCardButton.disabled = false;
       });
       return;
+    }
+
+    // Clear auto-dismiss timer on any click within info card
+    const infoCard = root.querySelector('.overlay-info-card');
+    if (infoCard && infoCard.contains(e.target)) {
+      clearAutoDismissTimer();
+      startAutoDismissTimer();
     }
 
     const badgeButton = e.target.closest('[data-badge-action]');
