@@ -1,3 +1,10 @@
+## [0.70.4](https://github.com/weirdtangent/pulse-os/compare/v0.70.3...v0.70.4) (2025-12-01)
+
+
+### Bug Fixes
+
+* improve earmuffs toggle logging and error handling ([aa4d8fe](https://github.com/weirdtangent/pulse-os/commit/aa4d8fe62429483036f4ea3e7c3a494d09df7270))
+
 ## [0.70.3](https://github.com/weirdtangent/pulse-os/compare/v0.70.2...v0.70.3) (2025-12-01)
 
 
