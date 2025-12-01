@@ -1,3 +1,10 @@
+# [0.69.0](https://github.com/weirdtangent/pulse-os/compare/v0.68.1...v0.69.0) (2025-12-01)
+
+
+### Features
+
+* add auto-dismiss timer to info card; make event list scrollable ([c6947ab](https://github.com/weirdtangent/pulse-os/commit/c6947ab10aeeee41b2653b08a2db78acf2c99d3b))
+
 ## [0.68.1](https://github.com/weirdtangent/pulse-os/compare/v0.68.0...v0.68.1) (2025-11-30)
 
 
