@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from pulse.assistant.actions import ActionEngine, _parse_datetime, _parse_duration_seconds, load_action_definitions
+from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
 from pulse.assistant.config import AssistantConfig, WyomingEndpoint
@@ -41,6 +41,7 @@ from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_volume_feedback
+from pulse.datetime_utils import parse_datetime, parse_duration_seconds
 
 LOGGER = logging.getLogger("pulse-assistant")
 
@@ -1090,7 +1091,7 @@ class PulseAssistant:
                 when_text = payload.get("when") or payload.get("time")
                 if not message or not when_text:
                     raise ValueError("reminder message and time are required")
-                fire_time = _parse_datetime(str(when_text))
+                fire_time = parse_datetime(str(when_text))
                 if fire_time is None:
                     raise ValueError("reminder time is invalid")
                 repeat_rule = payload.get("repeat") if isinstance(payload.get("repeat"), dict) else None
@@ -1140,7 +1141,7 @@ class PulseAssistant:
         if isinstance(raw_value, (int, float)):
             seconds = float(raw_value)
         else:
-            seconds = _parse_duration_seconds(str(raw_value))
+            seconds = parse_duration_seconds(str(raw_value))
         if seconds <= 0:
             raise ValueError("duration must be positive")
         return seconds
@@ -1945,7 +1946,7 @@ class PulseAssistant:
             idx = candidate.find(stop)
             if idx != -1:
                 candidate = candidate[:idx]
-        return _parse_duration_seconds(candidate.strip())
+        return parse_duration_seconds(candidate.strip())
 
     def _extract_time_of_day_from_text(self, text: str) -> str:
         lower = text.lower()

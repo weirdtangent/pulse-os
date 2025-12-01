@@ -17,6 +17,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from pulse import audio as pulse_audio
+from pulse.datetime_utils import combine_time, parse_time_string
 from pulse.utils import sanitize_hostname_for_entity_id
 
 from .home_assistant import HomeAssistantClient
@@ -61,33 +62,6 @@ def _clamp_volume(value: int) -> int:
     return max(0, min(100, value))
 
 
-def _parse_time_string(value: str) -> tuple[int, int]:
-    cleaned = value.strip().lower()
-    match = re.match(r"^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$", cleaned)
-    if not match:
-        raise ValueError("Invalid time format")
-    hour = int(match.group(1))
-    minute = int(match.group(2) or 0)
-    suffix = match.group(3)
-    if suffix:
-        if hour == 12:
-            hour = 0
-        if suffix == "pm":
-            hour += 12
-    if hour >= 24 or minute >= 60:
-        raise ValueError("Time outside 24h range")
-    return hour, minute
-
-
-def _combine_time(reference: datetime, time_str: str) -> datetime:
-    """Return ``reference`` with the provided HH:MM string."""
-    try:
-        hour, minute = _parse_time_string(time_str)
-    except ValueError:
-        return reference.replace(second=0, microsecond=0)
-    return reference.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-
 def _add_months(dt: datetime, months: int) -> datetime:
     total = dt.month - 1 + months
     year = dt.year + total // 12
@@ -105,7 +79,7 @@ def _next_weekly_occurrence(anchor: datetime, days: list[int], time_str: str, af
         candidate_date = start_search + timedelta(days=offset)
         if candidate_date.weekday() not in normalized_days:
             continue
-        candidate = _combine_time(candidate_date, time_str)
+        candidate = combine_time(candidate_date, time_str)
         if tz_anchor:
             candidate = candidate.astimezone(tz_anchor)
         if candidate <= after:
@@ -113,7 +87,7 @@ def _next_weekly_occurrence(anchor: datetime, days: list[int], time_str: str, af
         if candidate >= anchor:
             return candidate
     fallback = anchor if anchor > after else anchor + timedelta(days=7)
-    return _combine_time(fallback, time_str)
+    return combine_time(fallback, time_str)
 
 
 def _next_monthly_occurrence(anchor: datetime, day: int, time_str: str, after: datetime) -> datetime:
@@ -130,7 +104,7 @@ def _next_monthly_occurrence(anchor: datetime, day: int, time_str: str, after: d
             actual_day,
             tzinfo=tzinfo,
         )
-        candidate = _combine_time(candidate, time_str)
+        candidate = combine_time(candidate, time_str)
         if candidate <= after:
             current_month += 1
             if current_month > 12:
@@ -144,7 +118,7 @@ def _next_monthly_occurrence(anchor: datetime, day: int, time_str: str, after: d
             current_month = 1
             current_year += 1
     fallback = _add_months(anchor, 1)
-    return _combine_time(fallback, time_str)
+    return combine_time(fallback, time_str)
 
 
 def _next_interval_occurrence(
@@ -376,7 +350,7 @@ def day_indexes_to_names(indexes: list[int] | None) -> list[str]:
 
 
 def _compute_next_alarm_fire(time_str: str, repeat_days: list[int] | None) -> datetime:
-    hour, minute = _parse_time_string(time_str)
+    hour, minute = parse_time_string(time_str)
     now = _now()
     candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if not repeat_days:
