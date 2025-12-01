@@ -1,3 +1,10 @@
+## [0.70.9](https://github.com/weirdtangent/pulse-os/compare/v0.70.8...v0.70.9) (2025-12-01)
+
+
+### Bug Fixes
+
+* setup media_player_entity in PulseAssistant constructor ([e3ae107](https://github.com/weirdtangent/pulse-os/commit/e3ae107278a899104b053d94655f77ddfa46f2ea))
+
 ## [0.70.8](https://github.com/weirdtangent/pulse-os/compare/v0.70.7...v0.70.8) (2025-12-01)
 
 ## [0.70.7](https://github.com/weirdtangent/pulse-os/compare/v0.70.6...v0.70.7) (2025-12-01)
