@@ -943,9 +943,18 @@ class KioskMqttListener:
 
     def _handle_overlay_toggle_earmuffs_request(self) -> None:
         earmuffs_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/set"
-        self.log("earmuffs: toggle requested")
+        self.log(f"earmuffs: toggle requested, publishing to topic: {earmuffs_topic}")
         # Send toggle command - assistant will handle the actual state flip
-        self._safe_publish(None, earmuffs_topic, "toggle", qos=1, retain=False)
+        target_client = self._mqtt_client
+        if not target_client:
+            self.log("earmuffs: MQTT client not available, cannot publish toggle command")
+            return
+        with self._mqtt_publish_lock:
+            result = target_client.publish(earmuffs_topic, payload="toggle", qos=1, retain=False)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            self.log(f"earmuffs: successfully published toggle command to {earmuffs_topic} (mid={result.mid})")
+        else:
+            self.log(f"earmuffs: failed to publish toggle command to {earmuffs_topic} (rc={result.rc})")
 
     def _handle_overlay_earmuffs_state(self, payload: bytes) -> None:
         if not self.overlay_state:

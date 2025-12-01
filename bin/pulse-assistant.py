@@ -1061,9 +1061,13 @@ class PulseAssistant:
 
     def _subscribe_earmuffs_topic(self) -> None:
         try:
+            LOGGER.info("Subscribing to earmuffs set topic: %s", self._earmuffs_set_topic)
             self.mqtt.subscribe(self._earmuffs_set_topic, self._handle_earmuffs_command)
-        except RuntimeError:
-            LOGGER.debug("MQTT client not ready for earmuffs subscription")
+            LOGGER.info("Successfully subscribed to earmuffs set topic")
+        except RuntimeError as exc:
+            LOGGER.warning("MQTT client not ready for earmuffs subscription: %s", exc)
+        except Exception as exc:
+            LOGGER.error("Failed to subscribe to earmuffs topic: %s", exc, exc_info=True)
 
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -1162,7 +1166,7 @@ class PulseAssistant:
     def _publish_earmuffs_state(self) -> None:
         enabled = self._get_earmuffs_enabled()
         state = "on" if enabled else "off"
-        LOGGER.debug("Publishing earmuffs state: %s (enabled=%s)", state, enabled)
+        LOGGER.info("Publishing earmuffs state to %s: %s (enabled=%s)", self._earmuffs_state_topic, state, enabled)
         self._publish_message(self._earmuffs_state_topic, state, retain=True)
 
     def _publish_preferences(self) -> None:
