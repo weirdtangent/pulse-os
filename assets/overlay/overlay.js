@@ -1,0 +1,367 @@
+(function () {
+  const root = document.getElementById('pulse-overlay-root');
+  if (!root) {
+    return;
+  }
+  const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
+  const timerNodes = root.querySelectorAll('[data-timer]');
+  const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
+  let autoDismissTimer = null;
+  const AUTO_DISMISS_DELAY = 120000; // 2 minutes in milliseconds
+  const sizeClassMap = [
+    { className: 'overlay-timer__remaining--xlong', active: (len) => len > 8 },
+    { className: 'overlay-timer__remaining--long', active: (len) => len > 5 && len <= 8 },
+  ];
+  const hour12Attr = root.dataset.clockHour12;
+  const hour12 = hour12Attr !== 'false';
+  const timeOptions = { hour: 'numeric', minute: '2-digit', hour12 };
+  const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+
+  const alignNowPlayingCard = () => {
+    const clockCard = root.querySelector('.overlay-card--clock');
+    const nowPlayingCard = root.querySelector('.overlay-card--now-playing');
+    if (!clockCard || !nowPlayingCard) {
+      return;
+    }
+    const clockCell = clockCard.closest('.overlay-cell');
+    const nowPlayingCell = nowPlayingCard.closest('.overlay-cell');
+    if (!clockCell || !nowPlayingCell) {
+      return;
+    }
+    const clockRect = clockCard.getBoundingClientRect();
+    const clockCellRect = clockCell.getBoundingClientRect();
+    const offset = Math.max(0, clockCellRect.bottom - clockRect.bottom);
+    nowPlayingCard.style.marginBottom = offset ? `${offset}px` : '';
+  };
+
+  const formatWithZone = (date, tz, options) => {
+    try {
+      return new Intl.DateTimeFormat(undefined, { ...options, timeZone: tz || undefined }).format(date);
+    } catch (error) {
+      return new Intl.DateTimeFormat(undefined, options).format(date);
+    }
+  };
+
+  const tick = () => {
+    const now = new Date();
+    const clockNodes = root.querySelectorAll('[data-clock]');
+    clockNodes.forEach((node) => {
+      const tz = node.dataset.tz || undefined;
+      const timeEl = node.querySelector('[data-clock-time]');
+      const dateEl = node.querySelector('[data-clock-date]');
+      if (timeEl) {
+        try {
+          timeEl.textContent = formatWithZone(now, tz, timeOptions);
+        } catch (err) {
+          // Silently handle timezone formatting errors
+        }
+      }
+      if (dateEl) {
+        try {
+          dateEl.textContent = formatWithZone(now, tz, dateOptions);
+        } catch (err) {
+          // Silently handle timezone formatting errors
+        }
+      }
+    });
+
+    const nowMs = now.getTime();
+    timerNodes.forEach((node) => {
+      const targetMs = Number(node.dataset.targetMs || 0);
+      if (!Number.isFinite(targetMs) || targetMs <= 0) {
+        return;
+      }
+      let remaining = Math.max(0, Math.round((targetMs - nowMs) / 1000));
+      const hours = Math.floor(remaining / 3600);
+      remaining -= hours * 3600;
+      const minutes = Math.floor(remaining / 60);
+      const seconds = remaining % 60;
+      const formatted =
+        hours > 0
+          ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+          : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      const remainingEl = node.querySelector('[data-timer-remaining]');
+      if (remainingEl) {
+        remainingEl.textContent = formatted;
+        const len = formatted.length;
+        sizeClassMap.forEach(({ className, active }) => {
+          if (active(len)) {
+            remainingEl.classList.add(className);
+          } else {
+            remainingEl.classList.remove(className);
+          }
+        });
+      }
+      if (targetMs - nowMs <= 1000) {
+        node.classList.add('overlay-card--expired');
+      } else {
+        node.classList.remove('overlay-card--expired');
+      }
+    });
+  };
+
+  // Initial tick to set clock immediately
+  tick();
+  window.setInterval(tick, 1000);
+  alignNowPlayingCard();
+  window.addEventListener('resize', alignNowPlayingCard);
+
+  const forwardBlankTapToParent = () => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ source: 'pulse-overlay', type: 'blank-tap' }, '*');
+    }
+  };
+
+  const clearAutoDismissTimer = () => {
+    if (autoDismissTimer) {
+      clearTimeout(autoDismissTimer);
+      autoDismissTimer = null;
+    }
+  };
+
+  const startAutoDismissTimer = () => {
+    clearAutoDismissTimer();
+    autoDismissTimer = setTimeout(() => {
+      const infoCard = root.querySelector('.overlay-info-card');
+      if (infoCard) {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' })
+        }).catch(() => {});
+      }
+      autoDismissTimer = null;
+    }, AUTO_DISMISS_DELAY);
+  };
+
+  // Watch for info card appearance
+  const infoCardObserver = new MutationObserver(() => {
+    const infoCard = root.querySelector('.overlay-info-card');
+    if (infoCard) {
+      startAutoDismissTimer();
+    } else {
+      clearAutoDismissTimer();
+    }
+  });
+
+  infoCardObserver.observe(root, {
+    childList: true,
+    subtree: true
+  });
+
+  // Check on initial load
+  if (root.querySelector('.overlay-info-card')) {
+    startAutoDismissTimer();
+  }
+
+  // Handle stop timer button clicks
+  root.addEventListener('click', (e) => {
+    const closeCardButton = e.target.closest('[data-info-card-close]');
+    if (closeCardButton) {
+      clearAutoDismissTimer();
+      closeCardButton.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear' })
+      }).catch(() => {
+        closeCardButton.disabled = false;
+      });
+      return;
+    }
+
+    // Clear auto-dismiss timer on any click within info card
+    const infoCard = root.querySelector('.overlay-info-card');
+    if (infoCard && infoCard.contains(e.target)) {
+      clearAutoDismissTimer();
+      startAutoDismissTimer();
+    }
+
+    const badgeButton = e.target.closest('[data-badge-action]');
+    if (badgeButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      const action = badgeButton.dataset.badgeAction;
+      const badge = badgeButton;
+      badge.style.opacity = '0.7';
+      const resetOpacity = () => {
+        badge.style.opacity = '';
+      };
+      if (action === 'show_alarms') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_alarms' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'show_reminders') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_reminders' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'show_calendar') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_calendar' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'toggle_earmuffs') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggle_earmuffs' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      }
+    }
+
+    const deleteAlarmButton = e.target.closest('[data-delete-alarm]');
+    if (deleteAlarmButton) {
+      const alarmId = deleteAlarmButton.dataset.deleteAlarm;
+      if (!alarmId) {
+        return;
+      }
+      const previous = deleteAlarmButton.textContent;
+      deleteAlarmButton.disabled = true;
+      deleteAlarmButton.textContent = '…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_alarm', event_id: alarmId })
+      }).catch(() => {
+        deleteAlarmButton.disabled = false;
+        deleteAlarmButton.textContent = previous;
+      });
+      return;
+    }
+
+    const toggleAlarmButton = e.target.closest('[data-toggle-alarm]');
+    if (toggleAlarmButton) {
+      const eventId = toggleAlarmButton.dataset.eventId;
+      const toggleAction = toggleAlarmButton.dataset.toggleAlarm || 'pause';
+      if (!eventId) {
+        return;
+      }
+      const previous = toggleAlarmButton.textContent;
+      toggleAlarmButton.disabled = true;
+      toggleAlarmButton.textContent = '…';
+      const command = toggleAction === 'resume' ? 'resume_alarm' : 'pause_alarm';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: command, event_id: eventId })
+      }).catch(() => {
+        toggleAlarmButton.disabled = false;
+        toggleAlarmButton.textContent = previous;
+      });
+      return;
+    }
+
+    const deleteReminderButton = e.target.closest('[data-delete-reminder]');
+    if (deleteReminderButton) {
+      const reminderId = deleteReminderButton.dataset.deleteReminder;
+      if (!reminderId) {
+        return;
+      }
+      const previous = deleteReminderButton.textContent;
+      deleteReminderButton.disabled = true;
+      deleteReminderButton.textContent = '…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_reminder', event_id: reminderId })
+      }).catch(() => {
+        deleteReminderButton.disabled = false;
+        deleteReminderButton.textContent = previous;
+      });
+      return;
+    }
+
+    const completeReminderButton = e.target.closest('[data-complete-reminder]');
+    if (completeReminderButton) {
+      const eventId = completeReminderButton.dataset.eventId;
+      if (!eventId) {
+        return;
+      }
+      completeReminderButton.disabled = true;
+      completeReminderButton.textContent = '…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete_reminder', event_id: eventId })
+      }).catch(() => {
+        completeReminderButton.disabled = false;
+        completeReminderButton.textContent = 'Complete';
+      });
+      return;
+    }
+
+    const delayReminderButton = e.target.closest('[data-delay-reminder]');
+    if (delayReminderButton) {
+      const eventId = delayReminderButton.dataset.eventId;
+      const seconds = Number(delayReminderButton.dataset.delaySeconds || '0');
+      if (!eventId || !Number.isFinite(seconds) || seconds <= 0) {
+        return;
+      }
+      delayReminderButton.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delay_reminder', event_id: eventId, seconds })
+      }).catch(() => {
+        delayReminderButton.disabled = false;
+      });
+      return;
+    }
+
+    const snoozeButton = e.target.closest('[data-snooze-alarm]');
+    if (snoozeButton) {
+      const eventId = snoozeButton.dataset.eventId;
+      if (!eventId) {
+        return;
+      }
+      let minutes = Number(snoozeButton.dataset.snoozeMinutes || '5');
+      if (!Number.isFinite(minutes) || minutes <= 0) {
+        minutes = 5;
+      }
+      minutes = Math.max(1, Math.round(minutes));
+      const previous = snoozeButton.textContent;
+      snoozeButton.disabled = true;
+      snoozeButton.textContent = 'Snoozing...';
+      fetch(stopEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'snooze', event_id: eventId, minutes })
+      }).catch(() => {
+        snoozeButton.disabled = false;
+        snoozeButton.textContent = previous;
+      });
+      return;
+    }
+
+    const button = e.target.closest('[data-stop-timer]');
+    if (!button) {
+      forwardBlankTapToParent();
+      return;
+    }
+    const eventId = button.dataset.eventId;
+    if (!eventId) {
+      return;
+    }
+    const previous = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Stopping...';
+    fetch(stopEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop', event_id: eventId })
+    }).catch(() => {
+      button.disabled = false;
+      button.textContent = previous || 'Stop';
+    });
+  });
+})();
+
