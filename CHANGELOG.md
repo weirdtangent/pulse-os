@@ -1,3 +1,11 @@
+## [0.70.5](https://github.com/weirdtangent/pulse-os/compare/v0.70.4...v0.70.5) (2025-12-01)
+
+
+### Bug Fixes
+
+* added timeout to pulse-assistant.service ([3d0666d](https://github.com/weirdtangent/pulse-os/commit/3d0666d1bf7eb0c47e8a019530c79001f2e72b27))
+* rename assistant earmuffs topics to match overlay ([367a8a8](https://github.com/weirdtangent/pulse-os/commit/367a8a864740e14efbb9fa27c8d264a95ac31017))
+
 ## [0.70.4](https://github.com/weirdtangent/pulse-os/compare/v0.70.3...v0.70.4) (2025-12-01)
 
 
