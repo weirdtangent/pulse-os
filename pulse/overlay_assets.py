@@ -72,15 +72,17 @@ body {
 }
 
 .overlay-badge.overlay-badge--earmuffs-enabled {
-  background: rgba(220, 50, 47, 0.9) !important;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #ffffff;
+  background: #dc322f !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(220, 50, 47, 0.6);
 }
 
 .overlay-badge.overlay-badge--earmuffs-enabled:hover {
-  background: rgba(220, 50, 47, 1) !important;
+  background: #c92a27 !important;
   transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 0 12px rgba(220, 50, 47, 0.8);
 }
 
 .overlay-grid {
@@ -729,10 +731,18 @@ OVERLAY_JS = """
       const timeEl = node.querySelector('[data-clock-time]');
       const dateEl = node.querySelector('[data-clock-date]');
       if (timeEl) {
-        timeEl.textContent = formatWithZone(now, tz, timeOptions);
+        try {
+          timeEl.textContent = formatWithZone(now, tz, timeOptions);
+        } catch (err) {
+          // Silently handle timezone formatting errors
+        }
       }
       if (dateEl) {
-        dateEl.textContent = formatWithZone(now, tz, dateOptions);
+        try {
+          dateEl.textContent = formatWithZone(now, tz, dateOptions);
+        } catch (err) {
+          // Silently handle timezone formatting errors
+        }
       }
     });
 
@@ -771,8 +781,17 @@ OVERLAY_JS = """
     });
   };
 
+  // Initial tick to set clock immediately
   tick();
   window.setInterval(tick, 1000);
+  // Retry after a short delay in case DOM isn't ready
+  setTimeout(() => {
+    const retryNodes = root.querySelectorAll('[data-clock]');
+    if (retryNodes.length > clockNodes.length) {
+      // Re-run tick with potentially more nodes found
+      tick();
+    }
+  }, 100);
   alignNowPlayingCard();
   window.addEventListener('resize', alignNowPlayingCard);
 
@@ -871,11 +890,18 @@ OVERLAY_JS = """
         } else if (action === 'toggle_earmuffs') {
           e.preventDefault();
           e.stopPropagation();
+          const badge = badgeButton;
+          const originalBg = badge.style.background;
+          badge.style.opacity = '0.7';
           fetch(infoEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'toggle_earmuffs' })
-          }).catch(() => {});
+          }).then(() => {
+            badge.style.opacity = '';
+          }).catch(() => {
+            badge.style.opacity = '';
+          });
           return;
         }
       }

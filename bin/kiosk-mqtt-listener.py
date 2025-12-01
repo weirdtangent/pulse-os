@@ -1450,7 +1450,10 @@ class KioskMqttListener:
             client.subscribe(self.assistant_topics.timers_active)
             client.subscribe(self.assistant_topics.reminders_active)
             client.subscribe(self.assistant_topics.info_card)
-            client.subscribe(f"pulse/{self.config.hostname}/assistant/earmuffs/state")
+            earmuffs_state_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/state"
+            client.subscribe(earmuffs_state_topic)
+            # Request current state by subscribing (retained message will be delivered)
+            self.log("earmuffs: subscribed to state topic, waiting for retained message")
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_overlay_font_state(client)

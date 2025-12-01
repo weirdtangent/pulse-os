@@ -321,6 +321,7 @@ class PulseAssistant:
     async def _wait_for_wake_word(self) -> str | None:
         while not self._shutdown.is_set():
             if self._get_earmuffs_enabled():
+                LOGGER.debug("Earmuffs enabled, skipping wake word detection")
                 await asyncio.sleep(0.5)
                 continue
             try:
@@ -1124,9 +1125,11 @@ class PulseAssistant:
 
     def _handle_earmuffs_command(self, payload: str) -> None:
         value = payload.strip().lower()
+        LOGGER.info("Received earmuffs command: %s", value)
         if value == "toggle":
             current = self._get_earmuffs_enabled()
             enabled = not current
+            LOGGER.info("Toggling earmuffs from %s to %s", current, enabled)
         else:
             enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
         self._set_earmuffs_enabled(enabled, manual=True)
@@ -1148,7 +1151,9 @@ class PulseAssistant:
 
     def _get_earmuffs_enabled(self) -> bool:
         with self._earmuffs_lock:
-            return self._earmuffs_enabled
+            enabled = self._earmuffs_enabled
+            LOGGER.debug("Earmuffs state check: enabled=%s", enabled)
+            return enabled
 
     def _is_earmuffs_manual_override(self) -> bool:
         with self._earmuffs_lock:
@@ -1157,6 +1162,7 @@ class PulseAssistant:
     def _publish_earmuffs_state(self) -> None:
         enabled = self._get_earmuffs_enabled()
         state = "on" if enabled else "off"
+        LOGGER.debug("Publishing earmuffs state: %s (enabled=%s)", state, enabled)
         self._publish_message(self._earmuffs_state_topic, state, retain=True)
 
     def _publish_preferences(self) -> None:
