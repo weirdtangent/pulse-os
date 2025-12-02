@@ -495,15 +495,30 @@ class CalendarSyncService:
                     trigger_time.isoformat(),
                 )
                 continue
+            # If trigger is beyond lookahead, only schedule if the event itself is within lookahead
+            # This ensures we don't miss long advance notifications (e.g., 30-day birthday reminders)
             if trigger_time > lookahead_end:
+                if reminder.start > lookahead_end:
+                    self._logger.debug(
+                        "Skipping reminder %s (%s) - trigger time %s and event start %s are beyond "
+                        "lookahead window (%s)",
+                        reminder.uid,
+                        reminder.summary,
+                        trigger_time.isoformat(),
+                        reminder.start.isoformat(),
+                        lookahead_end.isoformat(),
+                    )
+                    continue
+                # Event is within lookahead, so schedule the reminder even though trigger is far out
                 self._logger.debug(
-                    "Skipping reminder %s (%s) - trigger time %s is beyond lookahead window (%s)",
+                    "Scheduling reminder %s (%s) - trigger time %s is beyond lookahead, but event "
+                    "start %s is within lookahead (%s)",
                     reminder.uid,
                     reminder.summary,
                     trigger_time.isoformat(),
+                    reminder.start.isoformat(),
                     lookahead_end.isoformat(),
                 )
-                continue
             key = self._reminder_key(reminder)
             valid_keys.add(key)
             if key in self._triggered:
