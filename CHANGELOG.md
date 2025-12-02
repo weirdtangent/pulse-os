@@ -1,3 +1,11 @@
+# [0.74.0](https://github.com/weirdtangent/pulse-os/compare/v0.73.1...v0.74.0) (2025-12-02)
+
+
+### Features
+
+* add update button to overlay ([6c05278](https://github.com/weirdtangent/pulse-os/commit/6c05278c635fa3a218db170eeb52e79237c884ed))
+* add update progress overlay ([9ed6ccf](https://github.com/weirdtangent/pulse-os/commit/9ed6ccfadf2aa82ebc93fd13b9449532c9436110))
+
 ## [0.73.1](https://github.com/weirdtangent/pulse-os/compare/v0.73.0...v0.73.1) (2025-12-02)
 
 # [0.73.0](https://github.com/weirdtangent/pulse-os/compare/v0.72.0...v0.73.0) (2025-12-02)
