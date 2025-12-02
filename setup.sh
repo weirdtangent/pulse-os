@@ -600,6 +600,31 @@ setup_user_dirs() {
     sudo chown -R "$PULSE_USER:$PULSE_USER" "/home/$PULSE_USER/.config" "/home/$PULSE_USER/bin"
 }
 
+generate_sound_files() {
+    log "Ensuring sound files exist…"
+    local sounds_dir="$REPO_DIR/assets/sounds"
+    local notification_script="$REPO_DIR/bin/tools/generate-notification-tone.py"
+    local alarm_script="$REPO_DIR/bin/tools/generate-alarm-tone.py"
+    local reminder_script="$REPO_DIR/bin/tools/generate-reminder-tone.py"
+
+    mkdir -p "$sounds_dir"
+
+    if [ ! -f "$sounds_dir/notification.wav" ] && [ -x "$notification_script" ]; then
+        log "Generating notification.wav…"
+        PYTHONPATH="$REPO_DIR" python3 "$notification_script" -o "$sounds_dir/notification.wav" || log "Warning: failed to generate notification.wav"
+    fi
+
+    if [ ! -f "$sounds_dir/alarm.wav" ] && [ -x "$alarm_script" ]; then
+        log "Generating alarm.wav…"
+        PYTHONPATH="$REPO_DIR" python3 "$alarm_script" -o "$sounds_dir/alarm.wav" || log "Warning: failed to generate alarm.wav"
+    fi
+
+    if [ ! -f "$sounds_dir/reminder.wav" ] && [ -x "$reminder_script" ]; then
+        log "Generating reminder.wav…"
+        PYTHONPATH="$REPO_DIR" python3 "$reminder_script" -o "$sounds_dir/reminder.wav" || log "Warning: failed to generate reminder.wav"
+    fi
+}
+
 link_home_files() {
     log "Linking home files…"
 
@@ -1197,6 +1222,7 @@ main() {
     install_packages
     install_voice_assistant_python_deps
     setup_user_dirs
+    generate_sound_files
     link_home_files
     link_system_files
     configure_snapclient
