@@ -863,6 +863,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_calendar_info_overlay(snapshot, card)
     if card_type == "weather":
         return _build_weather_info_overlay(snapshot, card)
+    if card_type == "update":
+        return _build_update_info_overlay(snapshot, card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -1014,6 +1016,25 @@ def _calendar_lookahead_hours(card: dict[str, Any]) -> int:
     if hours <= 0:
         return DEFAULT_CALENDAR_LOOKAHEAD_HOURS
     return hours
+
+
+def _build_update_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:
+    """Build update progress overlay with animated spinner."""
+    title = str(card.get("title") or "Updating Pulse").strip() or "Updating Pulse"
+    text = str(card.get("text") or "Updating PulseOS...").strip()
+    safe_title = html_escape(title)
+    safe_text = html_escape(text)
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--update">
+  <div class="overlay-info-card__header">
+    <div class="overlay-info-card__title">{safe_title}</div>
+  </div>
+  <div class="overlay-info-card__text">
+    <div class="overlay-update-spinner" aria-hidden="true"></div>
+    <div>{safe_text}</div>
+  </div>
+</div>
+""".strip()
 
 
 def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -> str:

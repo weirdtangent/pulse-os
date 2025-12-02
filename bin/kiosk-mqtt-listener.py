@@ -1614,6 +1614,26 @@ class KioskMqttListener:
             self.log(f"update: {description} failed with exit code {exc.returncode}")
         return False
 
+    def _show_update_progress(self, message: str) -> None:
+        """Show update progress popup on overlay."""
+        if not self.overlay_state:
+            return
+        card_payload = {
+            "type": "update",
+            "title": "Updating Pulse",
+            "text": message,
+            "ts": time.time(),
+        }
+        change = self.overlay_state.update_info_card(card_payload)
+        self._handle_overlay_change(change)
+
+    def _hide_update_progress(self) -> None:
+        """Hide update progress popup from overlay."""
+        if not self.overlay_state:
+            return
+        change = self.overlay_state.update_info_card(None)
+        self._handle_overlay_change(change)
+
     def _perform_update(self) -> None:
         repo_dir = self.repo_dir
         steps: list[tuple[str, list[str], str | None]] = [
@@ -1623,12 +1643,20 @@ class KioskMqttListener:
 
         try:
             self.log("update: starting update cycle")
+            self._show_update_progress("Updating PulseOS...")
             for description, command, cwd in steps:
                 if not self._run_step(description, command, cwd):
                     self.log(f"update: aborted during {description}")
+                    self._show_update_progress(f"Update failed during {description}")
+                    # Keep the error message visible for a few seconds
+                    time.sleep(3)
                     return
             self.log("update: finished successfully; services restarted by setup.sh")
+            self._show_update_progress("Update complete! Restarting services...")
+            # Keep success message visible briefly before hiding
+            time.sleep(2)
         finally:
+            self._hide_update_progress()
             self.update_lock.release()
             try:
                 self.refresh_update_availability()
