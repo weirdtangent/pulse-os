@@ -1,3 +1,5 @@
+## [0.73.1](https://github.com/weirdtangent/pulse-os/compare/v0.73.0...v0.73.1) (2025-12-02)
+
 # [0.73.0](https://github.com/weirdtangent/pulse-os/compare/v0.72.0...v0.73.0) (2025-12-02)
 
 
