@@ -330,9 +330,12 @@ PULSE_CALENDAR_OWNER_EMAILS=""
 
 # Optional comma-separated list of default notification times (in minutes before
 # event start) to apply to all calendar events. These supplement any VALARM
-# entries in the ICS file. For example, "10,5" will add 10-minute and 5-minute
-# reminders to all events. Duplicate times (within 30 seconds) are automatically
-# deduplicated.
+# entries in the ICS file. Note: Google Calendar's default notification (usually
+# 10 minutes before) is NOT included in the ICS export, so you should set at
+# least "10" here to mimic that behavior. For example, "10,5" will add 10-minute
+# and 5-minute reminders to all events. You can add additional default
+# notifications that will apply to ALL events. Duplicate times (within 30 seconds)
+# are automatically deduplicated.
 PULSE_CALENDAR_DEFAULT_NOTIFICATIONS=""
 
 # ============================================================================
