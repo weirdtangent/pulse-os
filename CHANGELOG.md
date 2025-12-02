@@ -1,3 +1,11 @@
+# [0.73.0](https://github.com/weirdtangent/pulse-os/compare/v0.72.0...v0.73.0) (2025-12-02)
+
+
+### Features
+
+* add alarm and reminder sounds to audio.py; generate them in setup.sh ([ddc3a5d](https://github.com/weirdtangent/pulse-os/commit/ddc3a5db0cdd64ba919c762d275b0bbca48dacfb))
+* add default notifications to calendar sync ([da1ef40](https://github.com/weirdtangent/pulse-os/commit/da1ef40c8507674d79d1c5c8aa18205e6f5d822b))
+
 # [0.72.0](https://github.com/weirdtangent/pulse-os/compare/v0.71.0...v0.72.0) (2025-12-02)
 
 
