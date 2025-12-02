@@ -1,3 +1,10 @@
+# [0.72.0](https://github.com/weirdtangent/pulse-os/compare/v0.71.0...v0.72.0) (2025-12-02)
+
+
+### Features
+
+* process VTODO components in ics - though Google Calendar doesn't export them ([55b477d](https://github.com/weirdtangent/pulse-os/commit/55b477de46330ae758fc0c7346bd02e31c9bdaf5))
+
 # [0.71.0](https://github.com/weirdtangent/pulse-os/compare/v0.70.10...v0.71.0) (2025-12-02)
 
 
