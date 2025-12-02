@@ -54,6 +54,7 @@ class OverlaySnapshot:
     generated_at: float
     schedule_snapshot: dict[str, Any] | None
     earmuffs_enabled: bool
+    update_available: bool
 
 
 @dataclass(frozen=True)
@@ -138,6 +139,7 @@ class OverlayStateManager:
         self._info_card: dict[str, Any] | None = None
         self._timer_position_history: dict[str, str] = {}
         self._earmuffs_enabled = False
+        self._update_available = False
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -154,6 +156,7 @@ class OverlayStateManager:
             "now_playing": "",
             "info_card": "",
             "earmuffs_enabled": "",
+            "update_available": "",
         }
 
     @property
@@ -350,6 +353,15 @@ class OverlayStateManager:
             self._signatures["earmuffs_enabled"] = signature
             return self._bump("earmuffs_enabled")
 
+    def update_update_available(self, available: bool) -> OverlayChange:
+        signature = str(available)
+        with self._lock:
+            if signature == self._signatures["update_available"]:
+                return OverlayChange(False, self._version, "update_available")
+            self._update_available = available
+            self._signatures["update_available"] = signature
+            return self._bump("update_available")
+
     def snapshot(self) -> OverlaySnapshot:
         with self._lock:
             return OverlaySnapshot(
@@ -370,6 +382,7 @@ class OverlayStateManager:
                 generated_at=time.time(),
                 schedule_snapshot=copy.deepcopy(self._schedule_snapshot),
                 earmuffs_enabled=self._earmuffs_enabled,
+                update_available=self._update_available,
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -463,6 +476,7 @@ ICON_MAP = {
     "reminder": "&#128221;",
     "calendar": "&#128197;",
     "earmuffs": "&#127911;",  # 🎧
+    "update": "&#128260;",  # 🔄
 }
 
 
@@ -827,6 +841,8 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
         badges.append(_render_badge("calendar", label))
     if snapshot.now_playing.strip():
         badges.append(_render_badge("music", "Now playing"))
+    if snapshot.update_available:
+        badges.append(_render_badge("update", "Update available"))
     badges.append(_render_earmuffs_badge(snapshot.earmuffs_enabled))
     classes = ["overlay-notification-bar"]
     if not badges:
@@ -1349,7 +1365,7 @@ def _format_info_text(text: str) -> str:
 def _render_badge(icon_key: str, label: str) -> str:
     icon = ICON_MAP.get(icon_key, "&#9679;")
     safe_label = html_escape(label)
-    interactive = icon_key in {"alarm", "alarm_ringing", "reminder", "reminder_active", "calendar"}
+    interactive = icon_key in {"alarm", "alarm_ringing", "reminder", "reminder_active", "calendar", "update"}
     action = None
     if icon_key.startswith("alarm"):
         action = "show_alarms"
@@ -1357,6 +1373,8 @@ def _render_badge(icon_key: str, label: str) -> str:
         action = "show_reminders"
     elif icon_key == "calendar":
         action = "show_calendar"
+    elif icon_key == "update":
+        action = "trigger_update"
     attrs = ['class="overlay-badge"', f'aria-label="{safe_label}"']
     if interactive and action:
         attrs.append('role="button"')

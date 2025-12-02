@@ -45,6 +45,7 @@ class OverlayHttpServer:
         on_pause_alarm: Callable[[str], None] | None = None,
         on_resume_alarm: Callable[[str], None] | None = None,
         on_toggle_earmuffs: Callable[[], None] | None = None,
+        on_trigger_update: Callable[[], None] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -60,6 +61,7 @@ class OverlayHttpServer:
         self._on_pause_alarm = on_pause_alarm
         self._on_resume_alarm = on_resume_alarm
         self._on_toggle_earmuffs = on_toggle_earmuffs
+        self._on_trigger_update = on_trigger_update
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -239,6 +241,14 @@ class OverlayHttpServer:
                         return
                     outer._on_toggle_earmuffs()
                     self._log("overlay: earmuffs toggle handler called")
+                elif action == "trigger_update":
+                    self._log("overlay: trigger_update requested")
+                    if not outer._on_trigger_update:
+                        self._log("overlay: update trigger handler not available")
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Update unavailable")
+                        return
+                    outer._on_trigger_update()
+                    self._log("overlay: update trigger handler called")
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return

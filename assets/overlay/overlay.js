@@ -215,6 +215,13 @@
           body: JSON.stringify({ action: 'toggle_earmuffs' })
         }).then(resetOpacity).catch(resetOpacity);
         return;
+      } else if (action === 'trigger_update') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'trigger_update' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
       }
     }
 

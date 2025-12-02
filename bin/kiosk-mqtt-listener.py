@@ -632,6 +632,7 @@ class KioskMqttListener:
                 on_delay_reminder=self._handle_overlay_delay_reminder_request,
                 on_delete_reminder=self._handle_overlay_delete_reminder_request,
                 on_toggle_earmuffs=self._handle_overlay_toggle_earmuffs_request,
+                on_trigger_update=self._handle_overlay_trigger_update_request,
             )
 
     def log(self, message: str) -> None:
@@ -941,6 +942,10 @@ class KioskMqttListener:
         payload = json.dumps({"action": "delete_reminder", "event_id": event_id})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
+    def _handle_overlay_trigger_update_request(self) -> None:
+        self.log("overlay: update requested via notification badge")
+        self.handle_update()
+
     def _handle_overlay_toggle_earmuffs_request(self) -> None:
         earmuffs_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/set"
         self.log(f"earmuffs: toggle requested, publishing to topic: {earmuffs_topic}")
@@ -1139,6 +1144,11 @@ class KioskMqttListener:
                 should_publish = True
         if should_publish:
             self.publish_update_button_availability(None, available)
+            # Update overlay state if available
+            if self.overlay_state:
+                change = self.overlay_state.update_update_available(available)
+                if change.changed:
+                    self._emit_overlay_refresh(change.version, "update_availability")
 
     def _safe_publish(
         self,
