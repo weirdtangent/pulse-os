@@ -207,6 +207,7 @@ class CalendarConfig:
     refresh_minutes: int
     lookahead_hours: int
     attendee_emails: tuple[str, ...]
+    default_notifications: tuple[int, ...]  # Minutes before event start (e.g., (10, 5) for 10-min and 5-min reminders)
 
 
 @dataclass(frozen=True)
@@ -447,6 +448,17 @@ class AssistantConfig:
             for email in split_csv(source.get("PULSE_CALENDAR_OWNER_EMAILS"))
             if email and email.strip()
         )
+        default_notifications_raw = source.get("PULSE_CALENDAR_DEFAULT_NOTIFICATIONS", "")
+        default_notifications = tuple(
+            sorted(
+                {
+                    max(0, int(minutes.strip()))
+                    for minutes in split_csv(default_notifications_raw)
+                    if minutes.strip().isdigit()
+                },
+                reverse=True,
+            )
+        )
 
         calendar_config = CalendarConfig(
             enabled=bool(feeds),
@@ -454,6 +466,7 @@ class AssistantConfig:
             refresh_minutes=refresh_minutes,
             lookahead_hours=lookahead_hours,
             attendee_emails=owner_emails,
+            default_notifications=default_notifications,
         )
 
         return AssistantConfig(

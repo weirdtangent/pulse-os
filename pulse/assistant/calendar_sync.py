@@ -257,10 +257,25 @@ class CalendarSyncService:
         url = str(component.get("URL")).strip() if component.get("URL") else None
         sequence = component.get("SEQUENCE")
         triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
-        if not triggers:
-            triggers = [self._default_trigger(start_dt, all_day)]
+        # Merge default notifications with VALARM triggers, avoiding duplicates
+        trigger_times = {trigger for trigger in triggers if trigger}
+        # Add default notifications if configured
+        if self._config.default_notifications:
+            for minutes_before in self._config.default_notifications:
+                default_trigger = start_dt - timedelta(minutes=minutes_before)
+                # Only add if not already covered by a VALARM trigger (within 30 seconds)
+                if not any(abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times):
+                    trigger_times.add(default_trigger)
+                    self._logger.debug(
+                        "Added default notification %d minutes before event start: %s",
+                        minutes_before,
+                        default_trigger.isoformat(),
+                    )
+        # If no triggers at all (no VALARM and no defaults), use the legacy 5-minute default
+        if not trigger_times:
+            trigger_times = {self._default_trigger(start_dt, all_day)}
         reminders: list[CalendarReminder] = []
-        for trigger_time in triggers:
+        for trigger_time in sorted(trigger_times):
             if not trigger_time:
                 continue
             reminder = CalendarReminder(
@@ -336,10 +351,25 @@ class CalendarSyncService:
         # VTODO might not have attendees, but check anyway
         declined = self._event_declined(component, state.owner_tokens)
         triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
-        if not triggers:
-            triggers = [self._default_trigger(start_dt, all_day)]
+        # Merge default notifications with VALARM triggers, avoiding duplicates
+        trigger_times = {trigger for trigger in triggers if trigger}
+        # Add default notifications if configured
+        if self._config.default_notifications:
+            for minutes_before in self._config.default_notifications:
+                default_trigger = start_dt - timedelta(minutes=minutes_before)
+                # Only add if not already covered by a VALARM trigger (within 30 seconds)
+                if not any(abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times):
+                    trigger_times.add(default_trigger)
+                    self._logger.debug(
+                        "Added default notification %d minutes before event start: %s",
+                        minutes_before,
+                        default_trigger.isoformat(),
+                    )
+        # If no triggers at all (no VALARM and no defaults), use the legacy 5-minute default
+        if not trigger_times:
+            trigger_times = {self._default_trigger(start_dt, all_day)}
         reminders: list[CalendarReminder] = []
-        for trigger_time in triggers:
+        for trigger_time in sorted(trigger_times):
             if not trigger_time:
                 continue
             reminder = CalendarReminder(

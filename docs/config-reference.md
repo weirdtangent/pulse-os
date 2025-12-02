@@ -181,6 +181,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_CALENDAR_REFRESH_MINUTES` | `5` | Minutes between feed polls (minimum 1). |
 | `PULSE_CALENDAR_LOOKAHEAD_HOURS` | `72` | Look-ahead window used for scheduling reminders and overlay snapshots. |
 | `PULSE_CALENDAR_OWNER_EMAILS` | *(empty)* | Comma-separated attendee emails treated as “me” (declined events are shown but reminders are suppressed). |
+| `PULSE_CALENDAR_DEFAULT_NOTIFICATIONS` | *(empty)* | Comma-separated default notification times (minutes before event start) to apply to all events. Supplements VALARM entries in ICS files. Example: `"10,5"` adds 10-minute and 5-minute reminders. Duplicates (within 30 seconds) are automatically deduplicated. |
 
 ## Snapcast Client (Optional)
 
