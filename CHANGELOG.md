@@ -1,3 +1,10 @@
+# [0.71.0](https://github.com/weirdtangent/pulse-os/compare/v0.70.10...v0.71.0) (2025-12-02)
+
+
+### Features
+
+* add alarm and reminder sounds to audio.py ([7816a40](https://github.com/weirdtangent/pulse-os/commit/7816a4049b0c80da748a164673c3e7478c2b00a7))
+
 ## [0.70.10](https://github.com/weirdtangent/pulse-os/compare/v0.70.9...v0.70.10) (2025-12-01)
 
 
