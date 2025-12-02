@@ -214,52 +214,150 @@ class CalendarSyncService:
         now: datetime,
     ) -> list[CalendarReminder]:
         reminders: list[CalendarReminder] = []
+        # Process VEVENT components (calendar events)
         for component in calendar.walk("VEVENT"):
-            uid = component.get("UID")
-            if not uid:
+            reminder = self._process_vevent(component, state, now)
+            if reminder:
+                reminders.extend(reminder)
+        # Process VTODO components (tasks)
+        for component in calendar.walk("VTODO"):
+            reminder = self._process_vtodo(component, state, now)
+            if reminder:
+                reminders.extend(reminder)
+        return reminders
+
+    def _process_vevent(
+        self,
+        component,
+        state: _FeedState,
+        now: datetime,
+    ) -> list[CalendarReminder]:
+        """Process a VEVENT component and return list of reminders."""
+        uid = component.get("UID")
+        if not uid:
+            return []
+        declined = self._event_declined(component, state.owner_tokens)
+        try:
+            start_value = component.decoded("DTSTART")
+        except Exception:  # pylint: disable=broad-except
+            return []
+        start_dt, all_day = self._coerce_datetime(start_value, now.tzinfo)
+        if not start_dt:
+            return []
+        end_dt = None
+        try:
+            end_value = component.decoded("DTEND")
+        except Exception:  # pylint: disable=broad-except
+            end_value = None
+        if end_value:
+            end_dt, _ = self._coerce_datetime(end_value, start_dt.tzinfo or now.tzinfo)
+        summary = str(component.get("SUMMARY") or "Calendar event").strip() or "Calendar event"
+        description = str(component.get("DESCRIPTION")).strip() if component.get("DESCRIPTION") else None
+        location = str(component.get("LOCATION")).strip() if component.get("LOCATION") else None
+        url = str(component.get("URL")).strip() if component.get("URL") else None
+        sequence = component.get("SEQUENCE")
+        triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
+        if not triggers:
+            triggers = [self._default_trigger(start_dt, all_day)]
+        reminders: list[CalendarReminder] = []
+        for trigger_time in triggers:
+            if not trigger_time:
                 continue
-            declined = self._event_declined(component, state.owner_tokens)
+            reminder = CalendarReminder(
+                uid=str(uid),
+                summary=summary,
+                description=description,
+                location=location,
+                start=start_dt,
+                end=end_dt,
+                all_day=all_day,
+                trigger_time=trigger_time,
+                calendar_name=state.calendar_name,
+                source_url=state.url,
+                url=url,
+                sequence=int(sequence) if sequence is not None else None,
+                declined=declined,
+            )
+            reminders.append(reminder)
+        return reminders
+
+    def _process_vtodo(
+        self,
+        component,
+        state: _FeedState,
+        now: datetime,
+    ) -> list[CalendarReminder]:
+        """Process a VTODO component and return list of reminders."""
+        uid = component.get("UID")
+        if not uid:
+            return []
+        # Skip completed or cancelled tasks
+        status = str(component.get("STATUS") or "").strip().upper()
+        if status in ("COMPLETED", "CANCELLED"):
+            return []
+        # VTODO can have DUE or DTSTART (or both)
+        # Prefer DUE if available, otherwise use DTSTART
+        start_value = None
+        try:
+            due_value = component.decoded("DUE")
+            if due_value:
+                start_value = due_value
+        except Exception:  # pylint: disable=broad-except
+            pass
+        if not start_value:
             try:
                 start_value = component.decoded("DTSTART")
             except Exception:  # pylint: disable=broad-except
-                continue
-            start_dt, all_day = self._coerce_datetime(start_value, now.tzinfo)
-            if not start_dt:
-                continue
-            end_dt = None
+                return []
+        start_dt, all_day = self._coerce_datetime(start_value, now.tzinfo)
+        if not start_dt:
+            return []
+        # VTODO typically doesn't have DTEND, but might have DURATION
+        end_dt = None
+        try:
+            duration_value = component.decoded("DURATION")
+            if duration_value and isinstance(duration_value, timedelta):
+                end_dt = start_dt + duration_value
+        except Exception:  # pylint: disable=broad-except
+            pass
+        # If no DURATION, try DTEND (some implementations use it)
+        if not end_dt:
             try:
                 end_value = component.decoded("DTEND")
+                if end_value:
+                    end_dt, _ = self._coerce_datetime(end_value, start_dt.tzinfo or now.tzinfo)
             except Exception:  # pylint: disable=broad-except
-                end_value = None
-            if end_value:
-                end_dt, _ = self._coerce_datetime(end_value, start_dt.tzinfo or now.tzinfo)
-            summary = str(component.get("SUMMARY") or "Calendar event").strip() or "Calendar event"
-            description = str(component.get("DESCRIPTION")).strip() if component.get("DESCRIPTION") else None
-            location = str(component.get("LOCATION")).strip() if component.get("LOCATION") else None
-            url = str(component.get("URL")).strip() if component.get("URL") else None
-            sequence = component.get("SEQUENCE")
-            triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
-            if not triggers:
-                triggers = [self._default_trigger(start_dt, all_day)]
-            for trigger_time in triggers:
-                if not trigger_time:
-                    continue
-                reminder = CalendarReminder(
-                    uid=str(uid),
-                    summary=summary,
-                    description=description,
-                    location=location,
-                    start=start_dt,
-                    end=end_dt,
-                    all_day=all_day,
-                    trigger_time=trigger_time,
-                    calendar_name=state.calendar_name,
-                    source_url=state.url,
-                    url=url,
-                    sequence=int(sequence) if sequence is not None else None,
-                    declined=declined,
-                )
-                reminders.append(reminder)
+                pass
+        summary = str(component.get("SUMMARY") or "Task").strip() or "Task"
+        description = str(component.get("DESCRIPTION")).strip() if component.get("DESCRIPTION") else None
+        location = str(component.get("LOCATION")).strip() if component.get("LOCATION") else None
+        url = str(component.get("URL")).strip() if component.get("URL") else None
+        sequence = component.get("SEQUENCE")
+        # VTODO might not have attendees, but check anyway
+        declined = self._event_declined(component, state.owner_tokens)
+        triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
+        if not triggers:
+            triggers = [self._default_trigger(start_dt, all_day)]
+        reminders: list[CalendarReminder] = []
+        for trigger_time in triggers:
+            if not trigger_time:
+                continue
+            reminder = CalendarReminder(
+                uid=str(uid),
+                summary=summary,
+                description=description,
+                location=location,
+                start=start_dt,
+                end=end_dt,
+                all_day=all_day,
+                trigger_time=trigger_time,
+                calendar_name=state.calendar_name,
+                source_url=state.url,
+                url=url,
+                sequence=int(sequence) if sequence is not None else None,
+                declined=declined,
+            )
+            reminders.append(reminder)
         return reminders
 
     def _event_declined(self, component, owner_tokens: set[str]) -> bool:
