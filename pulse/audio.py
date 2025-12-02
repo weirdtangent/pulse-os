@@ -12,12 +12,26 @@ from pathlib import Path
 
 _LOGGER = logging.getLogger("pulse.audio")
 _NOTIFICATION_FILENAME = "notification.wav"
+_ALARM_FILENAME = "alarm.wav"
+_REMINDER_FILENAME = "reminder.wav"
 _NOTIFICATION_SAMPLE_RATE = 48_000
 _NOTIFICATION_FREQUENCY_HZ = 720
 _NOTIFICATION_MAX_AMPLITUDE = 30_000
 _NOTIFICATION_DURATION_SECONDS = 0.22
 _NOTIFICATION_DECAY_RATE = 4.5
 _NOTIFICATION_FADE_IN_SECONDS = 0.01
+# Alarm sound: more urgent, higher frequency
+_ALARM_FREQUENCY_HZ = 880
+_ALARM_MAX_AMPLITUDE = 35_000
+_ALARM_DURATION_SECONDS = 0.25
+_ALARM_DECAY_RATE = 3.0
+_ALARM_FADE_IN_SECONDS = 0.02
+# Reminder sound: gentler chime-like sound
+_REMINDER_FREQUENCY_HZ = 600
+_REMINDER_MAX_AMPLITUDE = 25_000
+_REMINDER_DURATION_SECONDS = 0.3
+_REMINDER_DECAY_RATE = 5.0
+_REMINDER_FADE_IN_SECONDS = 0.015
 
 
 def _runtime_env() -> dict[str, str]:
@@ -46,8 +60,32 @@ def _notification_sample_path() -> Path:
     return runtime_dir / _NOTIFICATION_FILENAME
 
 
+def _alarm_sample_path() -> Path:
+    runtime_dir = Path(_runtime_env()["XDG_RUNTIME_DIR"])
+    return runtime_dir / _ALARM_FILENAME
+
+
+def _reminder_sample_path() -> Path:
+    runtime_dir = Path(_runtime_env()["XDG_RUNTIME_DIR"])
+    return runtime_dir / _REMINDER_FILENAME
+
+
 def _bundled_notification_sample() -> Path | None:
     candidate = Path(__file__).resolve().parent.parent / "assets" / "sounds" / _NOTIFICATION_FILENAME
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _bundled_alarm_sample() -> Path | None:
+    candidate = Path(__file__).resolve().parent.parent / "assets" / "sounds" / _ALARM_FILENAME
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _bundled_reminder_sample() -> Path | None:
+    candidate = Path(__file__).resolve().parent.parent / "assets" / "sounds" / _REMINDER_FILENAME
     if candidate.exists():
         return candidate
     return None
@@ -80,6 +118,30 @@ def _write_notification_beep(wav_file: wave.Wave_write) -> None:
         wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
 
 
+def _write_alarm_beep(wav_file: wave.Wave_write) -> None:
+    samples = max(1, int(_NOTIFICATION_SAMPLE_RATE * _ALARM_DURATION_SECONDS))
+    fade_in_samples = max(1, int(_NOTIFICATION_SAMPLE_RATE * _ALARM_FADE_IN_SECONDS))
+    for i in range(samples):
+        t = i / _NOTIFICATION_SAMPLE_RATE
+        decay = math.exp(-_ALARM_DECAY_RATE * t / _ALARM_DURATION_SECONDS)
+        fade_in = min(1.0, i / fade_in_samples)
+        angle = 2 * math.pi * _ALARM_FREQUENCY_HZ * t
+        value = int(fade_in * decay * _ALARM_MAX_AMPLITUDE * math.sin(angle))
+        wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
+
+
+def _write_reminder_beep(wav_file: wave.Wave_write) -> None:
+    samples = max(1, int(_NOTIFICATION_SAMPLE_RATE * _REMINDER_DURATION_SECONDS))
+    fade_in_samples = max(1, int(_NOTIFICATION_SAMPLE_RATE * _REMINDER_FADE_IN_SECONDS))
+    for i in range(samples):
+        t = i / _NOTIFICATION_SAMPLE_RATE
+        decay = math.exp(-_REMINDER_DECAY_RATE * t / _REMINDER_DURATION_SECONDS)
+        fade_in = min(1.0, i / fade_in_samples)
+        angle = 2 * math.pi * _REMINDER_FREQUENCY_HZ * t
+        value = int(fade_in * decay * _REMINDER_MAX_AMPLITUDE * math.sin(angle))
+        wav_file.writeframes(value.to_bytes(2, byteorder="little", signed=True))
+
+
 def _ensure_notification_sample() -> Path | None:
     path = _notification_sample_path()
     if path.exists():
@@ -94,6 +156,68 @@ def _ensure_notification_sample() -> Path | None:
             _LOGGER.debug("Unable to copy bundled thump sample: %s", exc)
             return bundled
     return render_notification_sample(path)
+
+
+def render_alarm_sample(destination: Path) -> Path | None:
+    """Render the alarm tone to the provided path."""
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(destination), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(_NOTIFICATION_SAMPLE_RATE)
+            _write_alarm_beep(wav_file)
+        return destination
+    except OSError as exc:
+        _LOGGER.debug("Unable to create alarm sample at %s: %s", destination, exc)
+        return None
+
+
+def _ensure_alarm_sample() -> Path | None:
+    path = _alarm_sample_path()
+    if path.exists():
+        return path
+    bundled = _bundled_alarm_sample()
+    if bundled:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bundled, path)
+            return path
+        except OSError as exc:
+            _LOGGER.debug("Unable to copy bundled alarm sample: %s", exc)
+            return bundled
+    return render_alarm_sample(path)
+
+
+def render_reminder_sample(destination: Path) -> Path | None:
+    """Render the reminder tone to the provided path."""
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(destination), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(_NOTIFICATION_SAMPLE_RATE)
+            _write_reminder_beep(wav_file)
+        return destination
+    except OSError as exc:
+        _LOGGER.debug("Unable to create reminder sample at %s: %s", destination, exc)
+        return None
+
+
+def _ensure_reminder_sample() -> Path | None:
+    path = _reminder_sample_path()
+    if path.exists():
+        return path
+    bundled = _bundled_reminder_sample()
+    if bundled:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bundled, path)
+            return path
+        except OSError as exc:
+            _LOGGER.debug("Unable to copy bundled reminder sample: %s", exc)
+            return bundled
+    return render_reminder_sample(path)
 
 
 def find_audio_sink() -> str | None:
@@ -211,10 +335,9 @@ def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = F
         return False
 
 
-def play_volume_feedback() -> None:
-    """Play a short confirmation thump after adjusting volume."""
-    sample = _ensure_notification_sample()
-    if not sample:
+def _play_sample(sample_path: Path | None) -> None:
+    """Play a sound sample using available audio player."""
+    if not sample_path:
         return
     player = None
     for candidate in ("pw-play", "aplay"):
@@ -222,15 +345,33 @@ def play_volume_feedback() -> None:
             player = candidate
             break
     if not player:
-        _LOGGER.debug("No audio player available for volume feedback")
+        _LOGGER.debug("No audio player available")
         return
     try:
         subprocess.run(
-            [player, str(sample)],
+            [player, str(sample_path)],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=_runtime_env(),
         )
     except OSError as exc:
-        _LOGGER.debug("Failed to play volume feedback: %s", exc)
+        _LOGGER.debug("Failed to play sample: %s", exc)
+
+
+def play_volume_feedback() -> None:
+    """Play a short confirmation thump after adjusting volume."""
+    sample = _ensure_notification_sample()
+    _play_sample(sample)
+
+
+def play_alarm_sound() -> None:
+    """Play the alarm sound (used for repeating alarm beeps)."""
+    sample = _ensure_alarm_sample()
+    _play_sample(sample)
+
+
+def play_reminder_sound() -> None:
+    """Play the reminder sound (used for reminders and calendar events)."""
+    sample = _ensure_reminder_sample()
+    _play_sample(sample)

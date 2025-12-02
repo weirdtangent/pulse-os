@@ -650,7 +650,7 @@ class PlaybackHandle:
                     else:
                         target = 100
                     pulse_audio.set_volume(target, self._sink)
-                await asyncio.to_thread(pulse_audio.play_volume_feedback)
+                await asyncio.to_thread(pulse_audio.play_alarm_sound)
                 await asyncio.sleep(0.8)
         except asyncio.CancelledError:
             raise
@@ -658,7 +658,10 @@ class PlaybackHandle:
             await self._restore_volume()
 
     async def _play_reminder_tone(self) -> None:
-        await asyncio.to_thread(pulse_audio.play_volume_feedback)
+        # Play reminder sound twice for better noticeability
+        await asyncio.to_thread(pulse_audio.play_reminder_sound)
+        await asyncio.sleep(0.2)
+        await asyncio.to_thread(pulse_audio.play_reminder_sound)
 
     async def _wait_if_paused(self) -> None:
         while self._pause_flag and not self._stop_event.is_set():
