@@ -389,28 +389,43 @@ class CalendarSyncService:
         local_tz,
     ) -> list[datetime]:
         triggers: list[datetime] = []
+        alarm_count = 0
         for alarm in getattr(component, "subcomponents", []):
             if getattr(alarm, "name", "").upper() != "VALARM":
                 continue
+            alarm_count += 1
             action = str(alarm.get("ACTION") or "").strip().upper()
             if action and action != "DISPLAY":
+                self._logger.debug("Skipping VALARM with action %s (only DISPLAY actions are processed)", action)
                 continue
             trigger_raw = alarm.get("TRIGGER")
             if trigger_raw is None:
+                self._logger.debug("Skipping VALARM with no TRIGGER")
                 continue
             try:
                 decoded = alarm.decoded("TRIGGER")
             except Exception:  # pylint: disable=broad-except
+                self._logger.debug("Failed to decode VALARM TRIGGER: %s", exc_info=True)
                 continue
             trigger_dt: datetime | None = None
             if isinstance(decoded, timedelta):
                 trigger_dt = start_dt + decoded
+                self._logger.debug("Extracted VALARM trigger: %s (relative: %s)", trigger_dt.isoformat(), decoded)
             elif isinstance(decoded, datetime):
                 trigger_dt = decoded if decoded.tzinfo else decoded.replace(tzinfo=local_tz)
                 trigger_dt = trigger_dt.astimezone(local_tz)
+                self._logger.debug("Extracted VALARM trigger: %s (absolute)", trigger_dt.isoformat())
             if not trigger_dt:
+                self._logger.debug("Could not determine trigger datetime from VALARM")
                 continue
             triggers.append(trigger_dt)
+        if alarm_count > 0:
+            self._logger.debug(
+                "Found %d VALARM(s), extracted %d trigger(s) for event starting at %s",
+                alarm_count,
+                len(triggers),
+                start_dt.isoformat(),
+            )
         return triggers
 
     def _default_trigger(self, start_dt: datetime, all_day: bool) -> datetime:
@@ -443,12 +458,39 @@ class CalendarSyncService:
         for reminder in reminders:
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
+                self._logger.debug(
+                    "Skipping reminder %s (%s) - trigger time %s is in the past",
+                    reminder.uid,
+                    reminder.summary,
+                    trigger_time.isoformat(),
+                )
                 continue
             if trigger_time > lookahead_end:
+                self._logger.debug(
+                    "Skipping reminder %s (%s) - trigger time %s is beyond lookahead window (%s)",
+                    reminder.uid,
+                    reminder.summary,
+                    trigger_time.isoformat(),
+                    lookahead_end.isoformat(),
+                )
                 continue
             key = self._reminder_key(reminder)
             valid_keys.add(key)
-            if key in self._triggered or key in self._scheduled:
+            if key in self._triggered:
+                self._logger.debug(
+                    "Skipping reminder %s (%s) - already triggered at %s",
+                    reminder.uid,
+                    reminder.summary,
+                    reminder.trigger_time.isoformat(),
+                )
+                continue
+            if key in self._scheduled:
+                self._logger.debug(
+                    "Skipping reminder %s (%s) - already scheduled for %s",
+                    reminder.uid,
+                    reminder.summary,
+                    reminder.trigger_time.isoformat(),
+                )
                 continue
             task = asyncio.create_task(self._await_and_fire(key, reminder))
             self._scheduled[key] = task
