@@ -1,3 +1,10 @@
+## [0.74.2](https://github.com/weirdtangent/pulse-os/compare/v0.74.1...v0.74.2) (2025-12-03)
+
+
+### Bug Fixes
+
+* changed calendar events should cancel old reminders ([0058933](https://github.com/weirdtangent/pulse-os/commit/0058933ec87481bbbbcd7500fe703e2464410faa))
+
 ## [0.74.1](https://github.com/weirdtangent/pulse-os/compare/v0.74.0...v0.74.1) (2025-12-02)
 
 # [0.74.0](https://github.com/weirdtangent/pulse-os/compare/v0.73.1...v0.74.0) (2025-12-02)
