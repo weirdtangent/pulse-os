@@ -485,6 +485,9 @@ class CalendarSyncService:
     ) -> None:
         lookahead_end = now + timedelta(hours=self._config.lookahead_hours)
         valid_keys: set[str] = set()
+        # First pass: collect all valid reminders and their trigger times per UID
+        valid_reminders: list[CalendarReminder] = []
+        uids_to_schedule: dict[str, dict[str, set[datetime]]] = {}  # uid -> {source_url: {trigger_times}}
         for reminder in reminders:
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
@@ -521,6 +524,12 @@ class CalendarSyncService:
                 )
             key = self._reminder_key(reminder)
             valid_keys.add(key)
+            # Track this UID and its trigger time
+            if reminder.uid not in uids_to_schedule:
+                uids_to_schedule[reminder.uid] = {}
+            if reminder.source_url not in uids_to_schedule[reminder.uid]:
+                uids_to_schedule[reminder.uid][reminder.source_url] = set()
+            uids_to_schedule[reminder.uid][reminder.source_url].add(trigger_time)
             if key in self._triggered:
                 self._logger.debug(
                     "Skipping reminder %s (%s) - already triggered at %s",
@@ -537,6 +546,15 @@ class CalendarSyncService:
                     reminder.trigger_time.isoformat(),
                 )
                 continue
+            valid_reminders.append(reminder)
+        # Cancel old reminders for UIDs we're about to schedule
+        # This handles the case where an event time changed
+        for uid, url_to_times in uids_to_schedule.items():
+            for source_url, trigger_times in url_to_times.items():
+                self._cancel_old_reminders_for_uid(uid, source_url, trigger_times, state)
+        # Now schedule all valid reminders
+        for reminder in valid_reminders:
+            key = self._reminder_key(reminder)
             task = asyncio.create_task(self._await_and_fire(key, reminder))
             self._scheduled[key] = task
             self._scheduled_reminders[key] = reminder
@@ -601,6 +619,41 @@ class CalendarSyncService:
 
     def _reminder_key(self, reminder: CalendarReminder) -> str:
         return f"{reminder.source_url}|{reminder.uid}|{reminder.trigger_time.isoformat()}"
+
+    def _cancel_old_reminders_for_uid(
+        self,
+        uid: str,
+        source_url: str,
+        new_trigger_times: set[datetime],
+        state: _FeedState,
+    ) -> None:
+        """Cancel any existing scheduled reminders for the same UID but different trigger times.
+
+        This handles the case where an event time changed - we need to cancel the old reminder(s)
+        and schedule new one(s) with the updated time.
+        """
+        keys_to_cancel: list[str] = []
+        for key, scheduled_reminder in self._scheduled_reminders.items():
+            # Only cancel reminders from the same source URL and UID
+            if scheduled_reminder.source_url != source_url or scheduled_reminder.uid != uid:
+                continue
+            # Cancel if the trigger time is different from any of the new trigger times
+            if scheduled_reminder.trigger_time not in new_trigger_times:
+                keys_to_cancel.append(key)
+        for key in keys_to_cancel:
+            scheduled_reminder = self._scheduled_reminders.get(key)
+            task = self._scheduled.pop(key, None)
+            if task:
+                task.cancel()
+                summary = scheduled_reminder.summary if scheduled_reminder else "unknown"
+                self._logger.info(
+                    "Cancelled old reminder for event %s (%s) - event time changed",
+                    uid,
+                    summary,
+                )
+            self._scheduled_reminders.pop(key, None)
+            self._key_to_feed.pop(key, None)
+            state.active_keys.discard(key)
 
     async def _emit_event_snapshot(self) -> None:
         ordered = sorted(
