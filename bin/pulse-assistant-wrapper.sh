@@ -24,5 +24,12 @@ if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -S "${XDG_RUNTIME_DIR}/bus" ]]; then
   export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
 fi
 
-exec /usr/bin/python3 -u /opt/pulse-os/bin/pulse-assistant.py "$@"
+# Pass log level from pulse.conf if set
+args=()
+if [[ -n "${PULSE_ASSISTANT_LOG_LEVEL:-}" ]]; then
+  args+=("--log-level" "${PULSE_ASSISTANT_LOG_LEVEL}")
+fi
+args+=("$@")
+
+exec /usr/bin/python3 -u /opt/pulse-os/bin/pulse-assistant.py "${args[@]}"
 

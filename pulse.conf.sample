@@ -192,6 +192,10 @@ PULSE_ASSISTANT_WAKE_SENSITIVITY="normal"
 # PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL — enforced trigger level while self audio is active (minimum 2).
 PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
 
+# PULSE_ASSISTANT_LOG_LEVEL — Python logging level (DEBUG, INFO, WARNING, ERROR). Defaults to INFO.
+# Set to "DEBUG" to see detailed calendar sync and event processing logs.
+# PULSE_ASSISTANT_LOG_LEVEL="INFO"
+
 # --- Wyoming endpoints ------------------------------------------------------
 # WYOMING_WHISPER_HOST — hostname/IP of your wyoming-whisper (speech-to-text) server.
 WYOMING_WHISPER_HOST=""
