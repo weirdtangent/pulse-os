@@ -1,3 +1,10 @@
+# [0.75.0](https://github.com/weirdtangent/pulse-os/compare/v0.74.2...v0.75.0) (2025-12-03)
+
+
+### Features
+
+* add log level to pulse-assistant-wrapper.sh and pulse.conf.sample ([a482789](https://github.com/weirdtangent/pulse-os/commit/a4827894ba05ae038df58b1ac1b761158db7ed2b))
+
 ## [0.74.2](https://github.com/weirdtangent/pulse-os/compare/v0.74.1...v0.74.2) (2025-12-03)
 
 
