@@ -205,6 +205,12 @@ class CalendarSyncService:
         if calendar_name:
             state.calendar_name = str(calendar_name)
         reminders = self._collect_reminders(calendar, state, now)
+        self._logger.debug(
+            "Collected %d reminder(s) from calendar %s (feed: %s)",
+            len(reminders),
+            state.calendar_name or "unknown",
+            state.url,
+        )
         await self._schedule_reminders(state, reminders, now)
 
     def _collect_reminders(
@@ -237,6 +243,14 @@ class CalendarSyncService:
         if not uid:
             return []
         declined = self._event_declined(component, state.owner_tokens)
+        summary = str(component.get("SUMMARY") or "Calendar event").strip() or "Calendar event"
+        # Log event details for debugging
+        self._logger.debug(
+            "Processing event: UID=%s, Summary=%s, Declined=%s",
+            uid,
+            summary,
+            declined,
+        )
         try:
             start_value = component.decoded("DTSTART")
         except Exception:  # pylint: disable=broad-except
