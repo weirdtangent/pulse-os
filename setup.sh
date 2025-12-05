@@ -1163,6 +1163,53 @@ print_feature_summary() {
     publish_summary_to_mqtt "$summary_output"
 }
 
+show_update_overlay() {
+    local message="${1:-Updating PulseOS...}"
+    local overlay_enabled="${PULSE_OVERLAY_ENABLED:-true}"
+    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+    
+    if [ "$overlay_enabled" != "true" ]; then
+        return 0
+    fi
+    
+    local url="http://localhost:${overlay_port}/overlay/info-card"
+    local payload
+    
+    # Use python to properly encode JSON if available, otherwise use simple approach
+    if command -v python3 >/dev/null 2>&1; then
+        payload=$(python3 -c "import json, sys; print(json.dumps({'type': 'update', 'title': 'Updating Pulse', 'text': sys.argv[1]}))" "$message" 2>/dev/null)
+    else
+        # Fallback: simple JSON construction (assumes message doesn't contain quotes)
+        payload="{\"type\":\"update\",\"title\":\"Updating Pulse\",\"text\":\"$message\"}"
+    fi
+    
+    if [ -n "$payload" ] && command -v curl >/dev/null 2>&1; then
+        curl -sf -X POST "$url" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            >/dev/null 2>&1 || true
+    fi
+}
+
+hide_update_overlay() {
+    local overlay_enabled="${PULSE_OVERLAY_ENABLED:-true}"
+    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+    
+    if [ "$overlay_enabled" != "true" ]; then
+        return 0
+    fi
+    
+    local url="http://localhost:${overlay_port}/overlay/info-card"
+    local payload='{"action": "clear"}'
+    
+    if command -v curl >/dev/null 2>&1; then
+        curl -sf -X POST "$url" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            >/dev/null 2>&1 || true
+    fi
+}
+
 restart_pulse_services() {
     local restart_script="$REPO_DIR/bin/tools/restart-services.sh"
     if [ ! -x "$restart_script" ]; then
@@ -1179,6 +1226,12 @@ restart_pulse_services() {
 }
 
 main() {
+    # Show update overlay at start
+    show_update_overlay "Running setup.sh..."
+    
+    # Ensure overlay is hidden on exit
+    trap 'hide_update_overlay' EXIT
+    
     local location_arg=""
     local auto_restart="true"
 
@@ -1232,9 +1285,14 @@ main() {
     install_bluetooth_audio
     print_feature_summary
     if [ "$auto_restart" = "true" ]; then
+        show_update_overlay "Restarting services..."
         restart_pulse_services
+        show_update_overlay "Setup complete!"
+        sleep 1
     else
         log "Skipping service restart (--no-restart)."
+        show_update_overlay "Setup complete!"
+        sleep 1
     fi
 
     log "PulseOS setup complete!"
