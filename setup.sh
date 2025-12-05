@@ -1277,28 +1277,28 @@ PYTHON_SCRIPT
     return 0
 }
 
-trigger_overlay_refresh() {
-    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+publish_overlay_refresh_mqtt() {
     local hostname="${PULSE_HOSTNAME:-$(hostname -s 2>/dev/null || echo 'pulse')}"
+    local reason="${1:-setup}"
     
-    # Try multiple methods to ensure the overlay refreshes
-    
-    # Method 1: Fetch overlay with cache-busting parameter (forces browser to check for update)
-    if command -v curl >/dev/null 2>&1; then
-        curl -sf --max-time 2 "http://localhost:${overlay_port}/overlay?refresh=$(date +%s)" >/dev/null 2>&1 || true
-    fi
-    
-    # Method 2: Try to reload via DevTools
-    reload_overlay_via_devtools || true
-    
-    # Method 3: Publish MQTT refresh message if MQTT is configured
+    # Publish MQTT refresh message to prompt HA to reload overlay
     if [ -n "${MQTT_HOST:-}" ] && command -v mosquitto_pub >/dev/null 2>&1; then
         local mqtt_host="${MQTT_HOST}"
         local mqtt_port="${MQTT_PORT:-1883}"
         local mqtt_user="${MQTT_USER:-}"
         local mqtt_pass="${MQTT_PASS:-${MQTT_PASSWORD:-}}"
         local topic="pulse/${hostname}/overlay/refresh"
-        local payload="{\"version\":$(date +%s),\"reason\":\"setup\",\"ts\":$(date +%s)}"
+        local ts
+        ts=$(date +%s)
+        local version
+        version=$((ts % 1000000))  # Use timestamp-based version
+        local payload
+        payload=$(python3 -c "import json, sys; print(json.dumps({'version': $version, 'reason': sys.argv[1], 'ts': $ts}))" "$reason" 2>/dev/null)
+        
+        if [ -z "$payload" ]; then
+            # Fallback if python fails
+            payload="{\"version\":${version},\"reason\":\"${reason}\",\"ts\":${ts}}"
+        fi
         
         local mqtt_args=()
         [ -n "$mqtt_user" ] && mqtt_args+=(-u "$mqtt_user")
@@ -1307,6 +1307,22 @@ trigger_overlay_refresh() {
         mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" "${mqtt_args[@]}" \
             -t "$topic" -m "$payload" >/dev/null 2>&1 || true
     fi
+}
+
+trigger_overlay_refresh() {
+    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+    local hostname="${PULSE_HOSTNAME:-$(hostname -s 2>/dev/null || echo 'pulse')}"
+    
+    # Method 1: Publish MQTT refresh message (most reliable - prompts HA to reload)
+    publish_overlay_refresh_mqtt "setup"
+    
+    # Method 2: Fetch overlay with cache-busting parameter (forces browser to check for update)
+    if command -v curl >/dev/null 2>&1; then
+        curl -sf --max-time 2 "http://localhost:${overlay_port}/overlay?refresh=$(date +%s)" >/dev/null 2>&1 || true
+    fi
+    
+    # Method 3: Try to reload via DevTools
+    reload_overlay_via_devtools || true
     
     # Small delay to allow refresh to propagate
     sleep 0.3
@@ -1396,6 +1412,11 @@ restart_pulse_services() {
 }
 
 main() {
+    # Publish MQTT overlay refresh at the very start to prompt HA to reload overlay
+    # This ensures the browser is ready to show the popup when we update it
+    publish_overlay_refresh_mqtt "setup_start"
+    sleep 0.5  # Give HA time to process the refresh message
+    
     # Show update overlay at start
     show_update_overlay "Running setup.sh..."
     
