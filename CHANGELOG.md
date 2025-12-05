@@ -1,3 +1,10 @@
+# [0.76.0](https://github.com/weirdtangent/pulse-os/compare/v0.75.0...v0.76.0) (2025-12-05)
+
+
+### Features
+
+* allow hiding declined events ([2853515](https://github.com/weirdtangent/pulse-os/commit/28535152d550c18ac4578e5f13454128f9e9c2bc))
+
 # [0.75.0](https://github.com/weirdtangent/pulse-os/compare/v0.74.2...v0.75.0) (2025-12-03)
 
 
