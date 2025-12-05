@@ -1,3 +1,10 @@
+## [0.78.1](https://github.com/weirdtangent/pulse-os/compare/v0.78.0...v0.78.1) (2025-12-05)
+
+
+### Bug Fixes
+
+* update overlay refresh logic ([071c5fe](https://github.com/weirdtangent/pulse-os/commit/071c5fed166149602dfc6ae0955deb123633ced4))
+
 # [0.78.0](https://github.com/weirdtangent/pulse-os/compare/v0.77.1...v0.78.0) (2025-12-05)
 
 
