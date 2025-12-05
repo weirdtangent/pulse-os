@@ -1,3 +1,10 @@
+## [0.77.1](https://github.com/weirdtangent/pulse-os/compare/v0.77.0...v0.77.1) (2025-12-05)
+
+
+### Bug Fixes
+
+* make update card smalle ([ad58698](https://github.com/weirdtangent/pulse-os/commit/ad58698f0cf3a9467907c12b33373528d6e1f894))
+
 # [0.77.0](https://github.com/weirdtangent/pulse-os/compare/v0.76.0...v0.77.0) (2025-12-05)
 
 
