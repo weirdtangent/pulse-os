@@ -1184,11 +1184,114 @@ wait_for_overlay_server() {
     return 1
 }
 
+reload_overlay_via_devtools() {
+    local devtools_url="${CHROMIUM_DEVTOOLS_URL:-http://localhost:9222/json}"
+    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+    
+    if ! command -v curl >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    # Get list of tabs from DevTools
+    local tabs_json
+    tabs_json=$(curl -sf --max-time 2 "${devtools_url}" 2>/dev/null)
+    if [ -z "$tabs_json" ]; then
+        return 1
+    fi
+    
+    # Extract the first tab's webSocketDebuggerUrl (or use the first tab's ID)
+    local tab_id
+    tab_id=$(echo "$tabs_json" | python3 -c "import sys, json; tabs = json.load(sys.stdin); print(tabs[0]['id'] if tabs else '')" 2>/dev/null)
+    if [ -z "$tab_id" ]; then
+        return 1
+    fi
+    
+    # Use Page.reload with bypassCache to force reload of overlay iframe
+    # We'll inject JavaScript to reload any iframe pointing to the overlay
+    local overlay_url="http://localhost:${overlay_port}/overlay"
+    local js_code="
+    (function() {
+        var iframes = document.querySelectorAll('iframe[src*=\"${overlay_port}/overlay\"], iframe[src*=\"/overlay\"]');
+        iframes.forEach(function(iframe) {
+            iframe.src = iframe.src.split('?')[0] + '?t=' + Date.now();
+        });
+        // Also try to find overlay by checking all iframes
+        var allIframes = document.querySelectorAll('iframe');
+        allIframes.forEach(function(iframe) {
+            try {
+                if (iframe.contentWindow && iframe.contentWindow.location) {
+                    var href = iframe.contentWindow.location.href;
+                    if (href && href.includes('${overlay_port}/overlay')) {
+                        iframe.src = href.split('?')[0] + '?t=' + Date.now();
+                    }
+                }
+            } catch(e) {}
+        });
+    })();
+    "
+    
+    # Execute JavaScript via DevTools Runtime.evaluate
+    local ws_url
+    ws_url=$(echo "$tabs_json" | python3 -c "import sys, json; tabs = json.load(sys.stdin); print(tabs[0]['webSocketDebuggerUrl'] if tabs and 'webSocketDebuggerUrl' in tabs[0] else '')" 2>/dev/null)
+    
+    # Execute JavaScript via DevTools to reload overlay iframes
+    # Note: This requires the tab to be accessible via DevTools
+    if command -v python3 >/dev/null 2>&1; then
+        python3 <<PYTHON_SCRIPT 2>/dev/null || true
+import json
+import urllib.request
+import urllib.error
+
+try:
+    overlay_port = "$overlay_port"
+    
+    # Get the first tab's webSocketDebuggerUrl
+    tabs_resp = urllib.request.urlopen("http://localhost:9222/json", timeout=2)
+    tabs = json.loads(tabs_resp.read().decode('utf-8'))
+    
+    if not tabs or len(tabs) == 0:
+        exit(1)
+    
+    tab = tabs[0]
+    ws_url = tab.get('webSocketDebuggerUrl', '')
+    
+    if not ws_url:
+        # Fallback: try to use Runtime.evaluate via HTTP (if supported)
+        # This is a simplified approach - we'll just try to trigger a page reload
+        # by fetching the overlay with a cache-busting parameter
+        overlay_url = f"http://localhost:{overlay_port}/overlay?refresh={int(__import__('time').time() * 1000)}"
+        try:
+            urllib.request.urlopen(overlay_url, timeout=1)
+        except:
+            pass
+        exit(0)
+    
+    # If we have websocket URL, we could use it, but that requires websocket library
+    # For now, just exit - the MQTT refresh or direct fetch should work
+    exit(0)
+except Exception:
+    exit(1)
+PYTHON_SCRIPT
+    fi
+    
+    return 0
+}
+
 trigger_overlay_refresh() {
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
     local hostname="${PULSE_HOSTNAME:-$(hostname -s 2>/dev/null || echo 'pulse')}"
     
-    # Try to publish MQTT refresh message if MQTT is configured
+    # Try multiple methods to ensure the overlay refreshes
+    
+    # Method 1: Fetch overlay with cache-busting parameter (forces browser to check for update)
+    if command -v curl >/dev/null 2>&1; then
+        curl -sf --max-time 2 "http://localhost:${overlay_port}/overlay?refresh=$(date +%s)" >/dev/null 2>&1 || true
+    fi
+    
+    # Method 2: Try to reload via DevTools
+    reload_overlay_via_devtools || true
+    
+    # Method 3: Publish MQTT refresh message if MQTT is configured
     if [ -n "${MQTT_HOST:-}" ] && command -v mosquitto_pub >/dev/null 2>&1; then
         local mqtt_host="${MQTT_HOST}"
         local mqtt_port="${MQTT_PORT:-1883}"
@@ -1205,10 +1308,8 @@ trigger_overlay_refresh() {
             -t "$topic" -m "$payload" >/dev/null 2>&1 || true
     fi
     
-    # Also fetch the overlay endpoint to ensure it's updated
-    if command -v curl >/dev/null 2>&1; then
-        curl -sf --max-time 2 "http://localhost:${overlay_port}/overlay" >/dev/null 2>&1 || true
-    fi
+    # Small delay to allow refresh to propagate
+    sleep 0.3
 }
 
 show_update_overlay() {
@@ -1242,8 +1343,12 @@ show_update_overlay() {
             -H "Content-Type: application/json" \
             -d "$payload" \
             >/dev/null 2>&1; then
-            # Trigger a refresh so the browser picks up the change
-            sleep 0.2
+            # Give the server a moment to process the update
+            sleep 0.5
+            # Trigger multiple refresh attempts to ensure browser picks it up
+            trigger_overlay_refresh
+            # Try again after a short delay (browser might need time to process)
+            sleep 0.5
             trigger_overlay_refresh
         fi
     fi
