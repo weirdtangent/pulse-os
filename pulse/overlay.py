@@ -807,7 +807,16 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     card = f"""
 <div class="overlay-card overlay-card--ambient overlay-card--now-playing">
   <div class="overlay-card__title">Now Playing</div>
-  <div class="overlay-now-playing__body">{body}</div>
+  <div class="overlay-now-playing__content">
+    <div class="overlay-now-playing__indicator" aria-hidden="true">
+      <div class="overlay-now-playing__bar"></div>
+      <div class="overlay-now-playing__bar"></div>
+      <div class="overlay-now-playing__bar"></div>
+      <div class="overlay-now-playing__bar"></div>
+      <div class="overlay-now-playing__bar"></div>
+    </div>
+    <div class="overlay-now-playing__body">{body}</div>
+  </div>
 </div>
 """.strip()
     return "bottom-right", card
