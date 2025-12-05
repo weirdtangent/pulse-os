@@ -1,3 +1,10 @@
+## [0.78.2](https://github.com/weirdtangent/pulse-os/compare/v0.78.1...v0.78.2) (2025-12-05)
+
+
+### Bug Fixes
+
+* more fixes to make sure overlay updates when we need ([6e81e0d](https://github.com/weirdtangent/pulse-os/commit/6e81e0df83a35bbd22b9ee7528e28603786d29d1))
+
 ## [0.78.1](https://github.com/weirdtangent/pulse-os/compare/v0.78.0...v0.78.1) (2025-12-05)
 
 
