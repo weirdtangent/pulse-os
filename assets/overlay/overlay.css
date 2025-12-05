@@ -705,11 +705,33 @@ body {
 }
 
 .overlay-info-card--update {
+  grid-column: 2;
+  grid-row: 2;
+  grid-area: center;
   text-align: center;
+  padding: 1.5rem;
+  max-width: none;
+  width: auto;
 }
 
 .overlay-info-card--update .overlay-info-card__header {
   border-bottom: none;
+}
+
+.overlay-info-card--update .overlay-info-card__title {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.overlay-info-card--update .overlay-info-card__text {
+  font-size: 1rem;
+}
+
+.overlay-info-card--update .overlay-update-spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 1rem;
+  border-width: 3px;
 }
 
 .overlay-info-card--update .overlay-info-card__close {
