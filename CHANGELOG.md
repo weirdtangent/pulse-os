@@ -1,3 +1,10 @@
+# [0.77.0](https://github.com/weirdtangent/pulse-os/compare/v0.76.0...v0.77.0) (2025-12-05)
+
+
+### Features
+
+* add now playing indicator to overlay ([a6515f7](https://github.com/weirdtangent/pulse-os/commit/a6515f749bea445276574972b3c094fdc414bd3b))
+
 # [0.76.0](https://github.com/weirdtangent/pulse-os/compare/v0.75.0...v0.76.0) (2025-12-05)
 
 
