@@ -1163,12 +1163,66 @@ print_feature_summary() {
     publish_summary_to_mqtt "$summary_output"
 }
 
+wait_for_overlay_server() {
+    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+    local max_attempts=10
+    local attempt=0
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if command -v curl >/dev/null 2>&1; then
+            if curl -sf --max-time 1 "http://localhost:${overlay_port}/overlay" >/dev/null 2>&1; then
+                return 0
+            fi
+        elif command -v nc >/dev/null 2>&1; then
+            if nc -z localhost "$overlay_port" 2>/dev/null; then
+                return 0
+            fi
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.5
+    done
+    return 1
+}
+
+trigger_overlay_refresh() {
+    local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
+    local hostname="${PULSE_HOSTNAME:-$(hostname -s 2>/dev/null || echo 'pulse')}"
+    
+    # Try to publish MQTT refresh message if MQTT is configured
+    if [ -n "${MQTT_HOST:-}" ] && command -v mosquitto_pub >/dev/null 2>&1; then
+        local mqtt_host="${MQTT_HOST}"
+        local mqtt_port="${MQTT_PORT:-1883}"
+        local mqtt_user="${MQTT_USER:-}"
+        local mqtt_pass="${MQTT_PASS:-${MQTT_PASSWORD:-}}"
+        local topic="pulse/${hostname}/overlay/refresh"
+        local payload="{\"version\":$(date +%s),\"reason\":\"setup\",\"ts\":$(date +%s)}"
+        
+        local mqtt_args=()
+        [ -n "$mqtt_user" ] && mqtt_args+=(-u "$mqtt_user")
+        [ -n "$mqtt_pass" ] && mqtt_args+=(-P "$mqtt_pass")
+        
+        mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" "${mqtt_args[@]}" \
+            -t "$topic" -m "$payload" >/dev/null 2>&1 || true
+    fi
+    
+    # Also fetch the overlay endpoint to ensure it's updated
+    if command -v curl >/dev/null 2>&1; then
+        curl -sf --max-time 2 "http://localhost:${overlay_port}/overlay" >/dev/null 2>&1 || true
+    fi
+}
+
 show_update_overlay() {
     local message="${1:-Updating PulseOS...}"
     local overlay_enabled="${PULSE_OVERLAY_ENABLED:-true}"
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
     
     if [ "$overlay_enabled" != "true" ]; then
+        return 0
+    fi
+    
+    # Wait for overlay server to be ready (with timeout)
+    if ! wait_for_overlay_server; then
+        # Server not ready, but continue anyway
         return 0
     fi
     
@@ -1184,10 +1238,14 @@ show_update_overlay() {
     fi
     
     if [ -n "$payload" ] && command -v curl >/dev/null 2>&1; then
-        curl -sf -X POST "$url" \
+        if curl -sf -X POST "$url" \
             -H "Content-Type: application/json" \
             -d "$payload" \
-            >/dev/null 2>&1 || true
+            >/dev/null 2>&1; then
+            # Trigger a refresh so the browser picks up the change
+            sleep 0.2
+            trigger_overlay_refresh
+        fi
     fi
 }
 
@@ -1199,14 +1257,21 @@ hide_update_overlay() {
         return 0
     fi
     
+    # Wait briefly for overlay server (shorter timeout since we're hiding)
+    wait_for_overlay_server || return 0
+    
     local url="http://localhost:${overlay_port}/overlay/info-card"
     local payload='{"action": "clear"}'
     
     if command -v curl >/dev/null 2>&1; then
-        curl -sf -X POST "$url" \
+        if curl -sf -X POST "$url" \
             -H "Content-Type: application/json" \
             -d "$payload" \
-            >/dev/null 2>&1 || true
+            >/dev/null 2>&1; then
+            # Trigger a refresh so the browser picks up the change
+            sleep 0.2
+            trigger_overlay_refresh
+        fi
     fi
 }
 
