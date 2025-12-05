@@ -1,3 +1,10 @@
+# [0.78.0](https://github.com/weirdtangent/pulse-os/compare/v0.77.1...v0.78.0) (2025-12-05)
+
+
+### Features
+
+* show update overlay during setup ([ffc828f](https://github.com/weirdtangent/pulse-os/commit/ffc828f4b59e870e59db9beab75f0e4537143077))
+
 ## [0.77.1](https://github.com/weirdtangent/pulse-os/compare/v0.77.0...v0.77.1) (2025-12-05)
 
 
