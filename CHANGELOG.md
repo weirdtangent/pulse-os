@@ -1,3 +1,10 @@
+## [0.78.3](https://github.com/weirdtangent/pulse-os/compare/v0.78.2...v0.78.3) (2025-12-05)
+
+
+### Bug Fixes
+
+* publish overlay refresh via MQTT ([2966e51](https://github.com/weirdtangent/pulse-os/commit/2966e51b434cfe19503b9bc90759c5c13c092b97))
+
 ## [0.78.2](https://github.com/weirdtangent/pulse-os/compare/v0.78.1...v0.78.2) (2025-12-05)
 
 
