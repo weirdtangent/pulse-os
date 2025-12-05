@@ -181,8 +181,9 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_CALENDAR_ICS_URLS` | *(empty)* | Comma-separated ICS/WebCal feed URLs (`webcal://` or `https://`). |
 | `PULSE_CALENDAR_REFRESH_MINUTES` | `5` | Minutes between feed polls (minimum 1). |
 | `PULSE_CALENDAR_LOOKAHEAD_HOURS` | `72` | Look-ahead window used for scheduling reminders and overlay snapshots. |
-| `PULSE_CALENDAR_OWNER_EMAILS` | *(empty)* | Comma-separated attendee emails treated as “me” (declined events are shown but reminders are suppressed). |
+| `PULSE_CALENDAR_OWNER_EMAILS` | *(empty)* | Comma-separated attendee emails treated as "me" (declined events are shown but reminders are suppressed). |
 | `PULSE_CALENDAR_DEFAULT_NOTIFICATIONS` | *(empty)* | Comma-separated default notification times (minutes before event start) to apply to all events. Supplements VALARM entries in ICS files. **Note:** Google Calendar's default notification (usually 10 minutes before) is NOT included in the ICS export, so you should set at least `"10"` here to mimic that behavior. Example: `"10,5"` adds 10-minute and 5-minute reminders to all events. You can add additional default notifications that will apply to ALL events. Duplicates (within 30 seconds) are automatically deduplicated. |
+| `PULSE_CALENDAR_HIDE_DECLINED` | `false` | Set to `true` to hide declined events entirely. When `false` (default), declined events are shown but reminders are suppressed. |
 
 ## Snapcast Client (Optional)
 

@@ -208,6 +208,7 @@ class CalendarConfig:
     lookahead_hours: int
     attendee_emails: tuple[str, ...]
     default_notifications: tuple[int, ...]  # Minutes before event start (e.g., (10, 5) for 10-min and 5-min reminders)
+    hide_declined_events: bool  # If True, filter out declined events entirely (default False)
 
 
 @dataclass(frozen=True)
@@ -460,6 +461,7 @@ class AssistantConfig:
             )
         )
 
+        hide_declined_events = parse_bool(source.get("PULSE_CALENDAR_HIDE_DECLINED"), False)
         calendar_config = CalendarConfig(
             enabled=bool(feeds),
             feeds=feeds,
@@ -467,6 +469,7 @@ class AssistantConfig:
             lookahead_hours=lookahead_hours,
             attendee_emails=owner_emails,
             default_notifications=default_notifications,
+            hide_declined_events=hide_declined_events,
         )
 
         return AssistantConfig(

@@ -342,6 +342,10 @@ PULSE_CALENDAR_OWNER_EMAILS=""
 # are automatically deduplicated.
 PULSE_CALENDAR_DEFAULT_NOTIFICATIONS=""
 
+# Set to "true" to hide declined events entirely (defaults to "false" - declined events
+# are shown but reminders are suppressed).
+# PULSE_CALENDAR_HIDE_DECLINED="false"
+
 # ============================================================================
 # Snapcast Client (optional)
 # ============================================================================

@@ -224,12 +224,20 @@ class CalendarSyncService:
         for component in calendar.walk("VEVENT"):
             reminder = self._process_vevent(component, state, now)
             if reminder:
-                reminders.extend(reminder)
+                # Filter out declined events if configured to hide them
+                if self._config.hide_declined_events:
+                    reminder = [r for r in reminder if not r.declined]
+                if reminder:
+                    reminders.extend(reminder)
         # Process VTODO components (tasks)
         for component in calendar.walk("VTODO"):
             reminder = self._process_vtodo(component, state, now)
             if reminder:
-                reminders.extend(reminder)
+                # Filter out declined events if configured to hide them
+                if self._config.hide_declined_events:
+                    reminder = [r for r in reminder if not r.declined]
+                if reminder:
+                    reminders.extend(reminder)
         return reminders
 
     def _process_vevent(
