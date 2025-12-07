@@ -156,5 +156,7 @@ After either disabling the provider loop or overriding `PULSE_MEDIA_PLAYER_ENTIT
 
 When the guard declines a reboot, you'll see `pulse-safe-reboot` entries in syslog explaining why it was skipped. Fix the underlying issue (bad kiosk URL, network outage, runaway MQTT automation), then either wait for the window to clear or reboot manually once you're ready.
 
+If you prefer not to schedule a reboot at 03:00 every day, leave `PULSE_DAILY_REBOOT_ENABLED="false"` (the default) or set it explicitly to `false` and rerun `./setup.sh` to disable the timer.
+
 Send PRs with any other gotchas so future builders don't have to rediscover them.
 

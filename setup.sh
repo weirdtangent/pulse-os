@@ -800,7 +800,13 @@ enable_services() {
         log "Disabling remote logging (syslog-ng)…"
         sudo systemctl disable --now syslog-ng 2>/dev/null || true
     fi
-    sudo systemctl enable --now pulse-daily-reboot.timer
+    if [ "${PULSE_DAILY_REBOOT_ENABLED:-false}" = "true" ]; then
+        log "Enabling daily reboot timer…"
+        sudo systemctl enable --now pulse-daily-reboot.timer
+    else
+        log "Daily reboot disabled; stopping timer…"
+        sudo systemctl disable --now pulse-daily-reboot.timer 2>/dev/null || true
+    fi
 
     if [ "$PULSE_DAY_NIGHT_AUTO" = "true" ]; then
         log "Enabling day/night auto-adjustment (screen brightness)..."

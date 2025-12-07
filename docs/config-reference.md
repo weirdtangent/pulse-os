@@ -73,6 +73,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_REMOTE_LOGGING` | `true` | Forwards syslog entries to a remote host. |
 | `PULSE_REMOTE_LOG_HOST` | `192.168.1.100` | Remote syslog target. |
 | `PULSE_REMOTE_LOG_PORT` | `5514` | Remote syslog UDP port. |
+| `PULSE_DAILY_REBOOT_ENABLED` | `false` | Enables the legacy 3 AM safe reboot timer. |
 | `PULSE_REBOOT_MIN_UPTIME_SECONDS` | `300` | Minimum uptime before allowing another automatic reboot. |
 | `PULSE_REBOOT_WINDOW_SECONDS` | `900` | Rolling window (seconds) to count automated reboots. |
 | `PULSE_REBOOT_MAX_COUNT` | `3` | Maximum automated reboots within the window above. |

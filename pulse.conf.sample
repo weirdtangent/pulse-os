@@ -152,6 +152,9 @@ PULSE_REMOTE_LOG_HOST="192.168.1.100"
 # PULSE_REMOTE_LOG_PORT — remote syslog server port.
 PULSE_REMOTE_LOG_PORT="5514"
 
+# PULSE_DAILY_REBOOT_ENABLED — set to "true" to keep the legacy 3 AM safe reboot timer.
+PULSE_DAILY_REBOOT_ENABLED="false"
+
 # PULSE_REBOOT_MIN_UPTIME_SECONDS — minimum uptime (seconds) before an automatic reboot is allowed.
 PULSE_REBOOT_MIN_UPTIME_SECONDS="300"
 
