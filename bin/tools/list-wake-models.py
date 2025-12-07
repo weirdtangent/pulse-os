@@ -47,6 +47,7 @@ def _load_verify_helpers() -> Any:
         raise ImportError(f"Unable to load verify helpers from {script_path}")
 
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)  # type: ignore[attr-defined]
     return module
 
