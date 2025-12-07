@@ -1,3 +1,10 @@
+## [0.80.2](https://github.com/weirdtangent/pulse-os/compare/v0.80.1...v0.80.2) (2025-12-07)
+
+
+### Bug Fixes
+
+* list-wake-models.py import AssistantConfig from pulse.assistant.config ([a742d4c](https://github.com/weirdtangent/pulse-os/commit/a742d4cc18a7571a8ebcd65bddfe1949eec07d70))
+
 ## [0.80.1](https://github.com/weirdtangent/pulse-os/compare/v0.80.0...v0.80.1) (2025-12-07)
 
 # [0.80.0](https://github.com/weirdtangent/pulse-os/compare/v0.79.0...v0.80.0) (2025-12-07)
