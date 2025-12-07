@@ -131,10 +131,13 @@ def main() -> int:
             continue
         advertised = extract_models(info)
         print(f"  Advertised models ({len(advertised)}): {_format_list(advertised)}")
-        missing = [model for model in expected if model not in advertised]
-        if missing:
-            had_error = True
-            print(f"  Missing models: {_format_list(missing)}")
+        if advertised:
+            missing = [model for model in expected if model not in advertised]
+            if missing:
+                had_error = True
+                print(f"  Missing models: {_format_list(missing)}")
+        elif expected:
+            print("  Note: endpoint did not advertise any models; detection may still work if models are preloaded.")
         service_name = getattr(info, "name", None) or "Service"
         version = getattr(info, "version", None) or ""
         type_list = [t for t in getattr(info, "types", []) if t]
