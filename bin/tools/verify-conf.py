@@ -595,18 +595,19 @@ def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeou
 
         expected = expected_models.get(name, [])
         advertised = _extract_wake_model_names(info) if name in expected_models else []
-        missing = _missing_wake_models(advertised, expected)
-        if missing:
-            detail = _missing_wake_model_detail(
-                name,
-                host=host,
-                port=port,
-                expected=expected,
-                advertised=advertised,
-                missing=missing,
-            )
-            results.append(CheckResult(name, "fail", detail))
-            continue
+        if expected and advertised:
+            missing = _missing_wake_models(advertised, expected)
+            if missing:
+                detail = _missing_wake_model_detail(
+                    name,
+                    host=host,
+                    port=port,
+                    expected=expected,
+                    advertised=advertised,
+                    missing=missing,
+                )
+                results.append(CheckResult(name, "fail", detail))
+                continue
 
         if name in {OPENWAKEWORD_LABEL, HA_OPENWAKEWORD_LABEL}:
             probe_result = _exercise_openwakeword(
