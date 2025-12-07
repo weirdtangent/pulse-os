@@ -10,7 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from pulse.assistant.config import AssistantConfig
+try:
+    from pulse.assistant.config import AssistantConfig
+except ModuleNotFoundError:  # pragma: no cover - runtime convenience
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from pulse.assistant.config import AssistantConfig
 
 
 def parse_args() -> argparse.Namespace:
