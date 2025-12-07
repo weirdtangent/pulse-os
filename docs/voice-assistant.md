@@ -100,6 +100,16 @@ PULSE_ASSISTANT_LOG_LLM="true"
 
 If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. If the HA Whisper endpoint exposes multiple models, set `HOME_ASSISTANT_STT_MODEL` so we request the correct one. Leave these blank to keep using your original servers.
 
+### Home Assistant wake-word models
+
+Wake words mapped to the `home_assistant` pipeline are now sent to the HA-managed `wyoming-openwakeword` endpoint while the local/Jarvis models keep using the primary server. To keep “Hey House” (or any other HA wake word) reliable:
+
+1. Set `HOME_ASSISTANT_OPENWAKEWORD_HOST` / `HOME_ASSISTANT_OPENWAKEWORD_PORT` to the host/port exposed by the HA add-on or container that runs `wyoming-openwakeword`. The official HA add-on listens on port `10400` and stores custom models under `/share/openwakeword`.
+2. Drop improved models (for example, a stronger `hey_house` model) into that directory and preload them. The add-on UI exposes a “Preload models” list; a vanilla container can use `--preload-model hey_house --custom-model-dir /share/openwakeword`. Copy both the `.tflite` and `.json` files from the OpenWakeWord project (or any custom training run) so the service advertises the exact model name you reference in `PULSE_ASSISTANT_WAKE_WORDS_HA`.
+3. Run `bin/tools/list-wake-models.py --config /path/to/pulse.conf` to see which models each endpoint reports. `bin/tools/verify-conf.py` now fails fast if a configured wake word is missing so you know to preload the model before testing voice control.
+
+If you want to train your own “Hey House” model, follow the [openWakeWord training guide](https://github.com/dscripka/openWakeWord) to generate a dataset (spoken samples + background noise), run the training pipeline, then copy the resulting artifacts into the HA directory mentioned above. Restart the HA add-on (or container) so it loads the new model, rerun `list-wake-models.py`, and the assistant will automatically start sending HA wake words to that endpoint.
+
 ### Music Assistant control
 
 Set `PULSE_MEDIA_PLAYER_ENTITY="media_player.<your_player>"` (and the required `HOME_ASSISTANT_*` credentials) to let the Pulse pipeline pause/stop/skip music or describe what’s playing without extra automations. Example prompts: “Pause the music”, “Next song”, “What song is this?”, or “Who is this?”. Pulse calls the standard Home Assistant `media_player` services and responds verbally with the result.

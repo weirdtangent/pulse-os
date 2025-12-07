@@ -403,6 +403,12 @@ HOME_ASSISTANT_ASSIST_PIPELINE=""
 HOME_ASSISTANT_OPENWAKEWORD_HOST=""
 
 # HOME_ASSISTANT_OPENWAKEWORD_PORT — HA-provided wyoming-openwakeword port.
+# When routing wake words such as "hey_house" through Home Assistant, point these
+# to the HA add-on or container that runs wyoming-openwakeword. Drop custom
+# models into the directory that service watches (e.g., /share/openwakeword on
+# Home Assistant OS) and preload them (via --preload-model or the add-on UI) so
+# the model name matches the value in PULSE_ASSISTANT_WAKE_WORDS_HA. Use
+# bin/tools/list-wake-models.py to confirm which models each endpoint advertises.
 HOME_ASSISTANT_OPENWAKEWORD_PORT=""
 
 # HOME_ASSISTANT_WHISPER_HOST — HA-provided wyoming-whisper host.

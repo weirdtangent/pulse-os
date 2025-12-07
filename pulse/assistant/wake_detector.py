@@ -9,6 +9,7 @@ import math
 import sys
 import threading
 from array import array
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
@@ -17,9 +18,23 @@ from wyoming.wake import Detect, Detection, NotDetected
 
 if TYPE_CHECKING:
     from pulse.assistant.audio import ArecordStream
-    from pulse.assistant.config import AssistantConfig, AssistantPreferences
+    from pulse.assistant.config import AssistantConfig, AssistantPreferences, WyomingEndpoint
 
 LOGGER = logging.getLogger("pulse-assistant.wake")
+
+
+@dataclass
+class WakeEndpointStream:
+    """Grouping of wake-word models that share an OpenWakeWord endpoint."""
+
+    endpoint: WyomingEndpoint
+    labels: set[str]
+    models: list[str]
+
+    @property
+    def display_label(self) -> str:
+        label = "/".join(sorted(self.labels))
+        return f"{label} ({self.endpoint.host}:{self.endpoint.port})"
 
 
 class WakeContextChanged(Exception):
@@ -146,6 +161,35 @@ class WakeDetector:
             return None
         return {"trigger_level": trigger_level}
 
+    def _wake_endpoint_streams(self) -> list[WakeEndpointStream]:
+        """Group wake-word models by their assigned OpenWakeWord endpoint."""
+        ha_endpoint = self.config.home_assistant.wake_endpoint
+        candidates: list[tuple[str, WyomingEndpoint, list[str]]] = []
+        pulse_models: list[str] = []
+        ha_models: list[str] = []
+        for model in self.config.wake_models:
+            pipeline = self.config.wake_routes.get(model, "pulse")
+            if pipeline == "home_assistant" and ha_endpoint:
+                ha_models.append(model)
+            else:
+                pulse_models.append(model)
+        if pulse_models:
+            candidates.append(("Pulse", self.config.wake_endpoint, pulse_models))
+        if ha_endpoint and ha_models:
+            candidates.append(("Home Assistant", ha_endpoint, ha_models))
+        streams: dict[tuple[str, int], WakeEndpointStream] = {}
+        for label, endpoint, models in candidates:
+            key = (endpoint.host, endpoint.port)
+            existing = streams.get(key)
+            if existing:
+                existing.labels.add(label)
+                for name in models:
+                    if name not in existing.models:
+                        existing.models.append(name)
+                continue
+            streams[key] = WakeEndpointStream(endpoint=endpoint, labels={label}, models=list(models))
+        return list(streams.values())
+
     def stable_detect_context(self) -> tuple[dict[str, int] | None, int]:
         """Get stable wake detection context (waits for version to stabilize)."""
         while True:
@@ -171,24 +215,39 @@ class WakeDetector:
     async def run_wake_detector_session(self) -> str | None:
         """Run a single wake detection session."""
         detect_context, context_version = self.stable_detect_context()
-        client = AsyncTcpClient(self.config.wake_endpoint.host, self.config.wake_endpoint.port)
-        await client.connect()
+        streams = self._wake_endpoint_streams()
+        if not streams:
+            LOGGER.warning("No wake models configured; skipping wake detection session")
+            await asyncio.sleep(1.0)
+            return None
         timestamp = 0
-        detection_task: asyncio.Task[str | None] | None = None
+        chunk_ms = self.config.mic.chunk_ms
+        clients: list[AsyncTcpClient] = []
+        reader_tasks: dict[asyncio.Task[str | None], WakeEndpointStream] = {}
         try:
-            detect_message = Detect(names=self.config.wake_models, context=detect_context or None)
-            await client.write_event(detect_message.event())
-            await client.write_event(
-                AudioStart(
-                    rate=self.config.mic.rate,
-                    width=self.config.mic.width,
-                    channels=self.config.mic.channels,
-                    timestamp=0,
-                ).event()
-            )
-            detection_task = asyncio.create_task(self._read_wake_events(client))
-            chunk_ms = self.config.mic.chunk_ms
-            while not detection_task.done():
+            for stream in streams:
+                client = AsyncTcpClient(stream.endpoint.host, stream.endpoint.port)
+                await client.connect()
+                clients.append(client)
+                detect_message = Detect(names=stream.models, context=detect_context or None)
+                await client.write_event(detect_message.event())
+                await client.write_event(
+                    AudioStart(
+                        rate=self.config.mic.rate,
+                        width=self.config.mic.width,
+                        channels=self.config.mic.channels,
+                        timestamp=0,
+                    ).event()
+                )
+                task = asyncio.create_task(self._read_wake_events(client, endpoint_label=stream.display_label))
+                reader_tasks[task] = stream
+                LOGGER.debug(
+                    "Started wake detection stream for %s with models: %s",
+                    stream.display_label,
+                    ", ".join(stream.models),
+                )
+            detected_word: str | None = None
+            while reader_tasks:
                 if context_version != self._wake_context_version:
                     raise WakeContextChanged
                 chunk_bytes = await self.mic.read_chunk()
@@ -202,20 +261,37 @@ class WakeDetector:
                     audio=chunk_bytes,
                     timestamp=timestamp,
                 )
-                await client.write_event(chunk_event.event())
+                for client in clients:
+                    await client.write_event(chunk_event.event())
                 timestamp += chunk_ms
-            if detection_task.done():
-                return detection_task.result()
-            return None
+                finished = [task for task in reader_tasks if task.done()]
+                for task in finished:
+                    stream = reader_tasks.pop(task)
+                    try:
+                        detection = task.result()
+                    except Exception:
+                        LOGGER.warning("Wake detector stream %s failed", stream.display_label, exc_info=True)
+                        continue
+                    if detection:
+                        detected_word = detection
+                        break
+                if detected_word is not None:
+                    break
+            return detected_word
         finally:
-            await client.write_event(AudioStop(timestamp=timestamp).event())
-            if detection_task:
-                detection_task.cancel()
+            for client in clients:
+                with contextlib.suppress(Exception):
+                    await client.write_event(AudioStop(timestamp=timestamp).event())
+            for task in reader_tasks:
+                task.cancel()
+            for task in reader_tasks:
                 with contextlib.suppress(asyncio.CancelledError):
-                    await detection_task
-            await client.disconnect()
+                    await task
+            for client in clients:
+                with contextlib.suppress(Exception):
+                    await client.disconnect()
 
-    async def _read_wake_events(self, client: AsyncTcpClient) -> str | None:
+    async def _read_wake_events(self, client: AsyncTcpClient, *, endpoint_label: str) -> str | None:
         """Read events from wake detection client."""
         while True:
             event = await client.read_event()
@@ -223,8 +299,9 @@ class WakeDetector:
                 return None
             if Detection.is_type(event.type):
                 detection = Detection.from_event(event)
-                LOGGER.info("Wake word detected: %s", detection.name or self.config.wake_models[0])
-                return detection.name or self.config.wake_models[0]
+                detected_name = detection.name or self.config.wake_models[0]
+                LOGGER.info("Wake word detected via %s: %s", endpoint_label, detected_name)
+                return detected_name
             if NotDetected.is_type(event.type):
-                LOGGER.debug("OpenWakeWord reported NotDetected")
+                LOGGER.debug("OpenWakeWord (%s) reported NotDetected", endpoint_label)
                 return None

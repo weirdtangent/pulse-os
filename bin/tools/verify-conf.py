@@ -17,7 +17,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,12 +66,16 @@ except ModuleNotFoundError:
 else:
     WYOMING_PROTOCOL_AVAILABLE = AsyncTcpClient is not None and wyoming_helpers is not None
 
+OPENWAKEWORD_LABEL = "Wyoming OpenWakeWord"
+HA_OPENWAKEWORD_LABEL = "Home Assistant OpenWakeWord"
+
 Status = Literal["ok", "fail", "skip"]
 
 EXPECTED_WYOMING_TYPES: dict[str, set[str]] = {
     "Wyoming Whisper": {"stt", "asr"},
     "Wyoming Piper": {"tts"},
-    "Wyoming OpenWakeWord": {"wake"},
+    OPENWAKEWORD_LABEL: {"wake"},
+    HA_OPENWAKEWORD_LABEL: {"wake"},
 }
 
 ParseResult = tuple[dict[str, str], dict[str, str], set[str]]
@@ -487,12 +491,90 @@ def check_llm(config: AssistantConfig) -> CheckResult:
     )
 
 
+def _split_wake_word_targets(
+    config: AssistantConfig,
+    *,
+    ha_endpoint_configured: bool,
+) -> tuple[list[str], list[str]]:
+    pulse_models: list[str] = []
+    ha_models: list[str] = []
+    for name in config.wake_models:
+        pipeline = config.wake_routes.get(name, "pulse")
+        if pipeline == "home_assistant" and ha_endpoint_configured:
+            ha_models.append(name)
+        else:
+            pulse_models.append(name)
+    return pulse_models, ha_models
+
+
+def _extract_wake_model_names(info: Info | None) -> list[str]:
+    if info is None:
+        return []
+    names: set[str] = set()
+    for model in getattr(info, "models", []):  # type: ignore[arg-type]
+        name = getattr(model, "name", None)
+        if name:
+            names.add(str(name))
+    return sorted(names)
+
+
+def _missing_wake_models(advertised: Sequence[str], expected: Sequence[str]) -> list[str]:
+    if not expected:
+        return []
+    advertised_set = set(advertised)
+    return [model for model in expected if model not in advertised_set]
+
+
+def _missing_wake_model_detail(
+    label: str,
+    *,
+    host: str | None,
+    port: int | None,
+    expected: Sequence[str],
+    advertised: Sequence[str],
+    missing: Sequence[str],
+) -> str:
+    pipeline = "Home Assistant" if label == HA_OPENWAKEWORD_LABEL else "Pulse"
+    host_display = f"{host}:{port}" if host and port else "the configured endpoint"
+    expected_display = ", ".join(expected) or "<none>"
+    advertised_display = ", ".join(advertised) or "<none>"
+    missing_display = ", ".join(missing)
+    guidance = (
+        "Install or preload the missing model(s) on that server (or adjust "
+        "PULSE_ASSISTANT_WAKE_WORDS_*). Run bin/tools/list-wake-models.py for details."
+    )
+    return (
+        f"{pipeline} wake pipeline expects [{expected_display}] but {host_display} advertised "
+        f"[{advertised_display}] (missing: {missing_display}). {guidance}"
+    )
+
+
 def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeout: float) -> list[CheckResult]:
     checks: list[tuple[str, str, str, WyomingEndpoint]] = [
         ("Wyoming Whisper", "WYOMING_WHISPER_HOST", "WYOMING_WHISPER_PORT", config.stt_endpoint),
         ("Wyoming Piper", "WYOMING_PIPER_HOST", "WYOMING_PIPER_PORT", config.tts_endpoint),
-        ("Wyoming OpenWakeWord", "WYOMING_OPENWAKEWORD_HOST", "WYOMING_OPENWAKEWORD_PORT", config.wake_endpoint),
+        (OPENWAKEWORD_LABEL, "WYOMING_OPENWAKEWORD_HOST", "WYOMING_OPENWAKEWORD_PORT", config.wake_endpoint),
     ]
+    ha_wake_endpoint = config.home_assistant.wake_endpoint
+    ha_endpoint_configured = ha_wake_endpoint is not None
+    pulse_models, ha_models = _split_wake_word_targets(
+        config,
+        ha_endpoint_configured=ha_endpoint_configured,
+    )
+    if ha_endpoint_configured and ha_wake_endpoint is not None:
+        checks.append(
+            (
+                HA_OPENWAKEWORD_LABEL,
+                "HOME_ASSISTANT_OPENWAKEWORD_HOST",
+                "HOME_ASSISTANT_OPENWAKEWORD_PORT",
+                ha_wake_endpoint,
+            )
+        )
+
+    expected_models: dict[str, list[str]] = {OPENWAKEWORD_LABEL: pulse_models}
+    if ha_endpoint_configured:
+        expected_models[HA_OPENWAKEWORD_LABEL] = ha_models
+
     results: list[CheckResult] = []
     for name, host_key, port_key, endpoint in checks:
         if not WYOMING_PROTOCOL_AVAILABLE:
@@ -511,7 +593,32 @@ def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeou
             results.append(describe_result)
             continue
 
-        probe_result = _exercise_wyoming_service(name, host, port, timeout, config)
+        expected = expected_models.get(name, [])
+        advertised = _extract_wake_model_names(info) if name in expected_models else []
+        missing = _missing_wake_models(advertised, expected)
+        if missing:
+            detail = _missing_wake_model_detail(
+                name,
+                host=host,
+                port=port,
+                expected=expected,
+                advertised=advertised,
+                missing=missing,
+            )
+            results.append(CheckResult(name, "fail", detail))
+            continue
+
+        if name in {OPENWAKEWORD_LABEL, HA_OPENWAKEWORD_LABEL}:
+            probe_result = _exercise_openwakeword(
+                name,
+                host,
+                port,
+                config,
+                timeout,
+                models=expected or None,
+            )
+        else:
+            probe_result = _exercise_wyoming_service(name, host, port, timeout, config)
 
         if probe_result is None:
             results.append(describe_result)
@@ -641,8 +748,8 @@ def _exercise_wyoming_service(
         return _exercise_whisper(host, port, config, timeout)
     if label == "Wyoming Piper":
         return _exercise_piper(host, port, timeout)
-    if label == "Wyoming OpenWakeWord":
-        return _exercise_openwakeword(host, port, config, timeout)
+    if label in {OPENWAKEWORD_LABEL, HA_OPENWAKEWORD_LABEL}:
+        return _exercise_openwakeword(label, host, port, config, timeout)
     return None
 
 
@@ -675,18 +782,25 @@ def _exercise_piper(host: str, port: int, timeout: float) -> CheckResult:
     return CheckResult("Wyoming Piper", "ok", f"Probe synthesized {chunks} audio chunk(s).")
 
 
-def _exercise_openwakeword(host: str, port: int, config: AssistantConfig, timeout: float) -> CheckResult:
+def _exercise_openwakeword(
+    label: str,
+    host: str,
+    port: int,
+    config: AssistantConfig,
+    timeout: float,
+    models: Sequence[str] | None = None,
+) -> CheckResult:
     if not wyoming_helpers:
-        return CheckResult("Wyoming OpenWakeWord", "fail", "Wyoming helpers unavailable for wake-word probe.")
+        return CheckResult(label, "fail", "Wyoming helpers unavailable for wake-word probe.")
     try:
-        detection = asyncio.run(_probe_openwakeword_async(host, port, config, timeout))
+        detection = asyncio.run(_probe_openwakeword_async(host, port, config, timeout, models=models))
     except TimeoutError:
-        return CheckResult("Wyoming OpenWakeWord", "fail", f"Wake-word probe timed out after {timeout:.1f}s.")
+        return CheckResult(label, "fail", f"Wake-word probe timed out after {timeout:.1f}s.")
     except OSError as exc:
-        return CheckResult("Wyoming OpenWakeWord", "fail", f"Wake-word probe failed: {exc}.")
+        return CheckResult(label, "fail", f"Wake-word probe failed: {exc}.")
     if detection:
-        return CheckResult("Wyoming OpenWakeWord", "ok", f"Probe detected wake word '{detection}'.")
-    return CheckResult("Wyoming OpenWakeWord", "ok", "Probe returned NotDetected (expected for silence sample).")
+        return CheckResult(label, "ok", f"Probe detected wake word '{detection}'.")
+    return CheckResult(label, "ok", "Probe returned NotDetected (expected for silence sample).")
 
 
 async def _probe_whisper_async(host: str, port: int, config: AssistantConfig, timeout: float) -> str | None:
@@ -712,14 +826,21 @@ async def _probe_piper_async(host: str, port: int, timeout: float) -> tuple[bool
     )
 
 
-async def _probe_openwakeword_async(host: str, port: int, config: AssistantConfig, timeout: float) -> str | None:
+async def _probe_openwakeword_async(
+    host: str,
+    port: int,
+    config: AssistantConfig,
+    timeout: float,
+    *,
+    models: Sequence[str] | None = None,
+) -> str | None:
     assert wyoming_helpers is not None
     endpoint = WyomingEndpoint(host=host, port=port)
-    models = config.wake_models or ["hey_jarvis"]
+    target_models = list(models) if models else (config.wake_models or ["hey_jarvis"])
     return await wyoming_helpers.probe_wake_detection(
         endpoint=endpoint,
         mic=config.mic,
-        models=models,
+        models=target_models,
         timeout=timeout,
     )
 
