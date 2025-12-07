@@ -1,3 +1,10 @@
+# [0.79.0](https://github.com/weirdtangent/pulse-os/compare/v0.78.3...v0.79.0) (2025-12-07)
+
+
+### Features
+
+* add PULSE_DAILY_REBOOT_ENABLED to pulse.conf.sample and setup.sh ([7f27460](https://github.com/weirdtangent/pulse-os/commit/7f27460c5ef2295f8471aff5245a02fb7c9b1acb))
+
 ## [0.78.3](https://github.com/weirdtangent/pulse-os/compare/v0.78.2...v0.78.3) (2025-12-05)
 
 
