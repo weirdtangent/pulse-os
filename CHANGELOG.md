@@ -1,3 +1,10 @@
+# [0.80.0](https://github.com/weirdtangent/pulse-os/compare/v0.79.0...v0.80.0) (2025-12-07)
+
+
+### Features
+
+* wake word processing ([0a61cfc](https://github.com/weirdtangent/pulse-os/commit/0a61cfc06369ea362cc94f57e7fa573e46e6b8e4))
+
 # [0.79.0](https://github.com/weirdtangent/pulse-os/compare/v0.78.3...v0.79.0) (2025-12-07)
 
 
