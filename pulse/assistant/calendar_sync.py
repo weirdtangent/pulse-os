@@ -747,8 +747,7 @@ class CalendarSyncService:
         filtered_count = len(past_reminders)
         if filtered_count > 0:
             past_summaries = [
-                f"{r.summary} (end: {r.end.isoformat() if r.end else r.start.isoformat()})"
-                for r in past_reminders[:3]
+                f"{r.summary} (end: {r.end.isoformat() if r.end else r.start.isoformat()})" for r in past_reminders[:3]
             ]
             self._logger.info(
                 "Filtered out %d past event(s) from calendar snapshot (now: %s). Examples: %s",
