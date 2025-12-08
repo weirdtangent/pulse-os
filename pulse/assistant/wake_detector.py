@@ -200,11 +200,18 @@ class WakeDetector:
 
     async def wait_for_wake_word(self, shutdown: asyncio.Event, get_earmuffs_enabled) -> str | None:
         """Wait for a wake word to be detected."""
+        last_earmuffs: bool | None = None
         while not shutdown.is_set():
-            if get_earmuffs_enabled():
-                LOGGER.debug("Earmuffs enabled, skipping wake word detection")
+            enabled = get_earmuffs_enabled()
+            if enabled:
+                if last_earmuffs is not True:
+                    LOGGER.debug("Earmuffs enabled; pausing wake word detection")
+                last_earmuffs = True
                 await asyncio.sleep(0.5)
                 continue
+            if last_earmuffs is not False:
+                LOGGER.debug("Earmuffs disabled; resuming wake word detection")
+            last_earmuffs = False
             try:
                 return await self.run_wake_detector_session()
             except WakeContextChanged:
