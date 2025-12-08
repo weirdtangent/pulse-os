@@ -79,7 +79,8 @@ class AssistantMqtt:
         def _callback(_client, _userdata, message):  # type: ignore[no-untyped-def]
             try:
                 payload = message.payload.decode("utf-8", errors="ignore")
-                self._logger.debug("Received MQTT message on topic '%s': %s", topic, payload)
+                if "telemetry/now_playing" not in topic:
+                    self._logger.debug("Received MQTT message on topic '%s': %s", topic, payload)
                 on_message(payload)
             except Exception as exc:  # pylint: disable=broad-except
                 self._logger.error("MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True)

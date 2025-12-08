@@ -122,6 +122,7 @@ class CalendarSyncService:
         self._latest_events: list[CalendarReminder] = []
         self._retry_tasks: dict[str, asyncio.Task] = {}
         self._failed_feeds: set[str] = set()
+        self._windowed_events: dict[str, CalendarReminder] = {}
 
     async def start(self) -> None:
         if not self._config.feeds:
@@ -133,7 +134,7 @@ class CalendarSyncService:
         self._stop_event.clear()
         self._client = httpx.AsyncClient(follow_redirects=True, timeout=20.0)
         self._runner = asyncio.create_task(self._run_loop())
-        self._logger.info("Calendar sync service started for %d feed(s)", len(self._feed_states))
+        self._logger.debug("Calendar sync service started for %d feed(s)", len(self._feed_states))
 
     async def stop(self) -> None:
         self._stop_event.set()
@@ -155,15 +156,15 @@ class CalendarSyncService:
         if self._client:
             await self._client.aclose()
             self._client = None
-        self._logger.info("Calendar sync service stopped")
+        self._logger.debug("Calendar sync service stopped")
 
     async def _run_loop(self) -> None:
         refresh_seconds = max(1, self._config.refresh_minutes) * 60
         while not self._stop_event.is_set():
             try:
-                self._logger.info("Calendar sync tick: starting sync_once()")
+                self._logger.debug("Calendar sync tick: starting sync_once()")
                 await asyncio.wait_for(self._sync_once(), timeout=30.0)
-                self._logger.info("Calendar sync tick: finished sync_once()")
+                self._logger.debug("Calendar sync tick: finished sync_once()")
             except Exception:  # pylint: disable=broad-except
                 self._logger.exception("Calendar sync loop failed; continuing")
             try:
@@ -174,6 +175,7 @@ class CalendarSyncService:
     async def _sync_once(self) -> None:
         now = _now()
         self._prune_triggered(now)
+        self._windowed_events.clear()
         for state in self._feed_states.values():
             try:
                 await asyncio.wait_for(self._sync_feed(state, now), timeout=12.0)
@@ -222,12 +224,6 @@ class CalendarSyncService:
         if calendar_name:
             state.calendar_name = str(calendar_name)
         reminders = self._collect_reminders(calendar, state, now)
-        self._logger.debug(
-            "Collected %d reminder(s) from calendar %s (feed: %s)",
-            len(reminders),
-            state.calendar_name or "unknown",
-            state.url,
-        )
         await self._schedule_reminders(state, reminders, now)
 
     def _collect_reminders(
@@ -255,7 +251,7 @@ class CalendarSyncService:
                     reminder = [r for r in reminder if not r.declined]
                 if reminder:
                     reminders.extend(reminder)
-        self._logger.info(
+        self._logger.debug(
             "Calendar feed %s (%s): collected %d reminder(s) before scheduling",
             state.url,
             state.calendar_name or "unknown",
@@ -275,13 +271,6 @@ class CalendarSyncService:
             return []
         declined = self._event_declined(component, state.owner_tokens)
         summary = str(component.get("SUMMARY") or "Calendar event").strip() or "Calendar event"
-        # Log event details for debugging
-        self._logger.debug(
-            "Processing event: UID=%s, Summary=%s, Declined=%s",
-            uid,
-            summary,
-            declined,
-        )
         try:
             start_value = component.decoded("DTSTART")
         except Exception:  # pylint: disable=broad-except
@@ -310,12 +299,6 @@ class CalendarSyncService:
         trigger_times = {trigger for trigger in triggers if trigger}
         # Add default notifications if configured
         if self._config.default_notifications:
-            self._logger.debug(
-                "Applying default notifications %s to event '%s' starting at %s",
-                self._config.default_notifications,
-                summary,
-                start_dt.isoformat(),
-            )
             for minutes_before in self._config.default_notifications:
                 default_trigger = start_dt - timedelta(minutes=minutes_before)
                 # Only add future triggers not already covered by a VALARM trigger (within 30 seconds)
@@ -323,18 +306,6 @@ class CalendarSyncService:
                     abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times
                 ):
                     trigger_times.add(default_trigger)
-                    self._logger.info(
-                        "Added default notification %d minutes before event '%s' (trigger: %s)",
-                        minutes_before,
-                        summary,
-                        default_trigger.isoformat(),
-                    )
-                else:
-                    self._logger.debug(
-                        "Skipped default notification %d minutes before event '%s' - already covered or in the past",
-                        minutes_before,
-                        summary,
-                    )
         # If no triggers at all (no VALARM and no defaults), use the legacy 5-minute default
         if not trigger_times:
             trigger_times = {self._default_trigger(start_dt, all_day)}
@@ -419,12 +390,6 @@ class CalendarSyncService:
         trigger_times = {trigger for trigger in triggers if trigger}
         # Add default notifications if configured
         if self._config.default_notifications:
-            self._logger.debug(
-                "Applying default notifications %s to task '%s' starting at %s",
-                self._config.default_notifications,
-                summary,
-                start_dt.isoformat(),
-            )
             for minutes_before in self._config.default_notifications:
                 default_trigger = start_dt - timedelta(minutes=minutes_before)
                 # Only add future triggers not already covered by a VALARM trigger (within 30 seconds)
@@ -432,18 +397,6 @@ class CalendarSyncService:
                     abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times
                 ):
                     trigger_times.add(default_trigger)
-                    self._logger.info(
-                        "Added default notification %d minutes before task '%s' (trigger: %s)",
-                        minutes_before,
-                        summary,
-                        default_trigger.isoformat(),
-                    )
-                else:
-                    self._logger.debug(
-                        "Skipped default notification %d minutes before task '%s' - already covered or in the past",
-                        minutes_before,
-                        summary,
-                    )
         # If no triggers at all (no VALARM and no defaults), use the legacy 5-minute default
         if not trigger_times:
             trigger_times = {self._default_trigger(start_dt, all_day)}
@@ -676,15 +629,8 @@ class CalendarSyncService:
         if self._stop_event.is_set():
             return
         try:
-            if reminder.declined:
-                self._logger.info(
-                    "Suppressed calendar reminder %s (%s) because attendee declined",
-                    reminder.uid,
-                    reminder.summary,
-                )
-            else:
+            if not reminder.declined:
                 await self._trigger_callback(reminder)
-                self._logger.info("Fired calendar reminder %s (%s)", reminder.uid, reminder.summary)
         except Exception:  # pylint: disable=broad-except
             self._logger.exception(
                 "Failed to trigger calendar reminder %s (%s)",
@@ -736,7 +682,7 @@ class CalendarSyncService:
             if task:
                 task.cancel()
                 summary = scheduled_reminder.summary if scheduled_reminder else "unknown"
-                self._logger.info(
+                self._logger.debug(
                     "Cancelled old reminder for event %s (%s) - event time changed",
                     uid,
                     summary,
@@ -746,50 +692,11 @@ class CalendarSyncService:
             state.active_keys.discard(key)
 
     async def _emit_event_snapshot(self) -> None:
-        now = _now()
-        # Filter out events that have already ended (or started if no end time)
-        # Also clean up past events from _scheduled_reminders
-        future_reminders = []
-        past_reminders = []
-        keys_to_remove = []
-        for key, reminder in list(self._scheduled_reminders.items()):
-            # Use end time if available, otherwise use start time
-            event_end = reminder.end or reminder.start
-            if event_end > now:
-                future_reminders.append(reminder)
-            else:
-                past_reminders.append(reminder)
-                keys_to_remove.append((key, reminder))
-        # Remove past events from _scheduled_reminders
-        for key, reminder in keys_to_remove:
-            task = self._scheduled.pop(key, None)
-            if task:
-                task.cancel()
-            self._scheduled_reminders.pop(key, None)
-            self._key_to_feed.pop(key, None)
-            # Update feed state active_keys
-            state = self._feed_states.get(reminder.source_url)
-            if state:
-                state.active_keys.discard(key)
-        filtered_count = len(past_reminders)
-        if filtered_count > 0:
-            past_summaries = [
-                f"{r.summary} (end: {r.end.isoformat() if r.end else r.start.isoformat()})" for r in past_reminders[:3]
-            ]
-            self._logger.info(
-                "Filtered out %d past event(s) from calendar snapshot (now: %s). Examples: %s",
-                filtered_count,
-                now.isoformat(),
-                "; ".join(past_summaries),
-            )
-        ordered = sorted(
-            future_reminders,
-            key=lambda reminder: (reminder.start, reminder.trigger_time),
-        )
+        ordered = sorted(self._windowed_events.values(), key=lambda reminder: (reminder.start, reminder.trigger_time))
         self._logger.info(
-            "Calendar sync snapshot: %d future reminder(s) after filtering (past=%d)",
+            "Calendar snapshot: %d event(s) within next %d hour(s)",
             len(ordered),
-            filtered_count,
+            self._config.lookahead_hours,
         )
         self._latest_events = list(ordered)
         if self._snapshot_callback:
@@ -811,7 +718,7 @@ class CalendarSyncService:
             return
         self._failed_feeds.add(feed_url)
         retry_delay = 120  # 2 minutes for retry
-        self._logger.info("Scheduling retry for failed calendar feed %s in %d seconds", feed_url, retry_delay)
+        self._logger.warning("Scheduling retry for failed calendar feed %s in %d seconds", feed_url, retry_delay)
         task = asyncio.create_task(self._retry_feed_after_delay(feed_url, retry_delay))
         self._retry_tasks[feed_url] = task
 
@@ -831,7 +738,7 @@ class CalendarSyncService:
             state = self._feed_states.get(feed_url)
             if not state:
                 return
-            self._logger.info("Retrying calendar fetch for %s after failure", feed_url)
+            self._logger.warning("Retrying calendar fetch for %s after failure", feed_url)
             now = _now()
             await self._sync_feed(state, now)
             # Emit snapshot after retry to update any changes

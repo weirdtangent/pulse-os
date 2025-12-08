@@ -2511,9 +2511,10 @@ class PulseAssistant:
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--log-level", default="WARNING")
     args = parser.parse_args()
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
+    resolved_level = getattr(logging, args.log_level.upper(), logging.WARNING)
+    logging.basicConfig(level=resolved_level)
 
     config = AssistantConfig.from_env()
     assistant = PulseAssistant(config)
