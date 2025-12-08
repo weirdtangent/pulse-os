@@ -210,13 +210,20 @@ class PulseAssistant:
             self._publish_earmuffs_state()
         self._publish_assistant_discovery()
         await self.schedule_service.start()
+        LOGGER.info("About to start calendar sync service (calendar_sync=%s)", self.calendar_sync is not None)
         if self.calendar_sync:
             LOGGER.info("Starting calendar sync service...")
-            await self.calendar_sync.start()
+            try:
+                await self.calendar_sync.start()
+                LOGGER.info("Calendar sync start() completed")
+            except Exception as exc:  # pylint: disable=broad-except
+                LOGGER.exception("Failed to start calendar sync service: %s", exc)
             # Clear any stale calendar events on startup
             self._calendar_events = []
             self._calendar_updated_at = None
             LOGGER.info("Cleared stale calendar events cache on startup")
+        else:
+            LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
         await self.mic.start()
         self._set_assist_stage("pulse", "idle")
         friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
