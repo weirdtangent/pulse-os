@@ -197,6 +197,7 @@ class PulseAssistant:
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self.media_controller._loop = self._loop
+        LOGGER.info("Pulse assistant run() starting")
         self.mqtt.connect()
         self._subscribe_preference_topics()
         self._subscribe_schedule_topics()
@@ -2481,6 +2482,7 @@ async def main() -> None:
 
     config = AssistantConfig.from_env()
     assistant = PulseAssistant(config)
+    LOGGER.info("pulse-assistant main(): created assistant, launching run() task")
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
