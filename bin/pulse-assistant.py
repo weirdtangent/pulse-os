@@ -2463,6 +2463,9 @@ async def main() -> None:
     requested_level = logging.getLevelName(args.log_level.upper()) if args.log_level else logging.INFO
     resolved_level = requested_level if isinstance(requested_level, int) else logging.INFO
     logging.basicConfig(level=resolved_level)
+    # Quiet third-party debug/info noise; problems still surface as warnings/errors.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     config = AssistantConfig.from_env()
     assistant = PulseAssistant(config)
