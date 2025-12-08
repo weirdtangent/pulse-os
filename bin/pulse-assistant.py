@@ -217,7 +217,11 @@ class PulseAssistant:
             if not self._earmuffs_state_restored:
                 # No retained message received, publish current state
                 LOGGER.debug("Publishing earmuffs state (no retained state restored)")
-                self._publish_earmuffs_state()
+                try:
+                    self._publish_earmuffs_state()
+                    LOGGER.debug("Published earmuffs state successfully")
+                except Exception as exc:  # pylint: disable=broad-except
+                    LOGGER.exception("Failed to publish earmuffs state: %s", exc)
             LOGGER.info("About to publish assistant discovery...")
             self._publish_assistant_discovery()
             LOGGER.info("Assistant discovery published, starting schedule service...")
