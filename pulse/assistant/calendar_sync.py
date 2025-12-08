@@ -162,7 +162,7 @@ class CalendarSyncService:
         while not self._stop_event.is_set():
             try:
                 self._logger.info("Calendar sync tick: starting sync_once()")
-                await self._sync_once()
+                await asyncio.wait_for(self._sync_once(), timeout=30.0)
                 self._logger.info("Calendar sync tick: finished sync_once()")
             except Exception:  # pylint: disable=broad-except
                 self._logger.exception("Calendar sync loop failed; continuing")
@@ -176,7 +176,9 @@ class CalendarSyncService:
         self._prune_triggered(now)
         for state in self._feed_states.values():
             try:
-                await self._sync_feed(state, now)
+                await asyncio.wait_for(self._sync_feed(state, now), timeout=12.0)
+            except TimeoutError:
+                self._logger.warning("Calendar sync timed out for feed %s", state.url)
             except Exception:  # pylint: disable=broad-except
                 self._logger.exception("Calendar sync failed for feed %s", state.url)
         try:
