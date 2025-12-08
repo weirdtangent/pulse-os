@@ -939,9 +939,7 @@ class PulseAssistant:
 
     def _get_earmuffs_enabled(self) -> bool:
         with self._earmuffs_lock:
-            enabled = self._earmuffs_enabled
-            LOGGER.debug("Earmuffs state check: enabled=%s", enabled)
-            return enabled
+            return self._earmuffs_enabled
 
     def _is_earmuffs_manual_override(self) -> bool:
         with self._earmuffs_lock:
