@@ -219,6 +219,13 @@ class CalendarSyncService:
         if calendar_name:
             state.calendar_name = str(calendar_name)
         reminders = self._collect_reminders(calendar, state, now)
+        if not reminders:
+            self._logger.warning(
+                "Calendar feed %s (%s) produced no reminders at %s",
+                state.url,
+                state.calendar_name or "unknown",
+                now.isoformat(),
+            )
         await self._schedule_reminders(state, reminders, now)
 
     def _collect_reminders(
@@ -541,6 +548,13 @@ class CalendarSyncService:
             self._scheduled_reminders.pop(key, None)
             self._key_to_feed.pop(key, None)
         state.active_keys = {key for key in valid_keys if key in self._scheduled}
+        if reminders and not valid_reminders:
+            self._logger.warning(
+                "Calendar feed %s (%s) had %d reminders but none were scheduled (all filtered out)",
+                state.url,
+                state.calendar_name or "unknown",
+                len(reminders),
+            )
 
     async def _await_and_fire(self, key: str, reminder: CalendarReminder) -> None:
         delay = (reminder.trigger_time - _now()).total_seconds()
