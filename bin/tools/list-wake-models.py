@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import importlib.util
 import sys
-import contextlib
 import wave
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 try:
     from pulse.assistant.config import AssistantConfig, WyomingEndpoint

@@ -34,9 +34,13 @@ MODULE_ROOT = Path(__file__).resolve().parents[2]
 if str(MODULE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODULE_ROOT))
 
-from pulse.assistant.config import AssistantConfig, HomeAssistantConfig, WyomingEndpoint
-from pulse.assistant.home_assistant import HomeAssistantAuthError, HomeAssistantError, verify_home_assistant_access
-from pulse.utils import parse_bool
+from pulse.assistant.config import AssistantConfig, HomeAssistantConfig, WyomingEndpoint  # noqa: E402
+from pulse.assistant.home_assistant import (  # noqa: E402
+    HomeAssistantAuthError,
+    HomeAssistantError,
+    verify_home_assistant_access,
+)
+from pulse.utils import parse_bool  # noqa: E402
 
 try:
     from wyoming.client import AsyncTcpClient
