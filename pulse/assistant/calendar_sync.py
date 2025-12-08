@@ -611,6 +611,11 @@ class CalendarSyncService:
 
     async def _emit_event_snapshot(self) -> None:
         ordered = sorted(self._windowed_events.values(), key=lambda reminder: (reminder.start, reminder.trigger_time))
+        if not ordered:
+            self._logger.warning(
+                "No upcoming calendar events found within the next %d hour(s); check calendar feed configuration",
+                self._config.lookahead_hours,
+            )
         self._latest_events = list(ordered)
         if self._snapshot_callback:
             try:

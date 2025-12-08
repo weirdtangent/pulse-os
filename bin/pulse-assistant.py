@@ -980,6 +980,11 @@ class PulseAssistant:
         now = datetime.now().astimezone()
         future_reminders = [reminder for reminder in unique_reminders if (reminder.end or reminder.start) > now]
         events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
+        if self.config.calendar.enabled and self.config.calendar.feeds and not events:
+            LOGGER.warning(
+                "Calendar snapshot contained no upcoming events within the lookahead window (now=%s)",
+                now.isoformat(),
+            )
         self._calendar_events = events
         self._calendar_updated_at = time.time()
         # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
@@ -2464,8 +2469,8 @@ async def main() -> None:
     resolved_level = requested_level if isinstance(requested_level, int) else logging.INFO
     logging.basicConfig(level=resolved_level)
     # Quiet third-party debug/info noise; problems still surface as warnings/errors.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("httpcore").setLevel(logging.ERROR)
 
     config = AssistantConfig.from_env()
     assistant = PulseAssistant(config)
