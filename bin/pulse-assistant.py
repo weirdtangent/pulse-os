@@ -221,11 +221,18 @@ class PulseAssistant:
             LOGGER.info("About to publish assistant discovery...")
             self._publish_assistant_discovery()
             LOGGER.info("Assistant discovery published, starting schedule service...")
-            await self.schedule_service.start()
-            LOGGER.info(
-                "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
-                self.calendar_sync is not None,
-            )
+            try:
+                await asyncio.wait_for(self.schedule_service.start(), timeout=8.0)
+                LOGGER.info(
+                    "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
+                    self.calendar_sync is not None,
+                )
+            except TimeoutError:
+                LOGGER.exception("Schedule service start() timed out")
+                raise
+            except Exception as exc:  # pylint: disable=broad-except
+                LOGGER.exception("Schedule service start() failed: %s", exc)
+                raise
             if self.calendar_sync:
                 LOGGER.info("Starting calendar sync service...")
                 try:
