@@ -222,6 +222,8 @@ class PulseAssistant:
             self._calendar_events = []
             self._calendar_updated_at = None
             LOGGER.info("Cleared stale calendar events cache on startup")
+            # Publish empty schedule state to clear overlay cache
+            self._publish_schedule_state({})
         else:
             LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
         await self.mic.start()
