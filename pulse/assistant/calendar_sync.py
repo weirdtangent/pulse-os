@@ -161,7 +161,9 @@ class CalendarSyncService:
         refresh_seconds = max(1, self._config.refresh_minutes) * 60
         while not self._stop_event.is_set():
             try:
+                self._logger.info("Calendar sync tick: starting sync_once()")
                 await self._sync_once()
+                self._logger.info("Calendar sync tick: finished sync_once()")
             except Exception:  # pylint: disable=broad-except
                 self._logger.exception("Calendar sync loop failed; continuing")
             try:
@@ -251,6 +253,12 @@ class CalendarSyncService:
                     reminder = [r for r in reminder if not r.declined]
                 if reminder:
                     reminders.extend(reminder)
+        self._logger.info(
+            "Calendar feed %s (%s): collected %d reminder(s) before scheduling",
+            state.url,
+            state.calendar_name or "unknown",
+            len(reminders),
+        )
         return reminders
 
     def _process_vevent(
