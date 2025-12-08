@@ -1,3 +1,10 @@
+## [0.81.5](https://github.com/weirdtangent/pulse-os/compare/v0.81.4...v0.81.5) (2025-12-08)
+
+
+### Bug Fixes
+
+* try/catch the whole damn thing ([94db7fd](https://github.com/weirdtangent/pulse-os/commit/94db7fd57cada9a6c69287edde8ba1b9cf55d36e))
+
 ## [0.81.4](https://github.com/weirdtangent/pulse-os/compare/v0.81.3...v0.81.4) (2025-12-08)
 
 
