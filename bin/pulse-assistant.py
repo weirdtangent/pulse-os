@@ -389,6 +389,8 @@ class PulseAssistant:
             return None
 
     def _publish_schedule_state(self, snapshot: dict[str, Any]) -> None:
+        # Always filter past events before publishing
+        self._filter_past_calendar_events()
         payload = copy.deepcopy(snapshot)
         payload["calendar_events"] = [dict(event) for event in self._calendar_events]
         if self._calendar_updated_at:
@@ -991,6 +993,50 @@ class PulseAssistant:
         # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
         snapshot = self._latest_schedule_snapshot or {}
         self._publish_schedule_state(snapshot)
+
+    def _filter_past_calendar_events(self) -> None:
+        """Filter out past events from _calendar_events list."""
+        now = datetime.now().astimezone()
+        filtered = []
+        for event in self._calendar_events:
+            # Event dict has 'start' and optionally 'end' as ISO strings
+            start_str = event.get("start")
+            end_str = event.get("end")
+            if not start_str:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=now.tzinfo)
+                else:
+                    start_dt = start_dt.astimezone(now.tzinfo)
+                event_end = start_dt
+                if end_str:
+                    try:
+                        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                        if end_dt.tzinfo is None:
+                            end_dt = end_dt.replace(tzinfo=now.tzinfo)
+                        else:
+                            end_dt = end_dt.astimezone(now.tzinfo)
+                        event_end = end_dt
+                    except (ValueError, AttributeError):
+                        pass
+                if event_end > now:
+                    filtered.append(event)
+            except (ValueError, AttributeError):
+                # Keep event if we can't parse the date (better to show than hide)
+                filtered.append(event)
+        if len(filtered) != len(self._calendar_events):
+            LOGGER.info(
+                "Filtered %d past event(s) from calendar events list (%d -> %d)",
+                len(self._calendar_events) - len(filtered),
+                len(self._calendar_events),
+                len(filtered),
+            )
+            self._calendar_events = filtered
+            # Republish schedule state with filtered events
+            snapshot = self._latest_schedule_snapshot or {}
+            self._publish_schedule_state(snapshot)
 
     def _deduplicate_calendar_reminders(self, reminders: Sequence[CalendarReminder]) -> list[CalendarReminder]:
         """Collapse duplicate events that arise from multiple VALARMs."""
