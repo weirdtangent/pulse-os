@@ -124,7 +124,11 @@ class CalendarSyncService:
         self._failed_feeds: set[str] = set()
 
     async def start(self) -> None:
-        if not self._config.feeds or self._runner:
+        if not self._config.feeds:
+            self._logger.warning("Calendar sync start() called but no feeds configured")
+            return
+        if self._runner:
+            self._logger.debug("Calendar sync start() called but runner already exists")
             return
         self._stop_event.clear()
         self._client = httpx.AsyncClient(follow_redirects=True, timeout=20.0)

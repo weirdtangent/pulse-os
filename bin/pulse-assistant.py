@@ -211,7 +211,12 @@ class PulseAssistant:
         self._publish_assistant_discovery()
         await self.schedule_service.start()
         if self.calendar_sync:
+            LOGGER.info("Starting calendar sync service...")
             await self.calendar_sync.start()
+            # Clear any stale calendar events on startup
+            self._calendar_events = []
+            self._calendar_updated_at = None
+            LOGGER.info("Cleared stale calendar events cache on startup")
         await self.mic.start()
         self._set_assist_stage("pulse", "idle")
         friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
