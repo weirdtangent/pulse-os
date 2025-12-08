@@ -1,3 +1,10 @@
+## [0.81.16](https://github.com/weirdtangent/pulse-os/compare/v0.81.15...v0.81.16) (2025-12-08)
+
+
+### Bug Fixes
+
+* calendar sync filtering out past events ([9f695f4](https://github.com/weirdtangent/pulse-os/commit/9f695f4fac27acc55d2178d8d894204199ea71cf))
+
 ## [0.81.15](https://github.com/weirdtangent/pulse-os/compare/v0.81.14...v0.81.15) (2025-12-08)
 
 
