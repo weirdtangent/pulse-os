@@ -1,3 +1,10 @@
+## [0.81.25](https://github.com/weirdtangent/pulse-os/compare/v0.81.24...v0.81.25) (2025-12-08)
+
+
+### Bug Fixes
+
+* extend calendar sync timeout ([52743ff](https://github.com/weirdtangent/pulse-os/commit/52743ff829e9bb2fba146854fa071c319c077a02))
+
 ## [0.81.24](https://github.com/weirdtangent/pulse-os/compare/v0.81.23...v0.81.24) (2025-12-08)
 
 
