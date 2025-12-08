@@ -1,3 +1,10 @@
+## [0.81.7](https://github.com/weirdtangent/pulse-os/compare/v0.81.6...v0.81.7) (2025-12-08)
+
+
+### Bug Fixes
+
+* more logging for assistant startup ([61bc78a](https://github.com/weirdtangent/pulse-os/commit/61bc78a2ff23ea9a6f1ec88f8882159454b9988b))
+
 ## [0.81.6](https://github.com/weirdtangent/pulse-os/compare/v0.81.5...v0.81.6) (2025-12-08)
 
 
