@@ -282,6 +282,14 @@ class CalendarSyncService:
         location = str(component.get("LOCATION")).strip() if component.get("LOCATION") else None
         url = str(component.get("URL")).strip() if component.get("URL") else None
         sequence = component.get("SEQUENCE")
+        # Skip events that have already ended (or started if no end time)
+        if end_dt:
+            if end_dt <= now:
+                return []
+        else:
+            if start_dt <= now - timedelta(minutes=1):
+                return []
+
         triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
         # Merge default notifications with VALARM triggers, avoiding duplicates
         trigger_times = {trigger for trigger in triggers if trigger}
@@ -295,8 +303,10 @@ class CalendarSyncService:
             )
             for minutes_before in self._config.default_notifications:
                 default_trigger = start_dt - timedelta(minutes=minutes_before)
-                # Only add if not already covered by a VALARM trigger (within 30 seconds)
-                if not any(abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times):
+                # Only add future triggers not already covered by a VALARM trigger (within 30 seconds)
+                if default_trigger > now - timedelta(minutes=1) and not any(
+                    abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times
+                ):
                     trigger_times.add(default_trigger)
                     self._logger.info(
                         "Added default notification %d minutes before event '%s' (trigger: %s)",
@@ -306,7 +316,7 @@ class CalendarSyncService:
                     )
                 else:
                     self._logger.debug(
-                        "Skipped default notification %d minutes before event '%s' - already covered by VALARM",
+                        "Skipped default notification %d minutes before event '%s' - already covered or in the past",
                         minutes_before,
                         summary,
                     )
@@ -402,8 +412,10 @@ class CalendarSyncService:
             )
             for minutes_before in self._config.default_notifications:
                 default_trigger = start_dt - timedelta(minutes=minutes_before)
-                # Only add if not already covered by a VALARM trigger (within 30 seconds)
-                if not any(abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times):
+                # Only add future triggers not already covered by a VALARM trigger (within 30 seconds)
+                if default_trigger > now - timedelta(minutes=1) and not any(
+                    abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times
+                ):
                     trigger_times.add(default_trigger)
                     self._logger.info(
                         "Added default notification %d minutes before task '%s' (trigger: %s)",
@@ -413,7 +425,7 @@ class CalendarSyncService:
                     )
                 else:
                     self._logger.debug(
-                        "Skipped default notification %d minutes before task '%s' - already covered by VALARM",
+                        "Skipped default notification %d minutes before task '%s' - already covered or in the past",
                         minutes_before,
                         summary,
                     )
