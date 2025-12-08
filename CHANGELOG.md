@@ -1,3 +1,10 @@
+## [0.81.15](https://github.com/weirdtangent/pulse-os/compare/v0.81.14...v0.81.15) (2025-12-08)
+
+
+### Bug Fixes
+
+* stop skipping recurring events that are still happening ([b7279e4](https://github.com/weirdtangent/pulse-os/commit/b7279e4198bb48e0d9e9023b0d476a3474b1723c))
+
 ## [0.81.14](https://github.com/weirdtangent/pulse-os/compare/v0.81.13...v0.81.14) (2025-12-08)
 
 
