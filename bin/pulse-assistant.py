@@ -209,8 +209,12 @@ class PulseAssistant:
             # No retained message received, publish current state
             self._publish_earmuffs_state()
         self._publish_assistant_discovery()
+        LOGGER.info("Starting schedule service...")
         await self.schedule_service.start()
-        LOGGER.info("About to start calendar sync service (calendar_sync=%s)", self.calendar_sync is not None)
+        LOGGER.info(
+            "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
+            self.calendar_sync is not None,
+        )
         if self.calendar_sync:
             LOGGER.info("Starting calendar sync service...")
             try:
