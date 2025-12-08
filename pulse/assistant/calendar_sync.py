@@ -301,13 +301,9 @@ class CalendarSyncService:
         location = str(component.get("LOCATION")).strip() if component.get("LOCATION") else None
         url = str(component.get("URL")).strip() if component.get("URL") else None
         sequence = component.get("SEQUENCE")
-        # Skip events that have already ended (or started if no end time)
-        if end_dt:
-            if end_dt <= now:
-                return []
-        else:
-            if start_dt <= now - timedelta(minutes=1):
-                return []
+        # Skip events that have already ended; keep recurring events even if the original DTSTART is in the past
+        if end_dt and end_dt <= now:
+            return []
 
         triggers = self._extract_alarm_triggers(component, start_dt, now.tzinfo or UTC)
         # Merge default notifications with VALARM triggers, avoiding duplicates
