@@ -510,6 +510,11 @@ class CalendarSyncService:
             if event_end <= now:
                 skipped_past_events += 1
                 continue
+            if reminder.start <= lookahead_end:
+                window_key = self._window_key(reminder)
+                existing = self._windowed_events.get(window_key)
+                if not existing or reminder.trigger_time < existing.trigger_time:
+                    self._windowed_events[window_key] = reminder
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
                 skipped_past_triggers += 1
@@ -603,6 +608,9 @@ class CalendarSyncService:
 
     def _reminder_key(self, reminder: CalendarReminder) -> str:
         return f"{reminder.source_url}|{reminder.uid}|{reminder.trigger_time.isoformat()}"
+
+    def _window_key(self, reminder: CalendarReminder) -> str:
+        return f"{reminder.source_url}|{reminder.uid}|{reminder.start.isoformat()}"
 
     def _cancel_old_reminders_for_uid(
         self,
