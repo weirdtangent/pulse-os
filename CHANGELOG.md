@@ -1,3 +1,19 @@
+## [0.81.2](https://github.com/weirdtangent/pulse-os/compare/v0.81.1...v0.81.2) (2025-12-08)
+
+
+### Bug Fixes
+
+* and more logging for calendar sync ([623f835](https://github.com/weirdtangent/pulse-os/commit/623f835ad7b8a9262abcd10e5b498bc5bb862c81))
+* even more logging for calendar sync filtering out past events ([44fdb7f](https://github.com/weirdtangent/pulse-os/commit/44fdb7f6ec8171db3a54601b174a5b56dabf2b50))
+* formatting ([fb1758d](https://github.com/weirdtangent/pulse-os/commit/fb1758d4e1e19fbb9d87219f07faf934872795b6))
+* more logging for assistant startup ([8e4556e](https://github.com/weirdtangent/pulse-os/commit/8e4556eca4e9170f60b4f071d437937671eec082))
+* more logging for assistant startup ([73507ae](https://github.com/weirdtangent/pulse-os/commit/73507aeb7ccc5713ac1dd2b9c3d411e4a81765fc))
+* more logging for calendar sync filtering out past events ([ac397e3](https://github.com/weirdtangent/pulse-os/commit/ac397e30424e46fa15bbb99a55369152b8d331bd))
+* more logging for calendar sync filtering out past events ([7c58c7b](https://github.com/weirdtangent/pulse-os/commit/7c58c7b7524bb4f46e625f4ef76a1d957fc9471c))
+* more logging for calendar sync filtering out past events§ ([110edc1](https://github.com/weirdtangent/pulse-os/commit/110edc18a4496c0fcf4156be9dd8cb17b5df1d46))
+* more logging for calendar sync filtering out past events§ ([e10d507](https://github.com/weirdtangent/pulse-os/commit/e10d5071d6361989c298ee3343c9e82f78e80add))
+* more logging for calendar sync service startup ([a0a584d](https://github.com/weirdtangent/pulse-os/commit/a0a584d90cb53c0fc9e673795de7456a5ab07f54))
+
 ## [0.81.1](https://github.com/weirdtangent/pulse-os/compare/v0.81.0...v0.81.1) (2025-12-08)
 
 
