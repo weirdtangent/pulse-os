@@ -30,7 +30,6 @@ class ArecordStream:
     async def start(self) -> None:
         if self._proc:
             return
-        self._logger.debug("Starting microphone capture: %s", " ".join(self.command))
         self._proc = await asyncio.create_subprocess_exec(
             *self.command,
             stdout=asyncio.subprocess.PIPE,
@@ -57,7 +56,6 @@ class ArecordStream:
     async def stop(self) -> None:
         if not self._proc:
             return
-        self._logger.debug("Stopping microphone capture")
         if self._proc.stdout:
             self._proc.stdout.feed_eof()
         if self._proc.stderr:
