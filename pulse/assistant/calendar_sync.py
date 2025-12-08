@@ -173,7 +173,7 @@ class CalendarSyncService:
         self._windowed_events.clear()
         for state in self._feed_states.values():
             try:
-                await asyncio.wait_for(self._sync_feed(state, now), timeout=12.0)
+                await asyncio.wait_for(self._sync_feed(state, now), timeout=30.0)
             except TimeoutError:
                 self._logger.warning("Calendar sync timed out for feed %s", state.url)
             except Exception:  # pylint: disable=broad-except
