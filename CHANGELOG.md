@@ -1,3 +1,10 @@
+## [0.81.20](https://github.com/weirdtangent/pulse-os/compare/v0.81.19...v0.81.20) (2025-12-08)
+
+
+### Bug Fixes
+
+* still trying to start over with logging ([5cc3acf](https://github.com/weirdtangent/pulse-os/commit/5cc3acf930046b5b40fde16ba0eb8436d31173f9))
+
 ## [0.81.19](https://github.com/weirdtangent/pulse-os/compare/v0.81.18...v0.81.19) (2025-12-08)
 
 
