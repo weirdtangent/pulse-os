@@ -200,15 +200,23 @@ class PulseAssistant:
             self.media_controller._loop = self._loop
             LOGGER.info("Pulse assistant run() starting")
             self.mqtt.connect()
+            LOGGER.debug("MQTT connected, subscribing topics...")
             self._subscribe_preference_topics()
+            LOGGER.debug("Subscribed preference topics")
             self._subscribe_schedule_topics()
+            LOGGER.debug("Subscribed schedule topics")
             self._subscribe_playback_topic()
+            LOGGER.debug("Subscribed playback topic")
             self._subscribe_earmuffs_topic()
+            LOGGER.debug("Subscribed earmuffs topics")
             self._publish_preferences()
+            LOGGER.debug("Published preferences; sleeping for retained messages")
             # Wait a moment for retained MQTT messages to arrive before publishing state
             await asyncio.sleep(0.5)
+            LOGGER.debug("Sleep complete; checking earmuffs state restored=%s", self._earmuffs_state_restored)
             if not self._earmuffs_state_restored:
                 # No retained message received, publish current state
+                LOGGER.debug("Publishing earmuffs state (no retained state restored)")
                 self._publish_earmuffs_state()
             LOGGER.info("About to publish assistant discovery...")
             self._publish_assistant_discovery()
@@ -234,6 +242,7 @@ class PulseAssistant:
             else:
                 LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
             await self.mic.start()
+            LOGGER.info("Mic started; entering idle stage")
             self._set_assist_stage("pulse", "idle")
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.exception("Fatal error in assistant.run(): %s", exc)
