@@ -1,3 +1,10 @@
+## [0.81.24](https://github.com/weirdtangent/pulse-os/compare/v0.81.23...v0.81.24) (2025-12-08)
+
+
+### Bug Fixes
+
+* calendar sync service windowed events ([d8b445e](https://github.com/weirdtangent/pulse-os/commit/d8b445e205009c0b8f4a88e5254c2b6e821ce27a))
+
 ## [0.81.23](https://github.com/weirdtangent/pulse-os/compare/v0.81.22...v0.81.23) (2025-12-08)
 
 
