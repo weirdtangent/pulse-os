@@ -209,22 +209,9 @@ class PulseAssistant:
             LOGGER.debug("Subscribed playback topic")
             self._subscribe_earmuffs_topic()
             LOGGER.debug("Subscribed earmuffs topics")
-            self._publish_preferences()
-            LOGGER.debug("Published preferences; sleeping for retained messages")
-            # Wait a moment for retained MQTT messages to arrive before publishing state
-            await asyncio.sleep(0.5)
-            LOGGER.debug("Sleep complete; checking earmuffs state restored=%s", self._earmuffs_state_restored)
-            if not self._earmuffs_state_restored:
-                # No retained message received, publish current state
-                LOGGER.debug("Publishing earmuffs state (no retained state restored)")
-                try:
-                    self._publish_earmuffs_state()
-                    LOGGER.debug("Published earmuffs state successfully")
-                except Exception as exc:  # pylint: disable=broad-except
-                    LOGGER.exception("Failed to publish earmuffs state: %s", exc)
-            LOGGER.info("About to publish assistant discovery...")
-            self._publish_assistant_discovery()
-            LOGGER.info("Assistant discovery published, starting schedule service...")
+
+            # Start schedule + calendar before any retained-message waits
+            LOGGER.info("Starting schedule service...")
             try:
                 await asyncio.wait_for(self.schedule_service.start(), timeout=8.0)
                 LOGGER.info(
@@ -252,6 +239,24 @@ class PulseAssistant:
                 self._publish_schedule_state({})
             else:
                 LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
+
+            # Publish preferences and retained-state after services are running
+            self._publish_preferences()
+            LOGGER.debug("Published preferences; sleeping for retained messages")
+            # Wait a moment for retained MQTT messages to arrive before publishing state
+            await asyncio.sleep(0.5)
+            LOGGER.debug("Sleep complete; checking earmuffs state restored=%s", self._earmuffs_state_restored)
+            if not self._earmuffs_state_restored:
+                # No retained message received, publish current state
+                LOGGER.debug("Publishing earmuffs state (no retained state restored)")
+                try:
+                    self._publish_earmuffs_state()
+                    LOGGER.debug("Published earmuffs state successfully")
+                except Exception as exc:  # pylint: disable=broad-except
+                    LOGGER.exception("Failed to publish earmuffs state: %s", exc)
+
+            LOGGER.info("About to publish assistant discovery...")
+            self._publish_assistant_discovery()
             await self.mic.start()
             LOGGER.info("Mic started; entering idle stage")
             self._set_assist_stage("pulse", "idle")
