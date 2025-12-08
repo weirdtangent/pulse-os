@@ -195,45 +195,49 @@ class PulseAssistant:
         self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
 
     async def run(self) -> None:
-        self._loop = asyncio.get_running_loop()
-        self.media_controller._loop = self._loop
-        LOGGER.info("Pulse assistant run() starting")
-        self.mqtt.connect()
-        self._subscribe_preference_topics()
-        self._subscribe_schedule_topics()
-        self._subscribe_playback_topic()
-        self._subscribe_earmuffs_topic()
-        self._publish_preferences()
-        # Wait a moment for retained MQTT messages to arrive before publishing state
-        await asyncio.sleep(0.5)
-        if not self._earmuffs_state_restored:
-            # No retained message received, publish current state
-            self._publish_earmuffs_state()
-        LOGGER.info("About to publish assistant discovery...")
-        self._publish_assistant_discovery()
-        LOGGER.info("Assistant discovery published, starting schedule service...")
-        await self.schedule_service.start()
-        LOGGER.info(
-            "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
-            self.calendar_sync is not None,
-        )
-        if self.calendar_sync:
-            LOGGER.info("Starting calendar sync service...")
-            try:
-                await self.calendar_sync.start()
-                LOGGER.info("Calendar sync start() completed")
-            except Exception as exc:  # pylint: disable=broad-except
-                LOGGER.exception("Failed to start calendar sync service: %s", exc)
-            # Clear any stale calendar events on startup
-            self._calendar_events = []
-            self._calendar_updated_at = None
-            LOGGER.info("Cleared stale calendar events cache on startup")
-            # Publish empty schedule state to clear overlay cache
-            self._publish_schedule_state({})
-        else:
-            LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
-        await self.mic.start()
-        self._set_assist_stage("pulse", "idle")
+        try:
+            self._loop = asyncio.get_running_loop()
+            self.media_controller._loop = self._loop
+            LOGGER.info("Pulse assistant run() starting")
+            self.mqtt.connect()
+            self._subscribe_preference_topics()
+            self._subscribe_schedule_topics()
+            self._subscribe_playback_topic()
+            self._subscribe_earmuffs_topic()
+            self._publish_preferences()
+            # Wait a moment for retained MQTT messages to arrive before publishing state
+            await asyncio.sleep(0.5)
+            if not self._earmuffs_state_restored:
+                # No retained message received, publish current state
+                self._publish_earmuffs_state()
+            LOGGER.info("About to publish assistant discovery...")
+            self._publish_assistant_discovery()
+            LOGGER.info("Assistant discovery published, starting schedule service...")
+            await self.schedule_service.start()
+            LOGGER.info(
+                "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
+                self.calendar_sync is not None,
+            )
+            if self.calendar_sync:
+                LOGGER.info("Starting calendar sync service...")
+                try:
+                    await self.calendar_sync.start()
+                    LOGGER.info("Calendar sync start() completed")
+                except Exception as exc:  # pylint: disable=broad-except
+                    LOGGER.exception("Failed to start calendar sync service: %s", exc)
+                # Clear any stale calendar events on startup
+                self._calendar_events = []
+                self._calendar_updated_at = None
+                LOGGER.info("Cleared stale calendar events cache on startup")
+                # Publish empty schedule state to clear overlay cache
+                self._publish_schedule_state({})
+            else:
+                LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
+            await self.mic.start()
+            self._set_assist_stage("pulse", "idle")
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.exception("Fatal error in assistant.run(): %s", exc)
+            raise
         friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
         LOGGER.info("Pulse assistant ready (wake words: %s)", friendly_words)
         while not self._shutdown.is_set():
