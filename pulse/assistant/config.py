@@ -460,6 +460,13 @@ class AssistantConfig:
                 reverse=True,
             )
         )
+        if default_notifications_raw and not default_notifications:
+            import logging
+            logging.getLogger("pulse.config").warning(
+                "PULSE_CALENDAR_DEFAULT_NOTIFICATIONS='%s' was provided but no valid values were parsed. "
+                "Expected comma-separated integers (e.g., '10,2').",
+                default_notifications_raw,
+            )
 
         hide_declined_events = parse_bool(source.get("PULSE_CALENDAR_HIDE_DECLINED"), False)
         calendar_config = CalendarConfig(

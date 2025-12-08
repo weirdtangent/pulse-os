@@ -283,15 +283,28 @@ class CalendarSyncService:
         trigger_times = {trigger for trigger in triggers if trigger}
         # Add default notifications if configured
         if self._config.default_notifications:
+            self._logger.debug(
+                "Applying default notifications %s to event '%s' starting at %s",
+                self._config.default_notifications,
+                summary,
+                start_dt.isoformat(),
+            )
             for minutes_before in self._config.default_notifications:
                 default_trigger = start_dt - timedelta(minutes=minutes_before)
                 # Only add if not already covered by a VALARM trigger (within 30 seconds)
                 if not any(abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times):
                     trigger_times.add(default_trigger)
-                    self._logger.debug(
-                        "Added default notification %d minutes before event start: %s",
+                    self._logger.info(
+                        "Added default notification %d minutes before event '%s' (trigger: %s)",
                         minutes_before,
+                        summary,
                         default_trigger.isoformat(),
+                    )
+                else:
+                    self._logger.debug(
+                        "Skipped default notification %d minutes before event '%s' - already covered by VALARM",
+                        minutes_before,
+                        summary,
                     )
         # If no triggers at all (no VALARM and no defaults), use the legacy 5-minute default
         if not trigger_times:
@@ -377,15 +390,28 @@ class CalendarSyncService:
         trigger_times = {trigger for trigger in triggers if trigger}
         # Add default notifications if configured
         if self._config.default_notifications:
+            self._logger.debug(
+                "Applying default notifications %s to task '%s' starting at %s",
+                self._config.default_notifications,
+                summary,
+                start_dt.isoformat(),
+            )
             for minutes_before in self._config.default_notifications:
                 default_trigger = start_dt - timedelta(minutes=minutes_before)
                 # Only add if not already covered by a VALARM trigger (within 30 seconds)
                 if not any(abs((default_trigger - existing).total_seconds()) < 30 for existing in trigger_times):
                     trigger_times.add(default_trigger)
-                    self._logger.debug(
-                        "Added default notification %d minutes before event start: %s",
+                    self._logger.info(
+                        "Added default notification %d minutes before task '%s' (trigger: %s)",
                         minutes_before,
+                        summary,
                         default_trigger.isoformat(),
+                    )
+                else:
+                    self._logger.debug(
+                        "Skipped default notification %d minutes before task '%s' - already covered by VALARM",
+                        minutes_before,
+                        summary,
                     )
         # If no triggers at all (no VALARM and no defaults), use the legacy 5-minute default
         if not trigger_times:
@@ -678,8 +704,23 @@ class CalendarSyncService:
             state.active_keys.discard(key)
 
     async def _emit_event_snapshot(self) -> None:
+        now = _now()
+        # Filter out events that have already ended (or started if no end time)
+        all_reminders = list(self._scheduled_reminders.values())
+        future_reminders = [
+            reminder
+            for reminder in all_reminders
+            if (reminder.end or reminder.start) > now
+        ]
+        filtered_count = len(all_reminders) - len(future_reminders)
+        if filtered_count > 0:
+            self._logger.debug(
+                "Filtered out %d past event(s) from calendar snapshot (now: %s)",
+                filtered_count,
+                now.isoformat(),
+            )
         ordered = sorted(
-            self._scheduled_reminders.values(),
+            future_reminders,
             key=lambda reminder: (reminder.start, reminder.trigger_time),
         )
         self._latest_events = list(ordered)
