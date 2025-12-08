@@ -957,11 +957,7 @@ class PulseAssistant:
         unique_reminders = self._deduplicate_calendar_reminders(reminders)
         # Filter out events that have already ended (or started if no end time)
         now = datetime.now().astimezone()
-        future_reminders = [
-            reminder
-            for reminder in unique_reminders
-            if (reminder.end or reminder.start) > now
-        ]
+        future_reminders = [reminder for reminder in unique_reminders if (reminder.end or reminder.start) > now]
         events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         self._calendar_events = events
         self._calendar_updated_at = time.time()

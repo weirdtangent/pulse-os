@@ -707,11 +707,7 @@ class CalendarSyncService:
         now = _now()
         # Filter out events that have already ended (or started if no end time)
         all_reminders = list(self._scheduled_reminders.values())
-        future_reminders = [
-            reminder
-            for reminder in all_reminders
-            if (reminder.end or reminder.start) > now
-        ]
+        future_reminders = [reminder for reminder in all_reminders if (reminder.end or reminder.start) > now]
         filtered_count = len(all_reminders) - len(future_reminders)
         if filtered_count > 0:
             self._logger.debug(
