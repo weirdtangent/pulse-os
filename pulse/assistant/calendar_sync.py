@@ -537,6 +537,17 @@ class CalendarSyncService:
         valid_reminders: list[CalendarReminder] = []
         uids_to_schedule: dict[str, dict[str, set[datetime]]] = {}  # uid -> {source_url: {trigger_times}}
         for reminder in reminders:
+            # Filter out events that have already ended (or started if no end time)
+            event_end = reminder.end or reminder.start
+            if event_end <= now:
+                self._logger.debug(
+                    "Skipping reminder %s (%s) - event has ended (end: %s, now: %s)",
+                    reminder.uid,
+                    reminder.summary,
+                    event_end.isoformat(),
+                    now.isoformat(),
+                )
+                continue
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
                 self._logger.debug(
@@ -706,16 +717,29 @@ class CalendarSyncService:
     async def _emit_event_snapshot(self) -> None:
         now = _now()
         # Filter out events that have already ended (or started if no end time)
-        all_reminders = list(self._scheduled_reminders.values())
+        # Also clean up past events from _scheduled_reminders
         future_reminders = []
         past_reminders = []
-        for reminder in all_reminders:
+        keys_to_remove = []
+        for key, reminder in list(self._scheduled_reminders.items()):
             # Use end time if available, otherwise use start time
             event_end = reminder.end or reminder.start
             if event_end > now:
                 future_reminders.append(reminder)
             else:
                 past_reminders.append(reminder)
+                keys_to_remove.append((key, reminder))
+        # Remove past events from _scheduled_reminders
+        for key, reminder in keys_to_remove:
+            task = self._scheduled.pop(key, None)
+            if task:
+                task.cancel()
+            self._scheduled_reminders.pop(key, None)
+            self._key_to_feed.pop(key, None)
+            # Update feed state active_keys
+            state = self._feed_states.get(reminder.source_url)
+            if state:
+                state.active_keys.discard(key)
         filtered_count = len(past_reminders)
         if filtered_count > 0:
             past_summaries = [
