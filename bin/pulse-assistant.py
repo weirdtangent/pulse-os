@@ -121,13 +121,21 @@ class PulseAssistant:
         self._calendar_updated_at: float | None = None
         self._latest_schedule_snapshot: dict[str, Any] | None = None
         self.calendar_sync: CalendarSyncService | None = None
-        if self.config.calendar.enabled and self.config.calendar.feeds:
-            self.calendar_sync = CalendarSyncService(
-                config=self.config.calendar,
-                trigger_callback=self._trigger_calendar_reminder,
-                snapshot_callback=self._handle_calendar_snapshot,
-                logger=logging.getLogger("pulse.calendar_sync"),
-            )
+        if self.config.calendar.enabled:
+            if self.config.calendar.feeds:
+                self.calendar_sync = CalendarSyncService(
+                    config=self.config.calendar,
+                    trigger_callback=self._trigger_calendar_reminder,
+                    snapshot_callback=self._handle_calendar_snapshot,
+                    logger=logging.getLogger("pulse.calendar_sync"),
+                )
+                LOGGER.info("Calendar sync service initialized with %d feed(s)", len(self.config.calendar.feeds))
+            else:
+                LOGGER.warning(
+                    "Calendar sync is enabled but no feeds are configured (PULSE_CALENDAR_ICS_URLS is empty)"
+                )
+        else:
+            LOGGER.info("Calendar sync is disabled (PULSE_CALENDAR_ICS_URLS not set or calendar disabled)")
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         base_topic = self.config.mqtt.topic_base
