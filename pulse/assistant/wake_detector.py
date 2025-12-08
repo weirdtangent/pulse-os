@@ -253,7 +253,6 @@ class WakeDetector:
                 chunk_bytes = await self.mic.read_chunk()
                 if context_version != self._wake_context_version:
                     raise WakeContextChanged
-                LOGGER.debug("Captured audio chunk (timestamp=%sms, size=%d)", timestamp, len(chunk_bytes))
                 chunk_event = AudioChunk(
                     rate=self.config.mic.rate,
                     width=self.config.mic.width,
@@ -300,7 +299,6 @@ class WakeDetector:
             if Detection.is_type(event.type):
                 detection = Detection.from_event(event)
                 detected_name = detection.name or self.config.wake_models[0]
-                LOGGER.info("Wake word detected via %s: %s", endpoint_label, detected_name)
                 return detected_name
             if NotDetected.is_type(event.type):
                 LOGGER.debug("OpenWakeWord (%s) reported NotDetected", endpoint_label)

@@ -1078,7 +1078,6 @@ class ScheduleService:
             auto_stop = asyncio.create_task(self._auto_stop(event.event_id, timeout=float(max(1, auto_clear_seconds))))
             active.auto_stop_task = auto_stop
             self._notify_active("reminder", {"state": "ringing", "event": event.to_public_dict(status="active")})
-        LOGGER.info("Ephemeral reminder triggered (%s)", label or message or event.event_id)
         return event.event_id
 
     def get_next_alarm(self) -> dict[str, Any] | None:
@@ -1132,7 +1131,6 @@ class ScheduleService:
                 return
             if event.event_type == "alarm" and event.paused:
                 return
-            LOGGER.info("Schedule firing %s (%s)", event.event_type, event.label or event.event_id)
             if event.event_type == "reminder":
                 _set_reminder_delay(event, None)
             handle = PlaybackHandle(event.playback, self._hostname, self._ha_client, event.event_type)

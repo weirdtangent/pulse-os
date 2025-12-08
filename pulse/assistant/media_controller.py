@@ -62,7 +62,6 @@ class MediaController:
                 {"entity_id": self.media_player_entity},
             )
             self._media_pause_pending = True
-            LOGGER.debug("Paused media player %s for wake word", self.media_player_entity)
         except HomeAssistantError as exc:
             LOGGER.debug("Unable to pause media player %s: %s", self.media_player_entity, exc)
 

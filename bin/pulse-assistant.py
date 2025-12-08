@@ -129,13 +129,12 @@ class PulseAssistant:
                     snapshot_callback=self._handle_calendar_snapshot,
                     logger=logging.getLogger("pulse.calendar_sync"),
                 )
-                LOGGER.info("Calendar sync service initialized with %d feed(s)", len(self.config.calendar.feeds))
             else:
                 LOGGER.warning(
                     "Calendar sync is enabled but no feeds are configured (PULSE_CALENDAR_ICS_URLS is empty)"
                 )
         else:
-            LOGGER.info("Calendar sync is disabled (PULSE_CALENDAR_ICS_URLS not set or calendar disabled)")
+            pass
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         base_topic = self.config.mqtt.topic_base
@@ -198,26 +197,15 @@ class PulseAssistant:
         try:
             self._loop = asyncio.get_running_loop()
             self.media_controller._loop = self._loop
-            LOGGER.info("Pulse assistant run() starting")
             self.mqtt.connect()
-            LOGGER.debug("MQTT connected, subscribing topics...")
             self._subscribe_preference_topics()
-            LOGGER.debug("Subscribed preference topics")
             self._subscribe_schedule_topics()
-            LOGGER.debug("Subscribed schedule topics")
             self._subscribe_playback_topic()
-            LOGGER.debug("Subscribed playback topic")
             self._subscribe_earmuffs_topic()
-            LOGGER.debug("Subscribed earmuffs topics")
 
             # Start schedule + calendar before any retained-message waits
-            LOGGER.info("Starting schedule service...")
             try:
                 await asyncio.wait_for(self.schedule_service.start(), timeout=8.0)
-                LOGGER.info(
-                    "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
-                    self.calendar_sync is not None,
-                )
             except TimeoutError:
                 LOGGER.exception("Schedule service start() timed out")
                 raise
@@ -225,16 +213,13 @@ class PulseAssistant:
                 LOGGER.exception("Schedule service start() failed: %s", exc)
                 raise
             if self.calendar_sync:
-                LOGGER.info("Starting calendar sync service...")
                 try:
                     await self.calendar_sync.start()
-                    LOGGER.info("Calendar sync start() completed")
                 except Exception as exc:  # pylint: disable=broad-except
                     LOGGER.exception("Failed to start calendar sync service: %s", exc)
                 # Clear any stale calendar events on startup
                 self._calendar_events = []
                 self._calendar_updated_at = None
-                LOGGER.info("Cleared stale calendar events cache on startup")
                 # Publish empty schedule state to clear overlay cache
                 self._publish_schedule_state({})
             else:
@@ -242,29 +227,21 @@ class PulseAssistant:
 
             # Publish preferences and retained-state after services are running
             self._publish_preferences()
-            LOGGER.debug("Published preferences; sleeping for retained messages")
             # Wait a moment for retained MQTT messages to arrive before publishing state
             await asyncio.sleep(0.5)
-            LOGGER.debug("Sleep complete; checking earmuffs state restored=%s", self._earmuffs_state_restored)
             if not self._earmuffs_state_restored:
                 # No retained message received, publish current state
-                LOGGER.debug("Publishing earmuffs state (no retained state restored)")
                 try:
                     self._publish_earmuffs_state()
-                    LOGGER.debug("Published earmuffs state successfully")
                 except Exception as exc:  # pylint: disable=broad-except
                     LOGGER.exception("Failed to publish earmuffs state: %s", exc)
 
-            LOGGER.info("About to publish assistant discovery...")
             self._publish_assistant_discovery()
             await self.mic.start()
-            LOGGER.info("Mic started; entering idle stage")
             self._set_assist_stage("pulse", "idle")
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.exception("Fatal error in assistant.run(): %s", exc)
             raise
-        friendly_words = ", ".join(self._display_wake_word(word) for word in self.config.wake_models)
-        LOGGER.info("Pulse assistant ready (wake words: %s)", friendly_words)
         while not self._shutdown.is_set():
             wake_word = await self.wake_detector.wait_for_wake_word(self._shutdown, self._get_earmuffs_enabled)
             if wake_word is None:
@@ -475,9 +452,8 @@ class PulseAssistant:
                 self._finalize_assist_run(status="no_transcript")
                 return
             if self._log_llm_messages:
-                LOGGER.info("Transcript (%s): %s", wake_word, transcript)
-            transcript_payload = {"text": transcript, "wake_word": wake_word}
-            self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
+                transcript_payload = {"text": transcript, "wake_word": wake_word}
+                self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
             if await self._maybe_handle_stop_phrase(transcript, wake_word, tracker):
                 self._finalize_assist_run(status="cancelled")
                 return
@@ -503,7 +479,6 @@ class PulseAssistant:
                 follow_up_audio = await self._record_follow_up_phrase()
                 if not follow_up_audio:
                     follow_up_attempts += 1
-                    LOGGER.info("Follow-up attempt %d captured no audio", follow_up_attempts)
                     if follow_up_attempts >= max_follow_up_attempts:
                         tracker.begin_stage("speaking")
                         self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word, "follow_up": True})
@@ -515,7 +490,6 @@ class PulseAssistant:
                 follow_up_transcript = await self._transcribe(follow_up_audio)
                 if not follow_up_transcript:
                     follow_up_attempts += 1
-                    LOGGER.info("Follow-up attempt %d produced no transcript", follow_up_attempts)
                     if follow_up_attempts >= max_follow_up_attempts:
                         tracker.begin_stage("speaking")
                         self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word, "follow_up": True})
@@ -524,9 +498,8 @@ class PulseAssistant:
                     continue
                 follow_up_attempts = 0
                 if self._log_llm_messages:
-                    LOGGER.info("Follow-up transcript (%s): %s", wake_word, follow_up_transcript)
-                payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
-                self._publish_message(self.config.transcript_topic, json.dumps(payload))
+                    payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
+                    self._publish_message(self.config.transcript_topic, json.dumps(payload))
                 is_useful_follow_up, normalized_follow_up = self.conversation_manager.evaluate_follow_up(
                     follow_up_transcript,
                     last_follow_up_normalized,
@@ -537,7 +510,6 @@ class PulseAssistant:
                     last_follow_up_normalized = normalized_follow_up
                 if not follow_up_transcript:
                     follow_up_attempts += 1
-                    LOGGER.info("Follow-up attempt %d produced no useful transcript", follow_up_attempts)
                     if follow_up_attempts >= max_follow_up_attempts:
                         tracker.begin_stage("speaking")
                         self._set_assist_stage("pulse", "speaking", {"wake_word": wake_word, "follow_up": True})
@@ -623,11 +595,10 @@ class PulseAssistant:
             transcript = self._extract_ha_transcript(ha_result)
             if transcript:
                 if self._log_llm_messages:
-                    LOGGER.info("HA transcript (%s): %s", wake_word, transcript)
-                self._publish_message(
-                    self.config.transcript_topic,
-                    json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
-                )
+                    self._publish_message(
+                        self.config.transcript_topic,
+                        json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
+                    )
             speech_text = self._extract_ha_speech(ha_result) or "Okay."
             tracker.begin_stage("speaking")
             self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
@@ -736,7 +707,7 @@ class PulseAssistant:
         ]
 
     async def _handle_scheduler_notification(self, message: str) -> None:
-        LOGGER.info("Scheduler notification: %s", message)
+        pass
         payload = json.dumps({"text": message, "source": "scheduler", "device": self.config.hostname})
         self._publish_message(self.config.response_topic, payload)
         try:
@@ -825,13 +796,9 @@ class PulseAssistant:
 
     def _subscribe_earmuffs_topic(self) -> None:
         try:
-            LOGGER.info("Subscribing to earmuffs set topic: %s", self._earmuffs_set_topic)
             self.mqtt.subscribe(self._earmuffs_set_topic, self._handle_earmuffs_command)
-            LOGGER.info("Successfully subscribed to earmuffs set topic")
             # Also subscribe to state topic to restore retained state on startup
-            LOGGER.info("Subscribing to earmuffs state topic: %s", self._earmuffs_state_topic)
             self.mqtt.subscribe(self._earmuffs_state_topic, self._handle_earmuffs_state_restore)
-            LOGGER.info("Successfully subscribed to earmuffs state topic")
         except RuntimeError as exc:
             LOGGER.warning("MQTT client not ready for earmuffs subscription: %s", exc)
         except Exception as exc:
@@ -896,7 +863,6 @@ class PulseAssistant:
             return
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
-        LOGGER.info("Restoring earmuffs state from MQTT: %s (enabled=%s)", value, enabled)
         # Restore state - if enabled, assume it was manually set (auto-enabled would have been cleared)
         with self._earmuffs_lock:
             if enabled != self._earmuffs_enabled:
@@ -913,11 +879,11 @@ class PulseAssistant:
 
     def _handle_earmuffs_command(self, payload: str) -> None:
         value = payload.strip().lower()
-        LOGGER.info("Received earmuffs command: %s", value)
+        # command received; act without noisy logging
         if value == "toggle":
             current = self._get_earmuffs_enabled()
             enabled = not current
-            LOGGER.info("Toggling earmuffs from %s to %s", current, enabled)
+            # state change handled without status logging
         else:
             enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
         self._set_earmuffs_enabled(enabled, manual=True)
@@ -931,8 +897,6 @@ class PulseAssistant:
                     self._earmuffs_manual_override = enabled
                 changed = True
         if changed:
-            reason = "manual" if manual else "automatic"
-            LOGGER.info("Earmuffs %s (%s)", "enabled" if enabled else "disabled", reason)
             self._publish_earmuffs_state()
             if enabled:
                 self.wake_detector.mark_wake_context_dirty()
@@ -948,7 +912,7 @@ class PulseAssistant:
     def _publish_earmuffs_state(self) -> None:
         enabled = self._get_earmuffs_enabled()
         state = "on" if enabled else "off"
-        LOGGER.info("Publishing earmuffs state to %s: %s (enabled=%s)", self._earmuffs_state_topic, state, enabled)
+        # publishing state; no status log
         self._publish_message(self._earmuffs_state_topic, state, retain=True)
 
     def _publish_preferences(self) -> None:
@@ -1012,17 +976,9 @@ class PulseAssistant:
 
     async def _handle_calendar_snapshot(self, reminders: list[CalendarReminder]) -> None:
         unique_reminders = self._deduplicate_calendar_reminders(reminders)
-        total = len(unique_reminders)
         # Filter out events that have already ended (or started if no end time)
         now = datetime.now().astimezone()
         future_reminders = [reminder for reminder in unique_reminders if (reminder.end or reminder.start) > now]
-        kept = len(future_reminders)
-        LOGGER.info(
-            "Calendar snapshot: %d reminder(s) received, %d kept after filtering, now=%s",
-            total,
-            kept,
-            now.isoformat(),
-        )
         events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         self._calendar_events = events
         self._calendar_updated_at = time.time()
@@ -1063,14 +1019,7 @@ class PulseAssistant:
                 # Keep event if we can't parse the date (better to show than hide)
                 filtered.append(event)
         if len(filtered) != len(self._calendar_events):
-            LOGGER.info(
-                "Filtered %d past event(s) from calendar events list (%d -> %d)",
-                len(self._calendar_events) - len(filtered),
-                len(self._calendar_events),
-                len(filtered),
-            )
             self._calendar_events = filtered
-            # Republish schedule state with filtered events
             snapshot = self._latest_schedule_snapshot or {}
             self._publish_schedule_state(snapshot)
 
@@ -1794,8 +1743,7 @@ class PulseAssistant:
     def _log_assistant_response(self, wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
         if not self._log_llm_messages or not text:
             return
-        snippet = text if len(text) <= 240 else f"{text[:237]}..."
-        LOGGER.info("Response (%s/%s): %s", pipeline, wake_word, snippet)
+        _ = text if len(text) <= 240 else f"{text[:237]}..."
 
     @staticmethod
     def _estimate_speech_duration(text: str) -> float:
@@ -2352,7 +2300,6 @@ class PulseAssistant:
     def _build_llm_provider(self) -> LLMProvider:
         provider = self._active_llm_provider()
         llm_config = replace(self.config.llm, provider=provider)
-        LOGGER.info("Using %s LLM provider", provider)
         return build_llm_provider(llm_config, LOGGER)
 
     def _publish_assistant_discovery(self) -> None:
@@ -2511,20 +2458,21 @@ class PulseAssistant:
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--log-level", default="WARNING")
+    parser.add_argument("--log-level", default=None)
     args = parser.parse_args()
-    resolved_level = getattr(logging, args.log_level.upper(), logging.WARNING)
+    requested_level = logging.getLevelName(args.log_level.upper()) if args.log_level else logging.INFO
+    resolved_level = requested_level if isinstance(requested_level, int) else logging.INFO
     logging.basicConfig(level=resolved_level)
 
     config = AssistantConfig.from_env()
     assistant = PulseAssistant(config)
-    LOGGER.info("pulse-assistant main(): created assistant, launching run() task")
+    # Assistant created; run loop starts below
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
     def _handle_signal(signum: int) -> None:
-        LOGGER.info("Received signal %s, shutting down", signum)
+        # shutdown requested
         stop_event.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):

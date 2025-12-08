@@ -113,7 +113,6 @@ class AssistantDisplay:
         if self._is_connect_success(reason_code):
             for topic in self._subscribed_topics:
                 client.subscribe(topic)
-                LOGGER.info("Subscribed to %s (rc=%s)", topic, reason_code)
         else:
             LOGGER.error("Failed to connect to MQTT (reason=%s, properties=%s)", reason_code, properties)
 

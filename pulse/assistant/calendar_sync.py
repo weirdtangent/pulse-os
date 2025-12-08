@@ -129,12 +129,10 @@ class CalendarSyncService:
             self._logger.warning("Calendar sync start() called but no feeds configured")
             return
         if self._runner:
-            self._logger.debug("Calendar sync start() called but runner already exists")
             return
         self._stop_event.clear()
         self._client = httpx.AsyncClient(follow_redirects=True, timeout=20.0)
         self._runner = asyncio.create_task(self._run_loop())
-        self._logger.debug("Calendar sync service started for %d feed(s)", len(self._feed_states))
 
     async def stop(self) -> None:
         self._stop_event.set()
@@ -156,15 +154,12 @@ class CalendarSyncService:
         if self._client:
             await self._client.aclose()
             self._client = None
-        self._logger.debug("Calendar sync service stopped")
 
     async def _run_loop(self) -> None:
         refresh_seconds = max(1, self._config.refresh_minutes) * 60
         while not self._stop_event.is_set():
             try:
-                self._logger.debug("Calendar sync tick: starting sync_once()")
                 await asyncio.wait_for(self._sync_once(), timeout=30.0)
-                self._logger.debug("Calendar sync tick: finished sync_once()")
             except Exception:  # pylint: disable=broad-except
                 self._logger.exception("Calendar sync loop failed; continuing")
             try:
@@ -251,12 +246,6 @@ class CalendarSyncService:
                     reminder = [r for r in reminder if not r.declined]
                 if reminder:
                     reminders.extend(reminder)
-        self._logger.debug(
-            "Calendar feed %s (%s): collected %d reminder(s) before scheduling",
-            state.url,
-            state.calendar_name or "unknown",
-            len(reminders),
-        )
         return reminders
 
     def _process_vevent(
@@ -451,43 +440,28 @@ class CalendarSyncService:
         local_tz,
     ) -> list[datetime]:
         triggers: list[datetime] = []
-        alarm_count = 0
         for alarm in getattr(component, "subcomponents", []):
             if getattr(alarm, "name", "").upper() != "VALARM":
                 continue
-            alarm_count += 1
             action = str(alarm.get("ACTION") or "").strip().upper()
             if action and action != "DISPLAY":
-                self._logger.debug("Skipping VALARM with action %s (only DISPLAY actions are processed)", action)
                 continue
             trigger_raw = alarm.get("TRIGGER")
             if trigger_raw is None:
-                self._logger.debug("Skipping VALARM with no TRIGGER")
                 continue
             try:
                 decoded = alarm.decoded("TRIGGER")
             except Exception:  # pylint: disable=broad-except
-                self._logger.debug("Failed to decode VALARM TRIGGER: %s", exc_info=True)
                 continue
             trigger_dt: datetime | None = None
             if isinstance(decoded, timedelta):
                 trigger_dt = start_dt + decoded
-                self._logger.debug("Extracted VALARM trigger: %s (relative: %s)", trigger_dt.isoformat(), decoded)
             elif isinstance(decoded, datetime):
                 trigger_dt = decoded if decoded.tzinfo else decoded.replace(tzinfo=local_tz)
                 trigger_dt = trigger_dt.astimezone(local_tz)
-                self._logger.debug("Extracted VALARM trigger: %s (absolute)", trigger_dt.isoformat())
             if not trigger_dt:
-                self._logger.debug("Could not determine trigger datetime from VALARM")
                 continue
             triggers.append(trigger_dt)
-        if alarm_count > 0:
-            self._logger.debug(
-                "Found %d VALARM(s), extracted %d trigger(s) for event starting at %s",
-                alarm_count,
-                len(triggers),
-                start_dt.isoformat(),
-            )
         return triggers
 
     def _default_trigger(self, start_dt: datetime, all_day: bool) -> datetime:
@@ -524,47 +498,15 @@ class CalendarSyncService:
             # Filter out events that have already ended (or started if no end time)
             event_end = reminder.end or reminder.start
             if event_end <= now:
-                self._logger.debug(
-                    "Skipping reminder %s (%s) - event has ended (end: %s, now: %s)",
-                    reminder.uid,
-                    reminder.summary,
-                    event_end.isoformat(),
-                    now.isoformat(),
-                )
                 continue
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
-                self._logger.debug(
-                    "Skipping reminder %s (%s) - trigger time %s is in the past",
-                    reminder.uid,
-                    reminder.summary,
-                    trigger_time.isoformat(),
-                )
                 continue
             # If trigger is beyond lookahead, only schedule if the event itself is within lookahead
             # This ensures we don't miss long advance notifications (e.g., 30-day birthday reminders)
             if trigger_time > lookahead_end:
                 if reminder.start > lookahead_end:
-                    self._logger.debug(
-                        "Skipping reminder %s (%s) - trigger time %s and event start %s are beyond "
-                        "lookahead window (%s)",
-                        reminder.uid,
-                        reminder.summary,
-                        trigger_time.isoformat(),
-                        reminder.start.isoformat(),
-                        lookahead_end.isoformat(),
-                    )
                     continue
-                # Event is within lookahead, so schedule the reminder even though trigger is far out
-                self._logger.debug(
-                    "Scheduling reminder %s (%s) - trigger time %s is beyond lookahead, but event "
-                    "start %s is within lookahead (%s)",
-                    reminder.uid,
-                    reminder.summary,
-                    trigger_time.isoformat(),
-                    reminder.start.isoformat(),
-                    lookahead_end.isoformat(),
-                )
             key = self._reminder_key(reminder)
             valid_keys.add(key)
             # Track this UID and its trigger time
@@ -574,20 +516,8 @@ class CalendarSyncService:
                 uids_to_schedule[reminder.uid][reminder.source_url] = set()
             uids_to_schedule[reminder.uid][reminder.source_url].add(trigger_time)
             if key in self._triggered:
-                self._logger.debug(
-                    "Skipping reminder %s (%s) - already triggered at %s",
-                    reminder.uid,
-                    reminder.summary,
-                    reminder.trigger_time.isoformat(),
-                )
                 continue
             if key in self._scheduled:
-                self._logger.debug(
-                    "Skipping reminder %s (%s) - already scheduled for %s",
-                    reminder.uid,
-                    reminder.summary,
-                    reminder.trigger_time.isoformat(),
-                )
                 continue
             valid_reminders.append(reminder)
         # Cancel old reminders for UIDs we're about to schedule
@@ -603,12 +533,6 @@ class CalendarSyncService:
             self._scheduled_reminders[key] = reminder
             self._key_to_feed[key] = state.url
             state.active_keys.add(key)
-            self._logger.debug(
-                "Scheduled calendar reminder %s (%s) for %s",
-                reminder.uid,
-                reminder.summary,
-                reminder.trigger_time.isoformat(),
-            )
         stale_keys = state.active_keys - valid_keys
         for key in stale_keys:
             task = self._scheduled.pop(key, None)
@@ -681,23 +605,12 @@ class CalendarSyncService:
             task = self._scheduled.pop(key, None)
             if task:
                 task.cancel()
-                summary = scheduled_reminder.summary if scheduled_reminder else "unknown"
-                self._logger.debug(
-                    "Cancelled old reminder for event %s (%s) - event time changed",
-                    uid,
-                    summary,
-                )
             self._scheduled_reminders.pop(key, None)
             self._key_to_feed.pop(key, None)
             state.active_keys.discard(key)
 
     async def _emit_event_snapshot(self) -> None:
         ordered = sorted(self._windowed_events.values(), key=lambda reminder: (reminder.start, reminder.trigger_time))
-        self._logger.info(
-            "Calendar snapshot: %d event(s) within next %d hour(s)",
-            len(ordered),
-            self._config.lookahead_hours,
-        )
         self._latest_events = list(ordered)
         if self._snapshot_callback:
             try:
