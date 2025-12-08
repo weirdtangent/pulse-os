@@ -501,18 +501,24 @@ class CalendarSyncService:
         # First pass: collect all valid reminders and their trigger times per UID
         valid_reminders: list[CalendarReminder] = []
         uids_to_schedule: dict[str, dict[str, set[datetime]]] = {}  # uid -> {source_url: {trigger_times}}
+        skipped_past_events = 0
+        skipped_past_triggers = 0
+        skipped_beyond_lookahead = 0
         for reminder in reminders:
             # Filter out events that have already ended (or started if no end time)
             event_end = reminder.end or reminder.start
             if event_end <= now:
+                skipped_past_events += 1
                 continue
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
+                skipped_past_triggers += 1
                 continue
             # If trigger is beyond lookahead, only schedule if the event itself is within lookahead
             # This ensures we don't miss long advance notifications (e.g., 30-day birthday reminders)
             if trigger_time > lookahead_end:
                 if reminder.start > lookahead_end:
+                    skipped_beyond_lookahead += 1
                     continue
             key = self._reminder_key(reminder)
             valid_keys.add(key)
@@ -550,10 +556,14 @@ class CalendarSyncService:
         state.active_keys = {key for key in valid_keys if key in self._scheduled}
         if reminders and not valid_reminders:
             self._logger.warning(
-                "Calendar feed %s (%s) had %d reminders but none were scheduled (all filtered out)",
+                "Calendar feed %s (%s) had %d reminder(s) but none were scheduled "
+                "(past events=%d, past triggers=%d, beyond lookahead=%d)",
                 state.url,
                 state.calendar_name or "unknown",
                 len(reminders),
+                skipped_past_events,
+                skipped_past_triggers,
+                skipped_beyond_lookahead,
             )
 
     async def _await_and_fire(self, key: str, reminder: CalendarReminder) -> None:
