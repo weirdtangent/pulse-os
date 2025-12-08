@@ -1,3 +1,10 @@
+## [0.81.22](https://github.com/weirdtangent/pulse-os/compare/v0.81.21...v0.81.22) (2025-12-08)
+
+
+### Bug Fixes
+
+* add calendar sync error logging ([ee1627f](https://github.com/weirdtangent/pulse-os/commit/ee1627f0a959ffd2e2a8e8780b761ba28000f651))
+
 ## [0.81.21](https://github.com/weirdtangent/pulse-os/compare/v0.81.20...v0.81.21) (2025-12-08)
 
 
