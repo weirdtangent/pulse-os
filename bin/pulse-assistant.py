@@ -208,8 +208,9 @@ class PulseAssistant:
         if not self._earmuffs_state_restored:
             # No retained message received, publish current state
             self._publish_earmuffs_state()
+        LOGGER.info("About to publish assistant discovery...")
         self._publish_assistant_discovery()
-        LOGGER.info("Starting schedule service...")
+        LOGGER.info("Assistant discovery published, starting schedule service...")
         await self.schedule_service.start()
         LOGGER.info(
             "Schedule service started, about to start calendar sync service (calendar_sync=%s)",
