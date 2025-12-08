@@ -1,3 +1,19 @@
+# [0.81.0](https://github.com/weirdtangent/pulse-os/compare/v0.80.3...v0.81.0) (2025-12-08)
+
+
+### Bug Fixes
+
+* formatting and linting ([a0d4455](https://github.com/weirdtangent/pulse-os/commit/a0d4455f0958322b0888dc004ed9bb4757d312b9))
+* list-wake-models.py handle missing models ([f6b2268](https://github.com/weirdtangent/pulse-os/commit/f6b226805305dd3a0b8eb4b5c2324976401177df))
+* list-wake-models.py import AssistantConfig from pulse.assistant.config ([378656a](https://github.com/weirdtangent/pulse-os/commit/378656a2b4d76e8a86b3ba433182d7f5b0080785))
+* verify-conf.py and list-wake-models.py ([3b74ddf](https://github.com/weirdtangent/pulse-os/commit/3b74ddf38896b578526928f499da21596567338d))
+
+
+### Features
+
+* add --probe option to list-wake-models.py ([4db3bf8](https://github.com/weirdtangent/pulse-os/commit/4db3bf81ec929945e967addf6559b14e1c17a3ed))
+* add scroll indicators to overlay info-card ([1f1c54f](https://github.com/weirdtangent/pulse-os/commit/1f1c54f106eb8e9fb9462173eaec399f32d4a8b4))
+
 ## [0.80.3](https://github.com/weirdtangent/pulse-os/compare/v0.80.2...v0.80.3) (2025-12-07)
 
 ## [0.80.2](https://github.com/weirdtangent/pulse-os/compare/v0.80.1...v0.80.2) (2025-12-07)
