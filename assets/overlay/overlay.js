@@ -134,11 +134,147 @@
     }, AUTO_DISMISS_DELAY);
   };
 
+  const updateScrollIndicators = (scrollableElement) => {
+    if (!scrollableElement) {
+      return;
+    }
+    const scrollId = scrollableElement.getAttribute('data-scroll-id');
+    if (!scrollId) {
+      return;
+    }
+    const infoCard = scrollableElement.closest('.overlay-info-card');
+    if (!infoCard) {
+      return;
+    }
+    const upArrow = infoCard.querySelector(`.overlay-info-card__scroll-indicator--up[data-scroll-target="${scrollId}"]`);
+    const downArrow = infoCard.querySelector(`.overlay-info-card__scroll-indicator--down[data-scroll-target="${scrollId}"]`);
+    
+    if (!upArrow || !downArrow) {
+      return;
+    }
+
+    const scrollTop = scrollableElement.scrollTop;
+    const scrollHeight = scrollableElement.scrollHeight;
+    const clientHeight = scrollableElement.clientHeight;
+    const canScrollUp = scrollTop > 0;
+    const canScrollDown = scrollTop + clientHeight < scrollHeight - 1; // -1 for floating point precision
+
+    if (canScrollUp) {
+      upArrow.classList.remove('overlay-info-card__scroll-indicator--hidden');
+    } else {
+      upArrow.classList.add('overlay-info-card__scroll-indicator--hidden');
+    }
+
+    if (canScrollDown) {
+      downArrow.classList.remove('overlay-info-card__scroll-indicator--hidden');
+    } else {
+      downArrow.classList.add('overlay-info-card__scroll-indicator--hidden');
+    }
+  };
+
+  const setupScrollIndicators = (infoCard) => {
+    if (!infoCard) {
+      return;
+    }
+
+    // Find scrollable elements
+    const scrollableBody = infoCard.querySelector('.overlay-info-card__body');
+    const scrollableText = infoCard.querySelector('.overlay-info-card__text');
+
+    const setupForElement = (scrollableElement) => {
+      if (!scrollableElement) {
+        return;
+      }
+
+      // Check if indicators already exist for this element
+      const elementId = scrollableElement.getAttribute('data-scroll-id');
+      let scrollId = elementId;
+      if (!scrollId) {
+        scrollId = 'scroll-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        scrollableElement.setAttribute('data-scroll-id', scrollId);
+      }
+
+      const existingUp = infoCard.querySelector(`.overlay-info-card__scroll-indicator--up[data-scroll-target="${scrollId}"]`);
+      const existingDown = infoCard.querySelector(`.overlay-info-card__scroll-indicator--down[data-scroll-target="${scrollId}"]`);
+      
+      if (existingUp && existingDown) {
+        // Already set up, just update
+        updateScrollIndicators(scrollableElement);
+        return;
+      }
+
+      // Ensure parent is a wrapper
+      let wrapper = scrollableElement.parentElement;
+      const needsWrapper = !wrapper.classList.contains('overlay-info-card__body-wrapper') && 
+                           !wrapper.classList.contains('overlay-info-card__text-wrapper');
+      
+      if (needsWrapper) {
+        // Create wrapper if needed
+        wrapper = document.createElement('div');
+        if (scrollableElement.classList.contains('overlay-info-card__body')) {
+          wrapper.className = 'overlay-info-card__body-wrapper';
+        } else {
+          wrapper.className = 'overlay-info-card__text-wrapper';
+        }
+        scrollableElement.parentElement.insertBefore(wrapper, scrollableElement);
+        wrapper.appendChild(scrollableElement);
+      }
+
+      // Create arrows if they don't exist
+      if (!existingUp) {
+        const upArrow = document.createElement('div');
+        upArrow.className = 'overlay-info-card__scroll-indicator overlay-info-card__scroll-indicator--up overlay-info-card__scroll-indicator--hidden';
+        upArrow.setAttribute('data-scroll-target', scrollId);
+        upArrow.textContent = '↑';
+        upArrow.setAttribute('aria-hidden', 'true');
+        wrapper.insertBefore(upArrow, scrollableElement);
+      }
+
+      if (!existingDown) {
+        const downArrow = document.createElement('div');
+        downArrow.className = 'overlay-info-card__scroll-indicator overlay-info-card__scroll-indicator--down overlay-info-card__scroll-indicator--hidden';
+        downArrow.setAttribute('data-scroll-target', scrollId);
+        downArrow.textContent = '↓';
+        downArrow.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(downArrow);
+      }
+
+      // Update indicators
+      updateScrollIndicators(scrollableElement);
+
+      // Listen for scroll events
+      const handleScroll = () => {
+        updateScrollIndicators(scrollableElement);
+      };
+      scrollableElement.addEventListener('scroll', handleScroll);
+      
+      // Also check on resize
+      const handleResize = () => {
+        // Use requestAnimationFrame to ensure layout is complete
+        requestAnimationFrame(() => {
+          updateScrollIndicators(scrollableElement);
+        });
+      };
+      window.addEventListener('resize', handleResize);
+    };
+
+    if (scrollableBody) {
+      setupForElement(scrollableBody);
+    }
+    if (scrollableText) {
+      setupForElement(scrollableText);
+    }
+  };
+
   // Watch for info card appearance
   const infoCardObserver = new MutationObserver(() => {
     const infoCard = root.querySelector('.overlay-info-card');
     if (infoCard) {
       startAutoDismissTimer();
+      // Setup scroll indicators after a brief delay to ensure layout is complete
+      setTimeout(() => {
+        setupScrollIndicators(infoCard);
+      }, 100);
     } else {
       clearAutoDismissTimer();
     }
@@ -150,8 +286,12 @@
   });
 
   // Check on initial load
-  if (root.querySelector('.overlay-info-card')) {
+  const initialInfoCard = root.querySelector('.overlay-info-card');
+  if (initialInfoCard) {
     startAutoDismissTimer();
+    setTimeout(() => {
+      setupScrollIndicators(initialInfoCard);
+    }, 100);
   }
 
   // Handle stop timer button clicks
