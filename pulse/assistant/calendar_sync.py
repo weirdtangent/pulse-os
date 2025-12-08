@@ -771,6 +771,11 @@ class CalendarSyncService:
             future_reminders,
             key=lambda reminder: (reminder.start, reminder.trigger_time),
         )
+        self._logger.info(
+            "Calendar sync snapshot: %d future reminder(s) after filtering (past=%d)",
+            len(ordered),
+            filtered_count,
+        )
         self._latest_events = list(ordered)
         if self._snapshot_callback:
             try:
