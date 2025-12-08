@@ -1,3 +1,10 @@
+## [0.81.4](https://github.com/weirdtangent/pulse-os/compare/v0.81.3...v0.81.4) (2025-12-08)
+
+
+### Bug Fixes
+
+* don't schedule past events ([fd12e76](https://github.com/weirdtangent/pulse-os/commit/fd12e76c690178883891b8becb407a2f0f5c7920))
+
 ## [0.81.3](https://github.com/weirdtangent/pulse-os/compare/v0.81.2...v0.81.3) (2025-12-08)
 
 
