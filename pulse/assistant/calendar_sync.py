@@ -206,9 +206,9 @@ class CalendarSyncService:
             try:
                 await asyncio.wait_for(self._sync_feed(state, now), timeout=60.0)
             except TimeoutError:
-                self._logger.warning("Calendar sync timed out for feed %s", feed_label)
+                self._logger.warning("Calendar sync timed out for feed '%s'", feed_label)
             except Exception:
-                self._logger.exception("Calendar sync failed for feed %s", feed_label)
+                self._logger.exception("Calendar sync failed for feed '%s'", feed_label)
         try:
             await self._emit_event_snapshot()
         except Exception:
@@ -228,11 +228,11 @@ class CalendarSyncService:
         try:
             response = await self._client.get(state.url, headers=headers)
         except httpx.ReadTimeout as exc:
-            self._logger.warning("Calendar fetch timed out for %s: %s", feed_label, exc)
+            self._logger.warning("Calendar fetch timed out for '%s': %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         except httpx.HTTPError as exc:
-            self._logger.warning("Calendar fetch failed for %s: %s", feed_label, exc)
+            self._logger.warning("Calendar fetch failed for '%s': %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         if response.status_code == 304:
@@ -240,7 +240,7 @@ class CalendarSyncService:
             self._cancel_retry(state.url)
             return
         if response.status_code >= 400:
-            self._logger.warning("Calendar fetch returned %s for %s", response.status_code, feed_label)
+            self._logger.warning("Calendar fetch returned %s for '%s'", response.status_code, feed_label)
             self._schedule_retry(state.url)
             return
         # Successful fetch - clear any retry
@@ -250,7 +250,7 @@ class CalendarSyncService:
         try:
             calendar = Calendar.from_ical(response.content)
         except Exception as exc:
-            self._logger.warning("Calendar parse failed for %s: %s", feed_label, exc)
+            self._logger.warning("Calendar parse failed for '%s': %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         calendar_name = calendar.get("X-WR-CALNAME")
@@ -260,9 +260,8 @@ class CalendarSyncService:
         reminders = self._collect_reminders(calendar, state, now)
         if not reminders:
             self._logger.warning(
-                "Calendar feed %s (%s) produced no reminders at %s",
+                "Calendar feed '%s' produced no reminders at %s",
                 self._feed_label(state),
-                state.calendar_name or "unknown",
                 now.isoformat(),
             )
         await self._schedule_reminders(state, reminders, now)
@@ -600,10 +599,9 @@ class CalendarSyncService:
         state.active_keys = {key for key in valid_keys if key in self._scheduled}
         if reminders and not valid_reminders:
             self._logger.warning(
-                "Calendar feed %s (%s) had %d reminder(s) but none were scheduled "
+                "Calendar feed '%s' had %d reminder(s) but none were scheduled "
                 "(past events=%d, past triggers=%d, beyond lookahead=%d)",
                 self._feed_label(state),
-                state.calendar_name or "unknown",
                 len(reminders),
                 skipped_past_events,
                 skipped_past_triggers,
