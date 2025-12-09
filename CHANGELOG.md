@@ -1,3 +1,10 @@
+## [0.81.27](https://github.com/weirdtangent/pulse-os/compare/v0.81.26...v0.81.27) (2025-12-09)
+
+
+### Bug Fixes
+
+* remove pylint exceptions, stop logging calendar URLs ([b03a2a9](https://github.com/weirdtangent/pulse-os/commit/b03a2a953850c84ff87d085010c132b46c922da0))
+
 ## [0.81.26](https://github.com/weirdtangent/pulse-os/compare/v0.81.25...v0.81.26) (2025-12-09)
 
 
