@@ -120,6 +120,8 @@ class CalendarSyncService:
         self._key_to_feed: dict[str, str] = {}
         self._triggered: dict[str, datetime] = {}
         self._latest_events: list[CalendarReminder] = []
+        self._last_sync_started: datetime | None = None
+        self._last_sync_completed: datetime | None = None
         self._retry_tasks: dict[str, asyncio.Task] = {}
         self._failed_feeds: set[str] = set()
         self._windowed_events: dict[str, CalendarReminder] = {}
@@ -173,10 +175,24 @@ class CalendarSyncService:
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=refresh_seconds)
             except TimeoutError:
-                continue
+                pass
+            if self._stop_event.is_set():
+                break
+            now = _now()
+            stale_after = refresh_seconds * 2 + 10
+            if not self._last_sync_completed or (now - self._last_sync_completed).total_seconds() > stale_after:
+                last_start = self._last_sync_started.isoformat() if self._last_sync_started else "never"
+                last_done = self._last_sync_completed.isoformat() if self._last_sync_completed else "never"
+                self._logger.warning(
+                    "Calendar sync has not completed in %d seconds (last_start=%s, last_done=%s)",
+                    stale_after,
+                    last_start,
+                    last_done,
+                )
 
     async def _sync_once(self) -> None:
         now = _now()
+        self._last_sync_started = now
         self._prune_triggered(now)
         self._windowed_events.clear()
         for state in self._feed_states.values():
@@ -191,6 +207,8 @@ class CalendarSyncService:
             await self._emit_event_snapshot()
         except Exception:
             self._logger.exception("Calendar snapshot emit failed")
+        else:
+            self._last_sync_completed = _now()
 
     async def _sync_feed(self, state: _FeedState, now: datetime) -> None:
         if not self._client:
@@ -238,7 +256,7 @@ class CalendarSyncService:
             state.calendar_name = str(calendar_name)
         reminders = self._collect_reminders(calendar, state, now)
         if not reminders:
-            self._logger.info(
+            self._logger.warning(
                 "Calendar feed %s (%s) produced no reminders at %s",
                 feed_label,
                 state.calendar_name or "unknown",
