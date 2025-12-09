@@ -1,3 +1,10 @@
+## [0.81.30](https://github.com/weirdtangent/pulse-os/compare/v0.81.29...v0.81.30) (2025-12-09)
+
+
+### Bug Fixes
+
+* again, stop logging calendar URLs; increase timeouts for calendar sync ([96ab70c](https://github.com/weirdtangent/pulse-os/commit/96ab70c58db80cf7e7e07996b2be028ac613aac6))
+
 ## [0.81.29](https://github.com/weirdtangent/pulse-os/compare/v0.81.28...v0.81.29) (2025-12-09)
 
 
