@@ -774,6 +774,13 @@ body {
 
 .overlay-info-card--update .overlay-info-card__text {
   font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding-right: 0;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 .overlay-info-card--update .overlay-update-spinner {
