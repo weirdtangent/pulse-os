@@ -1,3 +1,10 @@
+## [0.81.32](https://github.com/weirdtangent/pulse-os/compare/v0.81.31...v0.81.32) (2025-12-09)
+
+
+### Bug Fixes
+
+* fix updating popup to show text ([f82257e](https://github.com/weirdtangent/pulse-os/commit/f82257e8456d6631fc3bf6f7a69bf356f899cccc))
+
 ## [0.81.31](https://github.com/weirdtangent/pulse-os/compare/v0.81.30...v0.81.31) (2025-12-09)
 
 
