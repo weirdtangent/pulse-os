@@ -1,3 +1,10 @@
+## [0.81.26](https://github.com/weirdtangent/pulse-os/compare/v0.81.25...v0.81.26) (2025-12-09)
+
+
+### Bug Fixes
+
+* silence calendar sync loop timeout traceback ([e1b7201](https://github.com/weirdtangent/pulse-os/commit/e1b7201871e708dcb7d5b283087c38455f21ffe8))
+
 ## [0.81.25](https://github.com/weirdtangent/pulse-os/compare/v0.81.24...v0.81.25) (2025-12-08)
 
 
