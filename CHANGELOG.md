@@ -1,3 +1,10 @@
+## [0.81.28](https://github.com/weirdtangent/pulse-os/compare/v0.81.27...v0.81.28) (2025-12-09)
+
+
+### Bug Fixes
+
+* try to keep calendar sync working while steaming music ([4ac4911](https://github.com/weirdtangent/pulse-os/commit/4ac49119faa154e39bbca678c2ccae196a0fbb9a))
+
 ## [0.81.27](https://github.com/weirdtangent/pulse-os/compare/v0.81.26...v0.81.27) (2025-12-09)
 
 
