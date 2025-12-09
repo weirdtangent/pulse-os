@@ -131,7 +131,12 @@ class CalendarSyncService:
         if self._runner:
             return
         self._stop_event.clear()
-        self._client = httpx.AsyncClient(follow_redirects=True, timeout=20.0)
+        # Keep per-request timeouts tight so a slow network (e.g., while music
+        # is streaming) cannot stall the sync loop.
+        self._client = httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(10.0, connect=4.0, read=6.0, write=6.0, pool=6.0),
+        )
         self._runner = asyncio.create_task(self._run_loop())
 
     async def stop(self) -> None:
@@ -177,7 +182,7 @@ class CalendarSyncService:
         for state in self._feed_states.values():
             feed_label = state.calendar_name or "calendar"
             try:
-                await asyncio.wait_for(self._sync_feed(state, now), timeout=30.0)
+                await asyncio.wait_for(self._sync_feed(state, now), timeout=20.0)
             except TimeoutError:
                 self._logger.warning("Calendar sync timed out for feed %s", feed_label)
             except Exception:
@@ -197,7 +202,15 @@ class CalendarSyncService:
         if state.last_modified:
             headers["If-Modified-Since"] = state.last_modified
         try:
-            response = await self._client.get(state.url, headers=headers)
+            response = await self._client.get(
+                state.url,
+                headers=headers,
+                timeout=httpx.Timeout(8.0, connect=4.0, read=8.0, write=8.0, pool=8.0),
+            )
+        except httpx.ReadTimeout as exc:
+            self._logger.warning("Calendar fetch timed out for %s: %s", feed_label, exc)
+            self._schedule_retry(state.url)
+            return
         except httpx.HTTPError as exc:
             self._logger.warning("Calendar fetch failed for %s: %s", feed_label, exc)
             self._schedule_retry(state.url)
@@ -225,7 +238,7 @@ class CalendarSyncService:
             state.calendar_name = str(calendar_name)
         reminders = self._collect_reminders(calendar, state, now)
         if not reminders:
-            self._logger.warning(
+            self._logger.info(
                 "Calendar feed %s (%s) produced no reminders at %s",
                 feed_label,
                 state.calendar_name or "unknown",
@@ -673,7 +686,8 @@ class CalendarSyncService:
             return
         self._failed_feeds.add(feed_url)
         retry_delay = 120  # 2 minutes for retry
-        self._logger.warning("Scheduling retry for failed calendar feed %s in %d seconds", feed_url, retry_delay)
+        feed_label = self._feed_states.get(feed_url).calendar_name or "calendar"
+        self._logger.warning("Scheduling retry for failed calendar feed %s in %d seconds", feed_label, retry_delay)
         task = asyncio.create_task(self._retry_feed_after_delay(feed_url, retry_delay))
         self._retry_tasks[feed_url] = task
 
@@ -701,6 +715,7 @@ class CalendarSyncService:
         except asyncio.CancelledError:
             pass
         except Exception:
-            self._logger.exception("Error in calendar feed retry for %s", feed_url)
+            feed_label = self._feed_states.get(feed_url).calendar_name if feed_url in self._feed_states else "calendar"
+            self._logger.exception("Error in calendar feed retry for %s", feed_label)
         finally:
             self._retry_tasks.pop(feed_url, None)
