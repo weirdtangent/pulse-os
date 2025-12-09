@@ -209,13 +209,13 @@ class PulseAssistant:
             except TimeoutError:
                 LOGGER.exception("Schedule service start() timed out")
                 raise
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc:
                 LOGGER.exception("Schedule service start() failed: %s", exc)
                 raise
             if self.calendar_sync:
                 try:
                     await self.calendar_sync.start()
-                except Exception as exc:  # pylint: disable=broad-except
+                except Exception as exc:
                     LOGGER.exception("Failed to start calendar sync service: %s", exc)
                 # Clear any stale calendar events on startup
                 self._calendar_events = []
@@ -233,13 +233,13 @@ class PulseAssistant:
                 # No retained message received, publish current state
                 try:
                     self._publish_earmuffs_state()
-                except Exception as exc:  # pylint: disable=broad-except
+                except Exception as exc:
                     LOGGER.exception("Failed to publish earmuffs state: %s", exc)
 
             self._publish_assistant_discovery()
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             LOGGER.exception("Fatal error in assistant.run(): %s", exc)
             raise
         while not self._shutdown.is_set():
@@ -252,7 +252,7 @@ class PulseAssistant:
                     await self._run_home_assistant_pipeline(wake_word)
                 else:
                     await self._run_pulse_pipeline(wake_word)
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc:
                 LOGGER.exception("Pipeline %s failed for wake word %s: %s", pipeline, wake_word, exc)
                 self._set_assist_stage(pipeline, "error", {"wake_word": wake_word, "error": str(exc)})
                 self._finalize_assist_run(status="error")
@@ -427,7 +427,7 @@ class PulseAssistant:
         async with self.wake_detector.local_audio_block():
             try:
                 await asyncio.to_thread(play_volume_feedback)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 LOGGER.debug("Wake sound playback failed", exc_info=True)
 
     async def _run_pulse_pipeline(self, wake_word: str) -> None:
@@ -712,7 +712,7 @@ class PulseAssistant:
         self._publish_message(self.config.response_topic, payload)
         try:
             await self._speak(message)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             LOGGER.warning("Failed to speak scheduler message: %s", exc)
 
     @staticmethod
@@ -821,21 +821,10 @@ class PulseAssistant:
     def _handle_now_playing_message(self, payload: str) -> None:
         normalized = payload.strip()
         active = bool(normalized)
-        previous_active = self.wake_detector.get_remote_audio_active()
         changed = self.wake_detector.set_remote_audio_active(active)
         if changed:
             detail = normalized[:80] or "idle"
             LOGGER.debug("Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail)
-            # Auto-enable earmuffs when music starts (unless manually disabled)
-            if active and not previous_active:
-                with self._earmuffs_lock:
-                    if self._earmuffs_manual_override is not False:
-                        self._set_earmuffs_enabled(True, manual=False)
-            # Auto-disable earmuffs when music stops (only if not manually enabled)
-            elif not active and previous_active:
-                with self._earmuffs_lock:
-                    if self._earmuffs_manual_override is not True:
-                        self._set_earmuffs_enabled(False, manual=False)
 
     def _handle_speaking_style_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -971,7 +960,7 @@ class PulseAssistant:
                 metadata=metadata,
                 auto_clear_seconds=900,
             )
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             LOGGER.exception("Calendar reminder dispatch failed for %s: %s", label, exc)
 
     async def _handle_calendar_snapshot(self, reminders: list[CalendarReminder]) -> None:
@@ -1210,7 +1199,7 @@ class PulseAssistant:
                 seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration") or "0")
                 if event_id and seconds > 0:
                     await self.schedule_service.delay_reminder(str(event_id), int(seconds))
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             LOGGER.debug("Schedule command %s failed: %s", action, exc)
 
     @staticmethod

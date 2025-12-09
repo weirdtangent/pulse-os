@@ -48,7 +48,7 @@ class AssistantMqtt:
                 client.tls_set(**tls_kwargs)
             try:
                 client.connect(self.config.host, self.config.port, keepalive=30)
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc:
                 self._logger.warning("Failed to connect to MQTT: %s", exc)
                 return
             client.loop_start()
@@ -68,7 +68,7 @@ class AssistantMqtt:
             return
         try:
             client.publish(topic, payload=payload, qos=qos, retain=retain)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             self._logger.debug("Failed to publish MQTT message: %s", exc)
 
     def subscribe(self, topic: str, on_message: Callable[[str], None]) -> None:
@@ -80,7 +80,7 @@ class AssistantMqtt:
             try:
                 payload = message.payload.decode("utf-8", errors="ignore")
                 on_message(payload)
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc:
                 self._logger.error("MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True)
 
         result, mid = client.subscribe(topic)

@@ -43,13 +43,13 @@ def load_action_definitions(action_file: Path | None, inline_json: str | None) -
     if action_file and action_file.exists():
         try:
             candidates.extend(_ensure_list(json.loads(action_file.read_text(encoding="utf-8"))))
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             pass
 
     if inline_json:
         try:
             candidates.extend(_ensure_list(json.loads(inline_json)))
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             pass
 
     definitions: list[ActionDefinition] = []

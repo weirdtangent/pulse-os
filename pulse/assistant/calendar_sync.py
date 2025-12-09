@@ -163,7 +163,7 @@ class CalendarSyncService:
             except TimeoutError:
                 # Avoid noisy tracebacks when a slow sync exceeds the loop budget
                 self._logger.warning("Calendar sync loop timed out after 30s; continuing")
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 self._logger.exception("Calendar sync loop failed; continuing")
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=refresh_seconds)
@@ -175,20 +175,22 @@ class CalendarSyncService:
         self._prune_triggered(now)
         self._windowed_events.clear()
         for state in self._feed_states.values():
+            feed_label = state.calendar_name or "calendar"
             try:
                 await asyncio.wait_for(self._sync_feed(state, now), timeout=30.0)
             except TimeoutError:
-                self._logger.warning("Calendar sync timed out for feed %s", state.url)
-            except Exception:  # pylint: disable=broad-except
-                self._logger.exception("Calendar sync failed for feed %s", state.url)
+                self._logger.warning("Calendar sync timed out for feed %s", feed_label)
+            except Exception:
+                self._logger.exception("Calendar sync failed for feed %s", feed_label)
         try:
             await self._emit_event_snapshot()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             self._logger.exception("Calendar snapshot emit failed")
 
     async def _sync_feed(self, state: _FeedState, now: datetime) -> None:
         if not self._client:
             return
+        feed_label = state.calendar_name or "calendar"
         headers: dict[str, str] = {}
         if state.etag:
             headers["If-None-Match"] = state.etag
@@ -197,7 +199,7 @@ class CalendarSyncService:
         try:
             response = await self._client.get(state.url, headers=headers)
         except httpx.HTTPError as exc:
-            self._logger.warning("Calendar fetch failed for %s: %s", state.url, exc)
+            self._logger.warning("Calendar fetch failed for %s: %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         if response.status_code == 304:
@@ -205,7 +207,7 @@ class CalendarSyncService:
             self._cancel_retry(state.url)
             return
         if response.status_code >= 400:
-            self._logger.warning("Calendar fetch returned %s for %s", response.status_code, state.url)
+            self._logger.warning("Calendar fetch returned %s for %s", response.status_code, feed_label)
             self._schedule_retry(state.url)
             return
         # Successful fetch - clear any retry
@@ -214,8 +216,8 @@ class CalendarSyncService:
         state.last_modified = response.headers.get("last-modified") or state.last_modified
         try:
             calendar = Calendar.from_ical(response.content)
-        except Exception as exc:  # pylint: disable=broad-except
-            self._logger.warning("Calendar parse failed for %s: %s", state.url, exc)
+        except Exception as exc:
+            self._logger.warning("Calendar parse failed for %s: %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         calendar_name = calendar.get("X-WR-CALNAME")
@@ -225,7 +227,7 @@ class CalendarSyncService:
         if not reminders:
             self._logger.warning(
                 "Calendar feed %s (%s) produced no reminders at %s",
-                state.url,
+                feed_label,
                 state.calendar_name or "unknown",
                 now.isoformat(),
             )
@@ -272,7 +274,7 @@ class CalendarSyncService:
         summary = str(component.get("SUMMARY") or "Calendar event").strip() or "Calendar event"
         try:
             start_value = component.decoded("DTSTART")
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return []
         start_dt, all_day = self._coerce_datetime(start_value, now.tzinfo)
         if not start_dt:
@@ -280,7 +282,7 @@ class CalendarSyncService:
         end_dt = None
         try:
             end_value = component.decoded("DTEND")
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             end_value = None
         if end_value:
             end_dt, _ = self._coerce_datetime(end_value, start_dt.tzinfo or now.tzinfo)
@@ -351,12 +353,12 @@ class CalendarSyncService:
             due_value = component.decoded("DUE")
             if due_value:
                 start_value = due_value
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             pass
         if not start_value:
             try:
                 start_value = component.decoded("DTSTART")
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 return []
         start_dt, all_day = self._coerce_datetime(start_value, now.tzinfo)
         if not start_dt:
@@ -367,7 +369,7 @@ class CalendarSyncService:
             duration_value = component.decoded("DURATION")
             if duration_value and isinstance(duration_value, timedelta):
                 end_dt = start_dt + duration_value
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             pass
         # If no DURATION, try DTEND (some implementations use it)
         if not end_dt:
@@ -375,7 +377,7 @@ class CalendarSyncService:
                 end_value = component.decoded("DTEND")
                 if end_value:
                     end_dt, _ = self._coerce_datetime(end_value, start_dt.tzinfo or now.tzinfo)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 pass
         summary = str(component.get("SUMMARY") or "Task").strip() or "Task"
         description = str(component.get("DESCRIPTION")).strip() if component.get("DESCRIPTION") else None
@@ -461,7 +463,7 @@ class CalendarSyncService:
                 continue
             try:
                 decoded = alarm.decoded("TRIGGER")
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 continue
             trigger_dt: datetime | None = None
             if isinstance(decoded, timedelta):
@@ -587,7 +589,7 @@ class CalendarSyncService:
         try:
             if not reminder.declined:
                 await self._trigger_callback(reminder)
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             self._logger.exception(
                 "Failed to trigger calendar reminder %s (%s)",
                 reminder.uid,
@@ -655,7 +657,7 @@ class CalendarSyncService:
         if self._snapshot_callback:
             try:
                 await self._snapshot_callback(list(ordered))
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 self._logger.exception("Calendar snapshot callback failed")
 
     def cached_events(self) -> list[CalendarReminder]:
@@ -698,7 +700,7 @@ class CalendarSyncService:
             await self._emit_event_snapshot()
         except asyncio.CancelledError:
             pass
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             self._logger.exception("Error in calendar feed retry for %s", feed_url)
         finally:
             self._retry_tasks.pop(feed_url, None)

@@ -676,7 +676,7 @@ class KioskMqttListener:
             try:
                 metrics = self._collect_telemetry_metrics()
                 self._publish_telemetry(metrics)
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc:
                 self.log(f"telemetry: failed to publish metrics: {exc}")
             if self._telemetry_stop_event.wait(interval):
                 break
@@ -772,7 +772,7 @@ class KioskMqttListener:
         except urllib.error.URLError as exc:
             self._log_now_playing_error(f"now-playing: HA connection error: {exc}")
             return None
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             self._log_now_playing_error(f"now-playing: unexpected error: {exc}")
             return None
         try:
@@ -1482,7 +1482,7 @@ class KioskMqttListener:
             self._publish_latest_version(self.latest_remote_version)
         try:
             self.refresh_update_availability()
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             self.log(f"update-check: initial refresh failed: {exc}")
         self.publish_update_button_availability(client, self.is_update_available())
         self.start_update_checker(client)

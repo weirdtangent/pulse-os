@@ -79,7 +79,7 @@ class OpenAIProvider(LLMProvider):
         payload = self._build_payload(user_text, list(actions_for_prompt))
         try:
             response_text = await asyncio.to_thread(self._call_api, payload)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             self._logger.exception("LLM call failed: %s", exc)
             return LLMResult(response="Sorry, I ran into an error while thinking about that.", actions=[])
 
@@ -147,7 +147,7 @@ class GeminiProvider(LLMProvider):
         payload = self._build_payload(user_text, list(actions_for_prompt))
         try:
             response_text = await asyncio.to_thread(self._call_api, payload)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             self._logger.exception("LLM call failed: %s", exc)
             return LLMResult(response="Sorry, I ran into an error while thinking about that.", actions=[])
         return _parse_llm_response(response_text)

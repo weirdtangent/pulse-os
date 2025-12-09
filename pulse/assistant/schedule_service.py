@@ -579,7 +579,7 @@ class PlaybackHandle:
         }
         try:
             await self.ha_client.call_service("media_player", "play_media", payload)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             LOGGER.warning("Failed to start music alarm via Home Assistant: %s", exc)
             self.playback = PlaybackConfig()
             self._task = asyncio.create_task(self._beep_loop())
@@ -594,7 +594,7 @@ class PlaybackHandle:
             return
         try:
             await self.ha_client.call_service("media_player", "media_stop", {"entity_id": entity})
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             LOGGER.debug("Failed to stop media_player for alarm", exc_info=True)
         self._music_paused = False
 
@@ -609,7 +609,7 @@ class PlaybackHandle:
         try:
             await self.ha_client.call_service("media_player", "media_pause", {"entity_id": entity})
             self._music_paused = True
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             LOGGER.debug("Failed to pause media_player for alarm", exc_info=True)
 
     async def _resume_music(self) -> None:
@@ -623,7 +623,7 @@ class PlaybackHandle:
         try:
             await self.ha_client.call_service("media_player", "media_play", {"entity_id": entity})
             self._music_paused = False
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             LOGGER.debug("Failed to resume media_player for alarm", exc_info=True)
 
     async def _beep_loop(self) -> None:
@@ -1171,7 +1171,7 @@ class ScheduleService:
         for item in data.get("events", []):
             try:
                 event = ScheduledEvent.from_dict(item)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 LOGGER.debug("Skipping invalid schedule entry: %s", item, exc_info=True)
                 continue
             if event.event_type == "alarm" and event.time_of_day:

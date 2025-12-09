@@ -353,7 +353,7 @@ def check_home_assistant(config: HomeAssistantConfig, timeout: float) -> CheckRe
         return CheckResult("Home Assistant", "fail", f"Token rejected: {exc}")
     except HomeAssistantError as exc:
         return CheckResult("Home Assistant", "fail", str(exc))
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         return CheckResult("Home Assistant", "fail", f"Failed to query /api/: {exc}")
     location = info.get("location_name") or info.get("message") or "Home Assistant"
     version = info.get("version") or "unknown version"
@@ -427,7 +427,7 @@ def check_home_assistant_assist_pipeline(
             "fail",
             f"Assist pipeline endpoint returned invalid JSON: {exc}.",
         )
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         return CheckResult("HA Assist pipelines", "fail", f"Assist pipeline request failed: {exc}.")
 
     if isinstance(payload, dict):

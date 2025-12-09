@@ -201,6 +201,10 @@ class WakeDetector:
     async def wait_for_wake_word(self, shutdown: asyncio.Event, get_earmuffs_enabled) -> str | None:
         """Wait for a wake word to be detected."""
         while not shutdown.is_set():
+            if self.self_audio_is_active():
+                # Suppress wake detection while local/remote audio is playing
+                await asyncio.sleep(0.5)
+                continue
             enabled = get_earmuffs_enabled()
             if enabled:
                 await asyncio.sleep(0.5)

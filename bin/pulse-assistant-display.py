@@ -157,7 +157,7 @@ class AssistantDisplay:
                 if data is not None:
                     self._state_queue.put(data)
                 return
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             LOGGER.debug("Failed to process assistant message: %s", exc)
 
     def _poll_queue(self) -> None:
@@ -328,7 +328,7 @@ class AlarmOverlay:
     def _publish_command(self, data: dict[str, object]) -> None:
         try:
             self._client.publish(self._command_topic, json.dumps(data))
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             LOGGER.debug("Failed to publish schedule command", exc_info=True)
 
     @staticmethod
