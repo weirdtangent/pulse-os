@@ -160,6 +160,9 @@ class CalendarSyncService:
         while not self._stop_event.is_set():
             try:
                 await asyncio.wait_for(self._sync_once(), timeout=30.0)
+            except TimeoutError:
+                # Avoid noisy tracebacks when a slow sync exceeds the loop budget
+                self._logger.warning("Calendar sync loop timed out after 30s; continuing")
             except Exception:  # pylint: disable=broad-except
                 self._logger.exception("Calendar sync loop failed; continuing")
             try:
