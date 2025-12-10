@@ -1,3 +1,10 @@
+# [0.82.0](https://github.com/weirdtangent/pulse-os/compare/v0.81.32...v0.82.0) (2025-12-10)
+
+
+### Features
+
+* write activity log events to Home Assistant logbook ([6e3b4f9](https://github.com/weirdtangent/pulse-os/commit/6e3b4f9142a3622c83d29ffe9d525a4541580317))
+
 ## [0.81.32](https://github.com/weirdtangent/pulse-os/compare/v0.81.31...v0.81.32) (2025-12-09)
 
 
