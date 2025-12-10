@@ -1,0 +1,201 @@
+[
+  {
+    "id": "notify-soft-chime",
+    "label": "Soft Chime",
+    "filename": "notify-soft-chime.wav",
+    "kinds": [
+      "notification"
+    ]
+  },
+  {
+    "id": "notify-pleasant-trill",
+    "label": "Pleasant Trill",
+    "filename": "notify-pleasant-trill.wav",
+    "kinds": [
+      "notification",
+      "reminder"
+    ]
+  },
+  {
+    "id": "notify-two-tone",
+    "label": "Two-Tone",
+    "filename": "notify-two-tone.wav",
+    "kinds": [
+      "notification"
+    ]
+  },
+  {
+    "id": "notify-airy-pluck",
+    "label": "Airy Pluck",
+    "filename": "notify-airy-pluck.wav",
+    "kinds": [
+      "notification",
+      "reminder"
+    ]
+  },
+  {
+    "id": "notify-glass-pop",
+    "label": "Glass Pop",
+    "filename": "notify-glass-pop.wav",
+    "kinds": [
+      "notification"
+    ]
+  },
+  {
+    "id": "alarm-digital-rise",
+    "label": "Digital Rise",
+    "filename": "alarm-digital-rise.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "alarm-bright-triple",
+    "label": "Bright Triple",
+    "filename": "alarm-bright-triple.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "alarm-woodpecker",
+    "label": "Woodpecker",
+    "filename": "alarm-woodpecker.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "alarm-pulse-sweep",
+    "label": "Pulse Sweep",
+    "filename": "alarm-pulse-sweep.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "alarm-analog-bell",
+    "label": "Analog Bell",
+    "filename": "alarm-analog-bell.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "alarm-astro",
+    "label": "Astro Beacon",
+    "filename": "alarm-astro.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "alarm-buzzer-soft",
+    "label": "Soft Buzzer",
+    "filename": "alarm-buzzer-soft.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "timer-woodblock",
+    "label": "Woodblock",
+    "filename": "timer-woodblock.wav",
+    "kinds": [
+      "timer",
+      "notification"
+    ]
+  },
+  {
+    "id": "timer-mallet-duo",
+    "label": "Mallet Duo",
+    "filename": "timer-mallet-duo.wav",
+    "kinds": [
+      "timer",
+      "reminder"
+    ]
+  },
+  {
+    "id": "timer-interval-beep",
+    "label": "Interval Beep",
+    "filename": "timer-interval-beep.wav",
+    "kinds": [
+      "timer"
+    ]
+  },
+  {
+    "id": "reminder-marimba",
+    "label": "Marimba",
+    "filename": "reminder-marimba.wav",
+    "kinds": [
+      "reminder",
+      "notification"
+    ]
+  },
+  {
+    "id": "reminder-glass-harp",
+    "label": "Glass Harp",
+    "filename": "reminder-glass-harp.wav",
+    "kinds": [
+      "reminder"
+    ]
+  },
+  {
+    "id": "reminder-warm-chord",
+    "label": "Warm Chord",
+    "filename": "reminder-warm-chord.wav",
+    "kinds": [
+      "reminder"
+    ]
+  },
+  {
+    "id": "reminder-bell-duo",
+    "label": "Bell Duo",
+    "filename": "reminder-bell-duo.wav",
+    "kinds": [
+      "reminder"
+    ]
+  },
+  {
+    "id": "reminder-soft-arpeggio",
+    "label": "Soft Arpeggio",
+    "filename": "reminder-soft-arpeggio.wav",
+    "kinds": [
+      "reminder",
+      "notification"
+    ]
+  },
+  {
+    "id": "alarm-sonar",
+    "label": "Sonar Ping",
+    "filename": "alarm-sonar.wav",
+    "kinds": [
+      "alarm",
+      "timer"
+    ]
+  },
+  {
+    "id": "notify-short-pluck",
+    "label": "Short Pluck",
+    "filename": "notify-short-pluck.wav",
+    "kinds": [
+      "notification"
+    ]
+  },
+  {
+    "id": "reminder-uplift",
+    "label": "Uplift",
+    "filename": "reminder-uplift.wav",
+    "kinds": [
+      "reminder",
+      "notification"
+    ]
+  }
+]

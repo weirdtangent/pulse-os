@@ -133,6 +133,25 @@ PULSE_DAY_NIGHT_AUTO="true"
 # PULSE_VOLUME_TEST_SOUND — plays the heartbeat "thump-thump" after MQTT volume changes.
 PULSE_VOLUME_TEST_SOUND="true"
 
+# ============================================================================
+# Sounds
+# ============================================================================
+
+# PULSE_SOUNDS_DIR — directory for user-provided WAV/OGG files (defaults to ~/.local/share/pulse/sounds).
+# PULSE_SOUNDS_DIR="/home/pulse/.local/share/pulse/sounds"
+
+# PULSE_SOUND_ALARM — default alarm sound id or filename from the sound pack or custom dir.
+PULSE_SOUND_ALARM="alarm-digital-rise"
+
+# PULSE_SOUND_TIMER — default timer sound id or filename (falls back to PULSE_SOUND_ALARM if unset).
+PULSE_SOUND_TIMER="timer-woodblock"
+
+# PULSE_SOUND_REMINDER — default reminder sound id or filename.
+PULSE_SOUND_REMINDER="reminder-marimba"
+
+# PULSE_SOUND_NOTIFICATION — default notification/volume chime id or filename.
+PULSE_SOUND_NOTIFICATION="notify-soft-chime"
+
 # PULSE_BLUETOOTH_AUTOCONNECT — automatically reconnect to the last paired Bluetooth audio device and send keepalives.
 PULSE_BLUETOOTH_AUTOCONNECT="true"
 

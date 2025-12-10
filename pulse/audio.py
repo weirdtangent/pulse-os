@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 _LOGGER = logging.getLogger("pulse.audio")
@@ -343,6 +344,8 @@ def _play_sample(sample_path: Path | None) -> None:
     """Play a sound sample using available audio player."""
     if not sample_path:
         return
+    if not sample_path.exists():
+        return
     player = None
     for candidate in ("pw-play", "aplay"):
         if shutil.which(candidate):
@@ -363,8 +366,30 @@ def _play_sample(sample_path: Path | None) -> None:
         _LOGGER.debug("Failed to play sample: %s", exc)
 
 
+def play_sound(sound_path: Path | None, fallback: Callable[[], None] | None = None) -> None:
+    """Play a provided sound path or fall back to a callable."""
+    if sound_path and sound_path.exists():
+        _play_sample(sound_path)
+        return
+    if fallback:
+        fallback()
+
+
 def play_volume_feedback() -> None:
     """Play a short confirmation thump after adjusting volume."""
+    override_id = os.getenv("PULSE_SOUND_NOTIFICATION")
+    if override_id:
+        try:
+            from pulse.sound_library import SoundLibrary, SoundSettings
+
+            library = SoundLibrary()
+            settings = SoundSettings.with_defaults(default_notification=override_id)
+            override_path = library.resolve_with_default(override_id, kind="notification", settings=settings)
+            if override_path:
+                _play_sample(override_path)
+                return
+        except Exception:
+            _LOGGER.debug("Failed to play override notification sound '%s'", override_id, exc_info=True)
     sample = _ensure_notification_sample()
     _play_sample(sample)
 

@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from pulse import audio as pulse_audio
 from pulse.datetime_utils import combine_time, parse_time_string
+from pulse.sound_library import SoundKind, SoundLibrary, SoundSettings
 from pulse.utils import sanitize_hostname_for_entity_id
 
 from .home_assistant import HomeAssistantClient
@@ -375,6 +376,7 @@ class PlaybackConfig:
     media_content_type: str | None = None
     provider: str | None = None
     description: str | None = None
+    sound_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -384,6 +386,7 @@ class PlaybackConfig:
             "media_content_type": self.media_content_type,
             "provider": self.provider,
             "description": self.description,
+            "sound_id": self.sound_id,
         }
 
     @classmethod
@@ -397,6 +400,7 @@ class PlaybackConfig:
             media_content_type=payload.get("media_content_type"),
             provider=payload.get("provider"),
             description=payload.get("description"),
+            sound_id=payload.get("sound_id"),
         )
 
 
@@ -508,11 +512,15 @@ class PlaybackHandle:
         hostname: str,
         ha_client: HomeAssistantClient | None,
         event_type: EventType,
+        sound_library: SoundLibrary | None,
+        sound_settings: SoundSettings,
     ) -> None:
         self.playback = playback
         self.hostname = hostname
         self.ha_client = ha_client
         self.event_type = event_type
+        self._sound_library = sound_library
+        self._sound_settings = sound_settings
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -522,6 +530,11 @@ class PlaybackHandle:
         self._pause_condition = asyncio.Event()
         self._pause_condition.set()
         self._music_paused = False
+
+    def _sound_path(self, kind: SoundKind, sound_id: str | None) -> Path | None:
+        if not self._sound_library:
+            return None
+        return self._sound_library.resolve_with_default(sound_id, kind=kind, settings=self._sound_settings)
 
     async def start(self) -> None:
         if self.event_type == "reminder":
@@ -638,6 +651,8 @@ class PlaybackHandle:
         ramp_duration = 0.0 if force_full_volume else 30.0  # Ramp volume over 30 seconds
         ramp_end = self._loop.time() + ramp_duration
         stop_at = self._loop.time() + 60.0
+        sound_kind: SoundKind = "timer" if self.event_type == "timer" else "alarm"
+        resolved_sound = self._sound_path(sound_kind, self.playback.sound_id)
         try:
             while not self._stop_event.is_set() and self._loop.time() < stop_at:
                 await self._wait_if_paused()
@@ -653,7 +668,7 @@ class PlaybackHandle:
                     else:
                         target = 100
                     pulse_audio.set_volume(target, self._sink)
-                await asyncio.to_thread(pulse_audio.play_alarm_sound)
+                await asyncio.to_thread(pulse_audio.play_sound, resolved_sound, pulse_audio.play_alarm_sound)
                 await asyncio.sleep(0.8)
         except asyncio.CancelledError:
             raise
@@ -662,9 +677,10 @@ class PlaybackHandle:
 
     async def _play_reminder_tone(self) -> None:
         # Play reminder sound twice for better noticeability
-        await asyncio.to_thread(pulse_audio.play_reminder_sound)
+        sound_path = self._sound_path("reminder", self.playback.sound_id)
+        await asyncio.to_thread(pulse_audio.play_sound, sound_path, pulse_audio.play_reminder_sound)
         await asyncio.sleep(0.2)
-        await asyncio.to_thread(pulse_audio.play_reminder_sound)
+        await asyncio.to_thread(pulse_audio.play_sound, sound_path, pulse_audio.play_reminder_sound)
 
     async def _wait_if_paused(self) -> None:
         while self._pause_flag and not self._stop_event.is_set():
@@ -689,12 +705,16 @@ class ScheduleService:
         on_state_changed: StateCallback | None = None,
         on_active_event: ActiveCallback | None = None,
         ha_client: HomeAssistantClient | None = None,
+        sound_settings: SoundSettings | None = None,
     ) -> None:
         self._storage_path = storage_path
         self._hostname = hostname
         self._state_cb = on_state_changed
         self._active_cb = on_active_event
         self._ha_client = ha_client
+        self._sound_settings = sound_settings or SoundSettings.with_defaults()
+        self._sound_library = SoundLibrary(custom_dir=self._sound_settings.custom_dir)
+        self._sound_library.ensure_custom_dir()
         self._events: dict[str, ScheduledEvent] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._active: dict[str, ActiveEvent] = {}
@@ -1071,7 +1091,14 @@ class ScheduleService:
         reminder_meta = _ensure_reminder_meta(event)
         reminder_meta.setdefault("message", message or label or "Reminder")
         async with self._lock:
-            handle = PlaybackHandle(event.playback, self._hostname, self._ha_client, event.event_type)
+            handle = PlaybackHandle(
+                event.playback,
+                self._hostname,
+                self._ha_client,
+                event.event_type,
+                self._sound_library,
+                self._sound_settings,
+            )
             playback_task = asyncio.create_task(handle.start())
             active = ActiveEvent(
                 event=event,
@@ -1138,7 +1165,14 @@ class ScheduleService:
                 return
             if event.event_type == "reminder":
                 _set_reminder_delay(event, None)
-            handle = PlaybackHandle(event.playback, self._hostname, self._ha_client, event.event_type)
+            handle = PlaybackHandle(
+                event.playback,
+                self._hostname,
+                self._ha_client,
+                event.event_type,
+                self._sound_library,
+                self._sound_settings,
+            )
             playback_task = asyncio.create_task(handle.start())
             active = ActiveEvent(
                 event=event,

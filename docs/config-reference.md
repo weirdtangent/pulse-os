@@ -66,6 +66,16 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. |
 | `PULSE_BT_MAC` | *(empty)* | Optional explicit Bluetooth MAC to target. |
 
+## Sounds
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_SOUNDS_DIR` | `~/.local/share/pulse/sounds` | Directory for user-provided WAV/OGG files. |
+| `PULSE_SOUND_ALARM` | `alarm-digital-rise` | Default alarm sound (id or filename from the sound pack or custom dir). |
+| `PULSE_SOUND_TIMER` | `timer-woodblock` | Default timer sound (falls back to `PULSE_SOUND_ALARM` if unset). |
+| `PULSE_SOUND_REMINDER` | `reminder-marimba` | Default reminder sound. |
+| `PULSE_SOUND_NOTIFICATION` | `notify-soft-chime` | Default notification/volume chime sound. |
+
 ## Logging & Reliability
 
 | Key | Default | Description |

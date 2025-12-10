@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from pulse.sound_library import SoundSettings
 from pulse.utils import (
     parse_bool,
     parse_float,
@@ -251,6 +252,7 @@ class AssistantConfig:
     log_transcripts: bool
     info: InfoConfig
     calendar: CalendarConfig
+    sounds: SoundSettings
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -401,6 +403,18 @@ class AssistantConfig:
             ),
         )
 
+        sounds_dir_env = source.get("PULSE_SOUNDS_DIR")
+        sounds_dir = Path(sounds_dir_env).expanduser() if sounds_dir_env else None
+        sounds = SoundSettings.with_defaults(
+            custom_dir=sounds_dir,
+            default_alarm=(source.get("PULSE_SOUND_ALARM") or "alarm-digital-rise").strip(),
+            default_timer=(
+                source.get("PULSE_SOUND_TIMER") or source.get("PULSE_SOUND_ALARM") or "timer-woodblock"
+            ).strip(),
+            default_reminder=(source.get("PULSE_SOUND_REMINDER") or "reminder-marimba").strip(),
+            default_notification=(source.get("PULSE_SOUND_NOTIFICATION") or "notify-soft-chime").strip(),
+        )
+
         media_player_entity = _resolve_media_player_entity(hostname, source.get("PULSE_MEDIA_PLAYER_ENTITY"))
         extra_media_players = tuple(
             entity.strip()
@@ -539,6 +553,7 @@ class AssistantConfig:
             log_transcripts=log_transcripts,
             info=info_config,
             calendar=calendar_config,
+            sounds=sounds,
         )
 
 

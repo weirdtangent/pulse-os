@@ -118,6 +118,7 @@ class PulseAssistant:
             ha_client=self.home_assistant,
             on_state_changed=self._handle_schedule_state_changed,
             on_active_event=self._handle_active_schedule_event,
+            sound_settings=self.config.sounds,
         )
         self._calendar_events: list[dict[str, Any]] = []
         self._calendar_updated_at: float | None = None
@@ -1566,8 +1567,9 @@ class PulseAssistant:
                 return PlaybackConfig(mode="music")
             return PlaybackConfig()
         mode = (payload.get("mode") or payload.get("type") or "beep").lower()
+        sound_id = payload.get("sound") or payload.get("sound_id")
         if mode != "music":
-            return PlaybackConfig()
+            return PlaybackConfig(sound_id=sound_id)
         return PlaybackConfig(
             mode="music",
             music_entity=payload.get("entity") or payload.get("music_entity"),
@@ -1575,6 +1577,7 @@ class PulseAssistant:
             media_content_type=payload.get("media_content_type") or payload.get("content_type"),
             provider=payload.get("provider"),
             description=payload.get("description") or payload.get("name"),
+            sound_id=sound_id,
         )
 
     @staticmethod
