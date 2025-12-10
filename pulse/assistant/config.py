@@ -27,6 +27,7 @@ def _strip_or_none(value: str | None) -> str | None:
 
 
 DEFAULT_WAKE_MODEL = "hey_jarvis"
+DEFAULT_HA_WAKE_MODEL = "ok_nabu"
 WAKE_PIPELINES = {"pulse", "home_assistant"}
 
 
@@ -57,15 +58,21 @@ def _parse_wake_profiles(source: dict[str, str]) -> tuple[list[str], dict[str, s
 
     pulse_words = split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE")) or [DEFAULT_WAKE_MODEL]
 
-    ha_words = split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_HA"))
+    ha_words = split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_HA")) or [DEFAULT_HA_WAKE_MODEL]
     manual_routes = _parse_wake_route_string(source.get("PULSE_ASSISTANT_WAKE_ROUTES"))
+
+    # Check if HA wake endpoint is configured
+    ha_wake_host = source.get("HOME_ASSISTANT_OPENWAKEWORD_HOST")
+    ha_wake_configured = bool(ha_wake_host and ha_wake_host.strip())
 
     for model in pulse_words:
         if model:
             routes.setdefault(model, "pulse")
     for model in ha_words:
         if model:
-            routes[model] = "home_assistant"
+            # Route to home_assistant only if HA wake endpoint is configured
+            # Otherwise, fall back to pulse endpoint
+            routes[model] = "home_assistant" if ha_wake_configured else "pulse"
     for model, pipeline in manual_routes.items():
         routes[model] = pipeline
 
@@ -155,6 +162,7 @@ class HomeAssistantConfig:
     tts_endpoint: WyomingEndpoint | None
     timer_entity: str | None
     reminder_service: str | None
+    presence_entity: str | None
 
 
 @dataclass(frozen=True)
@@ -232,9 +240,12 @@ class AssistantConfig:
     response_topic: str
     state_topic: str
     action_topic: str
+    alert_topics: tuple[str, ...]
+    intercom_topic: str
     home_assistant: HomeAssistantConfig
     preferences: AssistantPreferences
     media_player_entity: str | None
+    media_player_entities: tuple[str, ...]
     self_audio_trigger_level: int
     log_llm_messages: bool
     info: InfoConfig
@@ -343,6 +354,7 @@ class AssistantConfig:
         ha_assist_pipeline = source.get("HOME_ASSISTANT_ASSIST_PIPELINE")
         ha_timer_entity = source.get("HOME_ASSISTANT_TIMER_ENTITY")
         ha_reminder_service = source.get("HOME_ASSISTANT_REMINDER_SERVICE")
+        ha_presence_entity = _strip_or_none(source.get("HOME_ASSISTANT_PRESENCE_ENTITY"))
 
         ha_wake_endpoint = _optional_wyoming_endpoint(
             source,
@@ -371,6 +383,7 @@ class AssistantConfig:
             tts_endpoint=ha_tts_endpoint,
             timer_entity=ha_timer_entity,
             reminder_service=ha_reminder_service,
+            presence_entity=ha_presence_entity,
         )
 
         preferences = AssistantPreferences(
@@ -388,6 +401,17 @@ class AssistantConfig:
         )
 
         media_player_entity = _resolve_media_player_entity(hostname, source.get("PULSE_MEDIA_PLAYER_ENTITY"))
+        extra_media_players = tuple(
+            entity.strip()
+            for entity in split_csv(source.get("PULSE_MEDIA_PLAYER_ENTITIES")) or ()
+            if entity and entity.strip()
+        )
+        media_player_entities: tuple[str, ...]
+        merged_media_players = []
+        if media_player_entity:
+            merged_media_players.append(media_player_entity)
+        merged_media_players.extend(extra_media_players)
+        media_player_entities = tuple(dict.fromkeys(merged_media_players))
         self_audio_trigger_level = parse_int(source.get("PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL"), 7)
         self_audio_trigger_level = max(2, self_audio_trigger_level)
 
@@ -395,6 +419,8 @@ class AssistantConfig:
         response_topic = f"{mqtt.topic_base}/response"
         state_topic = f"{mqtt.topic_base}/state"
         action_topic = f"{mqtt.topic_base}/actions"
+        alert_topics = tuple(split_csv(source.get("PULSE_ALERT_TOPICS")) or ())
+        intercom_topic = source.get("PULSE_INTERCOM_TOPIC") or f"{mqtt.topic_base}/intercom"
 
         log_llm_messages = parse_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
 
@@ -500,9 +526,12 @@ class AssistantConfig:
             response_topic=response_topic,
             state_topic=state_topic,
             action_topic=action_topic,
+            alert_topics=alert_topics,
+            intercom_topic=intercom_topic,
             home_assistant=home_assistant,
             preferences=preferences,
             media_player_entity=media_player_entity,
+            media_player_entities=media_player_entities,
             self_audio_trigger_level=self_audio_trigger_level,
             log_llm_messages=log_llm_messages,
             info=info_config,

@@ -874,6 +874,12 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_weather_info_overlay(snapshot, card)
     if card_type == "update":
         return _build_update_info_overlay(snapshot, card)
+    if card_type == "lights":
+        return _build_lights_info_overlay(card)
+    if card_type == "routines":
+        return _build_routines_info_overlay(card)
+    if card_type == "health":
+        return _build_health_info_overlay(card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -1193,6 +1199,143 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
       {subtitle_html}
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close weather list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _build_lights_info_overlay(card: dict[str, Any]) -> str:
+    entries = card.get("lights")
+    title = str(card.get("title") or "Lights").strip() or "Lights"
+    subtitle = str(card.get("subtitle") or "").strip()
+    safe_title = html_escape(title)
+    subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+    if not isinstance(entries, list) or not entries:
+        body = '<div class="overlay-info-card__empty">No lights to show.</div>'
+    else:
+        rows: list[str] = []
+        for light in entries:
+            if not isinstance(light, dict):
+                continue
+            name = html_escape(str(light.get("name") or light.get("entity_id") or "Light"))
+            state = str(light.get("state") or "unknown").title()
+            brightness = light.get("brightness_pct")
+            color_temp = light.get("color_temp")
+            area = str(light.get("area") or "").strip()
+            meta_parts = [state]
+            if isinstance(brightness, (int, float)):
+                meta_parts.append(f"{int(brightness)}%")
+            if color_temp:
+                meta_parts.append(str(color_temp))
+            if area:
+                meta_parts.append(area)
+            meta = " · ".join(meta_parts)
+            rows.append(
+                f"""
+  <div class="overlay-info-card__reminder">
+    <div class="overlay-info-card__reminder-body">
+      <div class="overlay-info-card__reminder-label">{name}</div>
+      <div class="overlay-info-card__reminder-meta">{html_escape(meta)}</div>
+    </div>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-info-card__alarm-list">' + "".join(rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--lights">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      {subtitle_html}
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close lights list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _build_routines_info_overlay(card: dict[str, Any]) -> str:
+    routines = card.get("routines")
+    title = str(card.get("title") or "Routines").strip() or "Routines"
+    subtitle = str(card.get("subtitle") or "").strip()
+    safe_title = html_escape(title)
+    subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+    if not isinstance(routines, list) or not routines:
+        body = '<div class="overlay-info-card__empty">No routines available.</div>'
+    else:
+        rows: list[str] = []
+        for routine in routines:
+            if not isinstance(routine, dict):
+                continue
+            label = html_escape(str(routine.get("label") or routine.get("slug") or "Routine"))
+            desc = html_escape(str(routine.get("description") or ""))
+            rows.append(
+                f"""
+  <div class="overlay-info-card__reminder">
+    <div class="overlay-info-card__reminder-body">
+      <div class="overlay-info-card__reminder-label">{label}</div>
+      <div class="overlay-info-card__reminder-meta">{desc}</div>
+    </div>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-info-card__alarm-list">' + "".join(rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--routines">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      {subtitle_html}
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close routines list">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _build_health_info_overlay(card: dict[str, Any]) -> str:
+    items = card.get("items")
+    title = str(card.get("title") or "Health").strip() or "Health"
+    subtitle = str(card.get("subtitle") or "").strip()
+    safe_title = html_escape(title)
+    subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+    if not isinstance(items, list) or not items:
+        body = '<div class="overlay-info-card__empty">No health details.</div>'
+    else:
+        rows: list[str] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            label = html_escape(str(item.get("label") or "Status"))
+            value = html_escape(str(item.get("value") or ""))
+            rows.append(
+                f"""
+  <div class="overlay-info-card__reminder">
+    <div class="overlay-info-card__reminder-body">
+      <div class="overlay-info-card__reminder-label">{label}</div>
+      <div class="overlay-info-card__reminder-meta">{value}</div>
+    </div>
+  </div>
+                """.strip()
+            )
+        body = '<div class="overlay-info-card__alarm-list">' + "".join(rows) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--health">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">{safe_title}</div>
+      {subtitle_html}
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close health status">&times;</button>
   </div>
   <div class="overlay-info-card__body">
     {body}

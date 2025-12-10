@@ -325,6 +325,61 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn("overlay-info-card__reminder--declined", html)
         self.assertIn("Declined", html)
 
+    def test_lights_info_card_renders_entries(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "lights",
+                "title": "Lights",
+                "subtitle": "2 on • 3 total",
+                "lights": [
+                    {
+                        "name": "Kitchen",
+                        "state": "on",
+                        "brightness_pct": 60,
+                        "color_temp": "3000K",
+                        "area": "Downstairs",
+                    }
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("Kitchen", html)
+        self.assertIn("3000K", html)
+        self.assertIn("60%", html)
+        self.assertIn("Lights", html)
+
+    def test_routines_info_card_renders_entries(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "routines",
+                "title": "Routines",
+                "subtitle": "Available: Morning",
+                "routines": [
+                    {"slug": "routine.morning", "label": "Morning", "description": "Warm lights on."},
+                    {"slug": "routine.movie", "label": "Movie", "description": "Dim lights."},
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("Routines", html)
+        self.assertIn("Morning", html)
+        self.assertIn("Dim lights.", html)
+
+    def test_health_info_card_renders_entries(self) -> None:
+        snapshot = self._snapshot(
+            info_card={
+                "type": "health",
+                "title": "Health",
+                "items": [
+                    {"label": "MQTT", "value": "connected"},
+                    {"label": "Home Assistant", "value": "online"},
+                ],
+            }
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("MQTT", html)
+        self.assertIn("connected", html)
+
 
 if __name__ == "__main__":
     unittest.main()

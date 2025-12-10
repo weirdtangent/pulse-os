@@ -22,7 +22,6 @@ SYSTEM_UNITS=(
     pulse-assistant.service
     pulse-kiosk-mqtt.service
     pulse-backlight-sun.service
-    pulse-bt-mute.service
     pulse-snapclient.service
     pulse-daily-reboot.service
     pulse-daily-reboot.timer

@@ -629,7 +629,10 @@ class PlaybackHandle:
     async def _beep_loop(self) -> None:
         self._sink = pulse_audio.find_audio_sink()
         if self._sink:
-            self._orig_volume = pulse_audio.get_current_volume(self._sink)
+            current = pulse_audio.get_current_volume(self._sink)
+            # Never save 0 as original volume - use minimum of 20% if volume is 0 or None
+            # This prevents accidentally restoring to 0% later
+            self._orig_volume = current if current and current > 0 else 20
         force_full_volume = self.event_type == "timer"
         start_volume = 100 if force_full_volume else _clamp_volume((self._orig_volume or 50) // 2)
         ramp_duration = 0.0 if force_full_volume else 30.0  # Ramp volume over 30 seconds
@@ -670,7 +673,9 @@ class PlaybackHandle:
     async def _restore_volume(self) -> None:
         if self._sink is None or self._orig_volume is None:
             return
-        await asyncio.to_thread(pulse_audio.set_volume, self._orig_volume, self._sink)
+        # Never restore to 0% - use minimum of 20% to prevent silent audio
+        restore_volume = max(20, self._orig_volume) if self._orig_volume > 0 else 20
+        await asyncio.to_thread(pulse_audio.set_volume, restore_volume, self._sink)
 
 
 class ScheduleService:

@@ -20,10 +20,17 @@ class MediaController:
         self,
         home_assistant: HomeAssistantClient | None,
         media_player_entity: str | None,
+        additional_entities: list[str] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         self.home_assistant = home_assistant
         self.media_player_entity = media_player_entity
+        extras = additional_entities or []
+        unique_entities: list[str] = []
+        for candidate in [media_player_entity, *extras]:
+            if candidate and candidate not in unique_entities:
+                unique_entities.append(candidate)
+        self._entities = unique_entities
         self._loop = loop
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
@@ -45,7 +52,7 @@ class MediaController:
 
     async def maybe_pause_media_playback(self) -> None:
         """Pause media playback if currently playing."""
-        if self._media_pause_pending or not self.home_assistant or not self.media_player_entity:
+        if self._media_pause_pending or not self.home_assistant or not self._entities:
             return
         state = await self.fetch_media_player_state()
         if not state:
@@ -56,11 +63,7 @@ class MediaController:
         try:
             from pulse.assistant.home_assistant import HomeAssistantError
 
-            await self.home_assistant.call_service(
-                "media_player",
-                "media_pause",
-                {"entity_id": self.media_player_entity},
-            )
+            await self._call_media_service("media_pause")
             self._media_pause_pending = True
         except HomeAssistantError as exc:
             LOGGER.debug("Unable to pause media player %s: %s", self.media_player_entity, exc)
@@ -76,12 +79,7 @@ class MediaController:
 
     def schedule_media_resume(self, delay: float) -> None:
         """Schedule media resume after a delay."""
-        if (
-            not self._media_pause_pending
-            or self._media_resume_task
-            or not self.home_assistant
-            or not self.media_player_entity
-        ):
+        if not self._media_pause_pending or self._media_resume_task or not self.home_assistant or not self._entities:
             return
         loop = self._loop or asyncio.get_running_loop()
         self._media_resume_task = loop.create_task(self._resume_media_after_delay(max(0.0, delay)))
@@ -92,12 +90,8 @@ class MediaController:
             from pulse.assistant.home_assistant import HomeAssistantError
 
             await asyncio.sleep(delay)
-            await self.home_assistant.call_service(
-                "media_player",
-                "media_play",
-                {"entity_id": self.media_player_entity},
-            )
-            LOGGER.debug("Resumed media player %s", self.media_player_entity)
+            await self._call_media_service("media_play")
+            LOGGER.debug("Resumed media players %s", self._entities)
         except asyncio.CancelledError:
             raise
         except HomeAssistantError as exc:
@@ -108,7 +102,7 @@ class MediaController:
 
     async def fetch_media_player_state(self) -> dict | None:
         """Fetch current media player state."""
-        entity = self.media_player_entity
+        entity = self._entities[0] if self._entities else None
         ha_client = self.home_assistant
         if not entity or not ha_client:
             return None
@@ -119,3 +113,21 @@ class MediaController:
         except HomeAssistantError as exc:
             LOGGER.debug("Unable to read media_player %s: %s", entity, exc)
             return None
+
+    async def pause_all(self) -> None:
+        """Pause all configured media players."""
+        await self._call_media_service("media_pause")
+
+    async def resume_all(self) -> None:
+        """Resume all configured media players."""
+        await self._call_media_service("media_play")
+
+    async def stop_all(self) -> None:
+        """Stop all configured media players."""
+        await self._call_media_service("media_stop")
+
+    async def _call_media_service(self, service: str) -> None:
+        if not self.home_assistant or not self._entities:
+            return
+        payload = {"entity_id": self._entities}
+        await self.home_assistant.call_service("media_player", service, payload)

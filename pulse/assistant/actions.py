@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
+from pulse.audio import set_volume
 from pulse.datetime_utils import parse_datetime, parse_duration_seconds, utc_now
 
+from .home_assistant import HomeAssistantError, kelvin_to_mired
 from .schedule_service import PlaybackConfig, parse_day_tokens
+
+LOGGER = logging.getLogger("pulse-assistant")
 
 if TYPE_CHECKING:  # pragma: no cover
     from .home_assistant import HomeAssistantClient
+    from .media_controller import MediaController
     from .schedule_service import ScheduleService
     from .scheduler import AssistantScheduler
 
@@ -80,6 +87,19 @@ def load_action_definitions(action_file: Path | None, inline_json: str | None) -
     return definitions
 
 
+def _utc_now() -> datetime:
+    return utc_now()
+
+
+def _local_now() -> datetime:
+    return _utc_now().astimezone()
+
+
+def _parse_datetime(text: str) -> datetime | None:
+    with patch("pulse.datetime_utils.utc_now", _utc_now):
+        return parse_datetime(text)
+
+
 def _ensure_list(value) -> list[dict]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, dict)]
@@ -104,6 +124,7 @@ class ActionEngine:
         ha_client: HomeAssistantClient | None = None,
         scheduler: AssistantScheduler | None = None,
         schedule_service: ScheduleService | None = None,
+        media_controller: MediaController | None = None,
     ) -> list[str]:
         executed: list[str] = []
 
@@ -133,6 +154,8 @@ class ActionEngine:
                     executed.append(slug)
             else:
                 handled = await _maybe_execute_scheduler_action(slug, arg_string, scheduler, schedule_service)
+                if not handled:
+                    handled = await _maybe_execute_media_action(slug, arg_string, media_controller)
                 if handled:
                     executed.append(slug)
         return executed
@@ -164,6 +187,219 @@ def _parse_action_args(arg_string: str) -> dict[str, str]:
     return args
 
 
+def _entity_domain(entity_id: str | None) -> str:
+    if not entity_id or "." not in entity_id:
+        return ""
+    return entity_id.split(".", 1)[0].lower()
+
+
+def _log_resolution(slug: str, targets: list[str], domains: list[str | None]) -> None:
+    LOGGER.debug("Resolved %s to %s (domain_order=%s)", slug, targets, domains)
+
+
+def _parse_brightness_pct(args: dict[str, str]) -> float | None:
+    value = args.get("brightness") or args.get("level")
+    if not value:
+        return None
+    cleaned = value.strip().lower().rstrip("%")
+    try:
+        brightness = float(cleaned)
+    except ValueError:
+        return None
+    return max(0.0, min(100.0, brightness))
+
+
+def _parse_color_temp_mired(args: dict[str, str]) -> int | None:
+    raw = args.get("color_temp") or args.get("color_temperature") or args.get("kelvin")
+    if raw is None:
+        return None
+    text = str(raw).strip().lower()
+    if not text:
+        return None
+    try:
+        value = float(text.rstrip("k"))
+    except ValueError:
+        return None
+    # Heuristic: values over 1000 are likely Kelvin
+    if value > 1000:
+        return kelvin_to_mired(value)
+    return int(round(value))
+
+
+def _parse_rgb_color(args: dict[str, str]) -> tuple[int, int, int] | None:
+    """Parse RGB color from action args. Supports names, hex, and RGB tuples."""
+    # Check for explicit RGB values
+    rgb_str = args.get("rgb") or args.get("rgb_color")
+    if rgb_str:
+        try:
+            # Support formats like "255,0,0" or "[255,0,0]"
+            cleaned = rgb_str.strip().strip("[]")
+            parts = [int(x.strip()) for x in cleaned.split(",")]
+            if len(parts) == 3:
+                return tuple(max(0, min(255, p)) for p in parts)
+        except (ValueError, TypeError):
+            pass
+
+    # Check for hex color (e.g., #ff0000 or ff0000)
+    hex_str = args.get("hex") or args.get("color_hex") or args.get("color")
+    if isinstance(hex_str, str) and hex_str.strip().startswith("#"):
+        hex_str = hex_str.strip()[1:]
+    if isinstance(hex_str, str) and len(hex_str.strip()) in {6, 8}:
+        try:
+            cleaned = hex_str.strip()
+            # Ignore alpha if present
+            if len(cleaned) == 8:
+                cleaned = cleaned[2:]
+            value = int(cleaned, 16)
+            r = (value >> 16) & 0xFF
+            g = (value >> 8) & 0xFF
+            b = value & 0xFF
+            return (r, g, b)
+        except (ValueError, TypeError):
+            pass
+
+    # Check for color name
+    color_name = args.get("color") or args.get("colour")
+    if color_name:
+        rgb = _color_name_to_rgb(color_name.strip().lower())
+        if rgb:
+            return rgb
+
+    return None
+
+
+def _color_name_to_rgb(color_name: str) -> tuple[int, int, int] | None:
+    """Convert common color names to RGB values."""
+    color_map: dict[str, tuple[int, int, int]] = {
+        "red": (255, 0, 0),
+        "green": (0, 255, 0),
+        "blue": (0, 0, 255),
+        "white": (255, 255, 255),
+        "yellow": (255, 255, 0),
+        "orange": (255, 165, 0),
+        "purple": (128, 0, 128),
+        "pink": (255, 192, 203),
+        "cyan": (0, 255, 255),
+        "magenta": (255, 0, 255),
+        "lime": (0, 255, 0),
+        "navy": (0, 0, 128),
+        "teal": (0, 128, 128),
+        "maroon": (128, 0, 0),
+        "olive": (128, 128, 0),
+        "silver": (192, 192, 192),
+        "gray": (128, 128, 128),
+        "grey": (128, 128, 128),
+        "black": (0, 0, 0),
+        "warm": (255, 147, 41),  # Warm white
+        "cool": (148, 191, 255),  # Cool white
+    }
+    return color_map.get(color_name)
+
+
+def _parse_percentage(args: dict[str, str]) -> int | None:
+    """Parse percentage value (0-100) from action args."""
+    raw = args.get("percentage") or args.get("speed") or args.get("percent")
+    if not raw:
+        return None
+    try:
+        value = int(float(raw))
+        return max(0, min(100, value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_transition_seconds(args: dict[str, str]) -> float | None:
+    raw = args.get("transition") or args.get("fade")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return max(0.0, value)
+
+
+def _preferred_domains(args: dict[str, str]) -> list[str | None]:
+    """Choose domain resolution order based on hints in the args."""
+    percent_hint = args.get("percentage") or args.get("speed") or args.get("percent")
+    name_hint = (args.get("name") or "").lower()
+    color_hint = args.get("color") or args.get("colour") or args.get("rgb") or args.get("rgb_color")
+    if percent_hint or "fan" in name_hint:
+        return ["fan", "light", "switch", None]
+    if color_hint:
+        return ["light", "fan", "switch", None]
+    return ["light", "fan", "switch", None]
+
+
+async def _resolve_entities(
+    args: dict[str, str], ha_client: HomeAssistantClient, domain: str | None = None
+) -> list[str]:
+    """Resolve entity names to entity IDs for any domain (lights, fans, switches, etc.)."""
+    entity_id = args.get("entity_id")
+    if entity_id:
+        return [entity_id]
+    room_hint = args.get("room") or args.get("area") or args.get("group")
+    name_hint = args.get("name")
+    scope_all = str(args.get("all") or "").lower() in {"true", "1", "yes", "on"}
+    entities = await ha_client.list_entities(domain)
+    if scope_all:
+        return [e["entity_id"] for e in entities if e.get("entity_id")]
+    if not room_hint and not name_hint:
+        return []
+
+    def _tokenize(text: str) -> list[str]:
+        return [t for t in re.split(r"[^a-z0-9]+", text.lower()) if t]
+
+    tokens: list[str] = []
+    if room_hint:
+        tokens.extend(_tokenize(room_hint))
+    if name_hint:
+        tokens.extend(_tokenize(name_hint))
+
+    def _score_entity(state: dict[str, Any]) -> int:
+        ent = state.get("entity_id") or ""
+        attrs = state.get("attributes") or {}
+        friendly = str(attrs.get("friendly_name") or ent).lower()
+        area = str(attrs.get("area_id") or "").lower()
+        score = 0
+        # Strong boost for exact name_hint substring in friendly name
+        if name_hint and name_hint.lower() in friendly:
+            score += 5
+        # Token matches across friendly, area, and entity_id
+        for token in tokens:
+            if token in friendly:
+                score += 3
+            elif token in area:
+                score += 2
+            elif token in ent.lower():
+                score += 1
+        return score
+
+    scored: list[tuple[int, str]] = []
+    for state in entities:
+        ent = state.get("entity_id")
+        if not ent:
+            continue
+        score = _score_entity(state)
+        if score > 0:
+            scored.append((score, ent))
+
+    if not scored:
+        return []
+
+    # Pick the top-scoring entity (or entities tied for top)
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    top_score = scored[0][0]
+    top_entities = [ent for score, ent in scored if score == top_score]
+    # Prefer a single best match to avoid acting on many devices at once
+    return [top_entities[0]] if top_entities else []
+
+
+async def _resolve_light_entities(args: dict[str, str], ha_client: HomeAssistantClient) -> list[str]:
+    """Resolve light entity names to entity IDs (backward compatibility wrapper)."""
+    return await _resolve_entities(args, ha_client, "light")
+
+
 async def _maybe_execute_home_assistant_action(
     slug: str,
     arg_string: str,
@@ -172,19 +408,192 @@ async def _maybe_execute_home_assistant_action(
     if ha_client is None:
         return False
     args = _parse_action_args(arg_string)
+
+    if slug in {"ha.light", "ha.light_on", "ha.light_off"}:
+        return await _execute_light_action(slug, args, ha_client)
     if slug == "ha.turn_on":
         entity_id = args.get("entity_id")
         if not entity_id:
-            return False
+            # Try to resolve entity by name, trying multiple common domains
+            targets: list[str] = []
+            for domain in _preferred_domains(args):
+                targets = await _resolve_entities(args, ha_client, domain)
+                if targets:
+                    break
+            if not targets:
+                return False
+            _log_resolution(slug, targets, _preferred_domains(args))
+            # Check if resolved entities are lights (for brightness/color support)
+            if all(_entity_domain(t) == "light" for t in targets):
+                brightness = _parse_brightness_pct(args)
+                rgb_color = _parse_rgb_color(args)
+                color_temp = None if rgb_color is not None else _parse_color_temp_mired(args)
+                transition = _parse_transition_seconds(args)
+                await ha_client.set_light_state(
+                    targets,
+                    on=True,
+                    brightness_pct=brightness,
+                    color_temp_mired=color_temp,
+                    rgb_color=rgb_color,
+                    transition=transition,
+                )
+                return True
+            # For non-light entities, use generic turn_on
+            for target in targets:
+                domain = _entity_domain(target)
+                if domain == "fan":
+                    percentage = _parse_percentage(args)
+                    if percentage is not None:
+                        try:
+                            await ha_client.call_service(
+                                "fan", "set_percentage", {"entity_id": target, "percentage": percentage}
+                            )
+                        except HomeAssistantError:
+                            try:
+                                await ha_client.call_service(
+                                    "fan", "set_speed", {"entity_id": target, "speed": str(percentage)}
+                                )
+                            except HomeAssistantError:
+                                await ha_client.call_service(
+                                    "homeassistant", "turn_on", {"entity_id": target, "percentage": percentage}
+                                )
+                    else:
+                        await ha_client.call_service("homeassistant", "turn_on", {"entity_id": target})
+                else:
+                    await ha_client.call_service("homeassistant", "turn_on", {"entity_id": target})
+            return True
+        if _entity_domain(entity_id) == "light":
+            brightness = _parse_brightness_pct(args)
+            rgb_color = _parse_rgb_color(args)
+            color_temp = None if rgb_color is not None else _parse_color_temp_mired(args)
+            transition = _parse_transition_seconds(args)
+            await ha_client.set_light_state(
+                [entity_id],
+                on=True,
+                brightness_pct=brightness,
+                color_temp_mired=color_temp,
+                rgb_color=rgb_color,
+                transition=transition,
+            )
+            return True
+        if _entity_domain(entity_id) == "fan":
+            # Handle fan speed/percentage
+            percentage = _parse_percentage(args)
+            if percentage is not None:
+                try:
+                    await ha_client.call_service(
+                        "fan", "set_percentage", {"entity_id": entity_id, "percentage": percentage}
+                    )
+                except HomeAssistantError:
+                    try:
+                        await ha_client.call_service(
+                            "fan", "set_speed", {"entity_id": entity_id, "speed": str(percentage)}
+                        )
+                    except HomeAssistantError:
+                        await ha_client.call_service(
+                            "homeassistant", "turn_on", {"entity_id": entity_id, "percentage": percentage}
+                        )
+            else:
+                await ha_client.call_service("homeassistant", "turn_on", {"entity_id": entity_id})
+            return True
         await ha_client.call_service("homeassistant", "turn_on", {"entity_id": entity_id})
         return True
     if slug == "ha.turn_off":
         entity_id = args.get("entity_id")
         if not entity_id:
-            return False
+            # Try to resolve entity by name, trying multiple common domains
+            targets: list[str] = []
+            for domain in _preferred_domains(args):
+                targets = await _resolve_entities(args, ha_client, domain)
+                if targets:
+                    break
+            if not targets:
+                return False
+            _log_resolution(slug, targets, _preferred_domains(args))
+            # Check if resolved entities are lights (for transition support)
+            if all(_entity_domain(t) == "light" for t in targets):
+                transition = _parse_transition_seconds(args)
+                await ha_client.set_light_state(targets, on=False, transition=transition)
+            else:
+                # For non-light entities, use generic turn_off
+                for target in targets:
+                    domain = _entity_domain(target)
+                    if domain == "fan":
+                        percentage = _parse_percentage(args)
+                        if percentage is not None:
+                            try:
+                                await ha_client.call_service(
+                                    "fan", "set_percentage", {"entity_id": target, "percentage": percentage}
+                                )
+                            except HomeAssistantError:
+                                try:
+                                    await ha_client.call_service(
+                                        "fan", "set_speed", {"entity_id": target, "speed": str(percentage)}
+                                    )
+                                except HomeAssistantError:
+                                    await ha_client.call_service(
+                                        "homeassistant", "turn_off", {"entity_id": target, "percentage": percentage}
+                                    )
+                        else:
+                            await ha_client.call_service("homeassistant", "turn_off", {"entity_id": target})
+                    else:
+                        await ha_client.call_service("homeassistant", "turn_off", {"entity_id": target})
+            return True
+        if _entity_domain(entity_id) == "light":
+            transition = _parse_transition_seconds(args)
+            await ha_client.set_light_state([entity_id], on=False, transition=transition)
+            return True
+        if _entity_domain(entity_id) == "fan":
+            percentage = _parse_percentage(args)
+            if percentage is not None:
+                try:
+                    await ha_client.call_service(
+                        "fan", "set_percentage", {"entity_id": entity_id, "percentage": percentage}
+                    )
+                except HomeAssistantError:
+                    try:
+                        await ha_client.call_service(
+                            "fan", "set_speed", {"entity_id": entity_id, "speed": str(percentage)}
+                        )
+                    except HomeAssistantError:
+                        await ha_client.call_service(
+                            "homeassistant", "turn_off", {"entity_id": entity_id, "percentage": percentage}
+                        )
+            else:
+                await ha_client.call_service("homeassistant", "turn_off", {"entity_id": entity_id})
+            return True
         await ha_client.call_service("homeassistant", "turn_off", {"entity_id": entity_id})
         return True
+    if slug == "ha.scene":
+        scene_id = args.get("entity_id") or args.get("scene") or args.get("name")
+        if not scene_id:
+            return False
+        scene_entity = scene_id if scene_id.startswith("scene.") else f"scene.{scene_id}"
+        await ha_client.activate_scene(scene_entity)
+        return True
     return False
+
+
+async def _execute_light_action(
+    slug: str,
+    args: dict[str, str],
+    ha_client: HomeAssistantClient,
+) -> bool:
+    targets = await _resolve_light_entities(args, ha_client)
+    if not targets:
+        return False
+    turn_on = slug in {"ha.light", "ha.light_on"} or args.get("state", "").lower() in {"on", "true", "1"}
+    brightness = _parse_brightness_pct(args)
+    color_temp = _parse_color_temp_mired(args)
+    transition = _parse_transition_seconds(args)
+    await ha_client.set_light_state(
+        targets,
+        on=turn_on,
+        brightness_pct=brightness,
+        color_temp_mired=color_temp,
+        transition=transition,
+    )
+    return True
 
 
 async def _maybe_execute_scheduler_action(
@@ -298,6 +707,41 @@ async def _maybe_execute_scheduler_action(
             return False
         label = args.get("label")
         await scheduler.start_timer(duration, label)
+        return True
+    return False
+
+
+async def _maybe_execute_media_action(
+    slug: str,
+    arg_string: str,
+    media_controller: MediaController | None,
+) -> bool:
+    if media_controller is None:
+        return False
+    if slug in {"media.pause", "media.mute"}:
+        await media_controller.pause_all()
+        return True
+    if slug in {"media.resume", "media.play"}:
+        await media_controller.resume_all()
+        return True
+    if slug in {"media.stop", "media.halt"}:
+        await media_controller.stop_all()
+        return True
+    if slug in {"volume.set", "volume"}:
+        args = _parse_action_args(arg_string)
+        percent = _parse_percentage(args)
+        if percent is None:
+            raw = args.get("volume") or args.get("value")
+            if raw:
+                try:
+                    percent = int(float(raw))
+                except (ValueError, TypeError):
+                    percent = None
+        if percent is None:
+            return False
+        sink = args.get("sink")
+        LOGGER.debug('Setting volume to %s%% (sink="%s")', percent, sink or "default")
+        set_volume(percent, sink)
         return True
     return False
 

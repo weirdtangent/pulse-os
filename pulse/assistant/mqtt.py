@@ -62,6 +62,13 @@ class AssistantMqtt:
             client.loop_stop()
             client.disconnect()
 
+    def is_connected(self) -> bool:
+        client = self._client
+        try:
+            return bool(client and client.is_connected())
+        except Exception:
+            return False
+
     def publish(self, topic: str, payload: str, retain: bool = False, qos: int = 0) -> None:
         client = self._client
         if not client:

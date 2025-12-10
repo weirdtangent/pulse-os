@@ -65,6 +65,10 @@ class ArecordStream:
             await asyncio.wait_for(self._proc.wait(), timeout=2)
         self._proc = None
 
+    @property
+    def running(self) -> bool:
+        return self._proc is not None and self._proc.returncode is None
+
 
 class AplaySink:
     """Play PCM audio via ``aplay``/``pw-play``/``paplay``."""

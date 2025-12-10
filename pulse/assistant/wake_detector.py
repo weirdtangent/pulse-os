@@ -162,33 +162,30 @@ class WakeDetector:
         return {"trigger_level": trigger_level}
 
     def _wake_endpoint_streams(self) -> list[WakeEndpointStream]:
-        """Group wake-word models by their assigned OpenWakeWord endpoint."""
+        """Group wake-word models by their assigned OpenWakeWord endpoint.
+
+        Creates a separate stream for each model to work around openWakeWord
+        limitation where only the first model in a Detect message is loaded.
+        """
         ha_endpoint = self.config.home_assistant.wake_endpoint
-        candidates: list[tuple[str, WyomingEndpoint, list[str]]] = []
-        pulse_models: list[str] = []
-        ha_models: list[str] = []
+        streams: list[WakeEndpointStream] = []
         for model in self.config.wake_models:
             pipeline = self.config.wake_routes.get(model, "pulse")
             if pipeline == "home_assistant" and ha_endpoint:
-                ha_models.append(model)
+                endpoint = ha_endpoint
+                label = "Home Assistant"
             else:
-                pulse_models.append(model)
-        if pulse_models:
-            candidates.append(("Pulse", self.config.wake_endpoint, pulse_models))
-        if ha_endpoint and ha_models:
-            candidates.append(("Home Assistant", ha_endpoint, ha_models))
-        streams: dict[tuple[str, int], WakeEndpointStream] = {}
-        for label, endpoint, models in candidates:
-            key = (endpoint.host, endpoint.port)
-            existing = streams.get(key)
-            if existing:
-                existing.labels.add(label)
-                for name in models:
-                    if name not in existing.models:
-                        existing.models.append(name)
-                continue
-            streams[key] = WakeEndpointStream(endpoint=endpoint, labels={label}, models=list(models))
-        return list(streams.values())
+                endpoint = self.config.wake_endpoint
+                label = "Pulse"
+            # Create a separate stream for each model to ensure all models are loaded
+            streams.append(
+                WakeEndpointStream(
+                    endpoint=endpoint,
+                    labels={label},
+                    models=[model],
+                )
+            )
+        return streams
 
     def stable_detect_context(self) -> tuple[dict[str, int] | None, int]:
         """Get stable wake detection context (waits for version to stabilize)."""
@@ -234,6 +231,11 @@ class WakeDetector:
                 await client.connect()
                 clients.append(client)
                 detect_message = Detect(names=stream.models, context=detect_context or None)
+                LOGGER.debug(
+                    "Sending Detect message to %s with model names: %s",
+                    stream.display_label,
+                    stream.models,
+                )
                 await client.write_event(detect_message.event())
                 await client.write_event(
                     AudioStart(

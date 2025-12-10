@@ -539,8 +539,8 @@ install_voice_assistant_python_deps() {
     log "Ensuring Python packages for the voice assistant are installed for the pulse user…"
     if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
         --user --upgrade --disable-pip-version-check --break-system-packages \
-        wyoming httpx openlocationcode; then
-        log "Warning: failed to install wyoming/httpx via pip (voice assistant may not start)."
+        wyoming httpx openlocationcode websockets; then
+        log "Warning: failed to install Python packages via pip (voice assistant may not start)."
     fi
 }
 
@@ -1173,7 +1173,7 @@ wait_for_overlay_server() {
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
     local max_attempts=10
     local attempt=0
-    
+
     while [ $attempt -lt $max_attempts ]; do
         if command -v curl >/dev/null 2>&1; then
             if curl -sf --max-time 1 "http://localhost:${overlay_port}/overlay" >/dev/null 2>&1; then
@@ -1193,25 +1193,25 @@ wait_for_overlay_server() {
 reload_overlay_via_devtools() {
     local devtools_url="${CHROMIUM_DEVTOOLS_URL:-http://localhost:9222/json}"
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
-    
+
     if ! command -v curl >/dev/null 2>&1; then
         return 1
     fi
-    
+
     # Get list of tabs from DevTools
     local tabs_json
     tabs_json=$(curl -sf --max-time 2 "${devtools_url}" 2>/dev/null)
     if [ -z "$tabs_json" ]; then
         return 1
     fi
-    
+
     # Extract the first tab's webSocketDebuggerUrl (or use the first tab's ID)
     local tab_id
     tab_id=$(echo "$tabs_json" | python3 -c "import sys, json; tabs = json.load(sys.stdin); print(tabs[0]['id'] if tabs else '')" 2>/dev/null)
     if [ -z "$tab_id" ]; then
         return 1
     fi
-    
+
     # Use Page.reload with bypassCache to force reload of overlay iframe
     # We'll inject JavaScript to reload any iframe pointing to the overlay
     local overlay_url="http://localhost:${overlay_port}/overlay"
@@ -1235,11 +1235,11 @@ reload_overlay_via_devtools() {
         });
     })();
     "
-    
+
     # Execute JavaScript via DevTools Runtime.evaluate
     local ws_url
     ws_url=$(echo "$tabs_json" | python3 -c "import sys, json; tabs = json.load(sys.stdin); print(tabs[0]['webSocketDebuggerUrl'] if tabs and 'webSocketDebuggerUrl' in tabs[0] else '')" 2>/dev/null)
-    
+
     # Execute JavaScript via DevTools to reload overlay iframes
     # Note: This requires the tab to be accessible via DevTools
     if command -v python3 >/dev/null 2>&1; then
@@ -1250,17 +1250,17 @@ import urllib.error
 
 try:
     overlay_port = "$overlay_port"
-    
+
     # Get the first tab's webSocketDebuggerUrl
     tabs_resp = urllib.request.urlopen("http://localhost:9222/json", timeout=2)
     tabs = json.loads(tabs_resp.read().decode('utf-8'))
-    
+
     if not tabs or len(tabs) == 0:
         exit(1)
-    
+
     tab = tabs[0]
     ws_url = tab.get('webSocketDebuggerUrl', '')
-    
+
     if not ws_url:
         # Fallback: try to use Runtime.evaluate via HTTP (if supported)
         # This is a simplified approach - we'll just try to trigger a page reload
@@ -1271,7 +1271,7 @@ try:
         except:
             pass
         exit(0)
-    
+
     # If we have websocket URL, we could use it, but that requires websocket library
     # For now, just exit - the MQTT refresh or direct fetch should work
     exit(0)
@@ -1279,14 +1279,14 @@ except Exception:
     exit(1)
 PYTHON_SCRIPT
     fi
-    
+
     return 0
 }
 
 publish_overlay_refresh_mqtt() {
     local hostname="${PULSE_HOSTNAME:-$(hostname -s 2>/dev/null || echo 'pulse')}"
     local reason="${1:-setup}"
-    
+
     # Publish MQTT refresh message to prompt HA to reload overlay
     if [ -n "${MQTT_HOST:-}" ] && command -v mosquitto_pub >/dev/null 2>&1; then
         local mqtt_host="${MQTT_HOST}"
@@ -1300,16 +1300,16 @@ publish_overlay_refresh_mqtt() {
         version=$((ts % 1000000))  # Use timestamp-based version
         local payload
         payload=$(python3 -c "import json, sys; print(json.dumps({'version': $version, 'reason': sys.argv[1], 'ts': $ts}))" "$reason" 2>/dev/null)
-        
+
         if [ -z "$payload" ]; then
             # Fallback if python fails
             payload="{\"version\":${version},\"reason\":\"${reason}\",\"ts\":${ts}}"
         fi
-        
+
         local mqtt_args=()
         [ -n "$mqtt_user" ] && mqtt_args+=(-u "$mqtt_user")
         [ -n "$mqtt_pass" ] && mqtt_args+=(-P "$mqtt_pass")
-        
+
         mosquitto_pub -h "$mqtt_host" -p "$mqtt_port" "${mqtt_args[@]}" \
             -t "$topic" -m "$payload" >/dev/null 2>&1 || true
     fi
@@ -1318,18 +1318,18 @@ publish_overlay_refresh_mqtt() {
 trigger_overlay_refresh() {
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
     local hostname="${PULSE_HOSTNAME:-$(hostname -s 2>/dev/null || echo 'pulse')}"
-    
+
     # Method 1: Publish MQTT refresh message (most reliable - prompts HA to reload)
     publish_overlay_refresh_mqtt "setup"
-    
+
     # Method 2: Fetch overlay with cache-busting parameter (forces browser to check for update)
     if command -v curl >/dev/null 2>&1; then
         curl -sf --max-time 2 "http://localhost:${overlay_port}/overlay?refresh=$(date +%s)" >/dev/null 2>&1 || true
     fi
-    
+
     # Method 3: Try to reload via DevTools
     reload_overlay_via_devtools || true
-    
+
     # Small delay to allow refresh to propagate
     sleep 0.3
 }
@@ -1338,20 +1338,20 @@ show_update_overlay() {
     local message="${1:-Updating PulseOS...}"
     local overlay_enabled="${PULSE_OVERLAY_ENABLED:-true}"
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
-    
+
     if [ "$overlay_enabled" != "true" ]; then
         return 0
     fi
-    
+
     # Wait for overlay server to be ready (with timeout)
     if ! wait_for_overlay_server; then
         # Server not ready, but continue anyway
         return 0
     fi
-    
+
     local url="http://localhost:${overlay_port}/overlay/info-card"
     local payload
-    
+
     # Use python to properly encode JSON if available, otherwise use simple approach
     if command -v python3 >/dev/null 2>&1; then
         payload=$(python3 -c "import json, sys; print(json.dumps({'type': 'update', 'title': 'Updating Pulse', 'text': sys.argv[1]}))" "$message" 2>/dev/null)
@@ -1359,7 +1359,7 @@ show_update_overlay() {
         # Fallback: simple JSON construction (assumes message doesn't contain quotes)
         payload="{\"type\":\"update\",\"title\":\"Updating Pulse\",\"text\":\"$message\"}"
     fi
-    
+
     if [ -n "$payload" ] && command -v curl >/dev/null 2>&1; then
         if curl -sf -X POST "$url" \
             -H "Content-Type: application/json" \
@@ -1379,17 +1379,17 @@ show_update_overlay() {
 hide_update_overlay() {
     local overlay_enabled="${PULSE_OVERLAY_ENABLED:-true}"
     local overlay_port="${PULSE_OVERLAY_PORT:-8800}"
-    
+
     if [ "$overlay_enabled" != "true" ]; then
         return 0
     fi
-    
+
     # Wait briefly for overlay server (shorter timeout since we're hiding)
     wait_for_overlay_server || return 0
-    
+
     local url="http://localhost:${overlay_port}/overlay/info-card"
     local payload='{"action": "clear"}'
-    
+
     if command -v curl >/dev/null 2>&1; then
         if curl -sf -X POST "$url" \
             -H "Content-Type: application/json" \
@@ -1422,13 +1422,13 @@ main() {
     # This ensures the browser is ready to show the popup when we update it
     publish_overlay_refresh_mqtt "setup_start"
     sleep 0.5  # Give HA time to process the refresh message
-    
+
     # Show update overlay at start
     show_update_overlay "Running setup.sh..."
-    
+
     # Ensure overlay is hidden on exit
     trap 'hide_update_overlay' EXIT
-    
+
     local location_arg=""
     local auto_restart="true"
 

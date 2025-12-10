@@ -36,6 +36,7 @@ from pulse.assistant.info_service import InfoService
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
+from pulse.assistant.routines import RoutineEngine, default_routines
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
@@ -96,6 +97,7 @@ class PulseAssistant:
         self.mqtt = AssistantMqtt(config.mqtt, logger=LOGGER)
         action_defs = load_action_definitions(config.action_file, config.inline_actions)
         self.actions = ActionEngine(action_defs)
+        self.routines = RoutineEngine(default_routines())
         self._llm_provider_override: str | None = None
         self.llm: LLMProvider = self._build_llm_provider()
         self.home_assistant: HomeAssistantClient | None = None
@@ -156,6 +158,9 @@ class PulseAssistant:
         self._ha_pipeline_override: str | None = None
         self._self_audio_trigger_level = max(2, self.config.self_audio_trigger_level)
         self._media_player_entity = self.config.media_player_entity
+        self._media_player_entities = self.config.media_player_entities
+        self._alert_topics = self.config.alert_topics
+        self._intercom_topic = self.config.intercom_topic
 
         # Initialize extracted modules
         self.wake_detector = WakeDetector(
@@ -167,6 +172,7 @@ class PulseAssistant:
         self.media_controller = MediaController(
             home_assistant=self.home_assistant,
             media_player_entity=self._media_player_entity,
+            additional_entities=list(self._media_player_entities),
             loop=None,  # Will be set in run()
         )
         self.conversation_manager = ConversationManager(
@@ -192,6 +198,9 @@ class PulseAssistant:
         base_topic = self.config.mqtt.topic_base
         self._earmuffs_state_topic = f"{base_topic}/earmuffs/state"
         self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
+        self._proactive_task: asyncio.Task | None = None
+        self._last_presence_state: str | None = None
+        self._proactive_interval = max(300, int(os.environ.get("PULSE_PROACTIVE_INTERVAL_SECONDS", "900")))
 
     async def run(self) -> None:
         try:
@@ -202,6 +211,8 @@ class PulseAssistant:
             self._subscribe_schedule_topics()
             self._subscribe_playback_topic()
             self._subscribe_earmuffs_topic()
+            self._subscribe_alert_topics()
+            self._subscribe_intercom_topic()
 
             # Start schedule + calendar before any retained-message waits
             try:
@@ -237,6 +248,8 @@ class PulseAssistant:
                     LOGGER.exception("Failed to publish earmuffs state: %s", exc)
 
             self._publish_assistant_discovery()
+            self._publish_routine_overlay()
+            self._proactive_task = asyncio.create_task(self._proactive_loop())
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
         except Exception as exc:
@@ -266,6 +279,10 @@ class PulseAssistant:
         self.mqtt.disconnect()
         await self.player.stop()
         self.media_controller.cancel_media_resume_task()
+        if self._proactive_task:
+            self._proactive_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._proactive_task
         if self.home_assistant:
             await self.home_assistant.close()
 
@@ -413,6 +430,191 @@ class PulseAssistant:
             return
         self._publish_message(self._schedules_state_topic, message, retain=True)
 
+    async def _publish_light_overlay(self) -> None:
+        ha_client = self.home_assistant
+        if not ha_client:
+            return
+        try:
+            lights = await ha_client.list_entities("light")
+        except HomeAssistantError as exc:
+            LOGGER.debug("Failed to fetch Home Assistant lights for overlay: %s", exc)
+            return
+        payload = self._format_lights_card(lights)
+        if not payload:
+            return
+        self._publish_info_overlay(
+            text=payload.get("subtitle") or "Lighting updated.",
+            category="lights",
+            extra=payload,
+        )
+
+    def _publish_routine_overlay(self) -> None:
+        routines = self.routines.overlay_entries()
+        if not routines:
+            return
+        # Only show routines overlay if Home Assistant is configured
+        # (routines require HA scenes to work)
+        if not self.home_assistant:
+            return
+        labels = [item.get("label") or "" for item in routines if item.get("label")]
+        hint = ", ".join(labels[:3])
+        subtitle = f"Available: {hint}" if hint else "Available routines"
+        self._publish_info_overlay(
+            text="Routines ready. Try one of them.",
+            category="routines",
+            extra={
+                "type": "routines",
+                "title": "Routines",
+                "subtitle": subtitle,
+                "routines": routines,
+            },
+        )
+        self._schedule_info_overlay_clear(6.0)
+
+    def _publish_health_overlay(self) -> None:
+        items = [
+            {"label": "MQTT", "value": "connected" if self.mqtt.is_connected() else "disconnected"},
+            {
+                "label": "Home Assistant",
+                "value": "connected" if self.home_assistant else "not configured",
+            },
+            {"label": "Mic", "value": "running" if getattr(self.mic, "running", False) else "stopped"},
+        ]
+        self._publish_info_overlay(
+            text="System status updated.",
+            category="health",
+            extra={"type": "health", "title": "Health", "items": items},
+        )
+        self._schedule_info_overlay_clear(6.0)
+
+    @staticmethod
+    def _format_lights_card(lights: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not lights:
+            return None
+        entries: list[dict[str, Any]] = []
+        on_count = 0
+        for light in lights:
+            if not isinstance(light, dict):
+                continue
+            entity_id = light.get("entity_id")
+            attrs = light.get("attributes") or {}
+            name = attrs.get("friendly_name") or entity_id or "Light"
+            state = str(light.get("state") or "unknown").lower()
+            if state == "on":
+                on_count += 1
+            brightness = attrs.get("brightness")
+            brightness_pct = None
+            if isinstance(brightness, (int, float)):
+                brightness_pct = int(round(max(0.0, min(1.0, float(brightness) / 255.0)) * 100))
+            color_temp_attr = attrs.get("color_temp")
+            color_temp_label = None
+            if isinstance(color_temp_attr, (int, float)) and color_temp_attr > 0:
+                try:
+                    kelvin = int(round(1_000_000 / float(color_temp_attr)))
+                    color_temp_label = f"{kelvin}K"
+                except (TypeError, ValueError):
+                    color_temp_label = None
+            area = attrs.get("area_id")
+            entries.append(
+                {
+                    "entity_id": entity_id,
+                    "name": name,
+                    "state": state,
+                    "brightness_pct": brightness_pct,
+                    "color_temp": color_temp_label,
+                    "area": area,
+                }
+            )
+        total = len(entries)
+        if total == 0:
+            return None
+        entries.sort(key=lambda item: (item.get("state") != "on", (item.get("name") or "").lower()))
+        subtitle_parts = [f"{on_count} on" if on_count else "All off", f"{total} total"]
+        return {
+            "type": "lights",
+            "title": "Lights",
+            "subtitle": " • ".join(subtitle_parts),
+            "lights": entries[:12],
+        }
+
+    async def _maybe_publish_light_overlay(self, executed_actions: list[str]) -> None:
+        if not executed_actions or not self.home_assistant:
+            return
+        action_prefixes = ("ha.light", "ha.turn_on", "ha.turn_off", "ha.scene")
+        if not any(action.startswith(action_prefixes) for action in executed_actions):
+            return
+        await self._publish_light_overlay()
+
+    async def _proactive_loop(self) -> None:
+        while not self._shutdown.is_set():
+            try:
+                await asyncio.sleep(self._proactive_interval)
+                if not await self._presence_allows_proactive():
+                    continue
+                await self._push_proactive_updates()
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                LOGGER.debug("Proactive update failed: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _presence_allows_proactive(self) -> bool:
+        entity = self.config.home_assistant.presence_entity
+        if not entity or not self.home_assistant:
+            return True
+        try:
+            state = await self.home_assistant.get_state(entity)
+        except HomeAssistantError:
+            return True
+        status = str(state.get("state") or "").lower()
+        previous = self._last_presence_state
+        self._last_presence_state = status
+        if previous and previous != status and status == "home":
+            self._publish_info_overlay(text="Welcome home.", category="presence")
+            self._schedule_info_overlay_clear(4.0)
+        return status not in {"not_home", "away", "off", "offline", "unknown", "unavailable"}
+
+    async def _push_proactive_updates(self) -> None:
+        reminder_entries = self._next_reminder_entries()
+        if reminder_entries:
+            self._publish_info_overlay(
+                text="Upcoming reminders.",
+                category="reminders",
+                extra={"type": "reminders", "title": "Reminders", "reminders": reminder_entries},
+            )
+            self._schedule_info_overlay_clear(8.0)
+        weather = await self.info_service.maybe_answer("weather forecast")
+        if weather and weather.card:
+            self._publish_info_overlay(text="Weather update", category="weather", extra=weather.card)
+            self._schedule_info_overlay_clear(8.0)
+        self._publish_health_overlay()
+
+    def _next_reminder_entries(self) -> list[dict[str, str]]:
+        snapshot = self._latest_schedule_snapshot or {}
+        reminders = snapshot.get("reminders") or []
+        now = time.time()
+        entries: list[tuple[float, dict[str, str]]] = []
+        for reminder in reminders:
+            if not isinstance(reminder, dict):
+                continue
+            next_fire = reminder.get("next_fire")
+            ts = None
+            if isinstance(next_fire, (int, float)):
+                ts = float(next_fire)
+            elif isinstance(next_fire, str):
+                try:
+                    ts = datetime.fromisoformat(next_fire).timestamp()
+                except ValueError:
+                    continue
+            if ts is None or ts < now:
+                continue
+            label = (reminder.get("label") or "Reminder").strip() or "Reminder"
+            meta = datetime.fromtimestamp(ts).strftime("%b %-d · %-I:%M %p")
+            entry_id = reminder.get("id") or reminder.get("event_id") or label
+            entries.append((ts, {"id": str(entry_id), "label": label, "meta": meta}))
+        entries.sort(key=lambda entry: entry[0])
+        return [entry for _, entry in entries[:3]]
+
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
 
@@ -451,6 +653,7 @@ class PulseAssistant:
             if not transcript:
                 self._finalize_assist_run(status="no_transcript")
                 return
+            LOGGER.debug("Transcript [%s]: %s", wake_word, transcript)
             if self._log_llm_messages:
                 transcript_payload = {"text": transcript, "wake_word": wake_word}
                 self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
@@ -594,12 +797,14 @@ class PulseAssistant:
                 return
             transcript = self._extract_ha_transcript(ha_result)
             if transcript:
+                LOGGER.debug("Transcript [%s/HA]: %s", wake_word, transcript)
                 if self._log_llm_messages:
                     self._publish_message(
                         self.config.transcript_topic,
                         json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
                     )
             speech_text = self._extract_ha_speech(ha_result) or "Okay."
+            LOGGER.debug("Response [%s/HA]: %s", wake_word, speech_text)
             tracker.begin_stage("speaking")
             self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
             self._publish_message(
@@ -642,20 +847,31 @@ class PulseAssistant:
     ) -> LLMResult | None:
         prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
         llm_result = await self.llm.generate(transcript, prompt_actions)
-        LOGGER.debug("LLM response: %s", llm_result)
-        executed_actions = await self.actions.execute(
-            llm_result.actions,
-            self.mqtt if llm_result.actions else None,
-            self.home_assistant,
-            self.scheduler,
-            self.schedule_service,
+        LOGGER.debug("LLM response [%s]: actions=%s, response=%s", wake_word, llm_result.actions, llm_result.response)
+        routine_actions = await self.routines.execute(llm_result.actions, self.home_assistant)
+        executed_actions = list(routine_actions)
+        executed_actions.extend(
+            await self.actions.execute(
+                llm_result.actions,
+                self.mqtt if llm_result.actions else None,
+                self.home_assistant,
+                self.scheduler,
+                self.schedule_service,
+                media_controller=self.media_controller,
+            )
         )
+        if executed_actions:
+            LOGGER.debug("Executed actions [%s]: %s", wake_word, executed_actions)
         if executed_actions:
             self._publish_message(
                 self.config.action_topic,
                 json.dumps({"executed": executed_actions, "wake_word": wake_word}),
             )
+            await self._maybe_publish_light_overlay(executed_actions)
+            if routine_actions:
+                self._publish_routine_overlay()
         if llm_result.response:
+            LOGGER.debug("Response [%s]: %s", wake_word, llm_result.response)
             tracker.begin_stage("speaking")
             stage_extra = {"wake_word": wake_word}
             if follow_up:
@@ -687,14 +903,50 @@ class PulseAssistant:
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
             return []
-        return [
+        prompt_entries = [
             {
-                "slug": "ha.turn_on:entity_id",
-                "description": "Turn on a Home Assistant entity (replace entity_id with light.kitchen etc.)",
+                "slug": "ha.turn_on:name=bedroom ceiling fan,percentage=75",
+                "description": "Turn on any HA entity by name or entity_id. For fans, use percentage=0-100 for speed.",
             },
             {
-                "slug": "ha.turn_off:entity_id",
-                "description": "Turn off a Home Assistant entity (replace entity_id with switch.projector)",
+                "slug": "ha.turn_off:name=bedroom ceiling fan",
+                "description": "Turn off any HA entity by name or entity_id (lights, fans, switches, etc.).",
+            },
+            {
+                "slug": "ha.light_on:name=nightstand light,color=blue",
+                "description": "Turn on a light by name/room with optional brightness or color (blue/red/green).",
+            },
+            {
+                "slug": "ha.light_off:name=nightstand light",
+                "description": "Turn off a specific light by name or all lights in an area/room.",
+            },
+            {
+                "slug": "ha.light_off:area=bedroom,all=true",
+                "description": "Turn off all lights in a room/area by name.",
+            },
+            {
+                "slug": "ha.scene:entity_id=scene.movie_time",
+                "description": "Activate a Home Assistant scene like movie time.",
+            },
+            {
+                "slug": "volume.set:percentage=75",
+                "description": "Set device volume to a percentage (0-100).",
+            },
+            {
+                "slug": "ha.turn_on:name=bedroom ceiling fan,percentage=40",
+                "description": "Set a fan speed by name (0-100%).",
+            },
+            {
+                "slug": "ha.turn_on:name=bedroom ceiling fan,percentage=0",
+                "description": "Turn a fan off by setting speed to 0%.",
+            },
+            {
+                "slug": "media.pause",
+                "description": "Pause all configured media players or whole-home audio.",
+            },
+            {
+                "slug": "media.resume",
+                "description": "Resume music or TV audio after an interruption.",
             },
             {
                 "slug": "timer.start:duration=10m,label=cookies",
@@ -705,6 +957,8 @@ class PulseAssistant:
                 "description": "Schedule a reminder at a specific time or use 'in 10m' format.",
             },
         ]
+        prompt_entries.extend(self.routines.prompt_entries())
+        return prompt_entries
 
     async def _handle_scheduler_notification(self, message: str) -> None:
         pass
@@ -804,6 +1058,21 @@ class PulseAssistant:
         except Exception as exc:
             LOGGER.error("Failed to subscribe to earmuffs topic: %s", exc, exc_info=True)
 
+    def _subscribe_alert_topics(self) -> None:
+        for topic in self._alert_topics:
+            try:
+                self.mqtt.subscribe(topic, lambda payload, t=topic: self._handle_alert_message(t, payload))
+            except Exception as exc:
+                LOGGER.debug("Failed to subscribe to alert topic %s: %s", topic, exc)
+
+    def _subscribe_intercom_topic(self) -> None:
+        if not self._intercom_topic:
+            return
+        try:
+            self.mqtt.subscribe(self._intercom_topic, self._handle_intercom_message)
+        except Exception as exc:
+            LOGGER.debug("Failed to subscribe to intercom topic %s: %s", self._intercom_topic, exc)
+
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes"}
@@ -876,6 +1145,31 @@ class PulseAssistant:
         else:
             enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
         self._set_earmuffs_enabled(enabled, manual=True)
+
+    def _handle_alert_message(self, topic: str, payload: str) -> None:
+        message = payload
+        try:
+            parsed = json.loads(payload)
+            if isinstance(parsed, dict):
+                message = str(parsed.get("message") or parsed.get("text") or payload)
+        except json.JSONDecodeError:
+            pass
+        clean = message.strip()
+        if not clean:
+            return
+        self._publish_info_overlay(text=f"Alert: {clean}", category="alerts")
+        self._schedule_info_overlay_clear(8.0)
+        target_loop = self._loop or asyncio.get_event_loop()
+        target_loop.create_task(self._speak(clean))
+
+    def _handle_intercom_message(self, payload: str) -> None:
+        message = payload.strip()
+        if not message:
+            return
+        self._publish_info_overlay(text=f"Intercom: {message}", category="intercom")
+        self._schedule_info_overlay_clear(6.0)
+        target_loop = self._loop or asyncio.get_event_loop()
+        target_loop.create_task(self._speak(message))
 
     def _set_earmuffs_enabled(self, enabled: bool, *, manual: bool = False) -> None:
         changed = False

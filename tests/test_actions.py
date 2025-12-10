@@ -50,3 +50,12 @@ def test_parse_datetime_next_monday_when_time_passed() -> None:
     expected = reference + timedelta(days=7)
     expected = expected.replace(hour=9, minute=0, second=0, microsecond=0)
     assert result == expected
+
+
+def test_parse_brightness_and_color_temp_helpers() -> None:
+    brightness = actions._parse_brightness_pct({"brightness": "75%"})
+    color_mired = actions._parse_color_temp_mired({"kelvin": "2700"})
+    transition = actions._parse_transition_seconds({"transition": "1.5"})
+    assert brightness == 75.0
+    assert color_mired == actions.kelvin_to_mired(2700)
+    assert transition == 1.5

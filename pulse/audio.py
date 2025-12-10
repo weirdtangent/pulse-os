@@ -302,13 +302,14 @@ def get_current_volume(sink: str | None = None) -> int | None:
     return None
 
 
-def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = False) -> bool:
+def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = False, allow_zero: bool = False) -> bool:
     """Set audio volume using pactl.
 
     Args:
         percent: Volume percentage (0-100), will be clamped to valid range.
         sink: Optional sink name. If None, will find the default sink.
         play_feedback: When True, play the thump sample after a successful change.
+        allow_zero: When True, allows setting volume to 0%. Default False to prevent accidental muting.
 
     Returns:
         True if successful, False otherwise.
@@ -318,8 +319,11 @@ def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = F
     if not sink:
         return False
 
-    # Clamp to valid range
+    # Clamp to valid range, but prevent setting to 0% unless explicitly allowed
     percent = max(0, min(100, percent))
+    if not allow_zero and percent == 0:
+        _LOGGER.warning("Prevented setting volume to 0% (use allow_zero=True to override)")
+        percent = 20  # Use minimum safe volume instead
 
     try:
         result = _run_pactl(["set-sink-volume", sink, f"{percent}%"])
