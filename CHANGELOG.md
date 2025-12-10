@@ -1,3 +1,15 @@
+# [0.83.0](https://github.com/weirdtangent/pulse-os/compare/v0.82.0...v0.83.0) (2025-12-10)
+
+
+### Bug Fixes
+
+* formatting ([8354fc3](https://github.com/weirdtangent/pulse-os/commit/8354fc3533f8a96b70e60e85a01feb4388c51588))
+
+
+### Features
+
+* get HA openwakeword working and use websockets to talk to HA ([1ba87d8](https://github.com/weirdtangent/pulse-os/commit/1ba87d8d582e5dee15540ee519b0f53856211705))
+
 # [0.82.0](https://github.com/weirdtangent/pulse-os/compare/v0.81.32...v0.82.0) (2025-12-10)
 
 
