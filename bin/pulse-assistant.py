@@ -932,6 +932,64 @@ class PulseAssistant:
             topic = self._reminders_active_topic
         message = payload or {"state": "idle"}
         self._publish_message(topic, json.dumps(message))
+        if payload and payload.get("state") == "ringing":
+            event_payload = payload.get("event") or {}
+            target_loop = self._loop or asyncio.get_event_loop()
+            target_loop.create_task(self._log_activity_event(event_type, event_payload))
+
+    async def _log_activity_event(self, event_type: str, event: dict[str, Any]) -> None:
+        if self.home_assistant is None:
+            return
+        message = self._build_activity_message(event_type, event)
+        if not message:
+            return
+        payload = {
+            "name": self.config.device_name,
+            "message": message,
+        }
+        try:
+            await self.home_assistant.call_service("logbook", "log", payload)
+        except Exception:
+            LOGGER.debug("Failed to log event to Home Assistant activity log", exc_info=True)
+
+    def _build_activity_message(self, event_type: str, event: dict[str, Any]) -> str | None:
+        label = (event.get("label") or "").strip()
+        if event_type == "alarm":
+            title = label or "Alarm"
+            return f"Alarm ringing: {title}"
+        if event_type == "timer":
+            duration = event.get("duration_seconds")
+            timer_label = label or self._format_timer_label(duration)
+            return f"Timer finished: {timer_label}"
+        if event_type == "reminder":
+            reminder_meta = event.get("metadata", {}).get("reminder", {})
+            reminder_message = ""
+            if isinstance(reminder_meta, dict):
+                reminder_message = str(reminder_meta.get("message") or "").strip()
+            base_label = reminder_message or label or "Reminder"
+            calendar_meta = event.get("metadata", {}).get("calendar")
+            if isinstance(calendar_meta, dict):
+                calendar_name = (calendar_meta.get("calendar_name") or "").strip()
+                if calendar_name:
+                    return f"Calendar reminder: {base_label} ({calendar_name})"
+            return f"Reminder: {base_label}"
+        return None
+
+    def _format_timer_label(self, duration_seconds: Any) -> str:
+        if not isinstance(duration_seconds, (int, float)):
+            return "Timer"
+        seconds = max(0, int(duration_seconds))
+        if seconds < 60:
+            return f"{seconds}s"
+        minutes, seconds = divmod(seconds, 60)
+        if minutes < 60:
+            if seconds == 0:
+                return f"{minutes}m"
+            return f"{minutes}m {seconds}s"
+        hours, minutes = divmod(minutes, 60)
+        if minutes == 0:
+            return f"{hours}h"
+        return f"{hours}h {minutes}m"
 
     async def _trigger_calendar_reminder(self, reminder: CalendarReminder) -> None:
         label = reminder.summary or "Calendar event"
