@@ -1,3 +1,10 @@
+# [0.85.0](https://github.com/weirdtangent/pulse-os/compare/v0.84.4...v0.85.0) (2025-12-10)
+
+
+### Features
+
+* expand sound library and allow for custom sounds ([a1ace86](https://github.com/weirdtangent/pulse-os/commit/a1ace8669e6a58b942ae25d46e113e59b583290e))
+
 ## [0.84.4](https://github.com/weirdtangent/pulse-os/compare/v0.84.3...v0.84.4) (2025-12-10)
 
 
