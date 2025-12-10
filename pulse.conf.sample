@@ -198,6 +198,10 @@ PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
 # PULSE_ASSISTANT_LOG_LEVEL — Python logging level (DEBUG, INFO, WARNING, ERROR). Defaults to INFO.
 # Set to "DEBUG" to see detailed calendar sync and event processing logs.
 # PULSE_ASSISTANT_LOG_LEVEL="INFO"
+# PULSE_ASSISTANT_LOG_LLM — publish transcripts/responses to MQTT (for dashboards/automation). Default true.
+# PULSE_ASSISTANT_LOG_LLM="true"
+# PULSE_ASSISTANT_LOG_TRANSCRIPTS — log transcripts/responses locally at INFO. Default false.
+# PULSE_ASSISTANT_LOG_TRANSCRIPTS="false"
 
 # --- Wyoming endpoints ------------------------------------------------------
 # WYOMING_WHISPER_HOST — hostname/IP of your wyoming-whisper (speech-to-text) server.

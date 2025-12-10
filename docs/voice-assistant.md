@@ -94,8 +94,8 @@ PULSE_ASSISTANT_WAKE_SOUND="true"
 PULSE_ASSISTANT_SPEAKING_STYLE="normal"   # relaxed/normal/aggressive
 PULSE_ASSISTANT_WAKE_SENSITIVITY="normal" # low/normal/high
 PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
-PULSE_ASSISTANT_LOG_LLM="true"
-    PULSE_ASSISTANT_LOG_LLM="true"
+PULSE_ASSISTANT_LOG_LLM="true"            # publish transcripts/responses to MQTT
+PULSE_ASSISTANT_LOG_TRANSCRIPTS="false"   # log transcripts/responses locally at INFO
 ```
 
 If you’re letting HA proxy the Wyoming services you can also point the assistant at HA’s ports via `HOME_ASSISTANT_OPENWAKEWORD_HOST`, `HOME_ASSISTANT_WHISPER_HOST`, `HOME_ASSISTANT_PIPER_HOST`, etc. If the HA Whisper endpoint exposes multiple models, set `HOME_ASSISTANT_STT_MODEL` so we request the correct one. Leave these blank to keep using your original servers.
@@ -117,7 +117,7 @@ Set `PULSE_MEDIA_PLAYER_ENTITY="media_player.<your_player>"` (and the required `
 
 ### Transcript logging toggle
 
-Every request logs “Transcript …” / “Response …” lines to `journalctl -u pulse-assistant` so you can debug wake-word interactions. If you’d rather suppress those entries (while still publishing transcripts to MQTT), set `PULSE_ASSISTANT_LOG_LLM="false"` in `pulse.conf` or flip the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm`. The switch shows up automatically in Home Assistant discovery next to the other assistant preferences.
+If you want local transcript/response logs at INFO, set `PULSE_ASSISTANT_LOG_TRANSCRIPTS="true"`. Publishing transcripts/responses to MQTT is controlled separately by `PULSE_ASSISTANT_LOG_LLM` (and the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm`). Leave `LOG_TRANSCRIPTS` false if you don’t want local log lines; leave `LOG_LLM` true if you still want MQTT payloads for dashboards/automation.
 
 ### Ignoring Pulse’s own audio
 

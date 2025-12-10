@@ -141,5 +141,5 @@ Responses are implicit—the kiosk publishes the updated state snapshot immediat
 
 ### Transcript logging switch
 
-The assistant logs every transcript/response pair to `journalctl` by default. To disable that per-device, either set `PULSE_ASSISTANT_LOG_LLM=false` in `pulse.conf` **or** toggle the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm` (`state` topic mirrors the current value, `set` accepts `on`/`off`). Disabling the switch suppresses the log lines but does **not** prevent the transcript JSON from being published to MQTT.
+Local transcript/response logging to `journalctl` is controlled by `PULSE_ASSISTANT_LOG_TRANSCRIPTS` (default false). Publishing transcript/response JSON to MQTT is controlled by `PULSE_ASSISTANT_LOG_LLM` or the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm` (`state` mirrors current value, `set` accepts `on`/`off`).
 

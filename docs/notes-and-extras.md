@@ -47,7 +47,7 @@ With `HOME_ASSISTANT_*` credentials and `PULSE_MEDIA_PLAYER_ENTITY` set, you can
 
 ### Transcript logging opt-out
 
-By default the assistant logs every transcript/response pair to `journalctl -u pulse-assistant`. If you need to suppress those entries for PII reasons, set `PULSE_ASSISTANT_LOG_LLM="false"` in `pulse.conf` (or add the env var to the systemd override) and rerun `./setup.sh`. You can also toggle the setting at runtime via the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm`.
+Local transcript/response logging to `journalctl -u pulse-assistant` is controlled by `PULSE_ASSISTANT_LOG_TRANSCRIPTS` (default false). Publishing those payloads to MQTT is controlled separately via `PULSE_ASSISTANT_LOG_LLM` (or the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm`).
 
 ### Home Assistant actions, timers, and reminders
 

@@ -94,6 +94,6 @@ These appear in the system prompt so the LLM executes them precisely. They’re 
 ## Tips
 
 - Use `bin/tools/verify-conf.py` anytime alarms/timers don’t react; it validates MQTT, Wyoming, and HA connectivity.
-- The assistant logs every shortcut it handles in `journalctl -u pulse-assistant.service`. Set `PULSE_ASSISTANT_LOG_LLM="false"` to suppress user transcript excerpts.
+- Local transcript/response logging to `journalctl -u pulse-assistant.service` is controlled by `PULSE_ASSISTANT_LOG_TRANSCRIPTS` (default false). MQTT publishing is controlled separately by `PULSE_ASSISTANT_LOG_LLM`.
 - All alarm/timer changes are mirrored over MQTT (`pulse/<hostname>/assistant/schedules/state`) so dashboards or automations stay in sync.
 
