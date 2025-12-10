@@ -1,3 +1,10 @@
+# [0.86.0](https://github.com/weirdtangent/pulse-os/compare/v0.85.0...v0.86.0) (2025-12-10)
+
+
+### Features
+
+* add config info card, plus sound picker to test sounds ([5fc71b6](https://github.com/weirdtangent/pulse-os/commit/5fc71b69c55633f4564723fcb072341fd5bef686))
+
 # [0.85.0](https://github.com/weirdtangent/pulse-os/compare/v0.84.4...v0.85.0) (2025-12-10)
 
 
