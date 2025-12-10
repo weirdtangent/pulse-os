@@ -384,15 +384,30 @@ async def _resolve_entities(
         if score > 0:
             scored.append((score, ent))
 
-    if not scored:
-        return []
+    if scored:
+        # Pick the top-scoring entity (or entities tied for top)
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        top_score = scored[0][0]
+        top_entities = [ent for score, ent in scored if score == top_score]
+        return [top_entities[0]] if top_entities else []
 
-    # Pick the top-scoring entity (or entities tied for top)
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-    top_score = scored[0][0]
-    top_entities = [ent for score, ent in scored if score == top_score]
-    # Prefer a single best match to avoid acting on many devices at once
-    return [top_entities[0]] if top_entities else []
+    # Fallback: substring match on friendly/entity/area if scoring produced nothing
+    fallback_matches: list[str] = []
+    name_lower = name_hint.lower() if name_hint else ""
+    for state in entities:
+        ent = state.get("entity_id") or ""
+        attrs = state.get("attributes") or {}
+        friendly = str(attrs.get("friendly_name") or ent).lower()
+        area = str(attrs.get("area_id") or "").lower()
+        if name_lower and (name_lower in friendly or name_lower in ent.lower() or name_lower in area):
+            fallback_matches.append(ent)
+            continue
+        if tokens and any(token in ent.lower() for token in tokens):
+            fallback_matches.append(ent)
+    if fallback_matches:
+        return [fallback_matches[0]]
+
+    return []
 
 
 async def _resolve_light_entities(args: dict[str, str], ha_client: HomeAssistantClient) -> list[str]:
