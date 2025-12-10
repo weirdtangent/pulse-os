@@ -145,9 +145,7 @@ async def test_websocket_connection():
                                 break
                         if not pipeline_id:
                             print(f"ERROR: Pipeline '{pipeline_name}' not found in list")
-                            pipeline_names = [
-                                p.get("name") for p in pipelines if isinstance(p, dict) and p.get("name")
-                            ]
+                            pipeline_names = [p.get("name") for p in pipelines if isinstance(p, dict) and p.get("name")]
                             print(f"Available pipelines: {pipeline_names}")
                             return False
                     else:
