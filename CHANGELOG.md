@@ -1,3 +1,10 @@
+## [0.86.2](https://github.com/weirdtangent/pulse-os/compare/v0.86.1...v0.86.2) (2025-12-10)
+
+
+### Bug Fixes
+
+* add update active flag to overlay state manager to prevent errant info cards during update ([f3798cb](https://github.com/weirdtangent/pulse-os/commit/f3798cb1a5b82c611e2d149c92f2e9a43d96adb6))
+
 ## [0.86.1](https://github.com/weirdtangent/pulse-os/compare/v0.86.0...v0.86.1) (2025-12-10)
 
 
