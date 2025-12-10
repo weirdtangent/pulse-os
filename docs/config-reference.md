@@ -94,6 +94,63 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_ASSISTANT_LOG_LEVEL` | `INFO` | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Set to `DEBUG` to see detailed logs including transcripts, responses, LLM actions, and calendar sync/event processing. |
 | `PULSE_ASSISTANT_LOG_LLM` | `true` | Publish transcripts/responses to MQTT (for dashboards/automation). |
 | `PULSE_ASSISTANT_LOG_TRANSCRIPTS` | `false` | Log transcripts/responses locally at INFO. |
+| `PULSE_ASSISTANT_TOPIC_BASE` | `pulse/<hostname>/assistant` | Override MQTT topic base (leave blank unless you need a custom layout). |
+| `PULSE_ASSISTANT_MIC_RATE` | `16000` | Override mic sample rate (advanced). |
+| `PULSE_ASSISTANT_MIC_WIDTH` | `2` | Override mic sample width bytes (advanced). |
+| `PULSE_ASSISTANT_MIC_CHANNELS` | `1` | Override mic channels (advanced). |
+| `PULSE_ASSISTANT_MIC_CHUNK_MS` | `30` | Override mic chunk size in ms (advanced). |
+| `PULSE_ASSISTANT_STT_MODEL` | *(empty)* | Optional STT model hint when backend exposes multiple models. |
+
+## Media & Alerts
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_MEDIA_PLAYER_ENTITY` | *(empty)* | Primary media_player/sensor for kiosk audio; defaults to media_player.\<hostname\> if blank. |
+| `PULSE_MEDIA_PLAYER_ENTITIES` | *(empty)* | Comma-separated list of additional media players. |
+| `PULSE_ALERT_TOPICS` | *(empty)* | Comma-separated MQTT alert topics to subscribe to. |
+| `PULSE_INTERCOM_TOPIC` | `pulse/<hostname>/assistant/intercom` | Custom intercom topic override. |
+
+## News
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_NEWS_API_KEY` | *(empty)* | NewsAPI key (or compatible endpoint). |
+| `PULSE_NEWS_BASE_URL` | `https://newsapi.org/v2` | News API base URL. |
+| `PULSE_NEWS_COUNTRY` | `us` | News country filter. |
+| `PULSE_NEWS_CATEGORY` | `general` | News category filter. |
+| `PULSE_NEWS_LANGUAGE` | `en` | News language filter. |
+| `PULSE_NEWS_MAX_ARTICLES` | `5` | Max headlines returned. |
+
+## Weather
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_WEATHER_LOCATION` | *(empty)* | Location (lat,lon, city, ZIP, plus code, or what3words). |
+| `PULSE_WEATHER_BASE_URL` | `https://api.open-meteo.com/v1/forecast` | Weather API base URL. |
+| `PULSE_WEATHER_UNITS` | `auto` | Units for forecast (auto/imperial/metric). |
+| `PULSE_WEATHER_LANGUAGE` | `en` | Weather language. |
+| `PULSE_WEATHER_FORECAST_DAYS` | `3` | Days of forecast (1–5). |
+
+## Sports
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_SPORTS_BASE_URL` | `https://site.api.espn.com/apis` | Sports API base URL. |
+| `PULSE_SPORTS_DEFAULT_COUNTRY` | `us` | Default country for sports headlines. |
+| `PULSE_SPORTS_HEADLINE_COUNTRY` | `us` | Country for headline feed. |
+| `PULSE_SPORTS_DEFAULT_LEAGUES` | `nfl,nba,mlb,nhl` | Default leagues. |
+| `PULSE_SPORTS_FAVORITE_TEAMS` | *(empty)* | Comma-separated favorite teams. |
+
+## Calendar
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_CALENDAR_ICS_URLS` | *(empty)* | Comma-separated ICS/WebCal URLs. |
+| `PULSE_CALENDAR_REFRESH_MINUTES` | `5` | Minutes between calendar polls (min 1). |
+| `PULSE_CALENDAR_LOOKAHEAD_HOURS` | `72` | Hours ahead to schedule reminders. |
+| `PULSE_CALENDAR_OWNER_EMAILS` | *(empty)* | Comma-separated attendee emails treated as “me”. |
+| `PULSE_CALENDAR_DEFAULT_NOTIFICATIONS` | *(empty)* | Comma-separated minutes-before defaults (e.g., 10,5). |
+| `PULSE_CALENDAR_HIDE_DECLINED` | `false` | Hide declined events entirely when true. |
 
 ### Wyoming Endpoints
 

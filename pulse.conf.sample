@@ -176,7 +176,7 @@ PULSE_VOICE_ASSISTANT="false"
 PULSE_ASSISTANT_WAKE_WORDS_PULSE="hey_jarvis"
 
 # PULSE_ASSISTANT_WAKE_WORDS_HA — models that should route audio through Home Assistant Assist instead of the Pulse pipeline.
-PULSE_ASSISTANT_WAKE_WORDS_HA="hey_house"
+PULSE_ASSISTANT_WAKE_WORDS_HA="ok_nabu"
 
 # PULSE_ASSISTANT_WAKE_ROUTES — optional explicit mapping (model=pipeline) to override the defaults above.
 # PULSE_ASSISTANT_WAKE_ROUTES="hey_jarvis=pulse,hey_house=home_assistant"
@@ -202,6 +202,8 @@ PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
 # PULSE_ASSISTANT_LOG_LLM="true"
 # PULSE_ASSISTANT_LOG_TRANSCRIPTS — log transcripts/responses locally at INFO. Default false.
 # PULSE_ASSISTANT_LOG_TRANSCRIPTS="false"
+# PULSE_ASSISTANT_TOPIC_BASE — override MQTT topic base (defaults to pulse/<hostname>/assistant). Most users leave this blank.
+# PULSE_ASSISTANT_TOPIC_BASE=""
 
 # --- Wyoming endpoints ------------------------------------------------------
 # WYOMING_WHISPER_HOST — hostname/IP of your wyoming-whisper (speech-to-text) server.
@@ -225,6 +227,12 @@ WYOMING_OPENWAKEWORD_PORT="10400"
 # --- Mic capture & phrase detection ----------------------------------------
 # PULSE_ASSISTANT_MIC_CMD — ALSA command used to stream 16 kHz mono PCM into the pipeline.
 PULSE_ASSISTANT_MIC_CMD="arecord -q -t raw -f S16_LE -c 1 -r 16000 -"
+# Advanced: override mic capture parameters only if needed.
+# PULSE_ASSISTANT_MIC_RATE=16000
+# PULSE_ASSISTANT_MIC_WIDTH=2
+# PULSE_ASSISTANT_MIC_CHANNELS=1
+# PULSE_ASSISTANT_MIC_CHUNK_MS=30
+# PULSE_ASSISTANT_STT_MODEL=""
 
 # PULSE_ASSISTANT_MIN_PHRASE_SECONDS — minimum captured speech (seconds) before we consider it a phrase.
 PULSE_ASSISTANT_MIN_PHRASE_SECONDS=1.5
@@ -292,6 +300,13 @@ PULSE_ASSISTANT_FONT_SIZE=28
 # Defaults to media_player.<hostname> (the Snapcast/Music Assistant player Pulse registers) when left blank.
 # Override if Music Assistant exposes multiple players and you want a specific one.
 PULSE_MEDIA_PLAYER_ENTITY=""
+# PULSE_MEDIA_PLAYER_ENTITIES — optional comma-separated list of additional media players.
+# PULSE_MEDIA_PLAYER_ENTITIES=""
+
+# PULSE_ALERT_TOPICS — optional comma-separated list of MQTT alert topics to subscribe to.
+# PULSE_ALERT_TOPICS=""
+# PULSE_INTERCOM_TOPIC — optional custom intercom topic (defaults to pulse/<hostname>/assistant/intercom).
+# PULSE_INTERCOM_TOPIC=""
 
 # ============================================================================
 # Information Services (news, weather, sports)
