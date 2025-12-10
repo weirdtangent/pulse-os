@@ -190,6 +190,7 @@ class PulseAssistant:
         self._media_resume_task: asyncio.Task | None = None
         self._media_resume_delay = 2.0
         self._log_llm_messages = config.log_llm_messages
+        self._log_transcripts = config.log_transcripts
         self._conversation_stop_prefixes = build_conversation_stop_prefixes(config)
         self._earmuffs_lock = threading.Lock()
         self._earmuffs_enabled = False
@@ -653,7 +654,8 @@ class PulseAssistant:
             if not transcript:
                 self._finalize_assist_run(status="no_transcript")
                 return
-            LOGGER.debug("Transcript [%s]: %s", wake_word, transcript)
+            if self._log_transcripts:
+                LOGGER.info("Transcript [%s]: %s", wake_word, transcript)
             if self._log_llm_messages:
                 transcript_payload = {"text": transcript, "wake_word": wake_word}
                 self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
@@ -797,14 +799,16 @@ class PulseAssistant:
                 return
             transcript = self._extract_ha_transcript(ha_result)
             if transcript:
-                LOGGER.debug("Transcript [%s/HA]: %s", wake_word, transcript)
+                if self._log_transcripts:
+                    LOGGER.info("Transcript [%s/HA]: %s", wake_word, transcript)
                 if self._log_llm_messages:
                     self._publish_message(
                         self.config.transcript_topic,
                         json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
                     )
             speech_text = self._extract_ha_speech(ha_result) or "Okay."
-            LOGGER.debug("Response [%s/HA]: %s", wake_word, speech_text)
+            if self._log_transcripts:
+                LOGGER.info("Response [%s/HA]: %s", wake_word, speech_text)
             tracker.begin_stage("speaking")
             self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
             self._publish_message(
@@ -871,7 +875,8 @@ class PulseAssistant:
             if routine_actions:
                 self._publish_routine_overlay()
         if llm_result.response:
-            LOGGER.debug("Response [%s]: %s", wake_word, llm_result.response)
+            if self._log_transcripts:
+                LOGGER.info("Response [%s]: %s", wake_word, llm_result.response)
             tracker.begin_stage("speaking")
             stage_extra = {"wake_word": wake_word}
             if follow_up:

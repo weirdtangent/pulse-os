@@ -248,6 +248,7 @@ class AssistantConfig:
     media_player_entities: tuple[str, ...]
     self_audio_trigger_level: int
     log_llm_messages: bool
+    log_transcripts: bool
     info: InfoConfig
     calendar: CalendarConfig
 
@@ -423,6 +424,7 @@ class AssistantConfig:
         intercom_topic = source.get("PULSE_INTERCOM_TOPIC") or f"{mqtt.topic_base}/intercom"
 
         log_llm_messages = parse_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
+        log_transcripts = parse_bool(source.get("PULSE_ASSISTANT_LOG_TRANSCRIPTS"), False)
 
         news_config = NewsConfig(
             api_key=source.get("PULSE_NEWS_API_KEY"),
@@ -534,6 +536,7 @@ class AssistantConfig:
             media_player_entities=media_player_entities,
             self_audio_trigger_level=self_audio_trigger_level,
             log_llm_messages=log_llm_messages,
+            log_transcripts=log_transcripts,
             info=info_config,
             calendar=calendar_config,
         )

@@ -8,6 +8,7 @@ import logging
 import math
 import sys
 import threading
+import time
 from array import array
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -84,6 +85,7 @@ class WakeDetector:
         self._local_audio_depth = 0
         self._wake_context_lock = threading.Lock()
         self._wake_context_version = 0
+        self._log_throttle: dict[str, float] = {}
 
     def self_audio_is_active(self) -> bool:
         """Check if local audio playback is active."""
@@ -107,6 +109,14 @@ class WakeDetector:
         if notify:
             self.mark_wake_context_dirty()
         return notify
+
+    def _debug_throttled(self, key: str, message: str, *args, interval: float = 30.0) -> None:
+        """Emit a debug log with throttling to reduce noise."""
+        now = time.monotonic()
+        last = self._log_throttle.get(key, 0.0)
+        if now - last >= interval:
+            LOGGER.debug(message, *args)
+            self._log_throttle[key] = now
 
     def increment_local_audio_depth(self) -> None:
         """Increment local audio depth counter."""
@@ -231,7 +241,8 @@ class WakeDetector:
                 await client.connect()
                 clients.append(client)
                 detect_message = Detect(names=stream.models, context=detect_context or None)
-                LOGGER.debug(
+                self._debug_throttled(
+                    "wake_detect",
                     "Sending Detect message to %s with model names: %s",
                     stream.display_label,
                     stream.models,
@@ -247,7 +258,8 @@ class WakeDetector:
                 )
                 task = asyncio.create_task(self._read_wake_events(client, endpoint_label=stream.display_label))
                 reader_tasks[task] = stream
-                LOGGER.debug(
+                self._debug_throttled(
+                    "wake_stream",
                     "Started wake detection stream for %s with models: %s",
                     stream.display_label,
                     ", ".join(stream.models),
