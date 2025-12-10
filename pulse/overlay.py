@@ -342,6 +342,33 @@ class OverlayStateManager:
                         "description": current_payload.get("description"),
                         "icon": current_payload.get("icon"),
                     }
+            elif card_type == "lights":
+                subtitle_value = card.get("subtitle")
+                if subtitle_value:
+                    normalized["subtitle"] = str(subtitle_value)
+                lights_payload = card.get("lights")
+                if isinstance(lights_payload, list):
+                    light_entries = [copy.deepcopy(item) for item in lights_payload if isinstance(item, dict)]
+                    if light_entries:
+                        normalized["lights"] = light_entries
+            elif card_type == "routines":
+                subtitle_value = card.get("subtitle")
+                if subtitle_value:
+                    normalized["subtitle"] = str(subtitle_value)
+                routines_payload = card.get("routines")
+                if isinstance(routines_payload, list):
+                    routine_entries = [copy.deepcopy(item) for item in routines_payload if isinstance(item, dict)]
+                    if routine_entries:
+                        normalized["routines"] = routine_entries
+            elif card_type == "health":
+                subtitle_value = card.get("subtitle")
+                if subtitle_value:
+                    normalized["subtitle"] = str(subtitle_value)
+                items_payload = card.get("items")
+                if isinstance(items_payload, list):
+                    item_entries = [copy.deepcopy(item) for item in items_payload if isinstance(item, dict)]
+                    if item_entries:
+                        normalized["items"] = item_entries
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
