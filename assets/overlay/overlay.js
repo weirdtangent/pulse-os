@@ -14,7 +14,7 @@
   ];
   const hour12Attr = root.dataset.clockHour12;
   const hour12 = hour12Attr !== 'false';
-  const timeOptions = { hour: 'numeric', minute: '2-digit', hour12 };
+  const timeOptions = { hour: hour12 ? 'numeric' : '2-digit', minute: '2-digit', hour12 };
   const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
 
   const alignNowPlayingCard = () => {
