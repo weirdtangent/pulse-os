@@ -554,6 +554,7 @@ class KioskMqttListener:
         self.local_version = self._detect_local_version()
         self.latest_remote_version: str | None = None
         self.update_available = False
+        self._overlay_update_active = False
         self._update_state_lock = threading.Lock()
         self._update_interval_seconds = self._calculate_update_interval_seconds(config.version_checks_per_day)
         self._update_checker_thread: threading.Thread | None = None
@@ -889,6 +890,9 @@ class KioskMqttListener:
             return
         data = self._decode_json_bytes(payload)
         if not isinstance(data, dict):
+            return
+        if self._overlay_update_active and not self._is_update_info_card(data):
+            self.log("overlay: ignoring info_card while update is in progress")
             return
         state = str(data.get("state") or "").lower()
         if state == "clear":
@@ -1523,6 +1527,7 @@ class KioskMqttListener:
         if not self.update_lock.acquire(blocking=False):
             self.log("update: request ignored because another update is running")
             return
+        self._overlay_update_active = True
         self._set_update_availability(False, force=True)
         thread = threading.Thread(target=self._perform_update, name="pulse-update", daemon=True)
         thread.start()
@@ -1616,6 +1621,7 @@ class KioskMqttListener:
 
     def _show_update_progress(self, message: str) -> None:
         """Show update progress popup on overlay."""
+        self._overlay_update_active = True
         if not self.overlay_state:
             return
         card_payload = {
@@ -1629,10 +1635,10 @@ class KioskMqttListener:
 
     def _hide_update_progress(self) -> None:
         """Hide update progress popup from overlay."""
-        if not self.overlay_state:
-            return
-        change = self.overlay_state.update_info_card(None)
-        self._handle_overlay_change(change)
+        if self.overlay_state:
+            change = self.overlay_state.update_info_card(None)
+            self._handle_overlay_change(change)
+        self._overlay_update_active = False
 
     def _perform_update(self) -> None:
         repo_dir = self.repo_dir
@@ -1662,6 +1668,12 @@ class KioskMqttListener:
                 self.refresh_update_availability()
             except Exception as exc:
                 self.log(f"update-check: failed to refresh availability after update: {exc}")
+
+    @staticmethod
+    def _is_update_info_card(data: dict[str, Any]) -> bool:
+        card_type = str(data.get("type") or "").lower()
+        category = str(data.get("category") or "").lower()
+        return card_type == "update" or category == "update"
 
     def _perform_reboot(self) -> None:
         try:
