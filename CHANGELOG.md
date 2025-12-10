@@ -1,3 +1,10 @@
+## [0.84.3](https://github.com/weirdtangent/pulse-os/compare/v0.84.2...v0.84.3) (2025-12-10)
+
+
+### Bug Fixes
+
+* make sure far-future events are included in windowed events ([a225402](https://github.com/weirdtangent/pulse-os/commit/a2254029a4742ed53193b8d47340da3b24be8ac9))
+
 ## [0.84.2](https://github.com/weirdtangent/pulse-os/compare/v0.84.1...v0.84.2) (2025-12-10)
 
 ## [0.84.1](https://github.com/weirdtangent/pulse-os/compare/v0.84.0...v0.84.1) (2025-12-10)
