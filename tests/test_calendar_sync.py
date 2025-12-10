@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from icalendar import Calendar
-from pulse.assistant.calendar_sync import CalendarSyncService
+from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
 from pulse.assistant.config import CalendarConfig
 
 
@@ -20,6 +21,8 @@ class CalendarSyncParserTests(unittest.TestCase):
             refresh_minutes=5,
             lookahead_hours=72,
             attendee_emails=("user@example.com",),
+            default_notifications=(),
+            hide_declined_events=False,
         )
         self.service = CalendarSyncService(config=config, trigger_callback=_noop_trigger)
         self.feed_state = self.service._feed_states[config.feeds[0]]
@@ -144,3 +147,27 @@ END:VCALENDAR
         reminders = self._collect(ics)
         self.assertEqual(len(reminders), 1)
         self.assertFalse(reminders[0].declined)
+
+    def test_reminder_window_includes_far_event_with_near_trigger(self) -> None:
+        now = datetime(2025, 1, 1, 9, 0, tzinfo=UTC).astimezone()
+        reminder = CalendarReminder(
+            uid="event-far",
+            summary="Future trip",
+            description=None,
+            location=None,
+            start=now + timedelta(days=7),
+            end=None,
+            all_day=False,
+            trigger_time=now,
+            calendar_name="Personal",
+            source_url=self.feed_state.url,
+        )
+
+        async def _run_schedule() -> None:
+            await self.service._schedule_reminders(self.feed_state, [reminder], now)
+            await asyncio.sleep(0)
+
+        asyncio.run(_run_schedule())
+        windowed = list(self.service._windowed_events.values())
+        self.assertEqual(len(windowed), 1)
+        self.assertEqual(windowed[0].uid, reminder.uid)
