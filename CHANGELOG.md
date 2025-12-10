@@ -1,3 +1,10 @@
+## [0.84.4](https://github.com/weirdtangent/pulse-os/compare/v0.84.3...v0.84.4) (2025-12-10)
+
+
+### Bug Fixes
+
+* 24-hour clock should have 2-digit hour ([c1cf028](https://github.com/weirdtangent/pulse-os/commit/c1cf028b381f64b31e1368a3d9dc5613a5023e02))
+
 ## [0.84.3](https://github.com/weirdtangent/pulse-os/compare/v0.84.2...v0.84.3) (2025-12-10)
 
 
