@@ -1,3 +1,10 @@
+## [0.83.1](https://github.com/weirdtangent/pulse-os/compare/v0.83.0...v0.83.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* improve entity resolution ([ac6ab35](https://github.com/weirdtangent/pulse-os/commit/ac6ab35e63099431e9b1cf05d604247d08cce478))
+
 # [0.83.0](https://github.com/weirdtangent/pulse-os/compare/v0.82.0...v0.83.0) (2025-12-10)
 
 
