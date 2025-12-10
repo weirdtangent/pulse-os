@@ -1,3 +1,10 @@
+# [0.84.0](https://github.com/weirdtangent/pulse-os/compare/v0.83.1...v0.84.0) (2025-12-10)
+
+
+### Features
+
+* add PULSE_ASSISTANT_LOG_TRANSCRIPTS to log what the assistant hears and responds with ([4c5f0d4](https://github.com/weirdtangent/pulse-os/commit/4c5f0d43375201c9500d11b1ed7ee8fe57d284b8))
+
 ## [0.83.1](https://github.com/weirdtangent/pulse-os/compare/v0.83.0...v0.83.1) (2025-12-10)
 
 
