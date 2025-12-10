@@ -95,12 +95,8 @@ for phrase in _CONVERSATION_STOP_PHRASES_RAW:
 
 def should_listen_for_follow_up(llm_result: LLMResult | None) -> bool:
     """Determine if we should listen for a follow-up response."""
-    if not llm_result:
-        return False
-    if llm_result.follow_up:
-        return True
-    response = (llm_result.response or "").strip()
-    return bool(response.endswith("?"))
+    # Temporarily disable automatic follow-ups; design to be revisited.
+    return False
 
 
 def evaluate_follow_up_transcript(
