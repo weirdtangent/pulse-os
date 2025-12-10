@@ -1,3 +1,10 @@
+## [0.84.1](https://github.com/weirdtangent/pulse-os/compare/v0.84.0...v0.84.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* make sure all docs and config are up to date ([d00bd42](https://github.com/weirdtangent/pulse-os/commit/d00bd42c1dd5fdd0157ae8d53e5fd63176542fc7))
+
 # [0.84.0](https://github.com/weirdtangent/pulse-os/compare/v0.83.1...v0.84.0) (2025-12-10)
 
 
