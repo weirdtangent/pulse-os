@@ -1,3 +1,10 @@
+## [0.86.1](https://github.com/weirdtangent/pulse-os/compare/v0.86.0...v0.86.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* stop empty info card from being shown especially after update/system restart ([5706f32](https://github.com/weirdtangent/pulse-os/commit/5706f3214940d59188f23cf3bca48e8488b9ec0a))
+
 # [0.86.0](https://github.com/weirdtangent/pulse-os/compare/v0.85.0...v0.86.0) (2025-12-10)
 
 
