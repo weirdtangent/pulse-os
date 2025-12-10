@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
+
+from pulse.audio import play_sound, play_volume_feedback
+from pulse.sound_library import SoundLibrary, SoundSettings
 
 from .overlay import OverlayChange, OverlayStateManager, OverlayTheme, render_overlay_html
 
@@ -62,8 +67,63 @@ class OverlayHttpServer:
         self._on_resume_alarm = on_resume_alarm
         self._on_toggle_earmuffs = on_toggle_earmuffs
         self._on_trigger_update = on_trigger_update
+        self._sound_settings = SoundSettings.with_defaults(
+            custom_dir=(
+                Path(os.environ.get("PULSE_SOUNDS_DIR")).expanduser() if os.environ.get("PULSE_SOUNDS_DIR") else None
+            ),
+            default_alarm=(os.environ.get("PULSE_SOUND_ALARM") or "alarm-digital-rise").strip(),
+            default_timer=(
+                os.environ.get("PULSE_SOUND_TIMER") or os.environ.get("PULSE_SOUND_ALARM") or "timer-woodblock"
+            ).strip(),
+            default_reminder=(os.environ.get("PULSE_SOUND_REMINDER") or "reminder-marimba").strip(),
+            default_notification=(os.environ.get("PULSE_SOUND_NOTIFICATION") or "notify-soft-chime").strip(),
+        )
+        self._sound_library = SoundLibrary(custom_dir=self._sound_settings.custom_dir)
+        self._sound_library.ensure_custom_dir()
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+
+    def _sound_catalog(self) -> list[dict[str, Any]]:
+        sounds = []
+        defaults = {
+            "alarm": self._sound_settings.default_alarm,
+            "timer": self._sound_settings.default_timer,
+            "reminder": self._sound_settings.default_reminder,
+            "notification": self._sound_settings.default_notification,
+        }
+        for entry in [*self._sound_library.custom_sounds(), *self._sound_library.built_in_sounds()]:
+            kinds = entry.kinds or ("alarm", "timer", "reminder", "notification")
+            sounds.append(
+                {
+                    "id": entry.sound_id,
+                    "label": entry.label,
+                    "kinds": kinds,
+                    "built_in": entry.built_in,
+                    "is_default": {kind: entry.sound_id == defaults.get(kind) for kind in kinds},
+                }
+            )
+        return sounds
+
+    def _preview_sound(self, sound_id: str, *, kind: str, mode: str) -> None:
+        sound_kind = kind if kind in {"alarm", "timer", "reminder", "notification"} else "alarm"
+        target_path = self._sound_library.resolve_with_default(sound_id, kind=sound_kind, settings=self._sound_settings)
+        if mode == "repeat":
+            thread = threading.Thread(
+                target=self._repeat_sound,
+                args=(target_path, sound_kind),
+                name=f"overlay-sound-preview-{sound_id}",
+                daemon=True,
+            )
+            thread.start()
+            return
+        play_sound(target_path, play_volume_feedback)
+
+    @staticmethod
+    def _repeat_sound(path: Path | None, kind: str) -> None:
+        loops = 3 if kind in {"alarm", "timer"} else 2
+        for _ in range(loops):
+            play_sound(path, play_volume_feedback)
+            threading.Event().wait(0.8 if kind in {"alarm", "timer"} else 0.35)
 
     def start(self) -> None:
         if self._server:
@@ -233,6 +293,32 @@ class OverlayHttpServer:
                     if outer._on_state_change:
                         outer._on_state_change(change)
                     self._log(f"overlay: calendar info card updated (changed={change.changed})")
+                elif action == "show_config":
+                    change = outer.state.update_info_card({"type": "config"})
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "show_sounds":
+                    payload = {
+                        "type": "sounds",
+                        "sounds": outer._sound_catalog(),
+                        "defaults": {
+                            "alarm": outer._sound_settings.default_alarm,
+                            "timer": outer._sound_settings.default_timer,
+                            "reminder": outer._sound_settings.default_reminder,
+                            "notification": outer._sound_settings.default_notification,
+                        },
+                    }
+                    change = outer.state.update_info_card(payload)
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "play_sound":
+                    sound_id = str(data.get("sound_id") or "").strip()
+                    if not sound_id:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing sound_id")
+                        return
+                    mode = (data.get("mode") or "once").strip().lower()
+                    kind = (data.get("kind") or "alarm").strip().lower()
+                    outer._preview_sound(sound_id, kind=kind, mode=mode)
                 elif action == "toggle_earmuffs":
                     self._log("overlay: toggle_earmuffs requested")
                     if not outer._on_toggle_earmuffs:

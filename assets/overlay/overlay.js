@@ -348,6 +348,20 @@
           body: JSON.stringify({ action: 'show_calendar' })
         }).then(resetOpacity).catch(resetOpacity);
         return;
+      } else if (action === 'show_config') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_config' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
+      } else if (action === 'show_sounds') {
+        fetch(infoEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'show_sounds' })
+        }).then(resetOpacity).catch(resetOpacity);
+        return;
       } else if (action === 'toggle_earmuffs') {
         fetch(infoEndpoint, {
           method: 'POST',
@@ -363,6 +377,43 @@
         }).then(resetOpacity).catch(resetOpacity);
         return;
       }
+    }
+
+    const configButton = e.target.closest('[data-config-action]');
+    if (configButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      const action = configButton.dataset.configAction;
+      if (!action) {
+        return;
+      }
+      configButton.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      }).finally(() => {
+        configButton.disabled = false;
+      });
+      return;
+    }
+
+    const playButton = e.target.closest('[data-play-sound]');
+    if (playButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      const mode = playButton.dataset.playSound || 'once';
+      const soundId = playButton.dataset.soundId;
+      const soundKind = playButton.dataset.soundKind || 'alarm';
+      playButton.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'play_sound', sound_id: soundId, mode, kind: soundKind })
+      }).finally(() => {
+        playButton.disabled = false;
+      });
+      return;
     }
 
     const deleteAlarmButton = e.target.closest('[data-delete-alarm]');

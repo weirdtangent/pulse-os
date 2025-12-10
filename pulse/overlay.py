@@ -298,6 +298,14 @@ class OverlayStateManager:
                 alarms_list = [copy.deepcopy(item) for item in alarms_payload if isinstance(item, dict)]
                 if alarms_list:
                     normalized["alarms"] = alarms_list
+            sounds_payload = card.get("sounds")
+            if isinstance(sounds_payload, list):
+                sounds_list = [copy.deepcopy(item) for item in sounds_payload if isinstance(item, dict)]
+                if sounds_list:
+                    normalized["sounds"] = sounds_list
+            defaults_payload = card.get("defaults")
+            if isinstance(defaults_payload, dict) and defaults_payload:
+                normalized["defaults"] = copy.deepcopy(defaults_payload)
             events_payload = card.get("events")
             if isinstance(events_payload, list):
                 events_list = [copy.deepcopy(item) for item in events_payload if isinstance(item, dict)]
@@ -469,6 +477,7 @@ TIMER_POSITION_MAP = {
 }
 
 ICON_MAP = {
+    "config": "&#9881;",  # ⚙️
     "alarm": "&#128276;",  # 🔔
     "alarm_ringing": "&#128276;",
     "timer": "&#9201;",
@@ -477,6 +486,7 @@ ICON_MAP = {
     "calendar": "&#128197;",
     "earmuffs": "&#127911;",  # 🎧
     "update": "&#128260;",  # 🔄
+    "sound": "&#127925;",  # 🎵
 }
 
 
@@ -824,6 +834,7 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
 
 def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
     badges: list[str] = []
+    badges.append(_render_badge("config", "Config"))
     upcoming = _filter_upcoming_alarms(snapshot.alarms)
     if snapshot.active_alarm:
         badges.append(_render_badge("alarm_ringing", "Alarm ringing"))
@@ -880,6 +891,10 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_routines_info_overlay(card)
     if card_type == "health":
         return _build_health_info_overlay(card)
+    if card_type == "config":
+        return _build_config_info_overlay()
+    if card_type == "sounds":
+        return _build_sounds_info_overlay(card)
     text = str(card.get("text") or "").strip()
     if not text:
         return ""
@@ -1047,6 +1062,93 @@ def _build_update_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) 
   <div class="overlay-info-card__text">
     <div class="overlay-update-spinner" aria-hidden="true"></div>
     <div>{safe_text}</div>
+  </div>
+</div>
+""".strip()
+
+
+def _build_config_info_overlay() -> str:
+    return """
+<div class="overlay-card overlay-info-card overlay-info-card--config">
+  <div class="overlay-info-card__header">
+    <div class="overlay-info-card__title">Config</div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close config">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    <div class="overlay-card__actions">
+      <button class="overlay-button" data-config-action="show_sounds">Sound picker</button>
+    </div>
+  </div>
+</div>
+""".strip()
+
+
+def _build_sounds_info_overlay(card: dict[str, Any]) -> str:
+    sounds = card.get("sounds") or []
+    entries: list[str] = []
+    for entry in sounds:
+        if not isinstance(entry, dict):
+            continue
+        sound_id = str(entry.get("id") or "").strip()
+        if not sound_id:
+            continue
+        label = str(entry.get("label") or sound_id).strip() or sound_id
+        kinds = tuple(kind for kind in entry.get("kinds") or () if isinstance(kind, str)) or ("alarm",)
+        built_in = bool(entry.get("built_in"))
+        is_default: dict[str, bool] = entry.get("is_default") or {}
+        kind_badge = ", ".join(kind.title() for kind in kinds)
+        source_badge = "Built-in" if built_in else "Custom"
+        default_labels = [
+            f"Default {kind}"
+            for kind, is_def in is_default.items()
+            if is_def and kind in {"alarm", "timer", "reminder", "notification"}
+        ]
+        default_label = " · ".join(default_labels)
+        meta_parts = [kind_badge, source_badge]
+        if default_label:
+            meta_parts.append(default_label)
+        meta = " · ".join(meta_parts)
+        primary_kind = kinds[0]
+        safe_id = html_escape(sound_id, quote=True)
+        entries.append(
+            f"""
+  <div class="overlay-sound-row">
+    <div class="overlay-sound-row__body">
+      <div class="overlay-sound-row__label">{html_escape(label)}</div>
+      <div class="overlay-sound-row__meta">{html_escape(meta)}</div>
+    </div>
+    <div class="overlay-sound-row__actions">
+      <button
+        class="overlay-button overlay-button--small"
+        data-play-sound="once"
+        data-sound-id="{safe_id}"
+        data-sound-kind="{primary_kind}"
+      >Listen</button>
+      <button
+        class="overlay-button overlay-button--small overlay-button--ghost"
+        data-play-sound="repeat"
+        data-sound-id="{safe_id}"
+        data-sound-kind="{primary_kind}"
+      >Alarm loop</button>
+    </div>
+  </div>
+            """.strip()
+        )
+    if not entries:
+        body = '<div class="overlay-info-card__empty">No sounds found.</div>'
+    else:
+        body = '<div class="overlay-sound-list">' + "".join(entries) + "</div>"
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--sounds">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">Sound picker</div>
+      <div class="overlay-info-card__subtitle">Tap to preview once or as an alarm loop.</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close sound picker">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
   </div>
 </div>
 """.strip()
@@ -1538,9 +1640,19 @@ def _format_info_text(text: str) -> str:
 def _render_badge(icon_key: str, label: str) -> str:
     icon = ICON_MAP.get(icon_key, "&#9679;")
     safe_label = html_escape(label)
-    interactive = icon_key in {"alarm", "alarm_ringing", "reminder", "reminder_active", "calendar", "update"}
+    interactive = icon_key in {
+        "config",
+        "alarm",
+        "alarm_ringing",
+        "reminder",
+        "reminder_active",
+        "calendar",
+        "update",
+    }
     action = None
-    if icon_key.startswith("alarm"):
+    if icon_key == "config":
+        action = "show_config"
+    elif icon_key.startswith("alarm"):
         action = "show_alarms"
     elif icon_key.startswith("reminder"):
         action = "show_reminders"

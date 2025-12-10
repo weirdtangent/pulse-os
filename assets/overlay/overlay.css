@@ -701,6 +701,19 @@ body {
   font-size: 0.85rem;
 }
 
+.overlay-button--ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.overlay-button--ghost:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.overlay-button--ghost:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .overlay-button--primary {
   display: block;
   width: 100%;
@@ -802,6 +815,45 @@ body {
   border-top-color: var(--overlay-accent-color, #88C0D0);
   border-radius: 50%;
   animation: overlaySpinner 0.8s linear infinite;
+}
+
+.overlay-info-card--sounds .overlay-sound-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.overlay-sound-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.overlay-sound-row__body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.overlay-sound-row__label {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.overlay-sound-row__meta {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.overlay-sound-row__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 @keyframes overlaySpinner {
