@@ -1,3 +1,11 @@
+## [0.88.9](https://github.com/weirdtangent/pulse-os/compare/v0.88.8...v0.88.9) (2025-12-11)
+
+
+### Bug Fixes
+
+* more fixes for a snapclient setup I thought was already working ([8705eb8](https://github.com/weirdtangent/pulse-os/commit/8705eb8c9c4c71a3e569a2e6325dd515a47f85ac))
+* this too ([3032389](https://github.com/weirdtangent/pulse-os/commit/3032389e89a1ac438a7c34bc28ab649591d97259))
+
 ## [0.88.8](https://github.com/weirdtangent/pulse-os/compare/v0.88.7...v0.88.8) (2025-12-11)
 
 
