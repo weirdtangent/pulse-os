@@ -1,3 +1,10 @@
+# [0.88.0](https://github.com/weirdtangent/pulse-os/compare/v0.87.0...v0.88.0) (2025-12-11)
+
+
+### Features
+
+* add HDMI config support to sample config ([1d4b674](https://github.com/weirdtangent/pulse-os/commit/1d4b6744283b8ac3922ab5746f65584381825bef))
+
 # [0.87.0](https://github.com/weirdtangent/pulse-os/compare/v0.86.2...v0.87.0) (2025-12-11)
 
 
