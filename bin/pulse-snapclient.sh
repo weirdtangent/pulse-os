@@ -64,6 +64,11 @@ if [ -n "$SNAPCLIENT_EXTRA_ARGS" ]; then
     extra_args=($SNAPCLIENT_EXTRA_ARGS)
 fi
 
+# Normalize soundcard when using Pulse backend (empty or "pulse" should fall back to "default")
+if [ -z "$SNAPCLIENT_SOUNDCARD" ] || [ "$SNAPCLIENT_SOUNDCARD" = "pulse" ]; then
+    SNAPCLIENT_SOUNDCARD="default"
+fi
+
 cmd=(
     "$SNAPCLIENT_BIN"
     --host "$SNAPCAST_HOST"
