@@ -200,9 +200,6 @@ class PulseAssistant:
         base_topic = self.config.mqtt.topic_base
         self._earmuffs_state_topic = f"{base_topic}/earmuffs/state"
         self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
-        self._proactive_task: asyncio.Task | None = None
-        self._last_presence_state: str | None = None
-        self._proactive_interval = max(300, int(os.environ.get("PULSE_PROACTIVE_INTERVAL_SECONDS", "900")))
         self._last_health_signature: tuple[tuple[str, str], ...] | None = None
 
     async def run(self) -> None:
@@ -252,7 +249,6 @@ class PulseAssistant:
 
             self._publish_assistant_discovery()
             self._publish_routine_overlay()
-            self._proactive_task = asyncio.create_task(self._proactive_loop())
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
         except Exception as exc:
@@ -282,10 +278,6 @@ class PulseAssistant:
         self.mqtt.disconnect()
         await self.player.stop()
         self.media_controller.cancel_media_resume_task()
-        if self._proactive_task:
-            self._proactive_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._proactive_task
         if self.home_assistant:
             await self.home_assistant.close()
 
@@ -514,76 +506,6 @@ class PulseAssistant:
         if not any(action.startswith(action_prefixes) for action in executed_actions):
             return
         await self._publish_light_overlay()
-
-    async def _proactive_loop(self) -> None:
-        while not self._shutdown.is_set():
-            try:
-                await asyncio.sleep(self._proactive_interval)
-                if not await self._presence_allows_proactive():
-                    continue
-                await self._push_proactive_updates()
-            except asyncio.CancelledError:
-                return
-            except Exception as exc:
-                LOGGER.debug("Proactive update failed: %s", exc)
-                await asyncio.sleep(60)
-
-    async def _presence_allows_proactive(self) -> bool:
-        entity = self.config.home_assistant.presence_entity
-        if not entity or not self.home_assistant:
-            return True
-        try:
-            state = await self.home_assistant.get_state(entity)
-        except HomeAssistantError:
-            return True
-        status = str(state.get("state") or "").lower()
-        previous = self._last_presence_state
-        self._last_presence_state = status
-        if previous and previous != status and status == "home":
-            self._publish_info_overlay(text="Welcome home.", category="presence")
-            self._schedule_info_overlay_clear(4.0)
-        return status not in {"not_home", "away", "off", "offline", "unknown", "unavailable"}
-
-    async def _push_proactive_updates(self) -> None:
-        reminder_entries = self._next_reminder_entries()
-        if reminder_entries:
-            self._publish_info_overlay(
-                text="Upcoming reminders.",
-                category="reminders",
-                extra={"type": "reminders", "title": "Reminders", "reminders": reminder_entries},
-            )
-            self._schedule_info_overlay_clear(8.0)
-        weather = await self.info_service.maybe_answer("weather forecast")
-        if weather and weather.card:
-            self._publish_info_overlay(text="Weather update", category="weather", extra=weather.card)
-            self._schedule_info_overlay_clear(8.0)
-        self._publish_health_overlay()
-
-    def _next_reminder_entries(self) -> list[dict[str, str]]:
-        snapshot = self._latest_schedule_snapshot or {}
-        reminders = snapshot.get("reminders") or []
-        now = time.time()
-        entries: list[tuple[float, dict[str, str]]] = []
-        for reminder in reminders:
-            if not isinstance(reminder, dict):
-                continue
-            next_fire = reminder.get("next_fire")
-            ts = None
-            if isinstance(next_fire, (int, float)):
-                ts = float(next_fire)
-            elif isinstance(next_fire, str):
-                try:
-                    ts = datetime.fromisoformat(next_fire).timestamp()
-                except ValueError:
-                    continue
-            if ts is None or ts < now:
-                continue
-            label = (reminder.get("label") or "Reminder").strip() or "Reminder"
-            meta = datetime.fromtimestamp(ts).strftime("%b %-d · %-I:%M %p")
-            entry_id = reminder.get("id") or reminder.get("event_id") or label
-            entries.append((ts, {"id": str(entry_id), "label": label, "meta": meta}))
-        entries.sort(key=lambda entry: entry[0])
-        return [entry for _, entry in entries[:3]]
 
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
