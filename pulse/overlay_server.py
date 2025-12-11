@@ -51,6 +51,9 @@ class OverlayHttpServer:
         on_resume_alarm: Callable[[str], None] | None = None,
         on_toggle_earmuffs: Callable[[], None] | None = None,
         on_trigger_update: Callable[[], None] | None = None,
+        on_set_volume: Callable[[int], bool] | None = None,
+        on_set_brightness: Callable[[int], bool] | None = None,
+        get_device_levels: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -67,6 +70,9 @@ class OverlayHttpServer:
         self._on_resume_alarm = on_resume_alarm
         self._on_toggle_earmuffs = on_toggle_earmuffs
         self._on_trigger_update = on_trigger_update
+        self._on_set_volume = on_set_volume
+        self._on_set_brightness = on_set_brightness
+        self._get_device_levels = get_device_levels
         self._sound_settings = SoundSettings.with_defaults(
             custom_dir=(
                 Path(os.environ.get("PULSE_SOUNDS_DIR")).expanduser() if os.environ.get("PULSE_SOUNDS_DIR") else None
@@ -124,6 +130,28 @@ class OverlayHttpServer:
         for _ in range(loops):
             play_sound(path, play_volume_feedback)
             threading.Event().wait(0.8 if kind in {"alarm", "timer"} else 0.35)
+
+    def _device_controls_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"type": "device_controls"}
+        device_levels: dict[str, Any] = {}
+        if self._get_device_levels:
+            try:
+                device_levels = self._get_device_levels()
+            except Exception as exc:  # pragma: no cover - defensive logging
+                if self.logger:
+                    self.logger(f"overlay device controls: failed to fetch levels ({exc})")
+                device_levels = {}
+        brightness_supported = bool(device_levels.get("brightness_supported"))
+        volume_supported = bool(device_levels.get("volume_supported", True))
+        payload["brightness_supported"] = brightness_supported
+        payload["volume_supported"] = volume_supported
+        brightness_value = device_levels.get("brightness")
+        volume_value = device_levels.get("volume")
+        if brightness_supported and isinstance(brightness_value, (int, float)):
+            payload["brightness"] = max(0, min(100, int(brightness_value)))
+        if volume_supported and isinstance(volume_value, (int, float)):
+            payload["volume"] = max(0, min(100, int(volume_value)))
+        return payload
 
     def start(self) -> None:
         if self._server:
@@ -297,6 +325,10 @@ class OverlayHttpServer:
                     change = outer.state.update_info_card({"type": "config"})
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                elif action == "show_device_controls":
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
                 elif action == "show_sounds":
                     payload = {
                         "type": "sounds",
@@ -319,6 +351,29 @@ class OverlayHttpServer:
                     mode = (data.get("mode") or "once").strip().lower()
                     kind = (data.get("kind") or "alarm").strip().lower()
                     outer._preview_sound(sound_id, kind=kind, mode=mode)
+                elif action in {"set_volume", "set_brightness"}:
+                    raw_value = data.get("value")
+                    try:
+                        target_value = max(0, min(100, int(float(raw_value))))
+                    except (TypeError, ValueError):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing or invalid value")
+                        return
+                    if action == "set_volume":
+                        if not outer._on_set_volume:
+                            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Volume control unavailable")
+                            return
+                        success = outer._on_set_volume(target_value)
+                    else:
+                        if not outer._on_set_brightness:
+                            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Brightness control unavailable")
+                            return
+                        success = outer._on_set_brightness(target_value)
+                    if not success:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Control request failed")
+                        return
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
                 elif action == "toggle_earmuffs":
                     self._log("overlay: toggle_earmuffs requested")
                     if not outer._on_toggle_earmuffs:

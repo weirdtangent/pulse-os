@@ -8,6 +8,7 @@
   const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
   let autoDismissTimer = null;
   const AUTO_DISMISS_DELAY = 120000; // 2 minutes in milliseconds
+  const pendingDeviceUpdates = {};
   const sizeClassMap = [
     { className: 'overlay-timer__remaining--xlong', active: (len) => len > 8 },
     { className: 'overlay-timer__remaining--long', active: (len) => len > 5 && len <= 8 },
@@ -16,6 +17,50 @@
   const hour12 = hour12Attr !== 'false';
   const timeOptions = { hour: hour12 ? 'numeric' : '2-digit', minute: '2-digit', hour12 };
   const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+
+  const clampPercent = (value) => {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round(numberValue)));
+  };
+
+  const updateControlDisplay = (kind, value) => {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const valueNode = root.querySelector(`[data-control-value="${kind}"]`);
+    if (valueNode) {
+      valueNode.textContent = `${value}%`;
+    }
+    const slider = root.querySelector(`[data-control-slider="${kind}"]`);
+    if (slider) {
+      slider.value = value;
+    }
+  };
+
+  const sendDeviceControl = (kind, value) => {
+    const action = kind === 'brightness' ? 'set_brightness' : 'set_volume';
+    return fetch(infoEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, value })
+    });
+  };
+
+  const queueDeviceControl = (kind, value) => {
+    const clamped = clampPercent(value);
+    updateControlDisplay(kind, clamped);
+    if (pendingDeviceUpdates[kind]) {
+      clearTimeout(pendingDeviceUpdates[kind]);
+    }
+    pendingDeviceUpdates[kind] = setTimeout(() => {
+      sendDeviceControl(kind, clamped).finally(() => {
+        pendingDeviceUpdates[kind] = null;
+      });
+    }, 150);
+  };
 
   const alignNowPlayingCard = () => {
     const clockCard = root.querySelector('.overlay-card--clock');
@@ -398,6 +443,26 @@
       return;
     }
 
+    const stepButton = e.target.closest('[data-step-control]');
+    if (stepButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      const kind = stepButton.dataset.stepControl;
+      if (!kind) {
+        return;
+      }
+      const step = Number(stepButton.dataset.step || '0');
+      const slider = root.querySelector(`[data-control-slider="${kind}"]`);
+      if (!slider || slider.disabled) {
+        return;
+      }
+      const current = clampPercent(slider.value || 0);
+      const next = clampPercent(current + step);
+      slider.value = next;
+      queueDeviceControl(kind, next);
+      return;
+    }
+
     const playButton = e.target.closest('[data-play-sound]');
     if (playButton) {
       e.preventDefault();
@@ -560,6 +625,21 @@
       button.disabled = false;
       button.textContent = previous || 'Stop';
     });
+  });
+
+  root.addEventListener('input', (e) => {
+    const slider = e.target.closest('[data-control-slider]');
+    if (!slider || slider.disabled) {
+      return;
+    }
+    const kind = slider.dataset.controlSlider;
+    if (!kind) {
+      return;
+    }
+    const value = clampPercent(slider.value);
+    clearAutoDismissTimer();
+    startAutoDismissTimer();
+    queueDeviceControl(kind, value);
   });
 })();
 

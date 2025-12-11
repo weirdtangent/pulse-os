@@ -369,6 +369,18 @@ class OverlayStateManager:
                     item_entries = [copy.deepcopy(item) for item in items_payload if isinstance(item, dict)]
                     if item_entries:
                         normalized["items"] = item_entries
+            elif card_type == "device_controls":
+                brightness_supported = bool(card.get("brightness_supported"))
+                normalized["brightness_supported"] = brightness_supported
+                brightness_value = _coerce_percent(card.get("brightness"))
+                if brightness_supported and brightness_value is not None:
+                    normalized["brightness"] = brightness_value
+                volume_supported_raw = card.get("volume_supported")
+                volume_supported = True if volume_supported_raw is None else bool(volume_supported_raw)
+                normalized["volume_supported"] = volume_supported
+                volume_value = _coerce_percent(card.get("volume"))
+                if volume_supported and volume_value is not None:
+                    normalized["volume"] = volume_value
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
@@ -438,6 +450,15 @@ def _coerce_dict_list(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, dict)]
     return []
+
+
+def _coerce_percent(value: Any) -> int | None:
+    """Clamp a numeric value to 0-100%, returning None when invalid."""
+    try:
+        percent = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return max(0, min(100, percent))
 
 
 def _normalize_active_payload(payload: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -920,6 +941,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_health_info_overlay(card)
     if card_type == "config":
         return _build_config_info_overlay()
+    if card_type == "device_controls":
+        return _build_device_controls_info_overlay(card)
     if card_type == "sounds":
         return _build_sounds_info_overlay(card)
     text = str(card.get("text") or "").strip()
@@ -1102,9 +1125,107 @@ def _build_config_info_overlay() -> str:
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close config">&times;</button>
   </div>
   <div class="overlay-info-card__body">
-    <div class="overlay-card__actions">
+    <div class="overlay-card__actions overlay-card__actions--split">
       <button class="overlay-button" data-config-action="show_sounds">Sound picker</button>
+      <button
+        class="overlay-button overlay-button--ghost"
+        data-config-action="show_device_controls"
+      >Device controls</button>
     </div>
+  </div>
+</div>
+""".strip()
+
+
+def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
+    brightness_supported = bool(card.get("brightness_supported"))
+    volume_supported = bool(card.get("volume_supported", True))
+    brightness_value = _coerce_percent(card.get("brightness"))
+    volume_value = _coerce_percent(card.get("volume"))
+
+    def _render_control(
+        *,
+        kind: str,
+        label: str,
+        description: str,
+        supported: bool,
+        value: int | None,
+        step: int = 5,
+    ) -> str:
+        slider_value = value if value is not None else 50
+        disabled_attr = " disabled" if not supported else ""
+        value_label = f"{slider_value}%" if value is not None else ("Not available" if not supported else "—")
+        note = '<div class="overlay-control__note">Not available on this device.</div>' if not supported else ""
+        escaped_label = html_escape(label)
+        escaped_description = html_escape(description)
+        return f"""
+  <div class="overlay-control">
+    <div class="overlay-control__header">
+      <div>
+        <div class="overlay-control__label">{escaped_label}</div>
+        <div class="overlay-control__description">{escaped_description}</div>
+      </div>
+      <div class="overlay-control__value" data-control-value="{kind}">{value_label}</div>
+    </div>
+    <div class="overlay-control__inputs">
+      <button
+        class="overlay-icon-button"
+        data-step-control="{kind}"
+        data-step="-{step}"
+        aria-label="{escaped_label} minus {step}%"
+        {disabled_attr}
+      >-</button>
+      <input
+        class="overlay-control__slider"
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value="{slider_value}"
+        data-control-slider="{kind}"
+        aria-label="{escaped_label} slider"
+        {disabled_attr}
+      />
+      <button
+        class="overlay-icon-button"
+        data-step-control="{kind}"
+        data-step="{step}"
+        aria-label="{escaped_label} plus {step}%"
+        {disabled_attr}
+      >+</button>
+    </div>
+    {note}
+  </div>
+            """.strip()
+
+    brightness_markup = _render_control(
+        kind="brightness",
+        label="Brightness",
+        description="Adjust the screen backlight.",
+        supported=brightness_supported,
+        value=brightness_value,
+    )
+    volume_markup = _render_control(
+        kind="volume",
+        label="Volume",
+        description="Adjust speaker volume.",
+        supported=volume_supported,
+        value=volume_value,
+        step=5,
+    )
+
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--device">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">Device controls</div>
+      <div class="overlay-info-card__subtitle">Manual brightness and volume.</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close device controls">&times;</button>
+  </div>
+  <div class="overlay-info-card__body overlay-device-controls">
+    {brightness_markup}
+    {volume_markup}
   </div>
 </div>
 """.strip()

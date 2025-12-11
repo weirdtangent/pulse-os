@@ -636,6 +636,9 @@ class KioskMqttListener:
                 on_delete_reminder=self._handle_overlay_delete_reminder_request,
                 on_toggle_earmuffs=self._handle_overlay_toggle_earmuffs_request,
                 on_trigger_update=self._handle_overlay_trigger_update_request,
+                on_set_volume=self._handle_overlay_volume_request,
+                on_set_brightness=self._handle_overlay_brightness_request,
+                get_device_levels=self._collect_device_control_snapshot,
             )
 
     def log(self, message: str) -> None:
@@ -735,6 +738,16 @@ class KioskMqttListener:
     def _get_current_brightness(self) -> int | None:
         """Get current screen brightness percentage."""
         return display.get_current_brightness()
+
+    def _collect_device_control_snapshot(self) -> dict[str, Any]:
+        volume = self._get_current_volume()
+        brightness = self._get_current_brightness() if self._brightness_supported else None
+        return {
+            "volume": volume,
+            "volume_supported": True,
+            "brightness": brightness,
+            "brightness_supported": self._brightness_supported,
+        }
 
     def _collect_now_playing_text(self) -> str:
         if not self.config.media_player_entity or not self.config.ha_base_url or not self.config.ha_token:
@@ -952,6 +965,41 @@ class KioskMqttListener:
     def _handle_overlay_trigger_update_request(self) -> None:
         self.log("overlay: update requested via notification badge")
         self.handle_update()
+
+    def _handle_overlay_volume_request(self, volume: int) -> bool:
+        success = audio.set_volume(volume, play_feedback=self.config.volume_feedback_enabled, allow_zero=True)
+        if success:
+            sink = audio.find_audio_sink()
+            self.log(f"volume: set to {volume}% on {sink or 'default sink'}")
+            self._safe_publish(
+                None,
+                f"{self.config.topics.telemetry}/volume",
+                str(volume),
+                qos=0,
+                retain=True,
+            )
+            return True
+        self.log("volume: failed to set volume - no audio sink found")
+        return False
+
+    def _handle_overlay_brightness_request(self, brightness: int) -> bool:
+        if not self._brightness_supported:
+            self.log("brightness: unsupported (no backlight device available)")
+            return False
+        success = display.set_brightness(brightness)
+        if success:
+            device_path = display.find_backlight_device()
+            self.log(f"brightness: set to {brightness}% on {device_path or 'default device'}")
+            self._safe_publish(
+                None,
+                f"{self.config.topics.telemetry}/brightness",
+                str(brightness),
+                qos=0,
+                retain=True,
+            )
+            return True
+        self.log("brightness: failed to set brightness - no backlight device found")
+        return False
 
     def _handle_overlay_toggle_earmuffs_request(self) -> None:
         earmuffs_topic = f"pulse/{self.config.hostname}/assistant/earmuffs/set"
