@@ -1,3 +1,10 @@
+## [0.88.1](https://github.com/weirdtangent/pulse-os/compare/v0.88.0...v0.88.1) (2025-12-11)
+
+
+### Bug Fixes
+
+* add revive interval to sample config ([d63a240](https://github.com/weirdtangent/pulse-os/commit/d63a240fb4b0475b252fb65b6c11d1895e3b05c9))
+
 # [0.88.0](https://github.com/weirdtangent/pulse-os/compare/v0.87.0...v0.88.0) (2025-12-11)
 
 
