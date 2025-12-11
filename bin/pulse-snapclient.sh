@@ -33,6 +33,31 @@ if [ -d "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/bus" ] && [ -z "${DBUS_SE
     export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
 fi
 
+PULSE_SOCKET="${PULSE_SOCKET:-${XDG_RUNTIME_DIR}/pulse/native}"
+if [ -S "$PULSE_SOCKET" ]; then
+    export PULSE_SERVER="unix:${PULSE_SOCKET}"
+fi
+
+wait_for_pulse() {
+    local socket="$1"
+    local attempts=20
+    local delay=0.5
+    local count=0
+    while [ $count -lt $attempts ]; do
+        if [ -S "$socket" ]; then
+            return 0
+        fi
+        sleep "$delay"
+        count=$((count + 1))
+    done
+    return 1
+}
+
+if ! wait_for_pulse "$PULSE_SOCKET"; then
+    log "pulse socket not available at $PULSE_SOCKET"
+    exit 1
+fi
+
 extra_args=()
 if [ -n "$SNAPCLIENT_EXTRA_ARGS" ]; then
     # shellcheck disable=SC2206 # we intentionally split on spaces for additional flags
