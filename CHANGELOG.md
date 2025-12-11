@@ -1,3 +1,10 @@
+## [0.88.5](https://github.com/weirdtangent/pulse-os/compare/v0.88.4...v0.88.5) (2025-12-11)
+
+
+### Bug Fixes
+
+* add pulse socket wait ([3a92808](https://github.com/weirdtangent/pulse-os/commit/3a92808c139f0aa89d17c22a1a3be01f43d0f24a))
+
 ## [0.88.4](https://github.com/weirdtangent/pulse-os/compare/v0.88.3...v0.88.4) (2025-12-11)
 
 
