@@ -134,6 +134,27 @@ PULSE_DAY_NIGHT_AUTO="true"
 PULSE_VOLUME_TEST_SOUND="true"
 
 # ============================================================================
+# Display Selection (DSI vs HDMI)
+# ============================================================================
+
+# PULSE_DISPLAY_TYPE — select "dsi" (default) for the ribbon Touch Display 2,
+# or "hdmi" for external HDMI panels. Setup will configure boot args accordingly.
+PULSE_DISPLAY_TYPE="dsi"
+
+# HDMI-only settings (used when PULSE_DISPLAY_TYPE="hdmi"):
+# Connector name for the kernel video arg (check `kmsprint`), common: HDMI-A-1.
+PULSE_HDMI_CONNECTOR="HDMI-A-1"
+# Kernel video mode for cmdline (e.g., 1280x800M@60, 1920x1080M@60).
+PULSE_HDMI_MODE="1280x800M@60"
+# hdmi_group/hdmi_mode for config.txt (28 = 1280x800@60); adjust for your panel.
+PULSE_HDMI_GROUP=2
+PULSE_HDMI_MODE_ID=28
+# Rotation (0/1/2/3 → 0/90/180/270) for display_hdmi_rotate in config.txt.
+PULSE_HDMI_ROTATE=0
+# KMS device that owns the HDMI connector (Pi 5/CM5 often exposes HDMI on card1).
+PULSE_HDMI_KMSDEV="/dev/dri/card1"
+
+# ============================================================================
 # Sounds
 # ============================================================================
 
