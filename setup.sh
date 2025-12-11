@@ -62,6 +62,7 @@ PULSE_HDMI_GROUP="${PULSE_HDMI_GROUP:-2}"
 PULSE_HDMI_MODE_ID="${PULSE_HDMI_MODE_ID:-28}"            # hdmi_mode value for config.txt (28=1280x800@60)
 PULSE_HDMI_ROTATE="${PULSE_HDMI_ROTATE:-0}"               # 0/1/2/3 => 0/90/180/270
 PULSE_HDMI_KMSDEV="${PULSE_HDMI_KMSDEV:-/dev/dri/card1}"  # KMS device that owns HDMI on Pi 5/CM5
+PULSE_REVIVE_INTERVAL="${PULSE_REVIVE_INTERVAL:-2}"       # minutes between kiosk revive checks
 
 export PULSE_REMOTE_LOG_HOST
 export PULSE_REMOTE_LOG_PORT
