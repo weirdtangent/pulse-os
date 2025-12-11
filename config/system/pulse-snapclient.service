@@ -8,6 +8,10 @@ Type=simple
 User=pulse
 WorkingDirectory=/opt/pulse-os
 EnvironmentFile=-/etc/default/pulse-snapclient
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=PULSE_SOCKET=/run/user/%U/pulse/native
+Environment=PULSE_SERVER=unix:/run/user/%U/pulse/native
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 20); do [ -S "$PULSE_SOCKET" ] && exit 0; sleep 0.5; done; echo "pulse-snapclient: pulse socket not available at $PULSE_SOCKET" >&2; exit 1'
 ExecStart=/opt/pulse-os/bin/pulse-snapclient.sh
 Restart=always
 RestartSec=3
