@@ -452,47 +452,10 @@ class PulseAssistant:
         )
 
     def _publish_routine_overlay(self) -> None:
-        routines = self.routines.overlay_entries()
-        if not routines:
-            return
-        # Only show routines overlay if Home Assistant is configured
-        # (routines require HA scenes to work)
-        if not self.home_assistant:
-            return
-        labels = [item.get("label") or "" for item in routines if item.get("label")]
-        hint = ", ".join(labels[:3])
-        subtitle = f"Available: {hint}" if hint else "Available routines"
-        self._publish_info_overlay(
-            text="Routines ready. Try one of them.",
-            category="routines",
-            extra={
-                "type": "routines",
-                "title": "Routines",
-                "subtitle": subtitle,
-                "routines": routines,
-            },
-        )
-        self._schedule_info_overlay_clear(6.0)
+        return  # Suppress routines overlay (no longer shown)
 
     def _publish_health_overlay(self) -> None:
-        items = [
-            {"label": "MQTT", "value": "connected" if self.mqtt.is_connected() else "disconnected"},
-            {
-                "label": "Home Assistant",
-                "value": "connected" if self.home_assistant else "not configured",
-            },
-            {"label": "Mic", "value": "running" if getattr(self.mic, "running", False) else "stopped"},
-        ]
-        signature = tuple((item["label"], item["value"]) for item in items)
-        if signature == self._last_health_signature:
-            return
-        self._last_health_signature = signature
-        self._publish_info_overlay(
-            text="System status updated.",
-            category="health",
-            extra={"type": "health", "title": "Health", "items": items},
-        )
-        self._schedule_info_overlay_clear(6.0)
+        return  # Suppress health overlay (no longer shown)
 
     @staticmethod
     def _format_lights_card(lights: list[dict[str, Any]]) -> dict[str, Any] | None:
