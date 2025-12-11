@@ -1,3 +1,10 @@
+## [0.88.8](https://github.com/weirdtangent/pulse-os/compare/v0.88.7...v0.88.8) (2025-12-11)
+
+
+### Bug Fixes
+
+* add pulse socket wait to pulse-snapclient.service ([d21fea5](https://github.com/weirdtangent/pulse-os/commit/d21fea509b45b21daeb3bbffee1670f8c53f8795))
+
 ## [0.88.7](https://github.com/weirdtangent/pulse-os/compare/v0.88.6...v0.88.7) (2025-12-11)
 
 
