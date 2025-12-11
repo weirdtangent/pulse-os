@@ -578,6 +578,8 @@ class KioskMqttListener:
         self._font_options: list[str] = []
         self._font_option_set: set[str] = set()
         self._refresh_font_options()
+        # Brightness control is available only if a backlight is detected
+        self._brightness_supported = display.get_current_brightness() is not None
         overlay_host = self.overlay_config.bind_address
         if overlay_host in {"0.0.0.0", "::"}:
             overlay_host = "localhost"
@@ -712,9 +714,10 @@ class KioskMqttListener:
             metrics["volume"] = volume
 
         # Get current screen brightness
-        brightness = self._get_current_brightness()
-        if brightness is not None:
-            metrics["brightness"] = brightness
+        if self._brightness_supported:
+            brightness = self._get_current_brightness()
+            if brightness is not None:
+                metrics["brightness"] = brightness
 
         now_playing = self._collect_now_playing_text()
         metrics["now_playing"] = now_playing
@@ -1364,20 +1367,6 @@ class KioskMqttListener:
             entity_category="config",
         )
 
-        brightness_control = build_number_entity(
-            "Screen Brightness",
-            f"{self.config.hostname}_control_brightness",
-            self.config.topics.brightness,
-            f"{self.config.topics.telemetry}/brightness",
-            sanitized_hostname,
-            min_value=0,
-            max_value=100,
-            step=1,
-            unit_of_measurement="%",
-            icon="mdi:brightness-6",
-            entity_category="config",
-        )
-
         self._refresh_font_options()
         font_select = build_select_entity(
             "Overlay Font",
@@ -1402,20 +1391,36 @@ class KioskMqttListener:
 
         telemetry_components = self._build_telemetry_components()
 
+        components: dict[str, dict[str, Any]] = {
+            "Home": home_button,
+            "Reboot": reboot_button,
+            "Update": update_button,
+            "Audio Volume": volume_control,
+            "Overlay Font": font_select,
+            "Latest version": latest_version_sensor,
+            **telemetry_components,
+        }
+        if self._brightness_supported:
+            brightness_control = build_number_entity(
+                "Screen Brightness",
+                f"{self.config.hostname}_control_brightness",
+                self.config.topics.brightness,
+                f"{self.config.topics.telemetry}/brightness",
+                sanitized_hostname,
+                min_value=0,
+                max_value=100,
+                step=1,
+                unit_of_measurement="%",
+                icon="mdi:brightness-6",
+                entity_category="config",
+            )
+            components["Screen Brightness"] = brightness_control
+
         return {
             "device": self.device_info,
             "origin": self.origin,
             "availability": availability,
-            "cmps": {
-                "Home": home_button,
-                "Reboot": reboot_button,
-                "Update": update_button,
-                "Audio Volume": volume_control,
-                "Screen Brightness": brightness_control,
-                "Overlay Font": font_select,
-                "Latest version": latest_version_sensor,
-                **telemetry_components,
-            },
+            "cmps": components,
         }
 
     def _build_telemetry_components(self) -> dict[str, dict[str, Any]]:
@@ -1465,7 +1470,8 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.update)
         client.subscribe(self.config.topics.reboot)
         client.subscribe(self.config.topics.volume)
-        client.subscribe(self.config.topics.brightness)
+        if self._brightness_supported:
+            client.subscribe(self.config.topics.brightness)
         client.subscribe(self.config.topics.overlay_font_command)
         if self.overlay_state:
             client.subscribe(self.assistant_topics.schedules_state)
@@ -1564,6 +1570,9 @@ class KioskMqttListener:
 
     def handle_brightness(self, payload: bytes) -> None:
         """Handle brightness control command from MQTT."""
+        if not self._brightness_supported:
+            self.log("brightness: unsupported (no backlight device available)")
+            return
         try:
             brightness_str = payload.decode("utf-8", errors="ignore").strip()
             brightness = int(float(brightness_str))
