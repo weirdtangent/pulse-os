@@ -1,3 +1,10 @@
+# [0.89.0](https://github.com/weirdtangent/pulse-os/compare/v0.88.9...v0.89.0) (2025-12-11)
+
+
+### Features
+
+* add device controls to config overlay ([60480a7](https://github.com/weirdtangent/pulse-os/commit/60480a7329fcf07a0129afbee6d9ae71f89e6caf))
+
 ## [0.88.9](https://github.com/weirdtangent/pulse-os/compare/v0.88.8...v0.88.9) (2025-12-11)
 
 
