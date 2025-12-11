@@ -1,3 +1,10 @@
+## [0.88.2](https://github.com/weirdtangent/pulse-os/compare/v0.88.1...v0.88.2) (2025-12-11)
+
+
+### Bug Fixes
+
+* stop showing useless info cards ([f92fb98](https://github.com/weirdtangent/pulse-os/commit/f92fb9857c522f313c4c57ac2b9b3e3777cf583e))
+
 ## [0.88.1](https://github.com/weirdtangent/pulse-os/compare/v0.88.0...v0.88.1) (2025-12-11)
 
 
