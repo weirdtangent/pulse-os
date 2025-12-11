@@ -1,3 +1,10 @@
+## [0.88.4](https://github.com/weirdtangent/pulse-os/compare/v0.88.3...v0.88.4) (2025-12-11)
+
+
+### Bug Fixes
+
+* disable stock snapclient ([dbdbac3](https://github.com/weirdtangent/pulse-os/commit/dbdbac3ef50cd72dfa3bf363ff26eefff23731ec))
+
 ## [0.88.3](https://github.com/weirdtangent/pulse-os/compare/v0.88.2...v0.88.3) (2025-12-11)
 
 
