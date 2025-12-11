@@ -1,3 +1,10 @@
+## [0.88.7](https://github.com/weirdtangent/pulse-os/compare/v0.88.6...v0.88.7) (2025-12-11)
+
+
+### Bug Fixes
+
+* undo last fix that was not a fix ([728697f](https://github.com/weirdtangent/pulse-os/commit/728697f2c4ff7f9068d5cf99bde06f2c0817809f))
+
 ## [0.88.6](https://github.com/weirdtangent/pulse-os/compare/v0.88.5...v0.88.6) (2025-12-11)
 
 
