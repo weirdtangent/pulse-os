@@ -1,3 +1,10 @@
+## [0.88.3](https://github.com/weirdtangent/pulse-os/compare/v0.88.2...v0.88.3) (2025-12-11)
+
+
+### Bug Fixes
+
+* brightness control support detection ([f5376db](https://github.com/weirdtangent/pulse-os/commit/f5376db882dd18591b0e338dda23c71a1f91d071))
+
 ## [0.88.2](https://github.com/weirdtangent/pulse-os/compare/v0.88.1...v0.88.2) (2025-12-11)
 
 
