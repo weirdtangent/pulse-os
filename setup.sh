@@ -635,9 +635,19 @@ ensure_snapclient_package() {
     sudo apt install -y snapclient
 }
 
+disable_stock_snapclient() {
+    if systemctl list-unit-files | grep -q "^snapclient.service"; then
+        log "Disabling stock snapclient.service to avoid conflicts…"
+        sudo systemctl disable --now snapclient.service 2>/dev/null || true
+    fi
+}
+
 configure_snapclient() {
     local enabled="${PULSE_SNAPCLIENT:-false}"
     local config_file="/etc/default/pulse-snapclient"
+
+    # Always disable the distro snapclient unit to prevent conflicts with ours
+    disable_stock_snapclient
 
     if [ "$enabled" != "true" ]; then
         log "Snapcast client disabled; removing config."
@@ -652,16 +662,11 @@ configure_snapclient() {
 
     ensure_snapclient_package
 
-    if systemctl list-unit-files | grep -q "^snapclient.service"; then
-        log "Disabling stock snapclient.service to avoid conflicts…"
-        sudo systemctl disable --now snapclient.service 2>/dev/null || true
-    fi
-
     sudo tee "$config_file" >/dev/null <<EOF
 SNAPCAST_HOST="${PULSE_SNAPCAST_HOST}"
 SNAPCAST_PORT="${PULSE_SNAPCAST_PORT:-1704}"
 SNAPCAST_CONTROL_PORT="${PULSE_SNAPCAST_CONTROL_PORT:-1705}"
-SNAPCLIENT_SOUNDCARD="${PULSE_SNAPCLIENT_SOUNDCARD:-default}"
+SNAPCLIENT_SOUNDCARD="${PULSE_SNAPCLIENT_SOUNDCARD:-pulse}"
 SNAPCLIENT_LATENCY_MS="${PULSE_SNAPCLIENT_LATENCY_MS:-}"
 SNAPCLIENT_EXTRA_ARGS="${PULSE_SNAPCLIENT_EXTRA_ARGS:---player pulse}"
 SNAPCLIENT_HOST_ID="${PULSE_SNAPCLIENT_HOST_ID:-}"
