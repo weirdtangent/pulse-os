@@ -203,6 +203,7 @@ class PulseAssistant:
         self._proactive_task: asyncio.Task | None = None
         self._last_presence_state: str | None = None
         self._proactive_interval = max(300, int(os.environ.get("PULSE_PROACTIVE_INTERVAL_SECONDS", "900")))
+        self._last_health_signature: tuple[tuple[str, str], ...] | None = None
 
     async def run(self) -> None:
         try:
@@ -482,6 +483,10 @@ class PulseAssistant:
             },
             {"label": "Mic", "value": "running" if getattr(self.mic, "running", False) else "stopped"},
         ]
+        signature = tuple((item["label"], item["value"]) for item in items)
+        if signature == self._last_health_signature:
+            return
+        self._last_health_signature = signature
         self._publish_info_overlay(
             text="System status updated.",
             category="health",

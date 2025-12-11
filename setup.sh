@@ -55,6 +55,13 @@ PULSE_DAY_NIGHT_AUTO="${PULSE_DAY_NIGHT_AUTO:-${PULSE_BACKLIGHT_SUN:-true}}"
 PULSE_BLUETOOTH_AUTOCONNECT="${PULSE_BLUETOOTH_AUTOCONNECT:-true}"
 PULSE_VOICE_ASSISTANT="${PULSE_VOICE_ASSISTANT:-false}"
 PULSE_SNAPCLIENT="${PULSE_SNAPCLIENT:-false}"
+PULSE_DISPLAY_TYPE="${PULSE_DISPLAY_TYPE:-dsi}"           # dsi | hdmi
+PULSE_HDMI_CONNECTOR="${PULSE_HDMI_CONNECTOR:-HDMI-A-1}"  # HDMI connector name for kernel arg
+PULSE_HDMI_MODE="${PULSE_HDMI_MODE:-1280x800M@60}"        # Kernel video mode
+PULSE_HDMI_GROUP="${PULSE_HDMI_GROUP:-2}"
+PULSE_HDMI_MODE_ID="${PULSE_HDMI_MODE_ID:-28}"            # hdmi_mode value for config.txt (28=1280x800@60)
+PULSE_HDMI_ROTATE="${PULSE_HDMI_ROTATE:-0}"               # 0/1/2/3 => 0/90/180/270
+PULSE_HDMI_KMSDEV="${PULSE_HDMI_KMSDEV:-/dev/dri/card1}"  # KMS device that owns HDMI on Pi 5/CM5
 
 export PULSE_REMOTE_LOG_HOST
 export PULSE_REMOTE_LOG_PORT
@@ -312,6 +319,35 @@ ensure_cmdline_kv() {
     log "Set kernel arg ${key}=${value}"
 }
 
+remove_cmdline_arg_matching() {
+    local pattern="$1"
+    local file="$BOOT_CMDLINE"
+    if [ ! -f "$file" ]; then
+        return
+    fi
+    local current
+    current=$(sudo cat "$file")
+    # shellcheck disable=SC2001
+    local updated
+    updated=$(echo "$current" | sed -E "s/[[:space:]]${pattern}//g")
+    if [ "$updated" != "$current" ]; then
+        printf '%s\n' "$updated" | sudo tee "$file" >/dev/null
+        log "Removed kernel args matching /${pattern}/ from $(basename "$file")"
+    fi
+}
+
+remove_boot_config_matching() {
+    local pattern="$1"
+    local file="$BOOT_CONFIG"
+    if [ ! -f "$file" ]; then
+        return
+    fi
+    if sudo grep -qE "$pattern" "$file"; then
+        sudo sed -i "/$pattern/d" "$file"
+        log "Removed lines matching /$pattern/ from $(basename "$file")"
+    fi
+}
+
 ensure_user_systemd_session() {
     local user="${PULSE_USER:-pulse}"
     if ! id "$user" >/dev/null 2>&1; then
@@ -461,11 +497,57 @@ EOF
 }
 
 configure_display_stack() {
-    log "Configuring Touch Display boot parameters…"
-    ensure_boot_config_line "dtparam=i2c_arm=on"
-    ensure_boot_config_kv "display_auto_detect" "0"
-    ensure_boot_config_line "dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx"
-    ensure_cmdline_arg "video=DSI-2:720x1280M@60"
+    if [ "${PULSE_DISPLAY_TYPE,,}" = "hdmi" ]; then
+        log "Configuring HDMI display parameters…"
+        # Remove any DSI-specific settings that break HDMI
+        remove_boot_config_matching "^dtoverlay=vc4-kms-dsi-ili9881-7inch"
+        remove_cmdline_arg_matching "video=DSI-2:[^ ]*"
+
+        ensure_boot_config_line "dtparam=i2c_arm=on"
+        ensure_boot_config_kv "display_auto_detect" "0"
+        ensure_boot_config_kv "hdmi_force_hotplug" "1"
+        ensure_boot_config_kv "hdmi_group" "${PULSE_HDMI_GROUP}"
+        ensure_boot_config_kv "hdmi_mode" "${PULSE_HDMI_MODE_ID}"
+        ensure_boot_config_kv "display_hdmi_rotate" "${PULSE_HDMI_ROTATE}"
+        ensure_cmdline_arg "video=${PULSE_HDMI_CONNECTOR}:${PULSE_HDMI_MODE}"
+
+        log "Writing X config for HDMI (kmsdev=${PULSE_HDMI_KMSDEV})…"
+        sudo tee /etc/X11/xorg.conf >/dev/null <<EOF
+Section "ServerLayout"
+    Identifier "Layout0"
+    Screen 0 "Screen0" 0 0
+EndSection
+
+Section "Device"
+    Identifier "VC4"
+    Driver "modesetting"
+    Option "kmsdev" "${PULSE_HDMI_KMSDEV}"
+    Option "PrimaryGPU" "true"
+EndSection
+
+Section "Monitor"
+    Identifier "HDMI-1"
+    Option "PreferredMode" "${PULSE_HDMI_MODE%M@*}"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "VC4"
+    Monitor "HDMI-1"
+EndSection
+EOF
+        log "Removing fbdev X driver to prevent fallback to framebuffer…"
+        sudo apt-get purge -y xserver-xorg-video-fbdev xserver-xorg-video-all >/dev/null 2>&1 || true
+    else
+        log "Configuring Touch Display boot parameters…"
+        # Clean up any forced HDMI config
+        remove_cmdline_arg_matching "video=${PULSE_HDMI_CONNECTOR//\//\\/}:[^ ]*"
+        sudo rm -f /etc/X11/xorg.conf
+        ensure_boot_config_line "dtparam=i2c_arm=on"
+        ensure_boot_config_kv "display_auto_detect" "0"
+        ensure_boot_config_line "dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx"
+        ensure_cmdline_arg "video=DSI-2:720x1280M@60"
+    fi
 }
 
 configure_device_identity() {

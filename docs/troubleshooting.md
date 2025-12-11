@@ -139,6 +139,77 @@ After either disabling the provider loop or overriding `PULSE_MEDIA_PLAYER_ENTIT
 
 **Solution**: Confirm `dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx` still exists in `/boot/firmware/config.txt`. If missing or incorrect, rerun `./setup.sh` to restore it.
 
+## Using a 10.1" HDMI display
+
+**Problem**: Swapping to an external 10.1" HDMI display (instead of the ribbon DSI panel) needs the right resolution/rotation so the overlay fits and touch (if present) lines up.
+
+**Solution**:
+
+1) **Set the native mode in `/boot/config.txt` (or `/boot/firmware/config.txt`)**. Example for 1280x800@60:
+```
+hdmi_force_hotplug=1
+hdmi_group=2
+hdmi_mode=28   # 1280x800@60
+display_hdmi_rotate=0  # 0/1/2/3 = 0/90/180/270
+```
+Reboot after editing.
+
+2) **Ensure X uses the same mode**. If EDID does not expose your mode, add an Xorg snippet `/etc/X11/xorg.conf.d/10-monitor.conf` with a Modeline, `PreferredMode`, and optional `Option "Rotate" "left|right"`.
+
+3) **Turn off power saving** (HDMI panels usually have no GPIO backlight):
+```
+DISPLAY=:0 xset -dpms s off
+```
+If you have no backlight device, keep `pulse-backlight` disabled or point `config/system/pulse-backlight.conf` at a valid device.
+
+4) **Touch screens** (if the HDMI panel is also USB touch): use `xinput list` to find the device and apply a `Coordinate Transformation Matrix` in `/etc/X11/xorg.conf.d/99-touch-calibration.conf` to match your rotation.
+
+5) **Overlay sanity check**: after boot, open the overlay and make sure cards are not clipped. Non-16:9/16:10 panels may need minor CSS padding tweaks, but the defaults work for 1280x800 and 1920x1080.
+
+## HDMI shows boot splash but X/Chromium stays black (Pi 5 / CM5)
+
+**Problem**: On Pi 5/CM5 with an HDMI panel, boot text/splash appears but X never starts (Xorg logs show `modeset(G0): using drv /dev/dri/card1` then `No devices detected`).
+
+**Solution**: Point X at the card that actually owns the HDMI connector (often `card1` on Pi 5/CM5) and avoid the fbdev fallback.
+
+1) Remove the fbdev X driver (stops the framebuffer fallback that bails out):
+```
+sudo apt-get purge -y xserver-xorg-video-fbdev xserver-xorg-video-all
+```
+
+2) Create `/etc/X11/xorg.conf` to force modesetting to the HDMI-capable card:
+```
+Section "ServerLayout"
+    Identifier "Layout0"
+    Screen 0 "Screen0" 0 0
+EndSection
+
+Section "Device"
+    Identifier "VC4"
+    Driver "modesetting"
+    Option "kmsdev" "/dev/dri/card1"   # use the card that has HDMI-A-1 (see kmsprint)
+    Option "PrimaryGPU" "true"
+EndSection
+
+Section "Monitor"
+    Identifier "HDMI-1"
+    Option "PreferredMode" "1280x800"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "VC4"
+    Monitor "HDMI-1"
+EndSection
+```
+If `kmsprint` shows HDMI-A-1 on `card0`, swap `card1` to `card0` above.
+
+3) Ensure card permissions are normal (default is fine): `ls -l /dev/dri/card*` should be group `video` and mode `660`.
+
+4) Keep your HDMI kernel hints in `/boot/firmware/cmdline.txt`, e.g. `video=HDMI-A-1:1280x800M@60`, and your `hdmi_force_hotplug/group/mode/rotate` lines in `/boot/firmware/config.txt`.
+
+After reboot, X should start and `DISPLAY=:0 xrandr --listmonitors` should list `HDMI-1` at the expected mode.
+
 ## Plymouth/boot splash misbehavior
 
 **Problem**: Boot splash screen doesn't display correctly or shows errors.
