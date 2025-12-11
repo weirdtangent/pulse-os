@@ -1,3 +1,10 @@
+# [0.87.0](https://github.com/weirdtangent/pulse-os/compare/v0.86.2...v0.87.0) (2025-12-11)
+
+
+### Features
+
+* support HDMI displays as well ([e9317d6](https://github.com/weirdtangent/pulse-os/commit/e9317d6d8f3cc652d49fc841319d191b7a7b536a))
+
 ## [0.86.2](https://github.com/weirdtangent/pulse-os/compare/v0.86.1...v0.86.2) (2025-12-10)
 
 
