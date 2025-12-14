@@ -128,7 +128,8 @@ class TelemetryDescriptor:
     expose_sensor: bool = True
 
 
-DEFAULT_VERSION_SOURCE_URL = "https://raw.githubusercontent.com/weirdtangent/pulse-os/main/VERSION"
+# GitHub API for latest release version
+DEFAULT_VERSION_SOURCE_URL = "https://api.github.com/repos/weirdtangent/pulse-os/releases/latest"
 DEFAULT_VERSION_CHECKS_PER_DAY = 12
 ALLOWED_VERSION_CHECK_COUNTS = {2, 4, 6, 8, 12, 24}
 DEFAULT_TELEMETRY_INTERVAL_SECONDS = 15
@@ -1137,13 +1138,22 @@ class KioskMqttListener:
     def _detect_local_version(self) -> str | None:
         if self.config.sw_version:
             return self.config.sw_version
-        version_path = os.path.join(self.repo_dir, "VERSION")
+        # Try to get version from git tag
         try:
-            with open(version_path, encoding="utf-8") as handle:
-                value = handle.read().strip()
-                return value or None
-        except OSError:
-            return None
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0"],
+                cwd=self.repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                tag = result.stdout.strip()
+                # Strip leading 'v' if present
+                return tag.lstrip("v") if tag else None
+        except (subprocess.SubprocessError, OSError):
+            pass
+        return None
 
     @staticmethod
     def _parse_version(value: str | None) -> Version | None:
@@ -1166,9 +1176,14 @@ class KioskMqttListener:
     def _fetch_remote_version(self) -> str | None:
         url = self.config.version_source_url
         try:
-            with urllib.request.urlopen(url, timeout=10) as resp:
-                value = resp.read().decode("utf-8", errors="ignore").strip()
-                return value or None
+            request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(request, timeout=10) as resp:
+                import json
+
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                tag_name = data.get("tag_name", "")
+                # Strip leading 'v' if present
+                return tag_name.lstrip("v") if tag_name else None
         except urllib.error.URLError as exc:
             self.log(f"update-check: failed to fetch remote version from {url}: {exc}")
         except Exception as exc:

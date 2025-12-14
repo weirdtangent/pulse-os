@@ -54,7 +54,7 @@ To return to the normal photo frame view, send a message to the `home` topic or 
   If `setup.sh` already runs unattended via sudo, you typically just need to add `reboot`.
 
 - There is no payload validation; only expose the buttons on a broker you control. The safe reboot wrapper prevents repeated reboots when multiple watchers fire inside a short window.
-- Button availability is dynamic: the `Update` button only appears when GitHub’s `VERSION` file is newer than the kiosk’s local version. The kiosk checks 12×/day by default (2/4/6/8/12/24 options via `PULSE_VERSION_CHECKS_PER_DAY`).
+- Button availability is dynamic: the `Update` button only appears when the latest GitHub release is newer than the kiosk's local version (from git tag). The kiosk checks 12×/day by default (2/4/6/8/12/24 options via `PULSE_VERSION_CHECKS_PER_DAY`).
 - The Update button title automatically changes to `Update to vX.Y.Z` so you know which release will be applied before clicking.
 
 Need to restart everything locally without re-running the whole setup flow? Run `sudo bin/tools/restart-services.sh` on the kiosk to bounce the same units the setup/Update path touches.

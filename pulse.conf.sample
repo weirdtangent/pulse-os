@@ -5,16 +5,16 @@
 # Core Configuration
 # ============================================================================
 
-# PULSE_VERSION derived from VERSION file located next to this config.
+# PULSE_VERSION derived from git tag in the repo.
 if [[ -z "${PULSE_VERSION:-}" ]]; then
   _pulse_conf_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-${0}}")" && pwd)"
-  _pulse_version_file="${_pulse_conf_dir}/VERSION"
-  if [[ -f "${_pulse_version_file}" ]]; then
-    PULSE_VERSION="$(tr -d '\n\r ' < "${_pulse_version_file}")"
+  if command -v git >/dev/null 2>&1 && [[ -d "${_pulse_conf_dir}/.git" ]]; then
+    PULSE_VERSION="$(git -C "${_pulse_conf_dir}" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')" || PULSE_VERSION="0.0.0"
   else
     PULSE_VERSION="0.0.0"
   fi
-  unset _pulse_conf_dir _pulse_version_file
+  [[ -z "$PULSE_VERSION" ]] && PULSE_VERSION="0.0.0"
+  unset _pulse_conf_dir
 fi
 
 # PULSE_USER — Linux account that auto-logs in and runs Pulse services.
