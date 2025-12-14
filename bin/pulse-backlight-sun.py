@@ -28,6 +28,10 @@ DEFAULT_CONF: dict[str, str] = {
 }
 VALID_TWILIGHT = {"OFFICIAL", "CIVIL", "NAUTICAL", "ASTRONOMICAL"}
 
+# Default automation brightness limits (can be overridden via environment)
+DEFAULT_BRIGHTNESS_MIN = 0
+DEFAULT_BRIGHTNESS_MAX = 100
+
 
 def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
     """Read the config file and return parsed values."""
@@ -87,6 +91,36 @@ def detect_tz() -> timezone | ZoneInfo:
         return datetime.UTC
 
 
+def get_brightness_limits() -> tuple[int, int]:
+    """Read automation brightness limits from environment variables.
+
+    Returns:
+        Tuple of (min_brightness, max_brightness) as percentages (0-100).
+    """
+    try:
+        min_brightness = int(os.environ.get("PULSE_BRIGHTNESS_MIN", DEFAULT_BRIGHTNESS_MIN))
+        min_brightness = max(0, min(100, min_brightness))
+    except (ValueError, TypeError):
+        min_brightness = DEFAULT_BRIGHTNESS_MIN
+
+    try:
+        max_brightness = int(os.environ.get("PULSE_BRIGHTNESS_MAX", DEFAULT_BRIGHTNESS_MAX))
+        max_brightness = max(0, min(100, max_brightness))
+    except (ValueError, TypeError):
+        max_brightness = DEFAULT_BRIGHTNESS_MAX
+
+    # Ensure min <= max
+    if min_brightness > max_brightness:
+        min_brightness, max_brightness = max_brightness, min_brightness
+
+    return min_brightness, max_brightness
+
+
+def clamp_brightness(percent: int, min_val: int, max_val: int) -> int:
+    """Clamp brightness to the allowed automation range."""
+    return max(min_val, min(max_val, percent))
+
+
 def set_backlight(device_dir: str, percent: int) -> None:
     """Write the scaled brightness value to the backlight device."""
     display.set_brightness(percent, device_path=device_dir)
@@ -138,12 +172,23 @@ def main() -> None:
     lat, lon, day_brightness, night_brightness, twilight, backlight_device = read_conf(CONF_PATH)
     tzinfo = detect_tz()
     is_daytime: bool | None = None
+    last_brightness_limits: tuple[int, int] | None = None
 
     while True:
         now = datetime.now(tzinfo)
         currently_daylight, next_transition = next_events(lat, lon, tzinfo, twilight, now)
-        target_brightness = day_brightness if currently_daylight else night_brightness
-        if is_daytime != currently_daylight:
+
+        # Re-read brightness limits each cycle to pick up MQTT-persisted changes
+        brightness_min, brightness_max = get_brightness_limits()
+        limits_changed = last_brightness_limits != (brightness_min, brightness_max)
+        last_brightness_limits = (brightness_min, brightness_max)
+
+        # Determine target brightness, clamped to automation limits
+        raw_target = day_brightness if currently_daylight else night_brightness
+        target_brightness = clamp_brightness(raw_target, brightness_min, brightness_max)
+
+        # Apply brightness on state change or if limits changed
+        if is_daytime != currently_daylight or limits_changed:
             try:
                 set_backlight(backlight_device, target_brightness)
             except OSError:

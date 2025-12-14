@@ -44,6 +44,8 @@ class Topics:
     reboot: str
     volume: str
     brightness: str
+    brightness_min: str
+    brightness_max: str
     device: str
     availability: str
     update_availability: str
@@ -316,6 +318,8 @@ def load_config() -> EnvConfig:
         reboot=f"pulse/{hostname}/kiosk/reboot",
         volume=f"pulse/{hostname}/audio/volume/set",
         brightness=f"pulse/{hostname}/display/brightness/set",
+        brightness_min=f"pulse/{hostname}/display/brightness_min/set",
+        brightness_max=f"pulse/{hostname}/display/brightness_max/set",
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
@@ -584,6 +588,9 @@ class KioskMqttListener:
         self._refresh_font_options()
         # Brightness control is available only if a backlight is detected
         self._brightness_supported = display.get_current_brightness() is not None
+        # Brightness automation limits (loaded from env, updated via MQTT, persisted to config)
+        self._brightness_min = self._load_brightness_limit("PULSE_BRIGHTNESS_MIN", 0)
+        self._brightness_max = self._load_brightness_limit("PULSE_BRIGHTNESS_MAX", 100)
         overlay_host = self.overlay_config.bind_address
         if overlay_host in {"0.0.0.0", "::"}:
             overlay_host = "localhost"
@@ -647,6 +654,15 @@ class KioskMqttListener:
 
     def log(self, message: str) -> None:
         log(message)
+
+    @staticmethod
+    def _load_brightness_limit(env_var: str, default: int) -> int:
+        """Load a brightness limit from environment, clamped to 0-100."""
+        try:
+            value = int(os.environ.get(env_var, default))
+            return max(0, min(100, value))
+        except (ValueError, TypeError):
+            return default
 
     def _build_origin(self) -> dict[str, Any]:
         origin: dict[str, Any] = {
@@ -1503,6 +1519,36 @@ class KioskMqttListener:
             )
             components["Screen Brightness"] = brightness_control
 
+            brightness_min_control = build_number_entity(
+                "Brightness Min",
+                f"{self.config.hostname}_brightness_min",
+                self.config.topics.brightness_min,
+                f"{self.config.topics.telemetry}/brightness_min",
+                sanitized_hostname,
+                min_value=0,
+                max_value=100,
+                step=1,
+                unit_of_measurement="%",
+                icon="mdi:brightness-4",
+                entity_category="config",
+            )
+            components["Brightness Min"] = brightness_min_control
+
+            brightness_max_control = build_number_entity(
+                "Brightness Max",
+                f"{self.config.hostname}_brightness_max",
+                self.config.topics.brightness_max,
+                f"{self.config.topics.telemetry}/brightness_max",
+                sanitized_hostname,
+                min_value=0,
+                max_value=100,
+                step=1,
+                unit_of_measurement="%",
+                icon="mdi:brightness-7",
+                entity_category="config",
+            )
+            components["Brightness Max"] = brightness_max_control
+
         return {
             "device": self.device_info,
             "origin": self.origin,
@@ -1560,6 +1606,8 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.volume)
         if self._brightness_supported:
             client.subscribe(self.config.topics.brightness)
+            client.subscribe(self.config.topics.brightness_min)
+            client.subscribe(self.config.topics.brightness_max)
         client.subscribe(self.config.topics.overlay_font_command)
         if self.overlay_state:
             client.subscribe(self.assistant_topics.schedules_state)
@@ -1574,6 +1622,8 @@ class KioskMqttListener:
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_overlay_font_state(client)
+        if self._brightness_supported:
+            self._publish_brightness_limits_state(client)
         self._publish_version_metadata()
         # Publish cached latest version if available
         if self.latest_remote_version:
@@ -1605,6 +1655,10 @@ class KioskMqttListener:
             self.handle_volume(msg.payload)
         elif msg.topic == self.config.topics.brightness:
             self.handle_brightness(msg.payload)
+        elif msg.topic == self.config.topics.brightness_min:
+            self.handle_brightness_min(msg.payload)
+        elif msg.topic == self.config.topics.brightness_max:
+            self.handle_brightness_max(msg.payload)
         elif msg.topic == self.config.topics.overlay_font_command:
             self.handle_overlay_font(msg.payload)
         elif self.overlay_state and msg.topic == self.assistant_topics.info_card:
@@ -1683,6 +1737,75 @@ class KioskMqttListener:
             )
         else:
             self.log("brightness: failed to set brightness - no backlight device found")
+
+    def handle_brightness_min(self, payload: bytes) -> None:
+        """Handle brightness min limit command from MQTT."""
+        try:
+            value_str = payload.decode("utf-8", errors="ignore").strip()
+            value = int(float(value_str))
+            value = max(0, min(100, value))
+        except (ValueError, TypeError):
+            self.log(f"brightness_min: invalid payload '{payload}', expected 0-100")
+            return
+
+        if value == self._brightness_min:
+            return
+
+        self._brightness_min = value
+        self.log(f"brightness_min: set automation minimum to {value}%")
+        # Publish current state
+        self._safe_publish(
+            None,
+            f"{self.config.topics.telemetry}/brightness_min",
+            str(value),
+            qos=0,
+            retain=True,
+        )
+        # Persist to config file
+        persist_preference("brightness_min", str(value))
+
+    def handle_brightness_max(self, payload: bytes) -> None:
+        """Handle brightness max limit command from MQTT."""
+        try:
+            value_str = payload.decode("utf-8", errors="ignore").strip()
+            value = int(float(value_str))
+            value = max(0, min(100, value))
+        except (ValueError, TypeError):
+            self.log(f"brightness_max: invalid payload '{payload}', expected 0-100")
+            return
+
+        if value == self._brightness_max:
+            return
+
+        self._brightness_max = value
+        self.log(f"brightness_max: set automation maximum to {value}%")
+        # Publish current state
+        self._safe_publish(
+            None,
+            f"{self.config.topics.telemetry}/brightness_max",
+            str(value),
+            qos=0,
+            retain=True,
+        )
+        # Persist to config file
+        persist_preference("brightness_max", str(value))
+
+    def _publish_brightness_limits_state(self, client: mqtt.Client | None) -> None:
+        """Publish current brightness limit states to MQTT."""
+        self._safe_publish(
+            client,
+            f"{self.config.topics.telemetry}/brightness_min",
+            str(self._brightness_min),
+            qos=0,
+            retain=True,
+        )
+        self._safe_publish(
+            client,
+            f"{self.config.topics.telemetry}/brightness_max",
+            str(self._brightness_max),
+            qos=0,
+            retain=True,
+        )
 
     def handle_overlay_font(self, payload: bytes) -> None:
         """Handle overlay font selection from Home Assistant."""
