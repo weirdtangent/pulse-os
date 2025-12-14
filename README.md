@@ -166,6 +166,10 @@ See the dedicated [troubleshooting guide](docs/troubleshooting.md) for the full 
 ### Build & Quality Status
 
 ![Lint](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=lint&logo=python)
-![Build & Release](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=release&logo=githubactions)
+![Tests](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=tests&logo=pytest)
+![CI](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/build.yaml?branch=main&label=ci&logo=githubactions)
 ![Release](https://img.shields.io/github/v/release/weirdtangent/pulse-os?sort=semver)
+![Python](https://img.shields.io/badge/python-3.13%20%7C%203.14-blue?logo=python&logoColor=white)
 ![License](https://img.shields.io/github/license/weirdtangent/pulse-os)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
