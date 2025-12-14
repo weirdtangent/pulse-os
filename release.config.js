@@ -23,19 +23,9 @@ module.exports = {
       },
     ],
     "@semantic-release/release-notes-generator",
-    [
-      "@semantic-release/changelog",
-      {
-        changelogFile: "CHANGELOG.md",
-      },
-    ],
-    [
-      "@semantic-release/git",
-      {
-        assets: ["CHANGELOG.md"],
-        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
-      },
-    ],
+    // Note: @semantic-release/changelog and @semantic-release/git removed
+    // because they require pushing to main, which is blocked by branch protection.
+    // Release notes are included in GitHub Releases instead.
     "@semantic-release/github",
   ],
 };
