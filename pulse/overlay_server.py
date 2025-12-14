@@ -11,11 +11,13 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from pulse.audio import play_sound, play_volume_feedback
 from pulse.sound_library import SoundLibrary, SoundSettings
 
 from .overlay import OverlayChange, OverlayStateManager, OverlayTheme, render_overlay_html
+from .overlay_assets import OVERLAY_JS
 
 Logger = Callable[[str], None]
 
@@ -153,6 +155,93 @@ class OverlayHttpServer:
             payload["volume"] = max(0, min(100, int(volume_value)))
         return payload
 
+    def _render_framed_overlay(self, target_url: str) -> str:
+        """Render an HTML page with target URL as background iframe and overlay on top."""
+        from html import escape as html_escape
+
+        snapshot = self.state.snapshot()
+        overlay_html = render_overlay_html(
+            snapshot,
+            self.theme,
+            clock_hour12=not self.config.clock_24h,
+            stop_endpoint=self.config.stop_endpoint,
+            info_endpoint=self.config.info_endpoint,
+        )
+        # Extract the body content from the overlay HTML (between <body> and </body>)
+        body_start = overlay_html.find("<body>")
+        body_end = overlay_html.find("</body>")
+        if body_start != -1 and body_end != -1:
+            overlay_body = overlay_html[body_start + 6 : body_end]
+        else:
+            overlay_body = ""
+        # Extract the style content
+        style_start = overlay_html.find("<style>")
+        style_end = overlay_html.find("</style>")
+        if style_start != -1 and style_end != -1:
+            overlay_style = overlay_html[style_start + 7 : style_end]
+        else:
+            overlay_style = ""
+        # Escape the target URL for use in HTML attribute
+        safe_url = html_escape(target_url, quote=True)
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pulse Overlay</title>
+<style>
+* {{
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}}
+html, body {{
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}}
+.frame-container {{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}}
+.frame-container iframe {{
+  width: 100%;
+  height: 100%;
+  border: none;
+}}
+.overlay-container {{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}}
+.overlay-container > * {{
+  pointer-events: auto;
+}}
+{overlay_style}
+</style>
+</head>
+<body>
+<div class="frame-container">
+  <iframe src="{safe_url}" allow="autoplay; fullscreen" allowfullscreen></iframe>
+</div>
+<div class="overlay-container">
+{overlay_body}
+</div>
+<script>
+{OVERLAY_JS}
+</script>
+</body>
+</html>
+"""
+
     def start(self) -> None:
         if self._server:
             return
@@ -210,10 +299,18 @@ class OverlayHttpServer:
                 self.end_headers()
 
             def do_HEAD(self) -> None:  # noqa: N802
-                self._serve_overlay(include_body=False)
+                path = self.path.split("?", 1)[0]
+                if path == "/overlay/frame":
+                    self._serve_frame(include_body=False)
+                else:
+                    self._serve_overlay(include_body=False)
 
             def do_GET(self) -> None:  # noqa: N802
-                self._serve_overlay(include_body=True)
+                path = self.path.split("?", 1)[0]
+                if path == "/overlay/frame":
+                    self._serve_frame(include_body=True)
+                else:
+                    self._serve_overlay(include_body=True)
 
             def do_POST(self) -> None:  # noqa: N802
                 path = self.path.split("?", 1)[0]
@@ -413,6 +510,24 @@ class OverlayHttpServer:
                     stop_endpoint=outer.config.stop_endpoint,
                     info_endpoint=outer.config.info_endpoint,
                 ).encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self._set_common_headers()
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html)))
+                self.end_headers()
+                if include_body:
+                    self.wfile.write(html)
+
+            def _serve_frame(self, *, include_body: bool) -> None:
+                """Serve a page with target URL as background iframe and overlay on top."""
+                parsed = urlparse(self.path)
+                query_params = parse_qs(parsed.query)
+                raw_url = query_params.get("url", [""])[0]
+                target_url = unquote(raw_url) if raw_url else ""
+                if not target_url:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Missing 'url' parameter")
+                    return
+                html = outer._render_framed_overlay(target_url).encode("utf-8")
                 self.send_response(HTTPStatus.OK)
                 self._set_common_headers()
                 self.send_header("Content-Type", "text/html; charset=utf-8")

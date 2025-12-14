@@ -38,6 +38,7 @@ from pulse.utils import parse_bool, sanitize_hostname_for_entity_id
 class Topics:
     home: str
     goto: str
+    goto_with_overlay: str
     update: str
     reboot: str
     volume: str
@@ -308,6 +309,7 @@ def load_config() -> EnvConfig:
     topics = Topics(
         home=f"pulse/{hostname}/kiosk/home",
         goto=f"pulse/{hostname}/kiosk/url/set",
+        goto_with_overlay=f"pulse/{hostname}/kiosk/url-with-overlay/set",
         update=f"pulse/{hostname}/kiosk/update",
         reboot=f"pulse/{hostname}/kiosk/reboot",
         volume=f"pulse/{hostname}/audio/volume/set",
@@ -1367,6 +1369,27 @@ class KioskMqttListener:
             return
         self.navigate(url)
 
+    def handle_goto_with_overlay(self, payload: bytes) -> None:
+        """Navigate to a URL with the overlay displayed on top."""
+        url = normalize_url(payload)
+        if not url:
+            self.log("GOTO-WITH-OVERLAY command ignored: empty payload")
+            return
+        if not self.overlay_config.enabled:
+            self.log("GOTO-WITH-OVERLAY falling back to direct navigation: overlay disabled")
+            self.navigate(url)
+            return
+        # Build the overlay frame URL with the target URL as a query parameter
+        overlay_host = self.overlay_config.bind_address
+        if overlay_host in {"0.0.0.0", "::"}:
+            overlay_host = "localhost"
+        if ":" in overlay_host and not overlay_host.startswith("["):
+            overlay_host = f"[{overlay_host}]"
+        encoded_url = urllib.parse.quote(url, safe="")
+        frame_url = f"http://{overlay_host}:{self.overlay_config.port}/overlay/frame?url={encoded_url}"
+        self.log(f"GOTO-WITH-OVERLAY: framing '{url}'")
+        self.navigate(frame_url)
+
     def build_device_definition(self) -> dict[str, Any]:
         availability = {
             "topic": self.config.topics.availability,
@@ -1515,6 +1538,7 @@ class KioskMqttListener:
         self._mqtt_client = client
         client.subscribe(self.config.topics.home)
         client.subscribe(self.config.topics.goto)
+        client.subscribe(self.config.topics.goto_with_overlay)
         client.subscribe(self.config.topics.update)
         client.subscribe(self.config.topics.reboot)
         client.subscribe(self.config.topics.volume)
@@ -1555,6 +1579,8 @@ class KioskMqttListener:
             self.handle_home()
         elif msg.topic == self.config.topics.goto:
             self.handle_goto(msg.payload)
+        elif msg.topic == self.config.topics.goto_with_overlay:
+            self.handle_goto_with_overlay(msg.payload)
         elif msg.topic == self.config.topics.update:
             self.handle_update()
         elif msg.topic == self.config.topics.reboot:
