@@ -10,7 +10,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_VERSION` | `VERSION` file | Automatically injected from the repo’s `VERSION` file; used for OTA/update checks. |
+| `PULSE_VERSION` | git tag | Automatically derived from the repo's git tag; used for OTA/update checks. |
 | `PULSE_USER` | `pulse` | Linux account that auto logs in and runs the kiosk + services. |
 
 ## Kiosk & Browser

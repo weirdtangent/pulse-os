@@ -15,9 +15,9 @@ BOOT_SPLASH="$BOOT_MOUNT/splash.rgb"
 FIRMWARE_LOGO="/lib/firmware/boot-splash.tga"
 LOCATION_FILE="/etc/pulse-location"
 
-VERSION_FILE="$REPO_DIR/VERSION"
-if [ -f "$VERSION_FILE" ]; then
-    VERSION="v$(tr -d '\r\n' <"$VERSION_FILE")"
+# Get version from git tag
+if command -v git >/dev/null 2>&1 && [ -d "$REPO_DIR/.git" ]; then
+    VERSION=$(git -C "$REPO_DIR" describe --tags --abbrev=0 2>/dev/null) || VERSION="unknown"
 else
     VERSION="unknown"
 fi
@@ -1059,7 +1059,7 @@ print_feature_summary() {
     # Set defaults for variables that might not be set
     local pulse_user="${PULSE_USER:-pulse}"
     local pulse_url="${PULSE_URL:-<not set>}"
-    local pulse_version="${PULSE_VERSION:-0.0.0}"
+    local pulse_version="${PULSE_VERSION:-${VERSION#v}}"
     local pulse_revive_interval="${PULSE_REVIVE_INTERVAL:-2}"
     local pulse_watchdog_interval="${PULSE_WATCHDOG_INTERVAL:-60}"
     local pulse_watchdog_limit="${PULSE_WATCHDOG_LIMIT:-5}"
@@ -1126,7 +1126,7 @@ print_feature_summary() {
         kv_block \
             "Version (PULSE_VERSION)" \
             "$pulse_version" \
-            "PulseOS version from VERSION file"
+            "PulseOS version from git tag"
         kv_block \
             "Revive Interval (PULSE_REVIVE_INTERVAL)" \
             "$pulse_revive_interval minutes" \
