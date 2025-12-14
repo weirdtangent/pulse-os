@@ -195,7 +195,7 @@ The repository includes a GitHub Actions workflow (`.github/workflows/build.yaml
 | **Test (Python 3.14)** | Runs the full pytest suite on Python 3.14 |
 | **Semantic Release** | Creates releases when commits follow conventional commit format (only on push to `main`) |
 
-All lint and test jobs must pass before the release job runs.
+All lint and test jobs must pass before the release job runs. The VERSION file is automatically updated after each release.
 
 ### Branch protection (recommended)
 
