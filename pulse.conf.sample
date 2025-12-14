@@ -133,6 +133,14 @@ PULSE_DAY_NIGHT_AUTO="true"
 # PULSE_VOLUME_TEST_SOUND — plays the heartbeat "thump-thump" after MQTT volume changes.
 PULSE_VOLUME_TEST_SOUND="true"
 
+# PULSE_BRIGHTNESS_MIN — minimum brightness (%) automations can set (default 0).
+# Manual MQTT/overlay control is not affected by this limit.
+# (default) PULSE_BRIGHTNESS_MIN="0"
+
+# PULSE_BRIGHTNESS_MAX — maximum brightness (%) automations can set (default 100).
+# Manual MQTT/overlay control is not affected by this limit.
+# (default) PULSE_BRIGHTNESS_MAX="100"
+
 # ============================================================================
 # Display Selection (DSI vs HDMI)
 # ============================================================================

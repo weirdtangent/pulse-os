@@ -61,12 +61,20 @@ Need to restart everything locally without re-running the whole setup flow? Run 
 
 ### MQTT Number Entities (volume & brightness)
 
-Home Assistant also discovers two `number` entities published by the same service:
+Home Assistant also discovers several `number` entities published by the same service:
 
 - `Audio Volume` → topic `pulse/<hostname>/audio/volume/set`
 - `Screen Brightness` → topic `pulse/<hostname>/display/brightness/set`
+- `Brightness Min` → topic `pulse/<hostname>/display/brightness_min/set`
+- `Brightness Max` → topic `pulse/<hostname>/display/brightness_max/set`
 
-Both sliders publish retained telemetry updates, and the telemetry loop re-sends the live hardware levels every ~15 seconds so brightness changes from other services (like the sunrise scheduler) and any volume adjustments stay reflected in Home Assistant. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/sounds/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
+Both volume and brightness sliders publish retained telemetry updates, and the telemetry loop re-sends the live hardware levels every ~15 seconds so brightness changes from other services (like the sunrise scheduler) and any volume adjustments stay reflected in Home Assistant. The volume slider automatically plays a short notification beep after each successful adjustment so you can hear the new level immediately; set `PULSE_VOLUME_TEST_SOUND="false"` in `pulse.conf` if you prefer silent changes. The WAV lives in `assets/sounds/notification.wav`—run `bin/tools/generate-notification-tone.py` if you ever want to regenerate or remix it.
+
+#### Brightness automation limits
+
+The `Brightness Min` and `Brightness Max` sliders control the range that **automations** (like the sunrise/sunset scheduler) can use. For example, set `Brightness Min` to 1% in a bedroom so night mode never goes completely dark, or set it to 20% in a living room for a brighter minimum. Manual brightness adjustments via the `Screen Brightness` slider or overlay controls are **not** constrained by these limits—you can still manually set 0% or 100% if needed.
+
+Changes to these limits are persisted to `pulse.conf` automatically, so they survive reboots and service restarts.
 
 ### Overlay font select
 

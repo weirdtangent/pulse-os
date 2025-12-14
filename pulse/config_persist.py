@@ -286,6 +286,9 @@ PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
     "sound_timer": ("PULSE_SOUND_TIMER", str),
     "sound_reminder": ("PULSE_SOUND_REMINDER", str),
     "sound_notification": ("PULSE_SOUND_NOTIFICATION", str),
+    # Brightness automation limits
+    "brightness_min": ("PULSE_BRIGHTNESS_MIN", str),
+    "brightness_max": ("PULSE_BRIGHTNESS_MAX", str),
 }
 
 

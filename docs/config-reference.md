@@ -63,6 +63,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | --- | --- | --- |
 | `PULSE_DAY_NIGHT_AUTO` | `true` | Sunrise/sunset-driven backlight changes. |
 | `PULSE_VOLUME_TEST_SOUND` | `true` | Plays a short “thump” after MQTT volume changes. |
+| `PULSE_BRIGHTNESS_MIN` | `0` | Minimum brightness (%) that automations can set. Manual MQTT/overlay control is not affected. |
+| `PULSE_BRIGHTNESS_MAX` | `100` | Maximum brightness (%) that automations can set. Manual MQTT/overlay control is not affected. |
 | `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. |
 | `PULSE_BT_MAC` | *(empty)* | Optional explicit Bluetooth MAC to target. |
 
