@@ -21,6 +21,7 @@ import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
 from pulse import audio, display
+from pulse.config_persist import persist_preference
 from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_select_entity
 from pulse.overlay import (
     DEFAULT_FONT_STACK,
@@ -1704,6 +1705,10 @@ class KioskMqttListener:
         self.log(f"overlay-font: set to '{label}'")
         self._publish_overlay_font_state(None)
         self._apply_overlay_font_choice(reason="font")
+        # Persist the font choice to config
+        # If "System default", persist the default stack; otherwise persist the selected font
+        config_value = normalized_choice if normalized_choice else self._default_font_stack
+        persist_preference("overlay_font", config_value)
 
     def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)

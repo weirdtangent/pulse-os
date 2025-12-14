@@ -739,6 +739,10 @@ class ScheduleService:
             await self.stop_event(event_id, reason="shutdown")
         self._started = False
 
+    def update_sound_settings(self, settings: SoundSettings) -> None:
+        """Update sound settings for future playback."""
+        self._sound_settings = settings
+
     async def pause_active_audio(self) -> None:
         async with self._lock:
             handles = [active.handle for active in self._active.values()]
