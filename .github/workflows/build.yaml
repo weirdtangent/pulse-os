@@ -96,6 +96,16 @@ jobs:
         with:
           semantic_version: 24
 
+      - name: Update VERSION file
+        if: steps.semrel.outputs.new_release_published == 'true'
+        run: |
+          echo "${{ steps.semrel.outputs.new_release_version }}" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: update VERSION to ${{ steps.semrel.outputs.new_release_version }} [skip ci]"
+          git push https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
       - name: Export PULSE_VERSION
         id: pulse_version
         if: always()
