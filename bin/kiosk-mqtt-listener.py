@@ -1153,9 +1153,7 @@ class KioskMqttListener:
         return interval_hours * 3600
 
     def _detect_local_version(self) -> str | None:
-        if self.config.sw_version:
-            return self.config.sw_version
-        # Try to get version from git tag
+        # Always try git first to get the most current version (env var may be stale after git pull)
         try:
             result = subprocess.run(
                 ["git", "describe", "--tags", "--abbrev=0"],
@@ -1167,10 +1165,12 @@ class KioskMqttListener:
             if result.returncode == 0:
                 tag = result.stdout.strip()
                 # Strip leading 'v' if present
-                return tag.lstrip("v") if tag else None
+                if tag:
+                    return tag.lstrip("v")
         except (subprocess.SubprocessError, OSError):
             pass
-        return None
+        # Fall back to config sw_version if git detection failed
+        return self.config.sw_version
 
     @staticmethod
     def _parse_version(value: str | None) -> Version | None:
