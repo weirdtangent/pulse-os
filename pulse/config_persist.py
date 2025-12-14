@@ -271,17 +271,44 @@ def update_config(var_name: str, value: str, *, logger: logging.Logger | None = 
     persister.update(var_name, value)
 
 
-# Mapping from preference keys to (config_var_name, value_transformer)
+# Mapping from MQTT preference keys to (config_var_name, value_transformer).
+#
+# MQTT preference keys are short, API-friendly names used in topics like:
+#   pulse/<hostname>/assistant/preferences/<key>/set
+#   pulse/<hostname>/assistant/preferences/<key>/state
+#
+# Config variable names are the full uppercase names used in pulse.conf.
+# The mapping allows some naming divergence for readability on both sides:
+#
+#   MQTT Key          -> Config Variable               -> Notes
+#   ─────────────────────────────────────────────────────────────────────
+#   wake_sound        -> PULSE_ASSISTANT_WAKE_SOUND    -> on/off -> true/false
+#   speaking_style    -> PULSE_ASSISTANT_SPEAKING_STYLE
+#   wake_sensitivity  -> PULSE_ASSISTANT_WAKE_SENSITIVITY
+#   ha_pipeline       -> HOME_ASSISTANT_ASSIST_PIPELINE  (ha_ is shorthand for HOME_ASSISTANT_)
+#   llm_provider      -> PULSE_ASSISTANT_PROVIDER        (llm_ prefix clarifies context)
+#   log_llm           -> PULSE_ASSISTANT_LOG_LLM       -> on/off -> true/false
+#   overlay_font      -> PULSE_OVERLAY_FONT_FAMILY       (font -> FONT_FAMILY for CSS context)
+#   sound_alarm       -> PULSE_SOUND_ALARM
+#   sound_timer       -> PULSE_SOUND_TIMER
+#   sound_reminder    -> PULSE_SOUND_REMINDER
+#   sound_notification-> PULSE_SOUND_NOTIFICATION
+#   brightness_min    -> PULSE_BRIGHTNESS_MIN
+#   brightness_max    -> PULSE_BRIGHTNESS_MAX
+#
 PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
-    # Existing preferences
+    # Assistant preferences
     "wake_sound": ("PULSE_ASSISTANT_WAKE_SOUND", lambda v: "true" if v == "on" else "false"),
     "speaking_style": ("PULSE_ASSISTANT_SPEAKING_STYLE", str),
     "wake_sensitivity": ("PULSE_ASSISTANT_WAKE_SENSITIVITY", str),
+    # Home Assistant integration (ha_ is shorthand for HOME_ASSISTANT_)
     "ha_pipeline": ("HOME_ASSISTANT_ASSIST_PIPELINE", str),
+    # LLM settings (llm_ prefix clarifies the MQTT key refers to LLM provider choice)
     "llm_provider": ("PULSE_ASSISTANT_PROVIDER", str),
     "log_llm": ("PULSE_ASSISTANT_LOG_LLM", lambda v: "true" if v == "on" else "false"),
+    # Overlay settings (font -> FONT_FAMILY matches CSS terminology)
     "overlay_font": ("PULSE_OVERLAY_FONT_FAMILY", str),
-    # Sound preferences
+    # Sound preferences (sound_<kind> -> PULSE_SOUND_<KIND>)
     "sound_alarm": ("PULSE_SOUND_ALARM", str),
     "sound_timer": ("PULSE_SOUND_TIMER", str),
     "sound_reminder": ("PULSE_SOUND_REMINDER", str),
