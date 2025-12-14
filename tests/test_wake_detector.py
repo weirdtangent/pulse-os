@@ -54,11 +54,21 @@ def test_wake_endpoint_streams_fall_back_when_ha_endpoint_missing():
 
     streams = detector._wake_endpoint_streams()
 
-    assert len(streams) == 1
-    assert set(streams[0].models) == {"hey_jarvis", "hey_house"}
+    # Each model gets its own stream; when HA endpoint is missing, both fall back to Pulse
+    assert len(streams) == 2
+    all_models = {model for stream in streams for model in stream.models}
+    assert all_models == {"hey_jarvis", "hey_house"}
+    # Both should have "Pulse" label since HA endpoint is missing
+    for stream in streams:
+        assert "Pulse" in stream.labels
 
 
-def test_wake_endpoint_streams_merge_when_endpoints_match():
+def test_wake_endpoint_streams_separate_per_model_even_when_endpoints_match():
+    """Each model gets its own stream even when endpoints match.
+
+    This is intentional to work around openWakeWord limitation where only
+    the first model in a Detect message is loaded.
+    """
     shared_endpoint = WyomingEndpoint(host="pulse.local", port=10400)
     detector = _build_detector(
         ["hey_jarvis", "hey_house"],
@@ -68,7 +78,9 @@ def test_wake_endpoint_streams_merge_when_endpoints_match():
 
     streams = detector._wake_endpoint_streams()
 
-    assert len(streams) == 1
-    merged = streams[0]
-    assert set(merged.labels) == {"Pulse", "Home Assistant"}
-    assert set(merged.models) == {"hey_jarvis", "hey_house"}
+    # Each model gets its own stream
+    assert len(streams) == 2
+    all_models = {model for stream in streams for model in stream.models}
+    all_labels = {label for stream in streams for label in stream.labels}
+    assert all_models == {"hey_jarvis", "hey_house"}
+    assert all_labels == {"Pulse", "Home Assistant"}

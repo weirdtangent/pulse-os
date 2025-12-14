@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -20,7 +23,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install tooling
         run: |
@@ -33,11 +36,40 @@ jobs:
       - name: Black format check
         run: black --check .
 
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" || pip install -e .
+          pip install pytest
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
+    # Only run on push to main, not on PRs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - lint
+      - test
 
     outputs:
       published: ${{ steps.semrel.outputs.new_release_published }}
@@ -89,4 +121,3 @@ jobs:
           else
             echo "VERSION file not found; skipping export." >&2
           fi
-

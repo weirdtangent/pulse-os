@@ -97,7 +97,8 @@ def _local_now() -> datetime:
 
 def _parse_datetime(text: str) -> datetime | None:
     with patch("pulse.datetime_utils.utc_now", _utc_now):
-        return parse_datetime(text)
+        with patch("pulse.datetime_utils.local_now", _local_now):
+            return parse_datetime(text)
 
 
 def _ensure_list(value) -> list[dict]:
