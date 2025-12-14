@@ -95,29 +95,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           semantic_version: 24
-          extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
-
-      - name: Update VERSION file in repo
-        if: steps.semrel.outputs.new_release_published == 'true'
-        run: |
-          echo "${{ steps.semrel.outputs.new_release_version }}" > VERSION
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git diff --cached --quiet || git commit -m "chore: update VERSION to ${{ steps.semrel.outputs.new_release_version }}"
-          git push
 
       - name: Export PULSE_VERSION
         id: pulse_version
         if: always()
         run: |
-          if [[ -f VERSION ]]; then
+          # Use semantic-release output if available, otherwise fall back to VERSION file
+          if [[ "${{ steps.semrel.outputs.new_release_published }}" == "true" ]]; then
+            version="${{ steps.semrel.outputs.new_release_version }}"
+          elif [[ -f VERSION ]]; then
             version="$(tr -d '\n\r ' < VERSION)"
-            echo "PULSE_VERSION=${version}" >> "$GITHUB_ENV"
-            echo "value=${version}" >> "$GITHUB_OUTPUT"
-            echo "PULSE_VERSION=${version}"
           else
-            echo "VERSION file not found; skipping export." >&2
+            echo "No version available; skipping export." >&2
+            exit 0
           fi
+          echo "PULSE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          echo "PULSE_VERSION=${version}"
