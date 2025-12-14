@@ -42,7 +42,9 @@ from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_volume_feedback
+from pulse.config_persist import persist_preference
 from pulse.datetime_utils import parse_datetime, parse_duration_seconds
+from pulse.sound_library import SoundKind, SoundLibrary, SoundSettings
 
 LOGGER = logging.getLogger("pulse-assistant")
 
@@ -120,6 +122,10 @@ class PulseAssistant:
             on_active_event=self._handle_active_schedule_event,
             sound_settings=self.config.sounds,
         )
+        # Sound library for dynamic sound options
+        self._sound_library = SoundLibrary(custom_dir=self.config.sounds.custom_dir)
+        self._sound_options: dict[str, list[tuple[str, str]]] = {}
+        self._refresh_sound_options()
         self._calendar_events: list[dict[str, Any]] = []
         self._calendar_updated_at: float | None = None
         self._latest_schedule_snapshot: dict[str, Any] | None = None
@@ -929,6 +935,11 @@ class PulseAssistant:
             self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
             self.mqtt.subscribe(f"{base}/llm_provider/set", self._handle_llm_provider_command)
             self.mqtt.subscribe(f"{base}/log_llm/set", self._handle_log_llm_command)
+            # Sound preferences
+            self.mqtt.subscribe(f"{base}/sound_alarm/set", self._handle_sound_alarm_command)
+            self.mqtt.subscribe(f"{base}/sound_timer/set", self._handle_sound_timer_command)
+            self.mqtt.subscribe(f"{base}/sound_reminder/set", self._handle_sound_reminder_command)
+            self.mqtt.subscribe(f"{base}/sound_notification/set", self._handle_sound_notification_command)
         except RuntimeError:
             LOGGER.debug("MQTT client not ready for preference subscriptions")
 
@@ -973,7 +984,9 @@ class PulseAssistant:
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes"}
         self.preferences = replace(self.preferences, wake_sound=enabled)
-        self._publish_preference_state("wake_sound", "on" if enabled else "off")
+        state = "on" if enabled else "off"
+        self._publish_preference_state("wake_sound", state)
+        persist_preference("wake_sound", state, logger=LOGGER)
 
     def _handle_log_llm_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -981,7 +994,96 @@ class PulseAssistant:
         if self._log_llm_messages == enabled:
             return
         self._log_llm_messages = enabled
-        self._publish_preference_state("log_llm", "on" if enabled else "off")
+        state = "on" if enabled else "off"
+        self._publish_preference_state("log_llm", state)
+        persist_preference("log_llm", state, logger=LOGGER)
+
+    def _refresh_sound_options(self) -> None:
+        """Build sound option lists for each kind from the sound library."""
+        built_in = self._sound_library.built_in_sounds()
+        custom = self._sound_library.custom_sounds()
+        all_sounds = built_in + custom
+
+        for kind in ("alarm", "timer", "reminder", "notification"):
+            options: list[tuple[str, str]] = []
+            for info in all_sounds:
+                if kind in info.kinds:
+                    options.append((info.sound_id, info.label))
+            # Sort by label for display
+            options.sort(key=lambda x: x[1].lower())
+            self._sound_options[kind] = options
+
+    def _get_sound_options_for_kind(self, kind: str) -> list[str]:
+        """Get list of sound labels for a given kind."""
+        return [label for _, label in self._sound_options.get(kind, [])]
+
+    def _get_sound_id_by_label(self, kind: str, label: str) -> str | None:
+        """Look up sound_id from its label."""
+        for sound_id, sound_label in self._sound_options.get(kind, []):
+            if sound_label == label:
+                return sound_id
+        return None
+
+    def _get_sound_label_by_id(self, kind: str, sound_id: str) -> str | None:
+        """Look up label from sound_id."""
+        for sid, label in self._sound_options.get(kind, []):
+            if sid == sound_id:
+                return label
+        return None
+
+    def _handle_sound_command(self, kind: SoundKind, payload: str) -> None:
+        """Handle a sound preference command for a given kind."""
+        label = payload.strip()
+        if not label:
+            return
+        sound_id = self._get_sound_id_by_label(kind, label)
+        if sound_id is None:
+            LOGGER.debug("Ignoring unknown %s sound: '%s'", kind, label)
+            return
+        current_id = self._get_current_sound_id(kind)
+        if sound_id == current_id:
+            return
+        # Update sound settings
+        self._update_sound_setting(kind, sound_id)
+        self._publish_preference_state(f"sound_{kind}", label)
+        persist_preference(f"sound_{kind}", sound_id, logger=LOGGER)
+        LOGGER.info("Set %s sound to '%s' (%s)", kind, label, sound_id)
+
+    def _get_current_sound_id(self, kind: SoundKind) -> str:
+        """Get the current sound_id for a given kind."""
+        sounds = self.config.sounds
+        return {
+            "alarm": sounds.default_alarm,
+            "timer": sounds.default_timer,
+            "reminder": sounds.default_reminder,
+            "notification": sounds.default_notification,
+        }.get(kind, "")
+
+    def _update_sound_setting(self, kind: SoundKind, sound_id: str) -> None:
+        """Update the sound setting for a given kind."""
+        sounds = self.config.sounds
+        new_sounds = SoundSettings(
+            default_alarm=sound_id if kind == "alarm" else sounds.default_alarm,
+            default_timer=sound_id if kind == "timer" else sounds.default_timer,
+            default_reminder=sound_id if kind == "reminder" else sounds.default_reminder,
+            default_notification=sound_id if kind == "notification" else sounds.default_notification,
+            custom_dir=sounds.custom_dir,
+        )
+        # Update config sounds and schedule_service
+        self.config = replace(self.config, sounds=new_sounds)
+        self.schedule_service.update_sound_settings(new_sounds)
+
+    def _handle_sound_alarm_command(self, payload: str) -> None:
+        self._handle_sound_command("alarm", payload)
+
+    def _handle_sound_timer_command(self, payload: str) -> None:
+        self._handle_sound_command("timer", payload)
+
+    def _handle_sound_reminder_command(self, payload: str) -> None:
+        self._handle_sound_command("reminder", payload)
+
+    def _handle_sound_notification_command(self, payload: str) -> None:
+        self._handle_sound_command("notification", payload)
 
     def _handle_now_playing_message(self, payload: str) -> None:
         normalized = payload.strip()
@@ -998,6 +1100,7 @@ class PulseAssistant:
             return
         self.preferences = replace(self.preferences, speaking_style=value)  # type: ignore[arg-type]
         self._publish_preference_state("speaking_style", value)
+        persist_preference("speaking_style", value, logger=LOGGER)
 
     def _handle_wake_sensitivity_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -1008,6 +1111,7 @@ class PulseAssistant:
             return
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
         self._publish_preference_state("wake_sensitivity", value)
+        persist_preference("wake_sensitivity", value, logger=LOGGER)
         self._mark_wake_context_dirty()
 
     def _handle_earmuffs_state_restore(self, payload: str) -> None:
@@ -1101,6 +1205,11 @@ class PulseAssistant:
         self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
         self._publish_preference_state("llm_provider", self._active_llm_provider())
         self._publish_preference_state("log_llm", "on" if self._log_llm_messages else "off")
+        # Sound preferences (publish labels, not sound IDs)
+        for kind in ("alarm", "timer", "reminder", "notification"):
+            sound_id = self._get_current_sound_id(kind)  # type: ignore[arg-type]
+            label = self._get_sound_label_by_id(kind, sound_id) or sound_id
+            self._publish_preference_state(f"sound_{kind}", label)
 
     def _publish_preference_state(self, key: str, value: str) -> None:
         topic = f"{self._preferences_topic}/{key}/state"
@@ -2520,7 +2629,9 @@ class PulseAssistant:
     def _handle_ha_pipeline_command(self, payload: str) -> None:
         value = payload.strip()
         self._ha_pipeline_override = value or None
-        self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
+        pipeline_value = self._active_ha_pipeline() or ""
+        self._publish_preference_state("ha_pipeline", pipeline_value)
+        persist_preference("ha_pipeline", pipeline_value, logger=LOGGER)
 
     def _active_ha_pipeline(self) -> str | None:
         return self._ha_pipeline_override or self.config.home_assistant.assist_pipeline
@@ -2535,7 +2646,9 @@ class PulseAssistant:
             LOGGER.debug("Ignoring invalid LLM provider: %s", payload)
             return
         self.llm = self._build_llm_provider()
-        self._publish_preference_state("llm_provider", self._active_llm_provider())
+        provider = self._active_llm_provider()
+        self._publish_preference_state("llm_provider", provider)
+        persist_preference("llm_provider", provider, logger=LOGGER)
 
     def _active_llm_provider(self) -> str:
         provider = self._llm_provider_override or self.config.llm.provider or "openai"
@@ -2698,6 +2811,33 @@ class PulseAssistant:
             ),
             retain=True,
         )
+        # Sound preference selects
+        sound_configs = [
+            ("alarm", "Alarm Sound", "mdi:alarm"),
+            ("timer", "Timer Sound", "mdi:timer-outline"),
+            ("reminder", "Reminder Sound", "mdi:bell-ring-outline"),
+            ("notification", "Notification Sound", "mdi:bell-outline"),
+        ]
+        for kind, name, icon in sound_configs:
+            options = self._get_sound_options_for_kind(kind)
+            if not options:
+                continue
+            self._publish_message(
+                f"{prefix}/select/{hostname_safe}_sound_{kind}/config",
+                json.dumps(
+                    {
+                        "name": f"{self.config.device_name} {name}",
+                        "unique_id": f"{self.config.hostname}-sound-{kind}",
+                        "state_topic": f"{self._preferences_topic}/sound_{kind}/state",
+                        "command_topic": f"{self._preferences_topic}/sound_{kind}/set",
+                        "options": options,
+                        "device": device,
+                        "entity_category": "config",
+                        "icon": icon,
+                    }
+                ),
+                retain=True,
+            )
 
 
 async def main() -> None:
