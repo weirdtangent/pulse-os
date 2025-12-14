@@ -178,3 +178,56 @@ Responses are implicit—the kiosk publishes the updated state snapshot immediat
 
 Local transcript/response logging to `journalctl` is controlled by `PULSE_ASSISTANT_LOG_TRANSCRIPTS` (default false). Publishing transcript/response JSON to MQTT is controlled by `PULSE_ASSISTANT_LOG_LLM` or the MQTT switch `pulse/<hostname>/assistant/preferences/log_llm` (`state` mirrors current value, `set` accepts `on`/`off`).
 
+---
+
+## Assistant Preferences (MQTT ↔ Config)
+
+Several assistant and kiosk settings can be changed at runtime via MQTT and are automatically persisted to `pulse.conf`. Home Assistant discovers these as `select` or `switch` entities.
+
+### Preference topics
+
+All assistant preferences use the topic pattern:
+
+```
+pulse/<hostname>/assistant/preferences/<key>/set    # Command (publish new value)
+pulse/<hostname>/assistant/preferences/<key>/state  # State (retained, reflects current value)
+```
+
+### MQTT preference key to config variable mapping
+
+MQTT preference keys are short, API-friendly names. Config variables are the full uppercase names in `pulse.conf`. The table below shows how they map:
+
+| MQTT Preference Key | Config Variable | Value Transform | Notes |
+| ------------------- | --------------- | --------------- | ----- |
+| `wake_sound` | `PULSE_ASSISTANT_WAKE_SOUND` | `on`/`off` → `true`/`false` | Chime when wake word fires |
+| `speaking_style` | `PULSE_ASSISTANT_SPEAKING_STYLE` | passthrough | `relaxed`, `normal`, `aggressive` |
+| `wake_sensitivity` | `PULSE_ASSISTANT_WAKE_SENSITIVITY` | passthrough | `low`, `normal`, `high` |
+| `ha_pipeline` | `HOME_ASSISTANT_ASSIST_PIPELINE` | passthrough | `ha_` is shorthand for `HOME_ASSISTANT_` |
+| `llm_provider` | `PULSE_ASSISTANT_PROVIDER` | passthrough | `llm_` prefix clarifies LLM context |
+| `log_llm` | `PULSE_ASSISTANT_LOG_LLM` | `on`/`off` → `true`/`false` | Publish transcripts to MQTT |
+| `overlay_font` | `PULSE_OVERLAY_FONT_FAMILY` | passthrough | `font` → `FONT_FAMILY` (CSS terminology) |
+| `sound_alarm` | `PULSE_SOUND_ALARM` | passthrough | Sound ID for alarm events |
+| `sound_timer` | `PULSE_SOUND_TIMER` | passthrough | Sound ID for timer events |
+| `sound_reminder` | `PULSE_SOUND_REMINDER` | passthrough | Sound ID for reminder events |
+| `sound_notification` | `PULSE_SOUND_NOTIFICATION` | passthrough | Sound ID for notifications/volume chime |
+
+### Kiosk preferences (via kiosk-mqtt service)
+
+The kiosk MQTT service exposes additional preferences that are persisted the same way:
+
+| MQTT Topic | Config Variable | Notes |
+| ---------- | --------------- | ----- |
+| `pulse/<hostname>/display/brightness_min/set` | `PULSE_BRIGHTNESS_MIN` | Min brightness for automations |
+| `pulse/<hostname>/display/brightness_max/set` | `PULSE_BRIGHTNESS_MAX` | Max brightness for automations |
+| `pulse/<hostname>/overlay/font/set` | `PULSE_OVERLAY_FONT_FAMILY` | Overlay font selection |
+
+### Naming rationale
+
+The MQTT keys intentionally differ slightly from config variable names to be shorter and more intuitive for API/automation use:
+
+- **`ha_pipeline`** uses the common `ha_` abbreviation instead of the full `HOME_ASSISTANT_ASSIST_` prefix
+- **`llm_provider`** adds the `llm_` prefix (the config var is just `PULSE_ASSISTANT_PROVIDER`) to clarify context in MQTT topics
+- **`overlay_font`** maps to `PULSE_OVERLAY_FONT_FAMILY` since the config follows CSS `font-family` terminology
+
+Changes made via MQTT are debounced (2 second delay) before being written to `pulse.conf`, so rapid adjustments don't cause excessive disk I/O. A backup is created automatically before each write.
+

@@ -59,6 +59,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 
 ## Device Preferences & Toggles
 
+> **Tip:** Many of these preferences can be changed at runtime via MQTT and are automatically persisted back to `pulse.conf`. See [MQTT and Telemetry → Assistant Preferences](mqtt-and-telemetry.md#assistant-preferences-mqtt--config) for the full mapping between MQTT topic keys and config variable names.
+
 | Key | Default | Description |
 | --- | --- | --- |
 | `PULSE_DAY_NIGHT_AUTO` | `true` | Sunrise/sunset-driven backlight changes. |
@@ -91,6 +93,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_REBOOT_MAX_COUNT` | `3` | Maximum automated reboots within the window above. |
 
 ## Voice Assistant — Pipeline & Routing
+
+> **Note:** Settings marked with ⚡ can be changed at runtime via MQTT selects/switches in Home Assistant and are automatically persisted to `pulse.conf`. See [MQTT and Telemetry → Assistant Preferences](mqtt-and-telemetry.md#assistant-preferences-mqtt--config) for the mapping between MQTT keys and config variables.
 
 | Key | Default | Description |
 | --- | --- | --- |
