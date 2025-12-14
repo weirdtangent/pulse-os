@@ -10,13 +10,13 @@ The `pulse-assistant` daemon streams wake audio to your Wyoming servers, calls t
 
 ### Real-time headlines, forecasts, and sports
 
-Short prompts such as “What’s the news?”, “What’s the weather tomorrow?”, “What are the NFL standings?”, or “When do the Penguins play next?” are intercepted before they reach the LLM. The assistant uses:
+Short prompts such as "What's the news?", "What's the weather tomorrow?", "What are the NFL standings?", or "When do the Penguins play next?" are intercepted before they reach the LLM. The assistant uses:
 
 - **NewsAPI.org** (or any compatible endpoint) for the latest US/global headlines — set `PULSE_NEWS_API_KEY`, country, category, and language in `pulse.conf`.
 - **Open-Meteo** forecasts for any location (`PULSE_WEATHER_LOCATION` accepts lat/lon, ZIP, city, Google Plus Code, or what3words with `WHAT3WORDS_API_KEY`). Adjust units/language/day count via `PULSE_WEATHER_UNITS`, `PULSE_WEATHER_LANGUAGE`, and `PULSE_WEATHER_FORECAST_DAYS`.
-- **ESPN public feeds** for general sports headlines, league summaries, standings, and favorite teams. Configure default countries/leagues with `PULSE_SPORTS_DEFAULT_COUNTRY`, `PULSE_SPORTS_DEFAULT_LEAGUES`, and seed `PULSE_SPORTS_FAVORITE_TEAMS` so prompts like “When is the next Steelers game?” have context.
+- **ESPN public feeds** for general sports headlines, league summaries, standings, and favorite teams. Configure default countries/leagues with `PULSE_SPORTS_DEFAULT_COUNTRY`, `PULSE_SPORTS_DEFAULT_LEAGUES`, and seed `PULSE_SPORTS_FAVORITE_TEAMS` so prompts like "When is the next Steelers game?" have context.
 
-Responses are spoken immediately (and published on the MQTT response topic) even if the LLM is offline. See the “Real-time news, weather, and sports” section in [`docs/voice-assistant.md`](voice-assistant.md#real-time-news-weather-and-sports) for the full variable list.
+Responses are spoken immediately (and published on the MQTT response topic) even if the LLM is offline. See the "Real-time news, weather, and sports" section in [`docs/voice-assistant.md`](voice-assistant.md#real-time-news-weather-and-sports) for the full variable list.
 
 ### Dual wake-word pipelines
 
@@ -36,14 +36,14 @@ When the kiosk is already playing audio we enforce a higher openWakeWord trigger
 
 - Raise the value if music at moderate volume still wakes Jarvis.
 - Lower it (minimum **2**) if you often say the wake word softly while the kiosk is making noise.
-- When Home Assistant access is configured and `PULSE_MEDIA_PLAYER_ENTITY` points at your Music Assistant player, the assistant auto-pauses that entity as soon as you say the wake word and resumes playback ~2 s after the spoken response finishes.
+- When Home Assistant access is configured and `PULSE_MEDIA_PLAYER_ENTITY` points at your Music Assistant player, the assistant auto-pauses that entity as soon as you say the wake word and resumes playback ~2 s after the spoken response finishes.
 
 ### Voice music controls
 
 With `HOME_ASSISTANT_*` credentials and `PULSE_MEDIA_PLAYER_ENTITY` set, you can ask the Pulse pipeline to control or describe the active Music Assistant player directly. Example phrases:
 
-- “Pause the music”, “Stop the music”, “Next song”.
-- “What song is this?” / “Who is this?” → pulls artist/title from the media player attributes and reads them back.
+- "Pause the music", "Stop the music", "Next song".
+- "What song is this?" / "Who is this?" → pulls artist/title from the media player attributes and reads them back.
 
 ### Transcript logging opt-out
 
@@ -76,7 +76,7 @@ Use these topics as MQTT selects/switches in Home Assistant or publish to them d
 ### Troubleshooting tips
 
 - Run `bin/tools/verify-conf.py` whenever Assist calls fail; it confirms MQTT, Wyoming services, and HA credentials.
-- For self-signed HA hosts, keep TLS verification on and provide the CA: set `REQUESTS_CA_BUNDLE=/path/to/ca.pem`, install the same CA into Chromium’s profile with `certutil`, then restart `pulse-kiosk`.
+- For self-signed HA hosts, keep TLS verification on and provide the CA: set `REQUESTS_CA_BUNDLE=/path/to/ca.pem`, install the same CA into Chromium's profile with `certutil`, then restart `pulse-kiosk`.
 - Store extra environment variables in systemd drop-ins (e.g., `/etc/systemd/system/pulse-assistant.service.d/override.conf`) because `pulse.conf` is regenerated from the sample.
 - Confirm custom HA hostnames resolve to the actual HA server; mismatched DNS produces `/api/assist_pipeline/run` 404s.
 - Watch `journalctl -u pulse-assistant.service -f` to see which pipeline handled each wake word and whether HA responded.
@@ -91,7 +91,7 @@ PulseOS can expose Home/Update/Reboot buttons and a full health sensor suite ove
 
 ## Home Assistant trusted-network example
 
-I land most kiosks on a Home Assistant dashboard. To avoid session prompts (and long-lived tokens inside Chromium) I trust the kiosk’s IP:
+I land most kiosks on a Home Assistant dashboard. To avoid session prompts (and long-lived tokens inside Chromium) I trust the kiosk's IP:
 
 ```yaml
 http:
@@ -158,7 +158,7 @@ Update either asset and rerun `./setup.sh <location>` to refresh the splash on a
 
 ## Touch Display boot config pins
 
-`setup.sh` also pins the Raspberry Pi Touch Display defaults so you don’t have to edit boot files by hand:
+`setup.sh` also pins the Raspberry Pi Touch Display defaults so you don't have to edit boot files by hand:
 
 - Adds `dtparam=i2c_arm=on` and `display_auto_detect=0` inside `/boot/firmware/config.txt`.
 - Ensures the overlay `dtoverlay=vc4-kms-dsi-ili9881-7inch,rotation=90,dsi1,swapxy,invx` is present.
@@ -222,13 +222,23 @@ With these settings, GitHub will block any PR merge until all CI checks pass.
 
 ---
 
-## Objective / future ideas
+## What's been built
 
-This is mostly just a fun hobby, but the direction I’m going includes:
+This started as a hobby project and has grown into a fairly complete smart display platform:
 
-- Running wyoming-piper / wyoming-whisper / wyoming-openwakeword containers on a Synology NAS to add more assistant-like skills.
-- Landing kiosks on a Home Assistant photo frame dashboard, with space for future interactive widgets.
-- Chasing a custom start-up animation and friendlier error screens when time allows.
+- ✅ **Voice assistant** — Wyoming-based wake detection, Whisper STT, LLM processing (OpenAI/Gemini), Piper TTS, with dual pipeline support for local and Home Assistant flows
+- ✅ **Photo frame dashboard** — Home Assistant integration with the custom `pulse-photo-card`, overlay clock/timers/notifications, and MQTT-driven refresh
+- ✅ **Custom boot experience** — Plymouth splash theme and firmware boot logo for a polished startup
+- ✅ **Real-time info** — News, weather, and sports queries intercepted before reaching the LLM
+- ✅ **Alarms, timers, reminders** — Voice-controlled scheduling with on-screen overlay and music playback support
+- ✅ **MQTT telemetry** — Full device health, volume/brightness controls, and Home Assistant discovery
+- ✅ **CI/CD pipeline** — Automated linting, testing (Python 3.13/3.14), and semantic releases
+
+## Future ideas
+
+- Interactive overlay widgets (light controls, routine triggers)
+- Calendar event display on the photo frame
+- Multi-room audio coordination improvements
+- Friendlier error screens when services are unavailable
 
 One step at a time. 🙂
-
