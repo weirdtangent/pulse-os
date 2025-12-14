@@ -14,6 +14,33 @@ When enabled, the systemd unit publishes three `button` entities under the topic
 | `Update` | `pulse/<hostname>/kiosk/update` | Runs `git pull`, then reruns `./setup.sh` (which restarts all Pulse services unless the kiosk was provisioned with `./setup.sh --no-restart`). |
 | `Reboot` | `pulse/<hostname>/kiosk/reboot` | Requests a safe reboot (respecting the guard thresholds). |
 
+### URL Navigation Topics
+
+Two topics allow you to navigate the kiosk to a URL directly from Home Assistant or automations:
+
+| Topic | Action |
+| ----- | ------ |
+| `pulse/<hostname>/kiosk/url/set` | Navigates Chromium to the provided URL directly, replacing the current page (including overlay). |
+| `pulse/<hostname>/kiosk/url-with-overlay/set` | Navigates to the URL but keeps the Pulse overlay (clock, timers, notifications) visible on top. The target URL is displayed in a full-screen background iframe. |
+
+**Example automation** (presence-triggered camera feed with overlay):
+
+```yaml
+automation:
+  - alias: "Show front yard camera on presence"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.great_room_presence
+        to: "on"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: "pulse/pulse-great-room/kiosk/url-with-overlay/set"
+          payload: "http://webrtc.example.com:1984/stream.html?src=FrontYard"
+```
+
+To return to the normal photo frame view, send a message to the `home` topic or use `url/set` with your `PULSE_URL`.
+
 ### Update button requirements
 
 - The script executes inside `/opt/pulse-os`, so the kiosk must have completed at least one manual `./setup.sh <location>` run beforehand.

@@ -166,6 +166,62 @@ Update either asset and rerun `./setup.sh <location>` to refresh the splash on a
 
 ---
 
+## Development & CI
+
+### Running tests locally
+
+```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install the package in development mode
+pip install -e ".[dev]"
+
+# Run linting and tests
+ruff check .
+black --check .
+pytest
+```
+
+### GitHub Actions workflow
+
+The repository includes a GitHub Actions workflow (`.github/workflows/build.yaml`) that runs on every push to `main` and on all pull requests:
+
+| Job | Description |
+| --- | ----------- |
+| **Lint & Format** | Runs `ruff check` and `black --check` to ensure code quality |
+| **Test (Python 3.13)** | Runs the full pytest suite on Python 3.13 |
+| **Test (Python 3.14)** | Runs the full pytest suite on Python 3.14 |
+| **Semantic Release** | Creates releases when commits follow conventional commit format (only on push to `main`) |
+
+All lint and test jobs must pass before the release job runs.
+
+### Branch protection (recommended)
+
+To prevent broken code from being merged, set up a branch ruleset in your GitHub repository:
+
+1. Go to **Settings → Rules → Rulesets**
+2. Click **New ruleset → New branch ruleset**
+3. Configure the ruleset:
+   - **Ruleset name**: `Protect main`
+   - **Enforcement status**: Active
+   - **Target branches**: Add target → Include default branch (or type `main`)
+4. Under **Rules**, enable:
+   - ✅ **Require a pull request before merging**
+   - ✅ **Require status checks to pass** → Add checks:
+     - `Lint & Format`
+     - `Test (Python 3.13)`
+     - `Test (Python 3.14)`
+   - ✅ **Block force pushes**
+5. Click **Create**
+
+With these settings, GitHub will block any PR merge until all CI checks pass.
+
+> **Note**: You can also use **Settings → Branches → Add classic branch protection rule** for the legacy UI, but rulesets are GitHub's recommended approach.
+
+---
+
 ## Objective / future ideas
 
 This is mostly just a fun hobby, but the direction I’m going includes:

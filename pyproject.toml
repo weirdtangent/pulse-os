@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pulse-os"
 version = "0.1.0"
@@ -20,16 +24,20 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "black>=24.8.0",
+    "pytest>=9.0.1",
     "ruff>=0.6.5",
 ]
 
+[tool.setuptools.packages.find]
+include = ["pulse", "pulse.*"]
+
 [tool.black]
 line-length = 120
-target-version = ["py312"]
+target-version = ["py313"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py313"
 src = ["bin", "pulse"]
 extend-exclude = ["uv.lock"]
 
@@ -52,7 +60,16 @@ docstring-code-format = true
 
 [dependency-groups]
 dev = [
-    "black>=25.11.0",
+    "black>=24.8.0",
     "pytest>=9.0.1",
-    "ruff>=0.14.5",
+    "ruff>=0.6.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets.*:",
 ]

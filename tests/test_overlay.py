@@ -41,6 +41,8 @@ class OverlayRenderTests(unittest.TestCase):
             "last_reason": "test",
             "generated_at": 0.0,
             "schedule_snapshot": None,
+            "earmuffs_enabled": False,
+            "update_available": False,
         }
         data.update(overrides)
         return OverlaySnapshot(**data)
@@ -128,8 +130,7 @@ class OverlayRenderTests(unittest.TestCase):
         )
         html = render_overlay_html(snapshot, self.theme)
         expected = (
-            'cell-top-center" data-cell="top-center"><div class="overlay-card '
-            "overlay-card--alert overlay-card--ringing"
+            'cell-top-center" data-cell="top-center"><div class="overlay-card overlay-card--alert overlay-card--ringing'
         )
         self.assertIn(expected, html)
 

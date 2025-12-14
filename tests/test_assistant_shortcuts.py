@@ -5,6 +5,12 @@ import importlib.util
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+
+from pulse.assistant.conversation_manager import (
+    evaluate_follow_up_transcript,
+    is_conversation_stop_command,
+)
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -38,30 +44,27 @@ def test_extract_time_of_day_handles_three_digit_am_pm() -> None:
 
 
 def test_conversation_stop_phrase_detection() -> None:
-    assistant = _assistant()
-    assistant._conversation_stop_prefixes = ("pulse", "hey pulse", "ok pulse", "okay pulse")
-    assert assistant._is_conversation_stop_command("Nevermind.")
-    assert assistant._is_conversation_stop_command("nothing else, thanks")
-    assert assistant._is_conversation_stop_command("ok pulse you can stop please")
-    assert not assistant._is_conversation_stop_command("cancel the alarm")
-    assert not assistant._is_conversation_stop_command("stop the timer")
+    prefixes = ("pulse", "hey pulse", "ok pulse", "okay pulse")
+    assert is_conversation_stop_command("Nevermind.", prefixes)
+    assert is_conversation_stop_command("nothing else, thanks", prefixes)
+    assert is_conversation_stop_command("ok pulse you can stop please", prefixes)
+    assert not is_conversation_stop_command("cancel the alarm", prefixes)
+    assert not is_conversation_stop_command("stop the timer", prefixes)
 
 
 def test_conversation_stop_prefixes_follow_wake_words() -> None:
-    assistant = _assistant()
-    assistant._conversation_stop_prefixes = ("hey gizmo", "gizmo")
-    assert assistant._is_conversation_stop_command("Hey Gizmo forget it")
-    assistant._conversation_stop_prefixes = ("hey other",)
-    assert not assistant._is_conversation_stop_command("Hey Gizmo forget it")
+    prefixes = ("hey gizmo", "gizmo")
+    assert is_conversation_stop_command("Hey Gizmo forget it", prefixes)
+    other_prefixes = ("hey other",)
+    assert not is_conversation_stop_command("Hey Gizmo forget it", other_prefixes)
 
 
 def test_follow_up_noise_filtering() -> None:
-    assistant = _assistant()
-    ok, normalized = assistant._evaluate_follow_up_transcript("You", None)
+    ok, normalized = evaluate_follow_up_transcript("You", None)
     assert not ok and normalized == "you"
-    ok, normalized = assistant._evaluate_follow_up_transcript("Add tomatoes", None)
+    ok, normalized = evaluate_follow_up_transcript("Add tomatoes", None)
     assert ok and normalized == "add tomatoes"
-    ok, normalized = assistant._evaluate_follow_up_transcript("Add tomatoes", normalized)
+    ok, normalized = evaluate_follow_up_transcript("Add tomatoes", normalized)
     assert not ok
 
 
@@ -71,12 +74,17 @@ def _setup_calendar_test_assistant() -> PulseAssistant:
     assistant._calendar_updated_at = None
     assistant._latest_schedule_snapshot = None
     assistant._publish_schedule_state = lambda snapshot: None  # type: ignore[assignment]
+    # Mock config.calendar
+    assistant.config = SimpleNamespace(
+        calendar=SimpleNamespace(enabled=True, feeds=[]),
+    )
     return assistant
 
 
 def test_calendar_snapshot_deduplicates_multiple_valarms() -> None:
     assistant = _setup_calendar_test_assistant()
-    start = datetime(2025, 1, 20, 12, 0, tzinfo=UTC)
+    # Use a date far in the future to avoid filtering
+    start = datetime.now(UTC) + timedelta(days=30)
     reminders = [
         CalendarReminder(
             uid="event-1",
@@ -112,7 +120,8 @@ def test_calendar_snapshot_deduplicates_multiple_valarms() -> None:
 
 def test_calendar_snapshot_retains_distinct_sources() -> None:
     assistant = _setup_calendar_test_assistant()
-    start = datetime(2025, 2, 1, 16, 0, tzinfo=UTC)
+    # Use a date far in the future to avoid filtering
+    start = datetime.now(UTC) + timedelta(days=30)
     reminders = [
         CalendarReminder(
             uid="event-shared",
