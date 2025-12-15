@@ -698,7 +698,7 @@ def main() -> int:
         print(f"\nAdded {len(new_vars)} new variable(s) marked as NEW:")
         for var_name in sorted(new_vars):
             print(f"  - {var_name}")
-        print("\nReview and remove 'NEW:' markers once you've verified the values.")
+        print("\nReview 'NEW:' markers in pulse.conf and rerun setup.sh once verified.")
     else:
         print("\nNo new variables added. Config file synced and reformatted.")
 
