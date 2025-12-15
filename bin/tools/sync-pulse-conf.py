@@ -55,15 +55,16 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
-def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[str]]:
+def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[str], set[str]]:
     """Parse a config file and extract variables and comments.
 
     Returns:
-        Tuple of (variables dict, comments dict, placeholder vars set)
+        Tuple of (variables dict, comments dict, placeholder vars set, explicit vars set)
     """
     variables: dict[str, str] = {}
     comments: dict[str, str] = {}
     placeholder_vars: set[str] = set()
+    explicit_vars: set[str] = set()
     current_comment: list[str] = []
     current_comment_has_new_marker = False
     in_bash_block = False
@@ -72,7 +73,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
     bash_block_depth = 0
 
     if not path.exists():
-        return variables, comments, placeholder_vars
+        return variables, comments, placeholder_vars, explicit_vars
 
     with path.open(encoding="utf-8") as handle:
         lines = handle.readlines()
@@ -102,6 +103,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
                         if bash_block_depth <= 0:
                             # End of bash block
                             variables[bash_block_var] = "\n".join(bash_block_lines)
+                            explicit_vars.add(bash_block_var)
                             if current_comment:
                                 comments[bash_block_var] = "\n".join(current_comment)
                             in_bash_block = False
@@ -177,6 +179,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
                     var_value = _strip_quotes(parts[1])
 
                     variables[var_name] = var_value
+                    explicit_vars.add(var_name)
 
                     # Store comment if we have one
                     if current_comment:
@@ -186,7 +189,7 @@ def parse_config_file(path: Path) -> tuple[dict[str, str], dict[str, str], set[s
 
             i += 1
 
-    return variables, comments, placeholder_vars
+    return variables, comments, placeholder_vars, explicit_vars
 
 
 def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
@@ -446,9 +449,11 @@ def format_config_file(
     user_vars: dict[str, str],
     user_comments: dict[str, str],
     new_vars: set[str],
+    explicit_user_vars: set[str] | None = None,
 ) -> str:
     """Format the config file with sections, preserving user values and marking new vars."""
     lines: list[str] = []
+    explicit_user_vars = explicit_user_vars or set()
 
     lines.append("# PulseOS configuration file (template)")
     lines.append("# Copy this to: /opt/pulse-os/pulse.conf")
@@ -503,7 +508,8 @@ def format_config_file(
             else:
                 default_value = var_info["value"]
                 matches_default = var_value == default_value
-                if matches_default:
+                user_set_explicitly = var_name in explicit_user_vars
+                if matches_default and not user_set_explicitly:
                     lines.append(f'# (default) {var_name}="{var_value}"')
                 else:
                     lines.append(f'{var_name}="{var_value}"')
@@ -636,10 +642,10 @@ def main() -> int:
 
     # Parse sample file
     sample_sections = extract_sections_from_sample(sample_path)
-    sample_vars, _, _ = parse_config_file(sample_path)
+    sample_vars, _, _, _ = parse_config_file(sample_path)
 
     # Parse user config file
-    user_vars, user_comments, user_placeholder_vars = parse_config_file(user_config_path)
+    user_vars, user_comments, user_placeholder_vars, user_explicit_vars = parse_config_file(user_config_path)
     repair_pulse_version_block(user_vars, user_comments, user_placeholder_vars, sample_vars)
 
     legacy_actions = apply_legacy_replacements(user_vars, user_comments, user_placeholder_vars, sample_vars)
@@ -663,7 +669,7 @@ def main() -> int:
         secure_file(backup_path, user_config_path)
 
     # Generate new config
-    new_config = format_config_file(sample_sections, user_vars, user_comments, new_vars)
+    new_config = format_config_file(sample_sections, user_vars, user_comments, new_vars, user_explicit_vars)
 
     # Write new config
     print(f"Writing updated config: {user_config_path}")
