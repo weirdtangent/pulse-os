@@ -286,7 +286,24 @@ def extract_sections_from_sample(sample_path: Path) -> list[dict[str, Any]]:
             if stripped.startswith("#"):
                 handled_special_case = False
 
-                if "NEW:" in stripped and "=" in stripped:
+                default_match = DEFAULT_COMMENT_RE.match(stripped)
+                if default_match and current_section:
+                    var_name = default_match.group(1)
+                    var_value = _strip_quotes(default_match.group(2))
+                    comment_lines = current_comment + [stripped] if current_comment else [stripped]
+                    current_section["vars"].append(
+                        {
+                            "name": var_name,
+                            "value": var_value,
+                            "comment": "\n".join(comment_lines),
+                            "is_block": False,
+                        }
+                    )
+                    current_comment = []
+                    current_comment_has_new_marker = False
+                    handled_special_case = True
+
+                if not handled_special_case and "NEW:" in stripped and "=" in stripped:
                     match = re.search(r"NEW:\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)", stripped)
                     if match and current_section:
                         var_name = match.group(1)
