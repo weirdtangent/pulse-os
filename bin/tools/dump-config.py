@@ -9,7 +9,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-ParseResult = tuple[dict[str, str], dict[str, str], set[str]]
+ParseResult = tuple[dict[str, str], dict[str, str], set[str], set[str] | None]
 ParseFunc = Callable[[Path], ParseResult]
 
 
@@ -82,8 +82,11 @@ def main(argv: list[str] | None = None) -> int:
 
     parse_config = _load_parse_function(repo_dir)
 
-    sample_vars, _, _ = parse_config(sample_path)
-    user_vars, _, _ = parse_config(config_path)
+    sample_parsed = parse_config(sample_path)
+    user_parsed = parse_config(config_path)
+
+    sample_vars = sample_parsed[0]
+    user_vars = user_parsed[0]
 
     changed = _changed_assignments(sample_vars, user_vars)
     if not changed:
