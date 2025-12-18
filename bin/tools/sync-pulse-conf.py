@@ -27,7 +27,6 @@ LEGACY_REPLACEMENTS: dict[str, str] = {
 
 INFO_SECTION_HEADER = "Information Services (news, weather, sports)"
 INFO_VAR_DEFAULTS: tuple[tuple[str, str], ...] = (
-    ("PULSE_LOCATION", ""),
     ("PULSE_LANGUAGE", "en"),
     ("PULSE_NEWS_API_KEY", ""),
     ("PULSE_NEWS_BASE_URL", "https://newsapi.org/v2"),
