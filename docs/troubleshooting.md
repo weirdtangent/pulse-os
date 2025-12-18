@@ -160,7 +160,7 @@ Reboot after editing.
 ```
 DISPLAY=:0 xset -dpms s off
 ```
-If you have no backlight device, keep `pulse-backlight` disabled or point `config/system/pulse-backlight.conf` at a valid device.
+If you have no backlight device, keep `pulse-backlight` disabled or set `PULSE_BACKLIGHT_DEVICE` in `pulse.conf` before running `setup.sh` so the generated `/etc/pulse-backlight.conf` points at a valid device.
 
 4) **Touch screens** (if the HDMI panel is also USB touch): use `xinput list` to find the device and apply a `Coordinate Transformation Matrix` in `/etc/X11/xorg.conf.d/99-touch-calibration.conf` to match your rotation.
 

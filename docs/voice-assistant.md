@@ -172,7 +172,7 @@ News prompts (“What’s the latest news?”, “Give me the headlines.”) sum
 
 ### Weather (Open-Meteo)
 
-The weather service relies on Open-Meteo’s free forecast endpoint. Provide any of the following in `PULSE_WEATHER_LOCATION`:
+The weather service relies on Open-Meteo’s free forecast endpoint. Provide any of the following in `PULSE_LOCATION`:
 
 - Latitude/longitude pair (`37.7749,-122.4194`)
 - ZIP/postal code (`30301`)
@@ -183,9 +183,9 @@ The weather service relies on Open-Meteo’s free forecast endpoint. Provide any
 Optional helpers:
 
 ```
-PULSE_WEATHER_UNITS="auto"   # auto | imperial | metric
-PULSE_WEATHER_LANGUAGE="en"
-PULSE_WEATHER_FORECAST_DAYS="3"  # 1–3 day spoken summary
+PULSE_LANGUAGE="en"             # default language for assistant/news/weather
+PULSE_WEATHER_UNITS="auto"      # auto | imperial | metric
+PULSE_WEATHER_FORECAST_DAYS="3" # 1–3 day spoken summary
 ```
 
 Open-Meteo is geo-only (no API key). If you provide a what3words string, drop the key in `WHAT3WORDS_API_KEY` and the assistant will translate it to coordinates before calling the forecast API.

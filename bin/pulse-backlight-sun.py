@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - fallback for Python < 3.9
 from astral import LocationInfo
 from astral.sun import dawn, dusk, sun
 from pulse import display
+from pulse.location_resolver import ResolvedLocation, resolve_location
 
 CONF_PATH = Path("/etc/pulse-backlight.conf")
 DEFAULT_CONF: dict[str, str] = {
@@ -28,9 +29,8 @@ DEFAULT_CONF: dict[str, str] = {
 }
 VALID_TWILIGHT = {"OFFICIAL", "CIVIL", "NAUTICAL", "ASTRONOMICAL"}
 
-# Default automation brightness limits (can be overridden via environment)
-DEFAULT_BRIGHTNESS_MIN = 0
-DEFAULT_BRIGHTNESS_MAX = 100
+
+_LOCATION_CACHE: ResolvedLocation | None = None
 
 
 def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
@@ -44,18 +44,39 @@ def read_conf(path: Path) -> tuple[float, float, int, int, str, str]:
                     continue
                 key, value = line.split("=", 1)
                 cfg[key.strip().upper()] = value.strip()
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"Backlight config not found at {path}") from exc
+    except FileNotFoundError:
+        # Will fall back to defaults and any env overrides.
+        pass
 
-    lat = float(cfg["LAT"])
-    lon = float(cfg["LON"])
+    def _percent(raw: str | None, default: int) -> int:
+        try:
+            return max(0, min(100, int(float(raw if raw is not None else default))))
+        except (ValueError, TypeError):
+            return default
+
+    global _LOCATION_CACHE
+    if _LOCATION_CACHE is None:
+        _LOCATION_CACHE = resolve_location(
+            os.environ.get("PULSE_LOCATION"),
+            language=os.environ.get("PULSE_WEATHER_LANGUAGE", "en"),
+            what3words_api_key=os.environ.get("WHAT3WORDS_API_KEY"),
+        )
+
+    if _LOCATION_CACHE:
+        lat = _LOCATION_CACHE.latitude
+        lon = _LOCATION_CACHE.longitude
+    else:
+        lat = float(cfg["LAT"])
+        lon = float(cfg["LON"])
     # Support legacy DAY/NIGHT for backward compatibility
-    day_brightness = max(0, min(100, int(cfg.get("DAY_BRIGHTNESS", cfg.get("DAY", "85")))))
-    night_brightness = max(0, min(100, int(cfg.get("NIGHT_BRIGHTNESS", cfg.get("NIGHT", "25")))))
-    twilight = cfg["TWILIGHT"].upper()
+    day_brightness = _percent(os.environ.get("PULSE_DAY_BRIGHTNESS") or cfg.get("DAY_BRIGHTNESS") or cfg.get("DAY"), 85)
+    night_brightness = _percent(
+        os.environ.get("PULSE_NIGHT_BRIGHTNESS") or cfg.get("NIGHT_BRIGHTNESS") or cfg.get("NIGHT"), 25
+    )
+    twilight = (os.environ.get("PULSE_TWILIGHT_MODE") or cfg["TWILIGHT"]).upper()
     if twilight not in VALID_TWILIGHT:
         twilight = "OFFICIAL"
-    backlight = cfg["BACKLIGHT"]
+    backlight = os.environ.get("PULSE_BACKLIGHT_DEVICE") or cfg["BACKLIGHT"]
     return lat, lon, day_brightness, night_brightness, twilight, backlight
 
 
@@ -89,36 +110,6 @@ def detect_tz() -> timezone | ZoneInfo:
         return datetime.now().astimezone().tzinfo or datetime.UTC
     except OSError:
         return datetime.UTC
-
-
-def get_brightness_limits() -> tuple[int, int]:
-    """Read automation brightness limits from environment variables.
-
-    Returns:
-        Tuple of (min_brightness, max_brightness) as percentages (0-100).
-    """
-    try:
-        min_brightness = int(os.environ.get("PULSE_BRIGHTNESS_MIN", DEFAULT_BRIGHTNESS_MIN))
-        min_brightness = max(0, min(100, min_brightness))
-    except (ValueError, TypeError):
-        min_brightness = DEFAULT_BRIGHTNESS_MIN
-
-    try:
-        max_brightness = int(os.environ.get("PULSE_BRIGHTNESS_MAX", DEFAULT_BRIGHTNESS_MAX))
-        max_brightness = max(0, min(100, max_brightness))
-    except (ValueError, TypeError):
-        max_brightness = DEFAULT_BRIGHTNESS_MAX
-
-    # Ensure min <= max
-    if min_brightness > max_brightness:
-        min_brightness, max_brightness = max_brightness, min_brightness
-
-    return min_brightness, max_brightness
-
-
-def clamp_brightness(percent: int, min_val: int, max_val: int) -> int:
-    """Clamp brightness to the allowed automation range."""
-    return max(min_val, min(max_val, percent))
 
 
 def set_backlight(device_dir: str, percent: int) -> None:
@@ -169,32 +160,28 @@ def next_events(
 
 
 def main() -> None:
-    lat, lon, day_brightness, night_brightness, twilight, backlight_device = read_conf(CONF_PATH)
     tzinfo = detect_tz()
     is_daytime: bool | None = None
-    last_brightness_limits: tuple[int, int] | None = None
+    last_target: int | None = None
+    last_device: str | None = None
 
     while True:
+        lat, lon, day_brightness, night_brightness, twilight, backlight_device = read_conf(CONF_PATH)
         now = datetime.now(tzinfo)
         currently_daylight, next_transition = next_events(lat, lon, tzinfo, twilight, now)
 
-        # Re-read brightness limits each cycle to pick up MQTT-persisted changes
-        brightness_min, brightness_max = get_brightness_limits()
-        limits_changed = last_brightness_limits != (brightness_min, brightness_max)
-        last_brightness_limits = (brightness_min, brightness_max)
+        target_brightness = day_brightness if currently_daylight else night_brightness
 
-        # Determine target brightness, clamped to automation limits
-        raw_target = day_brightness if currently_daylight else night_brightness
-        target_brightness = clamp_brightness(raw_target, brightness_min, brightness_max)
-
-        # Apply brightness on state change or if limits changed
-        if is_daytime != currently_daylight or limits_changed:
+        # Apply brightness on state change or when target/device changes
+        if is_daytime != currently_daylight or target_brightness != last_target or backlight_device != last_device:
             try:
                 set_backlight(backlight_device, target_brightness)
             except OSError:
                 # Backlight not ready; retry soon.
                 pass
             is_daytime = currently_daylight
+            last_target = target_brightness
+            last_device = backlight_device
         sleep_seconds = max(30, min(24 * 3600, int((next_transition - now).total_seconds()) + 2))
         time.sleep(sleep_seconds)
 

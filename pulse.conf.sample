@@ -61,11 +61,6 @@ PULSE_OVERLAY_BIND="0.0.0.0"
 # PULSE_OVERLAY_ALLOWED_ORIGINS — comma-separated list of allowed CORS origins (“*” allows all).
 PULSE_OVERLAY_ALLOWED_ORIGINS="*"
 
-# PULSE_OVERLAY_CLOCK — optional clock timezone and label
-# Example: PULSE_OVERLAY_CLOCK="local=💓 Bedroom" or "America/Chicago=Office"
-# If unset, defaults to local timezone with the device friendly name as label.
-PULSE_OVERLAY_CLOCK=""
-
 # PULSE_OVERLAY_FONT_FAMILY — preferred overlay font (CSS font-family syntax).
 # Example: PULSE_OVERLAY_FONT_FAMILY="Roboto"
 # Fallback fonts are appended automatically if not provided.
@@ -127,15 +122,23 @@ PULSE_TELEMETRY_INTERVAL_SECONDS=15
 # Device Preferences & Toggles
 # ============================================================================
 
-# PULSE_BRIGHTNESS_MIN — minimum brightness (%) automations can set (default 0).
-# Manual MQTT/overlay control is not affected by this limit.
-# (default) PULSE_BRIGHTNESS_MIN="0"
+# PULSE_LOCATION — location string for weather, sunrise/sunset brightness control, etc
+# (lat,lon | ZIP | "City, ST" | plus code | what3words)
+PULSE_LOCATION=""
 
-# PULSE_BRIGHTNESS_MAX — maximum brightness (%) automations can set (default 100).
-# Manual MQTT/overlay control is not affected by this limit.
-# (default) PULSE_BRIGHTNESS_MAX="100"
+# PULSE_DAY_BRIGHTNESS — daytime brightness target (%) for sunrise/sunset automation.
+# (default) PULSE_DAY_BRIGHTNESS="85"
 
-# PULSE_DAY_NIGHT_AUTO — automatically adjust screen brightness for sunrise/sunset; set to "false" for manual control.
+# PULSE_NIGHT_BRIGHTNESS — nighttime brightness target (%) for sunrise/sunset automation.
+# (default) PULSE_NIGHT_BRIGHTNESS="25"
+
+# PULSE_TWILIGHT_MODE — OFFICIAL, CIVIL, NAUTICAL, or ASTRONOMICAL.
+# (default) PULSE_TWILIGHT_MODE="OFFICIAL"
+
+# PULSE_BACKLIGHT_DEVICE — backlight device path; leave unset to auto-detect.
+# (default) PULSE_BACKLIGHT_DEVICE="/sys/class/backlight/11-0045"
+
+# PULSE_DAY_NIGHT_AUTO — automatically adjust screen brightness for sunrise/sunset
 PULSE_DAY_NIGHT_AUTO="true"
 
 # PULSE_VOLUME_TEST_SOUND — plays the heartbeat "thump-thump" after MQTT volume changes.
@@ -360,20 +363,20 @@ PULSE_MEDIA_PLAYER_ENTITY=""
 # Information Services (news, weather, sports)
 # ============================================================================
 
+# PULSE_LANGUAGE — default language for news, weather, assistant responses (ISO code).
+PULSE_LANGUAGE="en"
+
 # News headlines (NewsAPI.org or compatible)
 PULSE_NEWS_API_KEY=""
 PULSE_NEWS_BASE_URL="https://newsapi.org/v2"
 PULSE_NEWS_COUNTRY="us"
 PULSE_NEWS_CATEGORY="general"
-PULSE_NEWS_LANGUAGE="en"
 PULSE_NEWS_MAX_ARTICLES="5"
 
 # Weather forecast (Open-Meteo + optional location helpers)
-# Provide lat,lon pairs, city names, ZIP codes, plus codes, or what3words strings.
-PULSE_WEATHER_LOCATION=""
+# Uses PULSE_LOCATION; supports lat,lon pairs, city names, ZIP codes, plus codes, or what3words strings.
 PULSE_WEATHER_BASE_URL="https://api.open-meteo.com/v1/forecast"
 PULSE_WEATHER_UNITS="auto"
-PULSE_WEATHER_LANGUAGE="en"
 PULSE_WEATHER_FORECAST_DAYS="3"
 WHAT3WORDS_API_KEY=""
 

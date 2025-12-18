@@ -27,16 +27,15 @@ LEGACY_REPLACEMENTS: dict[str, str] = {
 
 INFO_SECTION_HEADER = "Information Services (news, weather, sports)"
 INFO_VAR_DEFAULTS: tuple[tuple[str, str], ...] = (
+    ("PULSE_LOCATION", ""),
+    ("PULSE_LANGUAGE", "en"),
     ("PULSE_NEWS_API_KEY", ""),
     ("PULSE_NEWS_BASE_URL", "https://newsapi.org/v2"),
     ("PULSE_NEWS_COUNTRY", "us"),
     ("PULSE_NEWS_CATEGORY", "general"),
-    ("PULSE_NEWS_LANGUAGE", "en"),
     ("PULSE_NEWS_MAX_ARTICLES", "5"),
-    ("PULSE_WEATHER_LOCATION", ""),
     ("PULSE_WEATHER_BASE_URL", "https://api.open-meteo.com/v1/forecast"),
     ("PULSE_WEATHER_UNITS", "auto"),
-    ("PULSE_WEATHER_LANGUAGE", "en"),
     ("PULSE_WEATHER_FORECAST_DAYS", "3"),
     ("WHAT3WORDS_API_KEY", ""),
     ("PULSE_SPORTS_BASE_URL", "https://site.api.espn.com/apis"),

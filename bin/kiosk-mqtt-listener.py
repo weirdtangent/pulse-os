@@ -21,7 +21,8 @@ import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
 from pulse import audio, display
-from pulse.config_persist import persist_preference
+from pulse.config_persist import ConfigPersister, persist_preference
+from pulse.location_resolver import resolve_location
 from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_select_entity
 from pulse.overlay import (
     DEFAULT_FONT_STACK,
@@ -44,8 +45,8 @@ class Topics:
     reboot: str
     volume: str
     brightness: str
-    brightness_min: str
-    brightness_max: str
+    day_brightness: str
+    night_brightness: str
     device: str
     availability: str
     update_availability: str
@@ -292,6 +293,83 @@ def log(message: str) -> None:
     print(f"[kiosk-mqtt] {message}", flush=True)
 
 
+BACKLIGHT_DEFAULT_DAY = 85
+BACKLIGHT_DEFAULT_NIGHT = 25
+
+
+def _parse_backlight_conf() -> dict[str, str]:
+    """Parse the backlight config file into a dict of key/value pairs."""
+    values: dict[str, str] = {}
+    try:
+        with display.CONF_PATH.open(encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                values[key.strip().upper()] = val.strip()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        # If the file cannot be read, fall back to defaults.
+        pass
+    return values
+
+
+def _load_backlight_targets() -> tuple[int, int]:
+    """Load day/night brightness targets from environment or backlight config."""
+
+    def _to_int(raw: str | None, default: int) -> int:
+        try:
+            return max(0, min(100, int(float(raw if raw is not None else default))))
+        except (ValueError, TypeError):
+            return default
+
+    env_day = os.environ.get("PULSE_DAY_BRIGHTNESS")
+    env_night = os.environ.get("PULSE_NIGHT_BRIGHTNESS")
+    if env_day is not None or env_night is not None:
+        return _to_int(env_day, BACKLIGHT_DEFAULT_DAY), _to_int(env_night, BACKLIGHT_DEFAULT_NIGHT)
+
+    values = _parse_backlight_conf()
+    day = _to_int(values.get("DAY_BRIGHTNESS") or values.get("DAY"), BACKLIGHT_DEFAULT_DAY)
+    night = _to_int(values.get("NIGHT_BRIGHTNESS") or values.get("NIGHT"), BACKLIGHT_DEFAULT_NIGHT)
+    return day, night
+
+
+def _persist_backlight_value(
+    persisters: tuple[ConfigPersister, ...],
+    key: str,
+    value: int,
+    *,
+    logger: Any,
+) -> None:
+    """Persist a single backlight value to all known config files."""
+    for persister in persisters:
+        try:
+            persister.update(key, str(value))
+            logger(
+                f"backlight-config: queued {key}={value} for persistence in {persister._config_path}"
+            )  # noqa: SLF001
+        except Exception as exc:
+            logger(f"backlight-config: failed to queue {key} update: {exc}")
+
+
+def _decode_brightness_payload(
+    payload: bytes,
+    label: str,
+    *,
+    logger: Any,
+) -> int | None:
+    """Decode a brightness payload (0-100), logging on error."""
+    try:
+        value_str = payload.decode("utf-8", errors="ignore").strip()
+        value = int(float(value_str))
+        return max(0, min(100, value))
+    except (ValueError, TypeError):
+        logger(f"{label}: invalid payload '{payload}', expected 0-100")
+        return None
+
+
 def load_config() -> EnvConfig:
     mqtt_host = os.environ.get("MQTT_HOST", "localhost")
     mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
@@ -318,8 +396,8 @@ def load_config() -> EnvConfig:
         reboot=f"pulse/{hostname}/kiosk/reboot",
         volume=f"pulse/{hostname}/audio/volume/set",
         brightness=f"pulse/{hostname}/display/brightness/set",
-        brightness_min=f"pulse/{hostname}/display/brightness_min/set",
-        brightness_max=f"pulse/{hostname}/display/brightness_max/set",
+        day_brightness=f"pulse/{hostname}/display/day_brightness/set",
+        night_brightness=f"pulse/{hostname}/display/night_brightness/set",
         device=f"homeassistant/device/{hostname}/config",
         availability=f"homeassistant/device/{hostname}/availability",
         update_availability=f"pulse/{hostname}/kiosk/update/availability",
@@ -341,7 +419,14 @@ def load_config() -> EnvConfig:
     overlay_allowed_origins = tuple(origin.strip() for origin in overlay_allowed_raw.split(",") if origin.strip()) or (
         "*",
     )
-    overlay_clock_spec = os.environ.get("PULSE_OVERLAY_CLOCK")
+    overlay_clock_spec = None
+    resolved = resolve_location(
+        os.environ.get("PULSE_LOCATION"),
+        language=(os.environ.get("PULSE_LANGUAGE") or "en").strip().lower() or "en",
+        what3words_api_key=(os.environ.get("WHAT3WORDS_API_KEY") or "").strip() or None,
+    )
+    if resolved and resolved.timezone:
+        overlay_clock_spec = f"{resolved.timezone}={friendly_name}"
     overlay_font_stack = (os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip() or DEFAULT_FONT_STACK
     overlay_clocks = parse_clock_config(
         overlay_clock_spec,
@@ -588,9 +673,12 @@ class KioskMqttListener:
         self._refresh_font_options()
         # Brightness control is available only if a backlight is detected
         self._brightness_supported = display.get_current_brightness() is not None
-        # Brightness automation limits (loaded from env, updated via MQTT, persisted to config)
-        self._brightness_min = self._load_brightness_limit("PULSE_BRIGHTNESS_MIN", 0)
-        self._brightness_max = self._load_brightness_limit("PULSE_BRIGHTNESS_MAX", 100)
+        # Day/night brightness targets (loaded from config/env, updated via MQTT)
+        self._backlight_persisters = (
+            ConfigPersister(),  # main pulse.conf
+            ConfigPersister(config_path=display.CONF_PATH),  # generated backlight conf for scheduler
+        )
+        self._day_brightness, self._night_brightness = _load_backlight_targets()
         overlay_host = self.overlay_config.bind_address
         if overlay_host in {"0.0.0.0", "::"}:
             overlay_host = "localhost"
@@ -654,15 +742,6 @@ class KioskMqttListener:
 
     def log(self, message: str) -> None:
         log(message)
-
-    @staticmethod
-    def _load_brightness_limit(env_var: str, default: int) -> int:
-        """Load a brightness limit from environment, clamped to 0-100."""
-        try:
-            value = int(os.environ.get(env_var, default))
-            return max(0, min(100, value))
-        except (ValueError, TypeError):
-            return default
 
     def _build_origin(self) -> dict[str, Any]:
         origin: dict[str, Any] = {
@@ -1519,35 +1598,35 @@ class KioskMqttListener:
             )
             components["Screen Brightness"] = brightness_control
 
-            brightness_min_control = build_number_entity(
-                "Brightness Min",
-                f"{self.config.hostname}_brightness_min",
-                self.config.topics.brightness_min,
-                f"{self.config.topics.telemetry}/brightness_min",
+            day_brightness_control = build_number_entity(
+                "Day Brightness",
+                f"{self.config.hostname}_day_brightness",
+                self.config.topics.day_brightness,
+                f"{self.config.topics.telemetry}/day_brightness",
                 sanitized_hostname,
                 min_value=0,
                 max_value=100,
                 step=1,
                 unit_of_measurement="%",
-                icon="mdi:brightness-4",
+                icon="mdi:weather-sunny",
                 entity_category="config",
             )
-            components["Brightness Min"] = brightness_min_control
+            components["Day Brightness"] = day_brightness_control
 
-            brightness_max_control = build_number_entity(
-                "Brightness Max",
-                f"{self.config.hostname}_brightness_max",
-                self.config.topics.brightness_max,
-                f"{self.config.topics.telemetry}/brightness_max",
+            night_brightness_control = build_number_entity(
+                "Night Brightness",
+                f"{self.config.hostname}_night_brightness",
+                self.config.topics.night_brightness,
+                f"{self.config.topics.telemetry}/night_brightness",
                 sanitized_hostname,
                 min_value=0,
                 max_value=100,
                 step=1,
                 unit_of_measurement="%",
-                icon="mdi:brightness-7",
+                icon="mdi:weather-night",
                 entity_category="config",
             )
-            components["Brightness Max"] = brightness_max_control
+            components["Night Brightness"] = night_brightness_control
 
         return {
             "device": self.device_info,
@@ -1606,8 +1685,8 @@ class KioskMqttListener:
         client.subscribe(self.config.topics.volume)
         if self._brightness_supported:
             client.subscribe(self.config.topics.brightness)
-            client.subscribe(self.config.topics.brightness_min)
-            client.subscribe(self.config.topics.brightness_max)
+            client.subscribe(self.config.topics.day_brightness)
+            client.subscribe(self.config.topics.night_brightness)
         client.subscribe(self.config.topics.overlay_font_command)
         if self.overlay_state:
             client.subscribe(self.assistant_topics.schedules_state)
@@ -1623,7 +1702,7 @@ class KioskMqttListener:
         self.publish_availability(client, "online")
         self._publish_overlay_font_state(client)
         if self._brightness_supported:
-            self._publish_brightness_limits_state(client)
+            self._publish_brightness_targets_state(client)
         self._publish_version_metadata()
         # Publish cached latest version if available
         if self.latest_remote_version:
@@ -1655,10 +1734,10 @@ class KioskMqttListener:
             self.handle_volume(msg.payload)
         elif msg.topic == self.config.topics.brightness:
             self.handle_brightness(msg.payload)
-        elif msg.topic == self.config.topics.brightness_min:
-            self.handle_brightness_min(msg.payload)
-        elif msg.topic == self.config.topics.brightness_max:
-            self.handle_brightness_max(msg.payload)
+        elif msg.topic == self.config.topics.day_brightness:
+            self.handle_day_brightness(msg.payload)
+        elif msg.topic == self.config.topics.night_brightness:
+            self.handle_night_brightness(msg.payload)
         elif msg.topic == self.config.topics.overlay_font_command:
             self.handle_overlay_font(msg.payload)
         elif self.overlay_state and msg.topic == self.assistant_topics.info_card:
@@ -1738,71 +1817,41 @@ class KioskMqttListener:
         else:
             self.log("brightness: failed to set brightness - no backlight device found")
 
-    def handle_brightness_min(self, payload: bytes) -> None:
-        """Handle brightness min limit command from MQTT."""
-        try:
-            value_str = payload.decode("utf-8", errors="ignore").strip()
-            value = int(float(value_str))
-            value = max(0, min(100, value))
-        except (ValueError, TypeError):
-            self.log(f"brightness_min: invalid payload '{payload}', expected 0-100")
+    def handle_day_brightness(self, payload: bytes) -> None:
+        """Handle day brightness target from MQTT."""
+        value = _decode_brightness_payload(payload, "day_brightness", logger=self.log)
+        if value is None or value == self._day_brightness:
             return
 
-        if value == self._brightness_min:
+        self._day_brightness = value
+        self.log(f"day_brightness: set daytime target to {value}%")
+        self._publish_brightness_targets_state(None)
+        _persist_backlight_value(self._backlight_persisters, "DAY_BRIGHTNESS", value, logger=self.log)
+
+    def handle_night_brightness(self, payload: bytes) -> None:
+        """Handle night brightness target from MQTT."""
+        value = _decode_brightness_payload(payload, "night_brightness", logger=self.log)
+        if value is None or value == self._night_brightness:
             return
 
-        self._brightness_min = value
-        self.log(f"brightness_min: set automation minimum to {value}%")
-        # Publish current state
-        self._safe_publish(
-            None,
-            f"{self.config.topics.telemetry}/brightness_min",
-            str(value),
-            qos=0,
-            retain=True,
-        )
-        # Persist to config file
-        persist_preference("brightness_min", str(value))
+        self._night_brightness = value
+        self.log(f"night_brightness: set nighttime target to {value}%")
+        self._publish_brightness_targets_state(None)
+        _persist_backlight_value(self._backlight_persisters, "NIGHT_BRIGHTNESS", value, logger=self.log)
 
-    def handle_brightness_max(self, payload: bytes) -> None:
-        """Handle brightness max limit command from MQTT."""
-        try:
-            value_str = payload.decode("utf-8", errors="ignore").strip()
-            value = int(float(value_str))
-            value = max(0, min(100, value))
-        except (ValueError, TypeError):
-            self.log(f"brightness_max: invalid payload '{payload}', expected 0-100")
-            return
-
-        if value == self._brightness_max:
-            return
-
-        self._brightness_max = value
-        self.log(f"brightness_max: set automation maximum to {value}%")
-        # Publish current state
-        self._safe_publish(
-            None,
-            f"{self.config.topics.telemetry}/brightness_max",
-            str(value),
-            qos=0,
-            retain=True,
-        )
-        # Persist to config file
-        persist_preference("brightness_max", str(value))
-
-    def _publish_brightness_limits_state(self, client: mqtt.Client | None) -> None:
-        """Publish current brightness limit states to MQTT."""
+    def _publish_brightness_targets_state(self, client: mqtt.Client | None) -> None:
+        """Publish current day/night brightness targets to MQTT."""
         self._safe_publish(
             client,
-            f"{self.config.topics.telemetry}/brightness_min",
-            str(self._brightness_min),
+            f"{self.config.topics.telemetry}/day_brightness",
+            str(self._day_brightness),
             qos=0,
             retain=True,
         )
         self._safe_publish(
             client,
-            f"{self.config.topics.telemetry}/brightness_max",
-            str(self._brightness_max),
+            f"{self.config.topics.telemetry}/night_brightness",
+            str(self._night_brightness),
             qos=0,
             retain=True,
         )

@@ -100,17 +100,7 @@ The kiosk renders the clock/timer/notification overlay itself and serves it at `
 3. Inject the returned HTML into the overlay layer of `pulse-photo-card`. The markup already includes JS to keep the clock/timers ticking locally and uses CSS grid slots so urgent cards (timers/alarms) shade the center of the screen while the clock stays transparent in the bottom-left corner. If the fetch fails, immediately fall back to the card's built-in lower-left clock so the user always sees the local time.
 4. (Optional) Set `PULSE_OVERLAY_CLOCK_24H="true"` if you prefer a 24‑hour clock; otherwise the overlay renders in 12‑hour format to match the original card.
 
-You can customize the layout colors and clock label per kiosk via the `PULSE_OVERLAY_*` knobs in `pulse.conf`. A sample clock configuration might look like:
-
-```
-PULSE_OVERLAY_CLOCK="local=💓 Bedroom"
-```
-
-Or for a different timezone:
-
-```
-PULSE_OVERLAY_CLOCK="America/Chicago=💓 Office"
-```
+You can customize the layout colors via the `PULSE_OVERLAY_*` knobs in `pulse.conf`. The clock timezone/label now defaults from `PULSE_LOCATION` (falling back to the device timezone); legacy `PULSE_OVERLAY_CLOCK` is still honored if set.
 
 The clock appears in the bottom-left corner. Timers/alarms automatically occupy the center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled”, “timer running”, and “Now Playing”.
 

@@ -293,8 +293,8 @@ def update_config(var_name: str, value: str, *, logger: logging.Logger | None = 
 #   sound_timer       -> PULSE_SOUND_TIMER
 #   sound_reminder    -> PULSE_SOUND_REMINDER
 #   sound_notification-> PULSE_SOUND_NOTIFICATION
-#   brightness_min    -> PULSE_BRIGHTNESS_MIN
-#   brightness_max    -> PULSE_BRIGHTNESS_MAX
+#   day_brightness    -> PULSE_DAY_BRIGHTNESS
+#   night_brightness  -> PULSE_NIGHT_BRIGHTNESS
 #
 PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
     # Assistant preferences
@@ -313,9 +313,9 @@ PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
     "sound_timer": ("PULSE_SOUND_TIMER", str),
     "sound_reminder": ("PULSE_SOUND_REMINDER", str),
     "sound_notification": ("PULSE_SOUND_NOTIFICATION", str),
-    # Brightness automation limits
-    "brightness_min": ("PULSE_BRIGHTNESS_MIN", str),
-    "brightness_max": ("PULSE_BRIGHTNESS_MAX", str),
+    # Display brightness targets (day/night)
+    "day_brightness": ("PULSE_DAY_BRIGHTNESS", str),
+    "night_brightness": ("PULSE_NIGHT_BRIGHTNESS", str),
 }
 
 

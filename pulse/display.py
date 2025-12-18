@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,11 @@ def find_backlight_device() -> str | None:
     Returns:
         The backlight device path (e.g., "/sys/class/backlight/11-0045") or None if not found.
     """
+    # Explicit override via env
+    env_path = os.environ.get("PULSE_BACKLIGHT_DEVICE")
+    if env_path and Path(env_path).exists():
+        return env_path
+
     # Try reading from config file first
     try:
         with CONF_PATH.open(encoding="utf-8") as handle:

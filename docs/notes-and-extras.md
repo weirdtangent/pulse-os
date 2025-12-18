@@ -12,8 +12,8 @@ The `pulse-assistant` daemon streams wake audio to your Wyoming servers, calls t
 
 Short prompts such as "What's the news?", "What's the weather tomorrow?", "What are the NFL standings?", or "When do the Penguins play next?" are intercepted before they reach the LLM. The assistant uses:
 
-- **NewsAPI.org** (or any compatible endpoint) for the latest US/global headlines — set `PULSE_NEWS_API_KEY`, country, category, and language in `pulse.conf`.
-- **Open-Meteo** forecasts for any location (`PULSE_WEATHER_LOCATION` accepts lat/lon, ZIP, city, Google Plus Code, or what3words with `WHAT3WORDS_API_KEY`). Adjust units/language/day count via `PULSE_WEATHER_UNITS`, `PULSE_WEATHER_LANGUAGE`, and `PULSE_WEATHER_FORECAST_DAYS`.
+- **NewsAPI.org** (or any compatible endpoint) for the latest US/global headlines — set `PULSE_NEWS_API_KEY`, country, category, and language (`PULSE_LANGUAGE`, or override with `PULSE_NEWS_LANGUAGE`) in `pulse.conf`.
+- **Open-Meteo** forecasts for any location (`PULSE_LOCATION` accepts lat/lon, ZIP, city, Google Plus Code, or what3words with `WHAT3WORDS_API_KEY`). Adjust units/day count via `PULSE_WEATHER_UNITS` and `PULSE_WEATHER_FORECAST_DAYS`; language follows `PULSE_LANGUAGE` unless overridden by `PULSE_WEATHER_LANGUAGE`.
 - **ESPN public feeds** for general sports headlines, league summaries, standings, and favorite teams. Configure default countries/leagues with `PULSE_SPORTS_DEFAULT_COUNTRY`, `PULSE_SPORTS_DEFAULT_LEAGUES`, and seed `PULSE_SPORTS_FAVORITE_TEAMS` so prompts like "When is the next Steelers game?" have context.
 
 Responses are spoken immediately (and published on the MQTT response topic) even if the LLM is offline. See the "Real-time news, weather, and sports" section in [`docs/voice-assistant.md`](voice-assistant.md#real-time-news-weather-and-sports) for the full variable list.

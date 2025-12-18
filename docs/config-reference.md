@@ -33,7 +33,6 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_PORT` | `8800` | TCP port serving `/overlay`. |
 | `PULSE_OVERLAY_BIND` | `0.0.0.0` | Bind address for the overlay server. |
 | `PULSE_OVERLAY_ALLOWED_ORIGINS` | `*` | Comma-separated CORS allow list for overlay requests. |
-| `PULSE_OVERLAY_CLOCK` | *(empty)* | Optional `timezone=Label` clock override (defaults to kiosk timezone). |
 | `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Primary overlay font (fallback stack added automatically). |
 | `PULSE_OVERLAY_AMBIENT_BG` | `rgba(0, 0, 0, 0.32)` | Background color for ambient cards. |
 | `PULSE_OVERLAY_ALERT_BG` | `rgba(0, 0, 0, 0.65)` | Background color for alert cards. |
@@ -63,10 +62,14 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 
 | Key | Default | Description |
 | --- | --- | --- |
+| `PULSE_LOCATION` | *(empty)* | Preferred location string for weather and sunrise/sunset (`lat,lon`, ZIP, `City, ST`, plus code, or what3words). |
+| `PULSE_LANGUAGE` | `en` | Default language for assistant, news, and weather. |
 | `PULSE_DAY_NIGHT_AUTO` | `true` | Sunrise/sunset-driven backlight changes. |
+| `PULSE_DAY_BRIGHTNESS` | `85` | Daytime brightness target (%) used by sunrise/sunset automation. |
+| `PULSE_NIGHT_BRIGHTNESS` | `25` | Nighttime brightness target (%) used by sunrise/sunset automation. |
+| `PULSE_TWILIGHT_MODE` | `OFFICIAL` | Twilight definition (`OFFICIAL`, `CIVIL`, `NAUTICAL`, `ASTRONOMICAL`). |
+| `PULSE_BACKLIGHT_DEVICE` | `/sys/class/backlight/11-0045` | Backlight device path (auto-detect if unset). |
 | `PULSE_VOLUME_TEST_SOUND` | `true` | Plays a short “thump” after MQTT volume changes. |
-| `PULSE_BRIGHTNESS_MIN` | `0` | Minimum brightness (%) that automations can set. Manual MQTT/overlay control is not affected. |
-| `PULSE_BRIGHTNESS_MAX` | `100` | Maximum brightness (%) that automations can set. Manual MQTT/overlay control is not affected. |
 | `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. |
 | `PULSE_BT_MAC` | *(empty)* | Optional explicit Bluetooth MAC to target. |
 
@@ -134,18 +137,18 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_NEWS_BASE_URL` | `https://newsapi.org/v2` | News API base URL. |
 | `PULSE_NEWS_COUNTRY` | `us` | News country filter. |
 | `PULSE_NEWS_CATEGORY` | `general` | News category filter. |
-| `PULSE_NEWS_LANGUAGE` | `en` | News language filter. |
 | `PULSE_NEWS_MAX_ARTICLES` | `5` | Max headlines returned. |
+| *(override)* `PULSE_NEWS_LANGUAGE` | *(empty)* | Optional language override (defaults to `PULSE_LANGUAGE`). |
 
 ## Weather
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_WEATHER_LOCATION` | *(empty)* | Location (lat,lon, city, ZIP, plus code, or what3words). |
+| `PULSE_LOCATION` | *(empty)* | Location (lat,lon, city, ZIP, plus code, or what3words). |
 | `PULSE_WEATHER_BASE_URL` | `https://api.open-meteo.com/v1/forecast` | Weather API base URL. |
 | `PULSE_WEATHER_UNITS` | `auto` | Units for forecast (auto/imperial/metric). |
-| `PULSE_WEATHER_LANGUAGE` | `en` | Weather language. |
 | `PULSE_WEATHER_FORECAST_DAYS` | `3` | Days of forecast (1–5). |
+| *(override)* `PULSE_WEATHER_LANGUAGE` | *(empty)* | Optional language override (defaults to `PULSE_LANGUAGE`). |
 
 ## Sports
 
@@ -226,19 +229,19 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_NEWS_BASE_URL` | `https://newsapi.org/v2` | Base URL for news calls. |
 | `PULSE_NEWS_COUNTRY` | `us` | Two-letter country code for top headlines. |
 | `PULSE_NEWS_CATEGORY` | `general` | News category (general, sports, etc.). |
-| `PULSE_NEWS_LANGUAGE` | `en` | Language for responses. |
 | `PULSE_NEWS_MAX_ARTICLES` | `5` | Maximum number of articles to read per request. |
+| *(override)* `PULSE_NEWS_LANGUAGE` | *(empty)* | Optional language override (defaults to `PULSE_LANGUAGE`). |
 
 ### Weather (Open-Meteo)
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_WEATHER_LOCATION` | *(empty)* | Lat/long, city, ZIP, plus code, or what3words string. |
+| `PULSE_LOCATION` | *(empty)* | Lat/long, city, ZIP, plus code, or what3words string. |
 | `PULSE_WEATHER_BASE_URL` | `https://api.open-meteo.com/v1/forecast` | Base API URL. |
 | `PULSE_WEATHER_UNITS` | `auto` | Units (`auto`, `imperial`, `metric`). |
-| `PULSE_WEATHER_LANGUAGE` | `en` | Output language. |
 | `PULSE_WEATHER_FORECAST_DAYS` | `3` | Number of daily forecasts (1–5). |
 | `WHAT3WORDS_API_KEY` | *(empty)* | Optional key to resolve `what3words://` inputs. |
+| *(override)* `PULSE_WEATHER_LANGUAGE` | *(empty)* | Optional language override (defaults to `PULSE_LANGUAGE`). |
 
 ### Sports (ESPN)
 

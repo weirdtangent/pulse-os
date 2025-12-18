@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from pulse.location_resolver import resolve_location_defaults
 from pulse.sound_library import SoundSettings
 from pulse.utils import (
     parse_bool,
@@ -430,6 +431,14 @@ class AssistantConfig:
         self_audio_trigger_level = parse_int(source.get("PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL"), 7)
         self_audio_trigger_level = max(2, self_audio_trigger_level)
 
+        default_language = (source.get("PULSE_LANGUAGE") or "").strip().lower() or "en"
+        resolved_location = resolve_location_defaults(
+            source.get("PULSE_LOCATION"),
+            language=default_language,
+            what3words_api_key=(source.get("WHAT3WORDS_API_KEY") or "").strip() or None,
+        )
+        resolved_country = (resolved_location.country_code or "").strip().lower() if resolved_location else ""
+
         transcript_topic = f"{mqtt.topic_base}/transcript"
         response_topic = f"{mqtt.topic_base}/response"
         state_topic = f"{mqtt.topic_base}/state"
@@ -440,22 +449,26 @@ class AssistantConfig:
         log_llm_messages = parse_bool(source.get("PULSE_ASSISTANT_LOG_LLM"), True)
         log_transcripts = parse_bool(source.get("PULSE_ASSISTANT_LOG_TRANSCRIPTS"), False)
 
+        news_language = (source.get("PULSE_NEWS_LANGUAGE") or "").strip().lower() or default_language
+        news_country = (source.get("PULSE_NEWS_COUNTRY") or "").strip().lower() or resolved_country or "us"
         news_config = NewsConfig(
             api_key=source.get("PULSE_NEWS_API_KEY"),
             base_url=(source.get("PULSE_NEWS_BASE_URL") or "https://newsapi.org/v2").rstrip("/"),
-            country=(source.get("PULSE_NEWS_COUNTRY") or "us").strip().lower() or "us",
+            country=news_country,
             category=(source.get("PULSE_NEWS_CATEGORY") or "general").strip().lower() or "general",
-            language=(source.get("PULSE_NEWS_LANGUAGE") or "en").strip().lower() or "en",
+            language=news_language,
             max_articles=max(1, parse_int(source.get("PULSE_NEWS_MAX_ARTICLES"), 5)),
         )
+        weather_location = (source.get("PULSE_LOCATION") or "").strip()
+        weather_language = (source.get("PULSE_WEATHER_LANGUAGE") or "").strip().lower() or default_language
         weather_config = WeatherConfig(
-            location=(source.get("PULSE_WEATHER_LOCATION") or "").strip() or None,
+            location=weather_location or None,
             units=_normalize_choice(
                 source.get("PULSE_WEATHER_UNITS"),
                 {"auto", "imperial", "metric"},
                 "auto",
             ),
-            language=(source.get("PULSE_WEATHER_LANGUAGE") or "en").strip().lower() or "en",
+            language=weather_language,
             forecast_days=max(1, min(5, parse_int(source.get("PULSE_WEATHER_FORECAST_DAYS"), 3))),
             base_url=(source.get("PULSE_WEATHER_BASE_URL") or "https://api.open-meteo.com/v1/forecast").rstrip("/"),
         )
@@ -464,9 +477,15 @@ class AssistantConfig:
             league.strip().lower()
             for league in split_csv(source.get("PULSE_SPORTS_DEFAULT_LEAGUES") or "nfl,nba,mlb,nhl")
         )
+        sports_default_country = (
+            (source.get("PULSE_SPORTS_DEFAULT_COUNTRY") or "").strip().lower() or resolved_country or "us"
+        )
+        sports_headline_country = (
+            (source.get("PULSE_SPORTS_HEADLINE_COUNTRY") or "").strip().lower() or resolved_country or "us"
+        )
         sports_config = SportsConfig(
-            default_country=(source.get("PULSE_SPORTS_DEFAULT_COUNTRY") or "us").strip().lower() or "us",
-            headline_country=(source.get("PULSE_SPORTS_HEADLINE_COUNTRY") or "us").strip().lower() or "us",
+            default_country=sports_default_country,
+            headline_country=sports_headline_country,
             favorite_teams=favorite_teams,
             default_leagues=default_leagues,
             base_url=(source.get("PULSE_SPORTS_BASE_URL") or "https://site.api.espn.com/apis").rstrip("/"),
@@ -525,7 +544,7 @@ class AssistantConfig:
         return AssistantConfig(
             hostname=hostname,
             device_name=device_name,
-            language=source.get("PULSE_ASSISTANT_LANGUAGE"),
+            language=source.get("PULSE_ASSISTANT_LANGUAGE") or default_language,
             wake_models=wake_models,
             wake_routes=wake_routes,
             mic=mic,

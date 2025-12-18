@@ -6,7 +6,7 @@ This guide lists the phrases the Pulse display understands immediately—no clou
 >
 > - `PULSE_VOICE_ASSISTANT="true"` with working Wyoming endpoints (wake word, STT, TTS)
 > - `HOME_ASSISTANT_*`/`PULSE_MEDIA_PLAYER_ENTITY` for music controls
-> - `PULSE_NEWS_API_KEY`, `PULSE_WEATHER_LOCATION`, `PULSE_SPORTS_*` for real-time info (see `docs/voice-assistant.md`)
+> - `PULSE_NEWS_API_KEY`, `PULSE_LOCATION`, `PULSE_SPORTS_*` for real-time info (see `docs/voice-assistant.md`)
 
 ## Alarms
 
