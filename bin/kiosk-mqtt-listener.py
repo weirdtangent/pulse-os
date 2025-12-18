@@ -657,6 +657,10 @@ class KioskMqttListener:
         self._telemetry_lock = threading.Lock()
         self._telemetry_thread: threading.Thread | None = None
         self._telemetry_stop_event = threading.Event()
+        self._watchdog_thread: threading.Thread | None = None
+        self._watchdog_stop_event = threading.Event()
+        self._last_mqtt_ok: float = time.monotonic()
+        self._last_reboot_attempt: float = 0.0
         self._ha_ssl_context = self._build_ha_ssl_context()
         self._last_now_playing_error: float = 0.0
         self.assistant_topics = config.assistant_topics
@@ -769,6 +773,21 @@ class KioskMqttListener:
             self._telemetry_thread.join(timeout=self.config.telemetry_interval_seconds * 2)
             self._telemetry_thread = None
 
+    def _start_watchdog(self) -> None:
+        if self._watchdog_thread and self._watchdog_thread.is_alive():
+            return
+        self._watchdog_stop_event.clear()
+        thread = threading.Thread(target=self._watchdog_loop, name="pulse-watchdog", daemon=True)
+        self._watchdog_thread = thread
+        thread.start()
+
+    def _stop_watchdog(self) -> None:
+        if not self._watchdog_thread:
+            return
+        self._watchdog_stop_event.set()
+        self._watchdog_thread.join(timeout=10)
+        self._watchdog_thread = None
+
     def _telemetry_loop(self) -> None:
         interval = self.config.telemetry_interval_seconds
         # Prime CPU percent measurement
@@ -785,6 +804,28 @@ class KioskMqttListener:
                 self.log(f"telemetry: failed to publish metrics: {exc}")
             if self._telemetry_stop_event.wait(interval):
                 break
+
+    def _watchdog_loop(self) -> None:
+        grace_seconds = 180
+        min_interval_seconds = 900
+        check_interval = 60
+        while not self._watchdog_stop_event.wait(check_interval):
+            now = time.monotonic()
+            offline_seconds = now - self._last_mqtt_ok
+            if offline_seconds < grace_seconds:
+                continue
+            if now - self._last_reboot_attempt < min_interval_seconds:
+                continue
+            if not self.reboot_lock.acquire(blocking=False):
+                continue
+            self._last_reboot_attempt = now
+            try:
+                self.log(f"watchdog: MQTT offline for {int(offline_seconds)}s; requesting safe reboot")
+                subprocess.run(self._safe_reboot_command("mqtt-watchdog"), check=True)
+            except Exception as exc:  # noqa: BLE001
+                self.log(f"watchdog: reboot attempt failed: {exc}")
+            finally:
+                self.reboot_lock.release()
 
     def _collect_telemetry_metrics(self) -> dict[str, int | float | str]:
         metrics: dict[str, int | float | str] = {}
@@ -1334,6 +1375,8 @@ class KioskMqttListener:
             result = target_client.publish(topic, payload=payload, qos=qos, retain=retain)
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
             self.log(f"Failed to publish topic '{topic}' payload '{payload}' (rc={result.rc})")
+        else:
+            self._last_mqtt_ok = time.monotonic()
 
     def publish_update_button_availability(self, client: mqtt.Client | None, available: bool) -> None:
         topic = self.config.topics.update_availability
@@ -1676,6 +1719,7 @@ class KioskMqttListener:
             self.log(f"MQTT connection failed (reason={reason_code}, properties={properties})")
             return
         self.log(f"Connected to MQTT (reason={reason_code}); subscribing to topics")
+        self._last_mqtt_ok = time.monotonic()
         self._mqtt_client = client
         client.subscribe(self.config.topics.home)
         client.subscribe(self.config.topics.goto)
@@ -1718,6 +1762,10 @@ class KioskMqttListener:
             self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
             if self._overlay_http:
                 self._overlay_http.start()
+        self._start_watchdog()
+
+    def on_disconnect(self, _client, _userdata, reason_code, properties=None):
+        self.log(f"MQTT disconnected (reason={reason_code}, properties={properties})")
 
     def on_message(self, _client, _userdata, msg):
         if msg.topic == self.config.topics.home:
@@ -1975,12 +2023,14 @@ def main():
     atexit.register(listener.stop_update_checker)
     atexit.register(listener.stop_telemetry)
     atexit.register(listener.stop_overlay_server)
+    atexit.register(listener._stop_watchdog)
 
     callback_kwargs: dict[str, object] = {}
     if hasattr(mqtt, "CallbackAPIVersion"):
         callback_kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
     client = mqtt.Client(**callback_kwargs)
     client.on_connect = listener.on_connect
+    client.on_disconnect = listener.on_disconnect
     client.on_message = listener.on_message
     client.will_set(
         config.topics.availability,
