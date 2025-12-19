@@ -140,12 +140,13 @@ DEFAULT_TELEMETRY_INTERVAL_SECONDS = 15
 MIN_TELEMETRY_INTERVAL_SECONDS = 5
 TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
     TelemetryDescriptor(
-        key="uptime_seconds",
+        key="uptime_hours",
         name="Uptime",
-        unit=None,
+        unit="h",
         device_class="duration",
         state_class="total_increasing",
         icon="mdi:timer",
+        precision=2,
     ),
     TelemetryDescriptor(
         key="cpu_usage",
@@ -831,7 +832,7 @@ class KioskMqttListener:
         metrics: dict[str, int | float | str] = {}
         now = time.time()
         uptime_seconds = max(0, int(now - psutil.boot_time()))
-        metrics["uptime_seconds"] = uptime_seconds
+        metrics["uptime_hours"] = uptime_seconds / 3600
 
         cpu_percent = psutil.cpu_percent(interval=None)
         metrics["cpu_usage"] = round(cpu_percent, 1)
