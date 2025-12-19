@@ -26,18 +26,74 @@ Two topics allow you to navigate the kiosk to a URL directly from Home Assistant
 **Example automation** (presence-triggered camera feed with overlay):
 
 ```yaml
-automation:
-  - alias: "Show front yard camera on presence"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.great_room_presence
-        to: "on"
-    action:
-      - service: mqtt.publish
-        data:
-          topic: "pulse/pulse-great-room/kiosk/url-with-overlay/set"
-          payload: "http://webrtc.example.com:1984/stream.html?src=FrontYard"
+alias: "Front Yard Monitor (Living Room)"
+description: >
+  Show the front yard camera with the Pulse overlay whenever presence is
+  detected, and restore the kiosk to its home view when the room empties.
+triggers:
+  - id: enter_room
+    trigger: state
+    entity_id: sensor.phone_presence_area          # e.g., "Living Room"
+    to: Living Room
+    for: "00:01:00"
+  - id: leave_room
+    trigger: state
+    entity_id: sensor.phone_presence_area
+    not_to: Living Room
+    for: "00:05:00"
+variables:
+  kiosk_topic: pulse/pulse-living-room             # replace with your hostname
+  camera_url: https://cam.example.com/stream.html?src=FrontYard
+  last_url: "{{ states('input_text.living_room_last_url') }}"
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: enter_room
+          - condition: template
+            value_template: "{{ last_url != camera_url }}"
+        sequence:
+          - action: mqtt.publish
+            data:
+              qos: "0"
+              retain: false
+              topic: "{{ kiosk_topic }}/kiosk/url-with-overlay/set"
+              payload: "{{ camera_url }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.living_room_last_url
+            data:
+              value: "{{ camera_url }}"
+          - action: logbook.log
+            data:
+              name: Living Room Display
+              message: Started Front Yard monitor (presence detected)
+      - conditions:
+          - condition: trigger
+            id: leave_room
+          - condition: template
+            value_template: "{{ last_url == camera_url }}"
+        sequence:
+          - action: button.press
+            target:
+              entity_id: button.pulse_living_room_home
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.living_room_last_url
+            data:
+              value: ""
+          - action: logbook.log
+            data:
+              name: Living Room Display
+              message: Stopped Front Yard monitor (room empty)
+mode: restart
 ```
+
+Notes:
+- `input_text.living_room_last_url` avoids re-sending the same URL repeatedly.
+- Swap `sensor.phone_presence_area` for any presence source and change `Living Room` to match its state values.
+- Replace `pulse-living-room` and the camera URL with your own values; both stay inside your network/broker.
+- `cam.example.com` could represent a Go2rtc camera endpoint served by the Go2rtc Docker container - or however you expose your camera's video feed.
 
 To return to the normal photo frame view, send a message to the `home` topic or use `url/set` with your `PULSE_URL`.
 
