@@ -605,6 +605,16 @@
       return;
     }
 
+    // Block background navigation when tapping inside the info card or notification bar
+    const infoCardElement = root.querySelector('.overlay-info-card');
+    if (infoCardElement && infoCardElement.contains(e.target)) {
+      return;
+    }
+    const notificationBar = root.querySelector('.overlay-notification-bar');
+    if (notificationBar && notificationBar.contains(e.target)) {
+      return;
+    }
+
     const button = e.target.closest('[data-stop-timer]');
     if (!button) {
       forwardBlankTapToParent();
