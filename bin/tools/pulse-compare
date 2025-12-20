@@ -12,7 +12,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-ParseResult = tuple[dict[str, str], dict[str, str], set[str]]
+ParseResult = tuple[dict[str, str], dict[str, str], set[str], set[str] | None]
 ParseFunc = Callable[[Path], ParseResult]
 
 
@@ -146,6 +146,12 @@ def _run_remote_setup(host: str, remote_path: Path) -> None:
         raise RuntimeError(f"Failed to run setup.sh on {host}: {message}")
 
 
+def _extract_vars(parse_result: ParseResult | tuple) -> dict[str, str]:
+    if not isinstance(parse_result, tuple) or not parse_result:
+        raise ValueError("parse_config_file returned unexpected result")
+    return parse_result[0]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Show config differences between this host and one or more peers")
     parser.add_argument(
@@ -188,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: local config {local_config} not found", file=sys.stderr)
         return 1
 
-    local_vars, _, _ = parse_config(local_config)
+    local_vars = _extract_vars(parse_config(local_config))
     exit_code = 0
 
     for host in args.hosts:
@@ -201,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.push:
                 _push_remote_config(host, remote_temp, remote_path)
                 _run_remote_setup(host, remote_path)
-            remote_vars, _, _ = parse_config(remote_temp)
+            remote_vars = _extract_vars(parse_config(remote_temp))
         except Exception as exc:
             exit_code = 1
             print(f"{host}: error - {exc}", file=sys.stderr)
