@@ -214,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Warning: local config {local_config} not found; comparing remotes to each other", file=sys.stderr)
     exit_code = 0
     remote_vars_by_host: dict[str, dict[str, str]] = {}
+    local_diff_summary: list[tuple[str, int]] = []
+    pairwise_diff_summary: list[tuple[str, str, int]] = []
 
     for host in args.hosts:
         remote_temp: Path | None = None
@@ -240,9 +242,10 @@ def main(argv: list[str] | None = None) -> int:
         if local_vars is not None:
             differences = _collect_differences(local_vars, remote_vars)
             _print_differences(host, differences, base_label="local")
+            local_diff_summary.append((host, len(differences)))
 
-    if local_vars is None and remote_vars_by_host:
-        hosts = sorted(remote_vars_by_host)
+    hosts = sorted(remote_vars_by_host)
+    if hosts:
         for i, base_host in enumerate(hosts):
             for peer_host in hosts[i + 1 :]:
                 base_vars = remote_vars_by_host[base_host]
@@ -250,6 +253,16 @@ def main(argv: list[str] | None = None) -> int:
                 differences = _collect_differences(base_vars, peer_vars)
                 _print_differences(peer_host, differences, base_label=base_host)
                 _log(f"Compared {peer_host} against {base_host}")
+                pairwise_diff_summary.append((base_host, peer_host, len(differences)))
+
+    if local_diff_summary:
+        _log("Summary vs local:")
+        for host, count in local_diff_summary:
+            _log(f"  {host}: {count} difference(s)")
+    if pairwise_diff_summary:
+        _log("Summary pairwise:")
+        for base_host, peer_host, count in pairwise_diff_summary:
+            _log(f"  {peer_host} vs {base_host}: {count} difference(s)")
 
     return exit_code
 
