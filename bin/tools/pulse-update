@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Update pulse.conf on multiple hosts (default from pulse-devices.conf) and run setup.sh
+
+set -euo pipefail
+
+REPO_DIR="${REPO_DIR:-/opt/pulse-os}"
+
+usage() {
+  cat <<'EOF'
+Usage: bin/tools/pulse-update [hosts...]
+
+Updates pulse.conf on the given hosts (or hosts from pulse-devices.conf if none provided)
+by rerunning setup.sh on each host via SSH.
+
+Environment:
+  REPO_DIR       Override repo root (default /opt/pulse-os)
+  DEVICES_FILE   Override devices list (default resolution: REPO_DIR/pulse-devices.conf, then ./pulse-devices.conf)
+EOF
+}
+
+resolve_devices_file() {
+  if [ -n "${DEVICES_FILE:-}" ]; then
+    echo "$DEVICES_FILE"
+    return
+  fi
+  if [ -f "$REPO_DIR/pulse-devices.conf" ]; then
+    echo "$REPO_DIR/pulse-devices.conf"
+    return
+  fi
+  if [ -f "./pulse-devices.conf" ]; then
+    echo "./pulse-devices.conf"
+    return
+  fi
+  echo ""  # caller will handle error
+}
+
+read_hosts() {
+  if [ "$#" -gt 0 ]; then
+    printf '%s\n' "$@"
+    return 0
+  fi
+  local df
+  df=$(resolve_devices_file)
+  if [ -z "$df" ]; then
+    echo "Error: devices file not found (tried $REPO_DIR/pulse-devices.conf and ./pulse-devices.conf)." >&2
+    exit 1
+  fi
+  if [ ! -f "$df" ]; then
+    echo "Error: devices file not found: $df" >&2
+    exit 1
+  fi
+  grep -v '^\s*#' "$df" | sed '/^\s*$/d'
+}
+
+hosts=()
+while IFS= read -r h; do
+  hosts+=("$h")
+done < <(read_hosts "$@")
+
+if [ "${#hosts[@]}" -eq 0 ]; then
+  echo "Error: no hosts provided or found in devices file" >&2
+  exit 1
+fi
+
+run_host() {
+  host="$1"
+  echo "Updating $host..."
+  if ssh "$host" "cd $REPO_DIR && ./setup.sh"; then
+    echo "OK: $host"
+  else
+    echo "FAIL: $host" >&2
+    return 1
+  fi
+}
+
+fails=0
+for h in "${hosts[@]}"; do
+  run_host "$h" || fails=$((fails + 1))
+done
+
+exit $fails
