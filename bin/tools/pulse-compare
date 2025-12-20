@@ -84,16 +84,35 @@ def _collect_differences(
 def _print_differences(
     host: str, differences: list[tuple[str, str | None, str | None]], base_label: str = "local"
 ) -> None:
+    for line in _render_differences(host, differences, base_label):
+        print(line)
+
+
+def _render_differences(host: str, differences: list[tuple[str, str | None, str | None]], base_label: str) -> list[str]:
     if not differences:
-        print(f"{host}: no differences")
-        return
+        return [f"{host}: no differences"]
 
     label_width = max(len(host), len(base_label))
-    print(f"{host}: {len(differences)} difference(s)")
+    lines = [f"{host}: {len(differences)} difference(s)"]
     for name, local_value, remote_value in differences:
-        print(f"- {name}")
-        _print_value(base_label, local_value, label_width)
-        _print_value(host, remote_value, label_width)
+        lines.append(f"- {name}")
+        lines.append(_format_value_line(base_label, local_value, label_width))
+        lines.extend(_format_extra_lines(base_label, local_value, label_width))
+        lines.append(_format_value_line(host, remote_value, label_width))
+        lines.extend(_format_extra_lines(host, remote_value, label_width))
+    return lines
+
+
+def _format_value_line(label: str, value: str | None, label_width: int) -> str:
+    formatted = _format_value(value)
+    return f"  {label:<{label_width}}: {formatted[0]}"
+
+
+def _format_extra_lines(label: str, value: str | None, label_width: int) -> list[str]:
+    formatted = _format_value(value)
+    if len(formatted) <= 1:
+        return []
+    return [f"  {'':<{label_width}}  {line}" for line in formatted[1:]]
 
 
 def _print_value(label: str, value: str | None, label_width: int) -> None:
@@ -216,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     remote_vars_by_host: dict[str, dict[str, str]] = {}
     local_diff_summary: list[tuple[str, int]] = []
     pairwise_diff_summary: list[tuple[str, str, int]] = []
+    diff_outputs: list[list[str]] = []
 
     for host in args.hosts:
         remote_temp: Path | None = None
@@ -243,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
             differences = _collect_differences(local_vars, remote_vars)
             _print_differences(host, differences, base_label="local")
             local_diff_summary.append((host, len(differences)))
+            diff_outputs.append(_render_differences(host, differences, base_label="local"))
 
     hosts = sorted(remote_vars_by_host)
     if hosts:
@@ -254,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                 _print_differences(peer_host, differences, base_label=base_host)
                 _log(f"Compared {peer_host} against {base_host}")
                 pairwise_diff_summary.append((base_host, peer_host, len(differences)))
+                diff_outputs.append(_render_differences(peer_host, differences, base_label=base_host))
 
     if local_diff_summary:
         _log("Summary vs local:")
@@ -263,6 +285,13 @@ def main(argv: list[str] | None = None) -> int:
         _log("Summary pairwise:")
         for base_host, peer_host, count in pairwise_diff_summary:
             _log(f"  {peer_host} vs {base_host}: {count} difference(s)")
+
+    if diff_outputs:
+        _log("=== Diff Results (collected) ===")
+        for block in diff_outputs:
+            for line in block:
+                print(line)
+            print("")
 
     return exit_code
 
