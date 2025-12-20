@@ -77,16 +77,18 @@ def _collect_differences(
     return differences
 
 
-def _print_differences(host: str, differences: list[tuple[str, str | None, str | None]]) -> None:
+def _print_differences(
+    host: str, differences: list[tuple[str, str | None, str | None]], base_label: str = "local"
+) -> None:
     if not differences:
         print(f"{host}: no differences")
         return
 
-    label_width = max(len(host), len("local"))
+    label_width = max(len(host), len(base_label))
     print(f"{host}: {len(differences)} difference(s)")
     for name, local_value, remote_value in differences:
         print(f"- {name}")
-        _print_value("local", local_value, label_width)
+        _print_value(base_label, local_value, label_width)
         _print_value(host, remote_value, label_width)
 
 
@@ -190,12 +192,16 @@ def main(argv: list[str] | None = None) -> int:
     local_config = (
         Path(args.local_config).expanduser().resolve() if args.local_config else _default_local_config(repo_dir)
     )
-    if not local_config.exists():
+    local_vars: dict[str, str] | None = None
+    if local_config.exists():
+        local_vars = _extract_vars(parse_config(local_config))
+    elif args.local_config:
         print(f"Error: local config {local_config} not found", file=sys.stderr)
         return 1
-
-    local_vars = _extract_vars(parse_config(local_config))
+    else:
+        print(f"Warning: local config {local_config} not found; comparing remotes to each other", file=sys.stderr)
     exit_code = 0
+    remote_vars_by_host: dict[str, dict[str, str]] = {}
 
     for host in args.hosts:
         remote_temp: Path | None = None
@@ -208,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
                 _push_remote_config(host, remote_temp, remote_path)
                 _run_remote_setup(host, remote_path)
             remote_vars = _extract_vars(parse_config(remote_temp))
+            remote_vars_by_host[host] = remote_vars
         except Exception as exc:
             exit_code = 1
             print(f"{host}: error - {exc}", file=sys.stderr)
@@ -216,8 +223,18 @@ def main(argv: list[str] | None = None) -> int:
             if remote_temp and remote_temp.exists():
                 remote_temp.unlink(missing_ok=True)
 
-        differences = _collect_differences(local_vars, remote_vars)
-        _print_differences(host, differences)
+        if local_vars is not None:
+            differences = _collect_differences(local_vars, remote_vars)
+            _print_differences(host, differences, base_label="local")
+
+    if local_vars is None and remote_vars_by_host:
+        hosts = sorted(remote_vars_by_host)
+        for i, base_host in enumerate(hosts):
+            for peer_host in hosts[i + 1 :]:
+                base_vars = remote_vars_by_host[base_host]
+                peer_vars = remote_vars_by_host[peer_host]
+                differences = _collect_differences(base_vars, peer_vars)
+                _print_differences(peer_host, differences, base_label=base_host)
 
     return exit_code
 
