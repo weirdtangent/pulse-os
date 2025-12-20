@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""Compare local pulse.conf against one or more remote hosts."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import os
+import subprocess
+import sys
+import tempfile
+from collections.abc import Callable
+from pathlib import Path
+
+ParseResult = tuple[dict[str, str], dict[str, str], set[str]]
+ParseFunc = Callable[[Path], ParseResult]
+
+
+def _resolve_repo_dir(explicit: str | None) -> Path:
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+
+    default = Path("/opt/pulse-os")
+    if default.exists():
+        return default
+
+    return Path(__file__).resolve().parents[2]
+
+
+def _default_local_config(repo_dir: Path) -> Path:
+    repo_config = repo_dir / "pulse.conf"
+    if repo_config.exists():
+        return repo_config
+    return Path("/opt/pulse-os/pulse.conf")
+
+
+def _load_parse_function(repo_dir: Path) -> ParseFunc:
+    script_path = repo_dir / "bin" / "tools" / "sync-pulse-conf.py"
+    if not script_path.exists():
+        raise FileNotFoundError(f"Unable to locate sync tool at {script_path}")
+
+    spec = importlib.util.spec_from_file_location("_sync_pulse_conf", script_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not import parser from {script_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+
+    parse_func = getattr(module, "parse_config_file", None)
+    if not callable(parse_func):
+        raise AttributeError("sync-pulse-conf.py does not expose parse_config_file()")
+
+    return parse_func
+
+
+def _format_value(value: str | None) -> list[str]:
+    if value is None:
+        return ["<missing>"]
+    if value == "":
+        return ['""']
+    if "\n" in value:
+        lines = value.splitlines()
+        return ['"""'] + lines + ['"""']
+    return [f'"{value}"']
+
+
+def _collect_differences(
+    local_vars: dict[str, str], remote_vars: dict[str, str]
+) -> list[tuple[str, str | None, str | None]]:
+    differences: list[tuple[str, str | None, str | None]] = []
+    for name in sorted(set(local_vars) | set(remote_vars)):
+        local_value = local_vars.get(name)
+        remote_value = remote_vars.get(name)
+        if local_value == remote_value:
+            continue
+        differences.append((name, local_value, remote_value))
+    return differences
+
+
+def _print_differences(host: str, differences: list[tuple[str, str | None, str | None]]) -> None:
+    if not differences:
+        print(f"{host}: no differences")
+        return
+
+    label_width = max(len(host), len("local"))
+    print(f"{host}: {len(differences)} difference(s)")
+    for name, local_value, remote_value in differences:
+        print(f"- {name}")
+        _print_value("local", local_value, label_width)
+        _print_value(host, remote_value, label_width)
+
+
+def _print_value(label: str, value: str | None, label_width: int) -> None:
+    formatted = _format_value(value)
+    print(f"  {label:<{label_width}}: {formatted[0]}")
+    for line in formatted[1:]:
+        print(f"  {'':<{label_width}}  {line}")
+
+
+def _fetch_remote_config(host: str, remote_path: Path) -> Path:
+    with tempfile.NamedTemporaryFile(delete=False, prefix=f"pulse-conf-{host}-", suffix=".tmp") as handle:
+        tmp_path = Path(handle.name)
+        result = subprocess.run(
+            ["ssh", host, "cat", str(remote_path)],
+            stdout=handle,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    if result.returncode != 0:
+        tmp_path.unlink(missing_ok=True)
+        stderr = (result.stderr or "").strip()
+        message = stderr if stderr else f"ssh exited with {result.returncode}"
+        raise RuntimeError(f"Failed to fetch config from {host}: {message}")
+    return tmp_path
+
+
+def _open_editor(path: Path) -> None:
+    editor = os.environ.get("EDITOR") or "vi"
+    result = subprocess.run([editor, str(path)])
+    if result.returncode != 0:
+        raise RuntimeError(f"Editor {editor} exited with {result.returncode}")
+
+
+def _push_remote_config(host: str, local_path: Path, remote_path: Path) -> None:
+    result = subprocess.run(
+        ["scp", str(local_path), f"{host}:{remote_path}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        message = stderr if stderr else f"scp exited with {result.returncode}"
+        raise RuntimeError(f"Failed to push config to {host}: {message}")
+
+
+def _run_remote_setup(host: str, remote_path: Path) -> None:
+    setup_path = remote_path.parent / "setup.sh"
+    result = subprocess.run(
+        ["ssh", host, str(setup_path)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        message = stderr if stderr else f"ssh exited with {result.returncode}"
+        raise RuntimeError(f"Failed to run setup.sh on {host}: {message}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Show config differences between this host and one or more peers")
+    parser.add_argument(
+        "hosts",
+        nargs="+",
+        help="Hostnames or SSH targets to compare against",
+    )
+    parser.add_argument(
+        "--repo",
+        help="Path to the PulseOS repository root (defaults to /opt/pulse-os if present)",
+    )
+    parser.add_argument(
+        "--local-config",
+        help="Path to the local pulse.conf (defaults to <repo>/pulse.conf)",
+    )
+    parser.add_argument(
+        "--remote-path",
+        default="/opt/pulse-os/pulse.conf",
+        help="Remote path to pulse.conf on target hosts",
+    )
+    parser.add_argument(
+        "--edit",
+        action="store_true",
+        help="Open each fetched remote config in $EDITOR before comparison and optional push",
+    )
+    parser.add_argument(
+        "--push",
+        action="store_true",
+        help="After optional edits, push the config back to the remote host",
+    )
+    args = parser.parse_args(argv)
+
+    repo_dir = _resolve_repo_dir(args.repo)
+    parse_config = _load_parse_function(repo_dir)
+
+    local_config = (
+        Path(args.local_config).expanduser().resolve() if args.local_config else _default_local_config(repo_dir)
+    )
+    if not local_config.exists():
+        print(f"Error: local config {local_config} not found", file=sys.stderr)
+        return 1
+
+    local_vars, _, _ = parse_config(local_config)
+    exit_code = 0
+
+    for host in args.hosts:
+        remote_temp: Path | None = None
+        try:
+            remote_path = Path(args.remote_path)
+            remote_temp = _fetch_remote_config(host, remote_path)
+            if args.edit:
+                _open_editor(remote_temp)
+            if args.push:
+                _push_remote_config(host, remote_temp, remote_path)
+                _run_remote_setup(host, remote_path)
+            remote_vars, _, _ = parse_config(remote_temp)
+        except Exception as exc:
+            exit_code = 1
+            print(f"{host}: error - {exc}", file=sys.stderr)
+            continue
+        finally:
+            if remote_temp and remote_temp.exists():
+                remote_temp.unlink(missing_ok=True)
+
+        differences = _collect_differences(local_vars, remote_vars)
+        _print_differences(host, differences)
+
+    return exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
