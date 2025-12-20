@@ -16,6 +16,10 @@ ParseResult = tuple[dict[str, str], dict[str, str], set[str], set[str] | None]
 ParseFunc = Callable[[Path], ParseResult]
 
 
+def _log(message: str) -> None:
+    print(message)
+
+
 def _resolve_repo_dir(explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).expanduser().resolve()
@@ -100,6 +104,7 @@ def _print_value(label: str, value: str | None, label_width: int) -> None:
 
 
 def _fetch_remote_config(host: str, remote_path: Path) -> Path:
+    _log(f"Fetching remote config from {host}:{remote_path}")
     with tempfile.NamedTemporaryFile(delete=False, prefix=f"pulse-conf-{host}-", suffix=".tmp") as handle:
         tmp_path = Path(handle.name)
         result = subprocess.run(
@@ -118,12 +123,14 @@ def _fetch_remote_config(host: str, remote_path: Path) -> Path:
 
 def _open_editor(path: Path) -> None:
     editor = os.environ.get("EDITOR") or "vi"
+    _log(f"Opening editor '{editor}' for {path}")
     result = subprocess.run([editor, str(path)])
     if result.returncode != 0:
         raise RuntimeError(f"Editor {editor} exited with {result.returncode}")
 
 
 def _push_remote_config(host: str, local_path: Path, remote_path: Path) -> None:
+    _log(f"Pushing updated config to {host}:{remote_path}")
     result = subprocess.run(
         ["scp", str(local_path), f"{host}:{remote_path}"],
         capture_output=True,
@@ -137,6 +144,7 @@ def _push_remote_config(host: str, local_path: Path, remote_path: Path) -> None:
 
 def _run_remote_setup(host: str, remote_path: Path) -> None:
     setup_path = remote_path.parent / "setup.sh"
+    _log(f"Running setup.sh on {host}")
     result = subprocess.run(
         ["ssh", host, str(setup_path)],
         capture_output=True,
@@ -146,6 +154,9 @@ def _run_remote_setup(host: str, remote_path: Path) -> None:
         stderr = (result.stderr or "").strip()
         message = stderr if stderr else f"ssh exited with {result.returncode}"
         raise RuntimeError(f"Failed to run setup.sh on {host}: {message}")
+    stdout = (result.stdout or "").strip()
+    if stdout:
+        _log(f"setup.sh output on {host}:\n{stdout}")
 
 
 def _extract_vars(parse_result: ParseResult | tuple) -> dict[str, str]:
@@ -194,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     local_vars: dict[str, str] | None = None
     if local_config.exists():
+        _log(f"Using local config {local_config}")
         local_vars = _extract_vars(parse_config(local_config))
     elif args.local_config:
         print(f"Error: local config {local_config} not found", file=sys.stderr)
@@ -215,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
                 _run_remote_setup(host, remote_path)
             remote_vars = _extract_vars(parse_config(remote_temp))
             remote_vars_by_host[host] = remote_vars
+            if local_vars is not None:
+                _log(f"Computing differences for {host} against local")
         except Exception as exc:
             exit_code = 1
             print(f"{host}: error - {exc}", file=sys.stderr)
@@ -235,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
                 peer_vars = remote_vars_by_host[peer_host]
                 differences = _collect_differences(base_vars, peer_vars)
                 _print_differences(peer_host, differences, base_label=base_host)
+                _log(f"Compared {peer_host} against {base_host}")
 
     return exit_code
 
