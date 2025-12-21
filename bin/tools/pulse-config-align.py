@@ -110,6 +110,49 @@ def _render_differences(host: str, differences: list[tuple[str, str | None, str 
     return lines
 
 
+def _find_differing_vars(
+    vars_by_host: dict[str, dict[str, str]],
+    ignore_vars: set[str] | None = None,
+) -> set[str]:
+    """Find all variable names that have different values across any hosts."""
+    ignore_vars = ignore_vars or set()
+    all_vars: set[str] = set()
+    for host_vars in vars_by_host.values():
+        all_vars.update(host_vars.keys())
+    all_vars -= ignore_vars
+
+    differing: set[str] = set()
+    for var in all_vars:
+        values = set()
+        for host_vars in vars_by_host.values():
+            values.add(host_vars.get(var))
+        if len(values) > 1:
+            differing.add(var)
+    return differing
+
+
+def _print_consolidated_differences(
+    vars_by_host: dict[str, dict[str, str]],
+    ignore_vars: set[str] | None = None,
+    label: str = "Differences across all hosts",
+) -> None:
+    """Print a consolidated view of variables that differ across hosts."""
+    differing_vars = _find_differing_vars(vars_by_host, ignore_vars)
+    if not differing_vars:
+        _log(f"{label}: no differences")
+        return
+
+    hosts = sorted(vars_by_host.keys())
+    label_width = max(len(h) for h in hosts)
+
+    _log(f"{label}: {len(differing_vars)} variable(s) differ")
+    for var in sorted(differing_vars):
+        print(f"- {var}")
+        for host in hosts:
+            value = vars_by_host[host].get(var)
+            _print_value(host, value, label_width)
+
+
 def _format_value_line(label: str, value: str | None, label_width: int) -> str:
     formatted = _format_value(value)
     return f"  {label:<{label_width}}: {formatted[0]}"
@@ -377,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
     default_ignored = {
         "PULSE_BT_MAC",
         "PULSE_DISPLAY_TYPE",
+        "PULSE_BLUETOOTH_AUTOCONNECT",
     }
     ignored_vars = default_ignored | {name.strip() for name in args.ignore_var}
     overrides: dict[str, str | None] = {}
@@ -400,7 +444,6 @@ def main(argv: list[str] | None = None) -> int:
     pre_vars_by_host: dict[str, dict[str, str]] = {}
     post_vars_by_host: dict[str, dict[str, str]] = {}
     local_diff_summary: list[tuple[str, int]] = []
-    pairwise_diff_summary: list[tuple[str, str, int]] = []
     diff_outputs: list[list[str]] = []
     overrides_only = bool(overrides) and not args.edit and not args.push
     show_diffs = args.compare or not overrides_only
@@ -426,15 +469,7 @@ def main(argv: list[str] | None = None) -> int:
                 local_diff_summary.append((host, len(differences)))
                 diff_outputs.append(_render_differences(host, differences, base_label="local"))
         if hosts:
-            for i, base_host in enumerate(hosts):
-                for peer_host in hosts[i + 1 :]:
-                    base_vars = pre_vars_by_host[base_host]
-                    peer_vars = pre_vars_by_host[peer_host]
-                    differences = _collect_differences(base_vars, peer_vars, ignore_vars=ignored_vars)
-                    _log(f"Pre-edit comparison: {peer_host} vs {base_host}")
-                    _print_differences(peer_host, differences, base_label=base_host)
-                    pairwise_diff_summary.append((base_host, peer_host, len(differences)))
-                    diff_outputs.append(_render_differences(peer_host, differences, base_label=base_host))
+            _print_consolidated_differences(pre_vars_by_host, ignore_vars=ignored_vars, label="Pre-edit comparison")
         _flush()
 
     # If nothing to change, stop after optional diffs
@@ -534,23 +569,15 @@ def main(argv: list[str] | None = None) -> int:
                     _log(f"Post-edit differences for {host} vs local:")
                     _print_differences(host, differences, base_label="local")
             if hosts:
-                for i, base_host in enumerate(hosts):
-                    for peer_host in hosts[i + 1 :]:
-                        base_vars = post_vars_by_host[base_host]
-                        peer_vars = post_vars_by_host[peer_host]
-                        differences = _collect_differences(base_vars, peer_vars, ignore_vars=ignored_vars)
-                        _log(f"Post-edit comparison: {peer_host} vs {base_host}")
-                        _print_differences(peer_host, differences, base_label=base_host)
+                _print_consolidated_differences(
+                    post_vars_by_host, ignore_vars=ignored_vars, label="Post-edit comparison"
+                )
 
     if show_diffs:
         if local_diff_summary:
             _log("Summary vs local:")
             for host, count in local_diff_summary:
                 _log(f"  {host}: {count} difference(s)")
-        if pairwise_diff_summary:
-            _log("Summary pairwise:")
-            for base_host, peer_host, count in pairwise_diff_summary:
-                _log(f"  {peer_host} vs {base_host}: {count} difference(s)")
 
         if diff_outputs:
             _log("=== Diff Results (collected) ===")

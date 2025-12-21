@@ -5,7 +5,7 @@ Compare and optionally align `pulse.conf` across multiple Pulse devices.
 ## Usage
 
 ```
-bin/tools/pulse-config-align [options] [host1 ...]
+bin/tools/pulse-config-align.py [options] [host1 ...]
 ```
 
 Common flags:
@@ -32,16 +32,16 @@ Common flags:
 
 Set a shared key everywhere (fast/parallel), skipping hosts already matching:
 ```
-bin/tools/pulse-config-align --set-var GEMINI_API_KEY=abc pulse-office pulse-bedroom
+bin/tools/pulse-config-align.py --set-var GEMINI_API_KEY=abc pulse-office pulse-bedroom
 ```
 
 Inspect diffs, then edit and push with overrides pre-applied:
 ```
-bin/tools/pulse-config-align --set-var GEMINI_API_KEY=abc --edit --push pulse-office pulse-bedroom
+bin/tools/pulse-config-align.py --set-var GEMINI_API_KEY=abc --edit --push pulse-office pulse-bedroom
 ```
 
 Hide host-specific noise:
 ```
-bin/tools/pulse-config-align --ignore-var PULSE_HOSTNAME --ignore-var PULSE_BT_MAC pulse-office pulse-bedroom
+bin/tools/pulse-config-align.py --ignore-var PULSE_HOSTNAME --ignore-var PULSE_BT_MAC pulse-office pulse-bedroom
 ```
 

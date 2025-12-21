@@ -5,7 +5,7 @@ These tools operate on multiple Pulse hosts. Hosts can be provided on the comman
 ## pulse-config-align
 
 ```
-bin/tools/pulse-config-align [options] [host1 ...]
+bin/tools/pulse-config-align.py [options] [host1 ...]
 ```
 
 - `--set-var VAR=VALUE` (repeatable): set a value on every host; skips hosts already matching. With only `--set-var`, applies/pushes/runs setup in parallel and hides diffs unless `--compare`.
