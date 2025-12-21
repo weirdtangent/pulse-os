@@ -23,7 +23,6 @@ class ResolvedLocation:
     display_name: str
     country_code: str | None = None
     timezone: str | None = None
-    country_code: str | None = None
 
 
 _CACHE: dict[str, ResolvedLocation] = {}
