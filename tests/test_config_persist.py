@@ -33,7 +33,7 @@ class TestQuoteUtilities:
 
     def test_strip_quotes_mismatched(self):
         """Test mismatched quotes are not stripped."""
-        assert _strip_quotes('"hello\'') == '"hello\''
+        assert _strip_quotes("\"hello'") == "\"hello'"
 
     def test_strip_quotes_whitespace(self):
         """Test stripping with surrounding whitespace."""
@@ -53,7 +53,7 @@ class TestQuoteUtilities:
 
     def test_quote_value_with_backslash(self):
         """Test quoting a value containing backslashes."""
-        assert _quote_value('path\\to\\file') == '"path\\\\to\\\\file"'
+        assert _quote_value("path\\to\\file") == '"path\\\\to\\\\file"'
 
     def test_quote_value_empty(self):
         """Test quoting empty string."""
@@ -128,7 +128,7 @@ class TestConfigPersisterDebouncing:
     def test_flush_clears_pending_changes(self):
         """Test that flush clears pending changes."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".conf") as f:
-            f.write("TEST_VAR=\"old_value\"\n")
+            f.write('TEST_VAR="old_value"\n')
             temp_path = Path(f.name)
 
         try:
@@ -148,7 +148,7 @@ class TestConfigPersisterWriting:
     def test_write_updates_existing_variable(self):
         """Test updating an existing variable."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".conf") as f:
-            f.write('# Test config\n')
+            f.write("# Test config\n")
             f.write('TEST_VAR="old_value"\n')
             f.write('OTHER_VAR="other"\n')
             temp_path = Path(f.name)
@@ -161,7 +161,7 @@ class TestConfigPersisterWriting:
             content = temp_path.read_text()
             assert 'TEST_VAR="new_value"' in content
             assert 'OTHER_VAR="other"' in content
-            assert '# Test config' in content
+            assert "# Test config" in content
         finally:
             temp_path.unlink(missing_ok=True)
             Path(str(temp_path) + ".lock").unlink(missing_ok=True)
@@ -193,9 +193,9 @@ class TestConfigPersisterWriting:
     def test_write_preserves_comments(self):
         """Test that comments are preserved."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".conf") as f:
-            f.write('# Important comment\n')
+            f.write("# Important comment\n")
             f.write('TEST_VAR="old_value"\n')
-            f.write('# Another comment\n')
+            f.write("# Another comment\n")
             temp_path = Path(f.name)
 
         try:
@@ -204,8 +204,8 @@ class TestConfigPersisterWriting:
             time.sleep(0.2)
 
             content = temp_path.read_text()
-            assert '# Important comment' in content
-            assert '# Another comment' in content
+            assert "# Important comment" in content
+            assert "# Another comment" in content
         finally:
             temp_path.unlink(missing_ok=True)
             Path(str(temp_path) + ".lock").unlink(missing_ok=True)
@@ -225,7 +225,7 @@ class TestConfigPersisterWriting:
             content = temp_path.read_text()
             assert 'TEST_VAR="new_value"' in content
             # Original comment should be removed or replaced
-            assert 'default_value' not in content or 'new_value' in content
+            assert "default_value" not in content or "new_value" in content
         finally:
             temp_path.unlink(missing_ok=True)
             Path(str(temp_path) + ".lock").unlink(missing_ok=True)

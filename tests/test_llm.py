@@ -42,11 +42,13 @@ class TestLLMResultParsing:
 
     def test_parse_valid_json(self):
         """Test parsing valid JSON response."""
-        response = json.dumps({
-            "response": "I've turned on the lights",
-            "actions": ["turn_on_lights"],
-            "follow_up": False,
-        })
+        response = json.dumps(
+            {
+                "response": "I've turned on the lights",
+                "actions": ["turn_on_lights"],
+                "follow_up": False,
+            }
+        )
         result = _parse_llm_response(response)
         assert result.response == "I've turned on the lights"
         assert result.actions == ["turn_on_lights"]
@@ -54,11 +56,13 @@ class TestLLMResultParsing:
 
     def test_parse_json_with_follow_up(self):
         """Test parsing JSON with follow_up flag."""
-        response = json.dumps({
-            "response": "Which room?",
-            "actions": [],
-            "follow_up": True,
-        })
+        response = json.dumps(
+            {
+                "response": "Which room?",
+                "actions": [],
+                "follow_up": True,
+            }
+        )
         result = _parse_llm_response(response)
         assert result.response == "Which room?"
         assert result.actions == []
@@ -66,28 +70,34 @@ class TestLLMResultParsing:
 
     def test_parse_json_multiple_actions(self):
         """Test parsing JSON with multiple actions."""
-        response = json.dumps({
-            "response": "Setting the mood",
-            "actions": ["dim_lights", "play_music"],
-        })
+        response = json.dumps(
+            {
+                "response": "Setting the mood",
+                "actions": ["dim_lights", "play_music"],
+            }
+        )
         result = _parse_llm_response(response)
         assert result.actions == ["dim_lights", "play_music"]
 
     def test_parse_json_filters_empty_actions(self):
         """Test that empty action strings are filtered out."""
-        response = json.dumps({
-            "response": "Done",
-            "actions": ["turn_on_lights", "", "activate_scene"],
-        })
+        response = json.dumps(
+            {
+                "response": "Done",
+                "actions": ["turn_on_lights", "", "activate_scene"],
+            }
+        )
         result = _parse_llm_response(response)
         assert result.actions == ["turn_on_lights", "activate_scene"]
 
     def test_parse_json_filters_non_string_actions(self):
         """Test that non-string actions are filtered out."""
-        response = json.dumps({
-            "response": "Done",
-            "actions": ["turn_on_lights", 123, None, "activate_scene"],
-        })
+        response = json.dumps(
+            {
+                "response": "Done",
+                "actions": ["turn_on_lights", 123, None, "activate_scene"],
+            }
+        )
         result = _parse_llm_response(response)
         assert result.actions == ["turn_on_lights", "activate_scene"]
 
@@ -124,10 +134,12 @@ class TestLLMResultParsing:
 
     def test_parse_json_whitespace_handling(self):
         """Test that whitespace is properly stripped."""
-        response = json.dumps({
-            "response": "  Hello there  ",
-            "actions": [],
-        })
+        response = json.dumps(
+            {
+                "response": "  Hello there  ",
+                "actions": [],
+            }
+        )
         result = _parse_llm_response(response)
         assert result.response == "Hello there"
 
@@ -198,10 +210,12 @@ class TestOpenAIProvider:
     async def test_generate_success(self, llm_config):
         """Test successful LLM generation."""
         provider = OpenAIProvider(llm_config)
-        response_json = json.dumps({
-            "response": "I've turned on the lights",
-            "actions": ["turn_on_lights"],
-        })
+        response_json = json.dumps(
+            {
+                "response": "I've turned on the lights",
+                "actions": ["turn_on_lights"],
+            }
+        )
 
         with patch.object(provider, "_call_api", return_value=response_json):
             result = await provider.generate(
@@ -232,9 +246,9 @@ class TestOpenAIProvider:
 
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_response = Mock()
-            mock_response.read.return_value = json.dumps({
-                "choices": [{"message": {"content": '{"response": "test"}'}}]
-            }).encode()
+            mock_response.read.return_value = json.dumps(
+                {"choices": [{"message": {"content": '{"response": "test"}'}}]}
+            ).encode()
             mock_urlopen.return_value.__enter__.return_value = mock_response
 
             provider._call_api(payload)
