@@ -600,13 +600,15 @@ async def _execute_light_action(
         return False
     turn_on = slug in {"ha.light", "ha.light_on"} or args.get("state", "").lower() in {"on", "true", "1"}
     brightness = _parse_brightness_pct(args)
-    color_temp = _parse_color_temp_mired(args)
+    rgb_color = _parse_rgb_color(args)
+    color_temp = None if rgb_color is not None else _parse_color_temp_mired(args)
     transition = _parse_transition_seconds(args)
     await ha_client.set_light_state(
         targets,
         on=turn_on,
         brightness_pct=brightness,
         color_temp_mired=color_temp,
+        rgb_color=rgb_color,
         transition=transition,
     )
     return True

@@ -584,7 +584,9 @@ DEFAULT_SYSTEM_PROMPT = """You are Pulse, a calm and concise desk assistant.
   include that slug in your response JSON. Otherwise, explain what information you
   still need or that the action is unavailable.
 - Never invent actions or slugs.
-- When unsure, ask clarifying questions instead of guessing."""
+- When unsure, ask clarifying questions instead of guessing.
+- When asked to turn on a light without brightness or color details, turn it on
+  with the existing defaults instead of asking for those details."""
 
 
 def render_actions_for_prompt(actions: Iterable[dict[str, Any]]) -> str:

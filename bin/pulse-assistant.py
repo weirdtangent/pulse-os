@@ -808,15 +808,28 @@ class PulseAssistant:
         prompt_entries = [
             {
                 "slug": "ha.turn_on:name=bedroom ceiling fan,percentage=75",
-                "description": "Turn on any HA entity by name or entity_id. For fans, use percentage=0-100 for speed.",
+                "description": (
+                    "Turn on any HA entity by name or entity_id. Lights can be turned on without brightness or "
+                    "color details; fans can use percentage=0-100 for speed."
+                ),
             },
             {
                 "slug": "ha.turn_off:name=bedroom ceiling fan",
                 "description": "Turn off any HA entity by name or entity_id (lights, fans, switches, etc.).",
             },
             {
-                "slug": "ha.light_on:name=nightstand light,color=blue",
-                "description": "Turn on a light by name/room with optional brightness or color (blue/red/green).",
+                "slug": "ha.light_on:name=nightstand light",
+                "description": (
+                    "Turn on a light by name or room. If the user does not provide brightness or color, just turn "
+                    "it on with the current defaults instead of asking follow-ups."
+                ),
+            },
+            {
+                "slug": "ha.light_on:name=nightstand light,brightness=50",
+                "description": (
+                    "Turn on a light by name/room with a specific brightness percentage (0-100) or a color when "
+                    "provided."
+                ),
             },
             {
                 "slug": "ha.light_off:name=nightstand light",
