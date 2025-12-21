@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
 from pulse.assistant.config import HomeAssistantConfig
 from pulse.assistant.home_assistant import (
     HomeAssistantAuthError,
@@ -300,7 +297,7 @@ class TestHomeAssistantLightControl:
         """Test that empty entity IDs are filtered out."""
         with patch.object(HomeAssistantClient, "call_service", new_callable=AsyncMock) as mock_call:
             client = HomeAssistantClient(ha_config)
-            result = await client.set_light_state(
+            await client.set_light_state(
                 ["light.bedroom", "", "light.kitchen"],
                 on=True,
             )
@@ -378,7 +375,7 @@ class TestHomeAssistantAssist:
         with patch.object(HomeAssistantClient, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = {"response": {"speech": {"plain": {"speech": "Hello"}}}}
             client = HomeAssistantClient(ha_config)
-            result = await client.assist_text("turn on the lights")
+            await client.assist_text("turn on the lights")
             mock_request.assert_called_once()
             call_args = mock_request.call_args
             assert call_args[0][0] == "POST"

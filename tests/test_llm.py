@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
-
 from pulse.assistant.config import LLMConfig
 from pulse.assistant.llm import (
     LLMResult,

@@ -6,9 +6,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import Mock, patch
-
-import pytest
+from unittest.mock import Mock
 
 from pulse.config_persist import (
     ConfigPersister,
