@@ -6,7 +6,7 @@ Collected reference material that used to live in the README. Each section summa
 
 ## Voice assistant (preview)
 
-The `pulse-assistant` daemon streams wake audio to your Wyoming servers, calls the configured LLM, then speaks and displays the reply. Configure `PULSE_ASSISTANT_*`, `WYOMING_*`, and `OPENAI_*`/`GEMINI_*` in `pulse.conf`, rerun `./setup.sh`, and review [`docs/voice-assistant.md`](voice-assistant.md) for deployment diagrams.
+The `pulse-assistant` daemon streams wake audio to your Wyoming servers, calls the configured LLM, then speaks and displays the reply. Configure `PULSE_ASSISTANT_*`, `WYOMING_*`, and your chosen provider's credentials (`OPENAI_*`, `GEMINI_*`, `ANTHROPIC_*`, `GROQ_*`, `MISTRAL_*`, or `OPENROUTER_*`) in `pulse.conf`, rerun `./setup.sh`, and review [`docs/voice-assistant.md`](voice-assistant.md) for deployment diagrams.
 
 ### Real-time headlines, forecasts, and sports
 
@@ -69,7 +69,7 @@ Every Pulse assistant publishes real-time status and accepts config commands und
 | `preferences/wake_sound/set` + `/state` | Turn the wake chime on/off (`on`/`off`). |
 | `preferences/speaking_style/set` + `/state` | Pick `relaxed`, `normal`, or `aggressive` for the Pulse pipeline persona. |
 | `preferences/wake_sensitivity/set` + `/state` | `low`, `normal`, or `high` (maps to openWakeWord trigger levels 5/3/2). |
-| `preferences/llm_provider/set` + `/state` | `openai` or `gemini`; switches the active model without editing `pulse.conf`. |
+| `preferences/llm_provider/set` + `/state` | `openai`, `gemini`, `anthropic`, `groq`, `mistral`, or `openrouter`; switches the active provider without editing `pulse.conf`. |
 
 Use these topics as MQTT selects/switches in Home Assistant or publish to them directly; they are retained so dashboards repopulate immediately after a reboot.
 
@@ -226,7 +226,7 @@ With these settings, GitHub will block any PR merge until all CI checks pass.
 
 This started as a hobby project and has grown into a fairly complete smart display platform:
 
-- ✅ **Voice assistant** — Wyoming-based wake detection, Whisper STT, LLM processing (OpenAI/Gemini), Piper TTS, with dual pipeline support for local and Home Assistant flows
+- ✅ **Voice assistant** — Wyoming-based wake detection, Whisper STT, LLM processing (OpenAI, Gemini, Anthropic Claude, Groq, Mistral AI, OpenRouter), Piper TTS, with dual pipeline support for local and Home Assistant flows
 - ✅ **Photo frame dashboard** — Home Assistant integration with the custom `pulse-photo-card`, overlay clock/timers/notifications, and MQTT-driven refresh
 - ✅ **Custom boot experience** — Plymouth splash theme and firmware boot logo for a polished startup
 - ✅ **Real-time info** — News, weather, and sports queries intercepted before reaching the LLM
