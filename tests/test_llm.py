@@ -32,6 +32,22 @@ def make_llm_config(**overrides):
         "gemini_api_key": None,
         "gemini_base_url": "https://generativelanguage.googleapis.com/v1beta",
         "gemini_timeout": 30,
+        "anthropic_model": "claude-3-5-haiku-20241022",
+        "anthropic_api_key": None,
+        "anthropic_base_url": "https://api.anthropic.com/v1",
+        "anthropic_timeout": 45,
+        "groq_model": "llama-3.3-70b-versatile",
+        "groq_api_key": None,
+        "groq_base_url": "https://api.groq.com/openai/v1",
+        "groq_timeout": 30,
+        "mistral_model": "mistral-small-latest",
+        "mistral_api_key": None,
+        "mistral_base_url": "https://api.mistral.ai/v1",
+        "mistral_timeout": 45,
+        "openrouter_model": "meta-llama/llama-3.3-70b-instruct",
+        "openrouter_api_key": None,
+        "openrouter_base_url": "https://openrouter.ai/api/v1",
+        "openrouter_timeout": 45,
     }
     defaults.update(overrides)
     return LLMConfig(**defaults)

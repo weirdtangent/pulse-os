@@ -138,6 +138,22 @@ class LLMConfig:
     gemini_api_key: str | None
     gemini_base_url: str
     gemini_timeout: int
+    anthropic_model: str
+    anthropic_api_key: str | None
+    anthropic_base_url: str
+    anthropic_timeout: int
+    groq_model: str
+    groq_api_key: str | None
+    groq_base_url: str
+    groq_timeout: int
+    mistral_model: str
+    mistral_api_key: str | None
+    mistral_base_url: str
+    mistral_timeout: int
+    openrouter_model: str
+    openrouter_api_key: str | None
+    openrouter_base_url: str
+    openrouter_timeout: int
 
 
 @dataclass(frozen=True)
@@ -323,6 +339,22 @@ class AssistantConfig:
             gemini_api_key=source.get("GEMINI_API_KEY"),
             gemini_base_url=source.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
             gemini_timeout=parse_int(source.get("GEMINI_TIMEOUT_SECONDS"), 45),
+            anthropic_model=source.get("ANTHROPIC_MODEL", "claude-3-5-haiku-20241022"),
+            anthropic_api_key=source.get("ANTHROPIC_API_KEY"),
+            anthropic_base_url=source.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"),
+            anthropic_timeout=parse_int(source.get("ANTHROPIC_TIMEOUT_SECONDS"), 45),
+            groq_model=source.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            groq_api_key=source.get("GROQ_API_KEY"),
+            groq_base_url=source.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+            groq_timeout=parse_int(source.get("GROQ_TIMEOUT_SECONDS"), 30),
+            mistral_model=source.get("MISTRAL_MODEL", "mistral-small-latest"),
+            mistral_api_key=source.get("MISTRAL_API_KEY"),
+            mistral_base_url=source.get("MISTRAL_BASE_URL", "https://api.mistral.ai/v1"),
+            mistral_timeout=parse_int(source.get("MISTRAL_TIMEOUT_SECONDS"), 45),
+            openrouter_model=source.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
+            openrouter_api_key=source.get("OPENROUTER_API_KEY"),
+            openrouter_base_url=source.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            openrouter_timeout=parse_int(source.get("OPENROUTER_TIMEOUT_SECONDS"), 45),
         )
 
         topic_base = source.get("PULSE_ASSISTANT_TOPIC_BASE") or f"pulse/{hostname}/assistant"

@@ -13,6 +13,16 @@ from dataclasses import dataclass
 
 from .config import LLMConfig
 
+# Registry of supported LLM providers
+SUPPORTED_PROVIDERS = {
+    "openai": "OpenAI",
+    "gemini": "Google Gemini",
+    "anthropic": "Anthropic Claude",
+    "groq": "Groq",
+    "mistral": "Mistral AI",
+    "openrouter": "OpenRouter",
+}
+
 
 @dataclass
 class LLMResult:
@@ -68,12 +78,32 @@ Always respond **only** with JSON in the form:
     return system_content
 
 
-class OpenAIProvider(LLMProvider):
-    """Call OpenAI-compatible chat completion endpoints."""
+class OpenAICompatibleProvider(LLMProvider):
+    """Base class for OpenAI-compatible chat completion APIs (OpenAI, Groq, Mistral, OpenRouter)."""
 
     def __init__(self, config: LLMConfig, logger: logging.Logger | None = None) -> None:
         self.config = config
         self._logger = logger or logging.getLogger(__name__)
+
+    def _get_api_key(self) -> str | None:
+        """Return the API key for this provider."""
+        raise NotImplementedError
+
+    def _get_model(self) -> str:
+        """Return the model name for this provider."""
+        raise NotImplementedError
+
+    def _get_base_url(self) -> str:
+        """Return the base URL for this provider."""
+        raise NotImplementedError
+
+    def _get_timeout(self) -> int:
+        """Return the timeout in seconds for this provider."""
+        raise NotImplementedError
+
+    def _get_provider_name(self) -> str:
+        """Return the provider name for error messages."""
+        raise NotImplementedError
 
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         payload = self._build_payload(user_text, list(actions_for_prompt))
@@ -97,7 +127,7 @@ class OpenAIProvider(LLMProvider):
         ]
 
         payload = {
-            "model": self.config.openai_model,
+            "model": self._get_model(),
             "messages": messages,
             "temperature": 0.3,
             "max_tokens": 400,
@@ -106,24 +136,25 @@ class OpenAIProvider(LLMProvider):
         return payload
 
     def _call_api(self, payload: dict) -> str:
-        if not self.config.openai_api_key:
-            raise RuntimeError("OPENAI_API_KEY is not set")
+        api_key = self._get_api_key()
+        if not api_key:
+            raise RuntimeError(f"{self._get_provider_name().upper()}_API_KEY is not set")
 
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            url=f"{self.config.openai_base_url.rstrip('/')}/chat/completions",
+            url=f"{self._get_base_url().rstrip('/')}/chat/completions",
             data=data,
             headers={
-                "Authorization": f"Bearer {self.config.openai_api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.config.openai_timeout) as response:
+            with urllib.request.urlopen(request, timeout=self._get_timeout()) as response:
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"OpenAI HTTP error: {exc.code}") from exc
+            raise RuntimeError(f"{self._get_provider_name()} HTTP error: {exc.code}") from exc
 
         parsed = json.loads(body)
         choices = parsed.get("choices") or []
@@ -134,6 +165,152 @@ class OpenAIProvider(LLMProvider):
         if not content:
             raise RuntimeError("LLM response missing content")
         return str(content)
+
+
+class OpenAIProvider(OpenAICompatibleProvider):
+    """Call OpenAI chat completion endpoints."""
+
+    def _get_api_key(self) -> str | None:
+        return self.config.openai_api_key
+
+    def _get_model(self) -> str:
+        return self.config.openai_model
+
+    def _get_base_url(self) -> str:
+        return self.config.openai_base_url
+
+    def _get_timeout(self) -> int:
+        return self.config.openai_timeout
+
+    def _get_provider_name(self) -> str:
+        return "OpenAI"
+
+
+class GroqProvider(OpenAICompatibleProvider):
+    """Call Groq inference API (OpenAI-compatible, ultra-fast)."""
+
+    def _get_api_key(self) -> str | None:
+        return self.config.groq_api_key
+
+    def _get_model(self) -> str:
+        return self.config.groq_model
+
+    def _get_base_url(self) -> str:
+        return self.config.groq_base_url
+
+    def _get_timeout(self) -> int:
+        return self.config.groq_timeout
+
+    def _get_provider_name(self) -> str:
+        return "Groq"
+
+
+class MistralProvider(OpenAICompatibleProvider):
+    """Call Mistral AI API (OpenAI-compatible)."""
+
+    def _get_api_key(self) -> str | None:
+        return self.config.mistral_api_key
+
+    def _get_model(self) -> str:
+        return self.config.mistral_model
+
+    def _get_base_url(self) -> str:
+        return self.config.mistral_base_url
+
+    def _get_timeout(self) -> int:
+        return self.config.mistral_timeout
+
+    def _get_provider_name(self) -> str:
+        return "Mistral"
+
+
+class OpenRouterProvider(OpenAICompatibleProvider):
+    """Call OpenRouter API (OpenAI-compatible model aggregator)."""
+
+    def _get_api_key(self) -> str | None:
+        return self.config.openrouter_api_key
+
+    def _get_model(self) -> str:
+        return self.config.openrouter_model
+
+    def _get_base_url(self) -> str:
+        return self.config.openrouter_base_url
+
+    def _get_timeout(self) -> int:
+        return self.config.openrouter_timeout
+
+    def _get_provider_name(self) -> str:
+        return "OpenRouter"
+
+
+class AnthropicProvider(LLMProvider):
+    """Call Anthropic Claude API (Messages format)."""
+
+    def __init__(self, config: LLMConfig, logger: logging.Logger | None = None) -> None:
+        self.config = config
+        self._logger = logger or logging.getLogger(__name__)
+
+    async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
+        payload = self._build_payload(user_text, list(actions_for_prompt))
+        try:
+            response_text = await asyncio.to_thread(self._call_api, payload)
+        except Exception as exc:
+            self._logger.exception("LLM call failed: %s", exc)
+            return LLMResult(response="Sorry, I ran into an error while thinking about that.", actions=[])
+        return _parse_llm_response(response_text)
+
+    def _build_payload(self, user_text: str, actions_for_prompt: list[dict[str, str]]) -> dict:
+        system_content = _format_system_prompt(self.config, actions_for_prompt)
+
+        # Anthropic uses top-level "system" field instead of system message
+        payload = {
+            "model": self.config.anthropic_model,
+            "max_tokens": 400,  # Required by Anthropic API
+            "temperature": 0.3,
+            "system": system_content,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_text.strip(),
+                }
+            ],
+        }
+        return payload
+
+    def _call_api(self, payload: dict) -> str:
+        if not self.config.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            url=f"{self.config.anthropic_base_url.rstrip('/')}/messages",
+            data=data,
+            headers={
+                "x-api-key": self.config.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=self.config.anthropic_timeout) as response:
+                body = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"Anthropic HTTP error: {exc.code}") from exc
+
+        # Parse Anthropic response format: {"content": [{"type": "text", "text": "..."}]}
+        parsed = json.loads(body)
+        content = parsed.get("content") or []
+
+        # Anthropic returns content as array of blocks
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text")
+                if text:
+                    return str(text)
+
+        raise RuntimeError("LLM response missing content")
 
 
 class GeminiProvider(LLMProvider):
@@ -227,8 +404,47 @@ class GeminiProvider(LLMProvider):
         raise RuntimeError("LLM response missing content")
 
 
+def get_supported_providers() -> dict[str, str]:
+    """Return mapping of provider IDs to display names."""
+    return SUPPORTED_PROVIDERS.copy()
+
+
 def build_llm_provider(config: LLMConfig, logger: logging.Logger | None = None) -> LLMProvider:
+    """Build an LLM provider based on configuration.
+
+    Args:
+        config: LLM configuration containing provider selection and credentials
+        logger: Optional logger instance
+
+    Returns:
+        Configured LLM provider instance
+
+    Raises:
+        RuntimeError: If provider credentials are missing
+    """
     provider = (config.provider or "").strip().lower()
+    log = logger or logging.getLogger(__name__)
+
+    # Validate provider and log helpful message if unknown
+    if provider and provider not in SUPPORTED_PROVIDERS:
+        supported = ", ".join(SUPPORTED_PROVIDERS.keys())
+        log.warning(f"Unknown LLM provider '{provider}', falling back to OpenAI. " f"Supported providers: {supported}")
+        provider = "openai"
+
+    # Default to OpenAI if no provider specified
+    if not provider:
+        provider = "openai"
+
+    # Build the appropriate provider
     if provider == "gemini":
-        return GeminiProvider(config, logger)
-    return OpenAIProvider(config, logger)
+        return GeminiProvider(config, log)
+    elif provider == "anthropic":
+        return AnthropicProvider(config, log)
+    elif provider == "groq":
+        return GroqProvider(config, log)
+    elif provider == "mistral":
+        return MistralProvider(config, log)
+    elif provider == "openrouter":
+        return OpenRouterProvider(config, log)
+
+    return OpenAIProvider(config, log)

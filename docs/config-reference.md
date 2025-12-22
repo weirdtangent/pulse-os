@@ -198,7 +198,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_ASSISTANT_PROVIDER` | `openai` | Active LLM backend (`openai` or `gemini`). |
+| `PULSE_ASSISTANT_PROVIDER` | `openai` | Active LLM backend: `openai`, `gemini`, `anthropic`, `groq`, `mistral`, or `openrouter`. |
 | `OPENAI_API_KEY` | *(empty)* | API key used when provider is OpenAI. |
 | `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI chat/completions model. |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Optional OpenAI-compatible proxy. |
@@ -207,6 +207,22 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `GEMINI_MODEL` | `gemini-1.5-flash-latest` | Gemini model name. |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta` | Optional Gemini proxy URL. |
 | `GEMINI_TIMEOUT_SECONDS` | `45` | Timeout for Gemini requests. |
+| `ANTHROPIC_API_KEY` | *(empty)* | API key for Anthropic Claude models. |
+| `ANTHROPIC_MODEL` | `claude-3-5-haiku-20241022` | Anthropic Claude model identifier. |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com/v1` | Anthropic API endpoint. |
+| `ANTHROPIC_TIMEOUT_SECONDS` | `45` | Request timeout for Anthropic calls. |
+| `GROQ_API_KEY` | *(empty)* | API key for Groq inference service. |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model identifier. |
+| `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` | Groq API endpoint. |
+| `GROQ_TIMEOUT_SECONDS` | `30` | Request timeout for Groq calls. |
+| `MISTRAL_API_KEY` | *(empty)* | API key for Mistral AI. |
+| `MISTRAL_MODEL` | `mistral-small-latest` | Mistral model identifier. |
+| `MISTRAL_BASE_URL` | `https://api.mistral.ai/v1` | Mistral API endpoint. |
+| `MISTRAL_TIMEOUT_SECONDS` | `45` | Request timeout for Mistral calls. |
+| `OPENROUTER_API_KEY` | *(empty)* | API key for OpenRouter. |
+| `OPENROUTER_MODEL` | `meta-llama/llama-3.3-70b-instruct` | OpenRouter model identifier (see openrouter.ai/models). |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter API endpoint. |
+| `OPENROUTER_TIMEOUT_SECONDS` | `45` | Request timeout for OpenRouter calls. |
 | `PULSE_ASSISTANT_SYSTEM_PROMPT` | *(empty)* | Inline system prompt string. |
 | `PULSE_ASSISTANT_SYSTEM_PROMPT_FILE` | *(empty)* | Path to a file containing the system prompt. |
 | `PULSE_ASSISTANT_TTS_VOICE` | *(empty)* | Preferred Piper voice (falls back to server default). |

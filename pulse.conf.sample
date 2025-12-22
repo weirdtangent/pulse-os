@@ -305,9 +305,11 @@ PULSE_ASSISTANT_RMS_THRESHOLD=120
 
 # --- LLM provider -----------------------------------------------------------
 # PULSE_ASSISTANT_PROVIDER — LLM backend slug; defaults to "openai".
+# Options: "openai", "gemini", "anthropic", "groq", "mistral", "openrouter"
 PULSE_ASSISTANT_PROVIDER="openai"
-# Publish "openai" or "gemini" to pulse/<hostname>/preferences/llm_provider/set (or use the HA select)
+# Publish any provider name to pulse/<hostname>/preferences/llm_provider/set (or use the HA select)
 # to change providers at runtime without editing this file.
+# You can also change models at runtime via pulse/<hostname>/preferences/<provider>_model/set
 
 # OPENAI_API_KEY — API key used when the provider is OpenAI (leave blank for other providers).
 OPENAI_API_KEY=""
@@ -332,6 +334,59 @@ GEMINI_BASE_URL="https://generativelanguage.googleapis.com/v1beta"
 
 # GEMINI_TIMEOUT_SECONDS — request timeout for Gemini API calls (seconds).
 GEMINI_TIMEOUT_SECONDS=45
+
+# --- Anthropic Claude -------------------------------------------------------
+# ANTHROPIC_API_KEY — API key for Anthropic's Claude models.
+ANTHROPIC_API_KEY=""
+
+# ANTHROPIC_MODEL — Claude model to use (haiku for speed, sonnet for quality).
+ANTHROPIC_MODEL="claude-3-5-haiku-20241022"
+
+# ANTHROPIC_BASE_URL — override if proxying Anthropic requests.
+ANTHROPIC_BASE_URL="https://api.anthropic.com/v1"
+
+# ANTHROPIC_TIMEOUT_SECONDS — request timeout for Anthropic API calls.
+ANTHROPIC_TIMEOUT_SECONDS=45
+
+# --- Groq (ultra-fast inference) --------------------------------------------
+# GROQ_API_KEY — API key for Groq's inference service.
+GROQ_API_KEY=""
+
+# GROQ_MODEL — Groq model (llama, mixtral, gemma variants available).
+GROQ_MODEL="llama-3.3-70b-versatile"
+
+# GROQ_BASE_URL — Groq API endpoint (OpenAI-compatible).
+GROQ_BASE_URL="https://api.groq.com/openai/v1"
+
+# GROQ_TIMEOUT_SECONDS — request timeout (Groq is usually < 1s).
+GROQ_TIMEOUT_SECONDS=30
+
+# --- Mistral AI -------------------------------------------------------------
+# MISTRAL_API_KEY — API key for Mistral AI.
+MISTRAL_API_KEY=""
+
+# MISTRAL_MODEL — Mistral model (mistral-small, mistral-medium, mistral-large).
+MISTRAL_MODEL="mistral-small-latest"
+
+# MISTRAL_BASE_URL — Mistral API endpoint (OpenAI-compatible).
+MISTRAL_BASE_URL="https://api.mistral.ai/v1"
+
+# MISTRAL_TIMEOUT_SECONDS — request timeout for Mistral API calls.
+MISTRAL_TIMEOUT_SECONDS=45
+
+# --- OpenRouter (model aggregator) ------------------------------------------
+# OPENROUTER_API_KEY — API key for OpenRouter.
+OPENROUTER_API_KEY=""
+
+# OPENROUTER_MODEL — Model identifier (see openrouter.ai/models).
+# Examples: meta-llama/llama-3.3-70b-instruct, google/gemini-2.0-flash-exp
+OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
+
+# OPENROUTER_BASE_URL — OpenRouter API endpoint (OpenAI-compatible).
+OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
+
+# OPENROUTER_TIMEOUT_SECONDS — request timeout for OpenRouter API calls.
+OPENROUTER_TIMEOUT_SECONDS=45
 
 # --- Prompting, automations & TTS -------------------------------------------
 # PULSE_ASSISTANT_SYSTEM_PROMPT="You are a friendly desk assistant..."

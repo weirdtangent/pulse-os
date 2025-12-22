@@ -127,25 +127,129 @@ When the kiosk is playing music (or speaking a TTS reply) the microphones used b
 
 ## LLM and Automations
 
-`pulse-assistant` injects your options into the LLM system prompt. Pick a provider and set the matching variables:
+`pulse-assistant` supports **6 LLM providers**: OpenAI, Google Gemini, Anthropic Claude, Groq, Mistral AI, and OpenRouter. Pick a provider and set the matching variables:
 
-```
+### OpenAI
+
+```bash
 PULSE_ASSISTANT_PROVIDER="openai"
 OPENAI_API_KEY="sk-..."
-OPENAI_MODEL="gpt-4o-mini"
+OPENAI_MODEL="gpt-4o-mini"  # or gpt-4o, gpt-4-turbo, etc.
 ```
 
-Or, to route the Pulse pipeline through Google Gemini instead:
+### Google Gemini
 
-```
+```bash
 PULSE_ASSISTANT_PROVIDER="gemini"
 GEMINI_API_KEY="AIza..."
 GEMINI_MODEL="gemini-1.5-flash-latest"
 ```
 
-Both providers support optional base URL + timeout overrides (`OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `GEMINI_BASE_URL`, `GEMINI_TIMEOUT_SECONDS`) in case you proxy the traffic elsewhere.
+### Anthropic Claude
 
-You can keep both credential sets in `pulse.conf` and flip between them at runtime. Publish `openai` or `gemini` to `pulse/<hostname>/preferences/llm_provider/set` (or use the new “LLM Provider” select that shows up in Home Assistant discovery) and the assistant will rebuild its LLM client on the fly.
+Claude offers premium quality with industry-leading context windows. Best for complex queries and detailed responses.
+
+```bash
+PULSE_ASSISTANT_PROVIDER="anthropic"
+ANTHROPIC_API_KEY="sk-ant-..."
+ANTHROPIC_MODEL="claude-3-5-haiku-20241022"  # Fast and cost-effective
+# Or use: claude-3-5-sonnet-20241022 for higher quality
+```
+
+**Models:**
+- `claude-3-5-haiku-20241022` - Fastest, most cost-effective
+- `claude-3-5-sonnet-20241022` - Balanced performance and quality
+- `claude-opus-4-20250514` - Highest quality, slowest
+
+### Groq (Ultra-Fast Inference)
+
+Groq provides sub-second inference speeds with open-source models. Ideal for real-time voice interactions.
+
+```bash
+PULSE_ASSISTANT_PROVIDER="groq"
+GROQ_API_KEY="gsk_..."
+GROQ_MODEL="llama-3.3-70b-versatile"
+```
+
+**Popular models:**
+- `llama-3.3-70b-versatile` - Best quality, fast
+- `llama-3.1-8b-instant` - Fastest, good for simple queries
+- `mixtral-8x7b-32768` - Large context window
+
+Groq typically responds in under 1 second, making it excellent for voice assistant use cases.
+
+### Mistral AI
+
+Mistral offers cost-effective European AI models with strong multilingual support.
+
+```bash
+PULSE_ASSISTANT_PROVIDER="mistral"
+MISTRAL_API_KEY="..."
+MISTRAL_MODEL="mistral-small-latest"
+```
+
+**Models:**
+- `mistral-small-latest` - Cost-effective, auto-updates
+- `mistral-medium-latest` - Balanced performance
+- `mistral-large-latest` - Highest quality
+
+### OpenRouter (Model Aggregator)
+
+OpenRouter provides access to 100+ models from various providers through a single API. Great for experimenting with different models.
+
+```bash
+PULSE_ASSISTANT_PROVIDER="openrouter"
+OPENROUTER_API_KEY="sk-or-..."
+OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
+```
+
+**Popular models:**
+- `meta-llama/llama-3.3-70b-instruct` - Open source, high quality
+- `google/gemini-2.0-flash-exp` - Fast, experimental
+- `anthropic/claude-3.5-sonnet` - Premium quality (requires credits)
+- `mistralai/mistral-small` - Cost-effective
+
+Browse the full catalog at [openrouter.ai/models](https://openrouter.ai/models).
+
+### Base URL and Timeout Overrides
+
+All providers support optional base URL and timeout overrides in case you proxy the traffic elsewhere:
+- `<PROVIDER>_BASE_URL` - Custom API endpoint
+- `<PROVIDER>_TIMEOUT_SECONDS` - Request timeout
+
+### Runtime Provider Switching
+
+You can keep all credential sets in `pulse.conf` and switch providers at runtime without restarting:
+
+```bash
+# Publish to MQTT to change provider
+mosquitto_pub -h mqtt-host -t "pulse/hostname/preferences/llm_provider/set" -m "anthropic"
+
+# Or use the Home Assistant "LLM Provider" select entity
+```
+
+The assistant rebuilds its LLM client immediately when the provider changes.
+
+### Runtime Model Selection
+
+You can also change models at runtime without restarting the assistant:
+
+```bash
+# Change OpenAI model
+mosquitto_pub -t "pulse/hostname/preferences/openai_model/set" -m "gpt-4o"
+
+# Change Anthropic model
+mosquitto_pub -t "pulse/hostname/preferences/anthropic_model/set" -m "claude-3-5-sonnet-20241022"
+
+# Change Groq model
+mosquitto_pub -t "pulse/hostname/preferences/groq_model/set" -m "llama-3.1-8b-instant"
+```
+
+Or use the Home Assistant select entities (one per provider). Each provider remembers its preferred model when you switch between providers.
+
+**Pro tip:** Pre-configure your preferred models for each provider, then switch providers based on your needs (speed vs quality vs cost).
+
+### Custom System Prompt
 
 You can override the persona via `PULSE_ASSISTANT_SYSTEM_PROMPT` or supply a path in `PULSE_ASSISTANT_SYSTEM_PROMPT_FILE`.
 

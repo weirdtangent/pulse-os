@@ -33,7 +33,7 @@ from pulse.assistant.conversation_manager import (
 )
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.info_service import InfoService
-from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
+from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider, get_supported_providers
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.response_modes import select_ha_response
@@ -102,6 +102,12 @@ class PulseAssistant:
         self.actions = ActionEngine(action_defs)
         self.routines = RoutineEngine(default_routines())
         self._llm_provider_override: str | None = None
+        self._openai_model_override: str | None = None
+        self._gemini_model_override: str | None = None
+        self._anthropic_model_override: str | None = None
+        self._groq_model_override: str | None = None
+        self._mistral_model_override: str | None = None
+        self._openrouter_model_override: str | None = None
         self.llm: LLMProvider = self._build_llm_provider()
         self.home_assistant: HomeAssistantClient | None = None
         self.preferences = config.preferences
@@ -979,6 +985,13 @@ class PulseAssistant:
             self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
             self.mqtt.subscribe(f"{base}/llm_provider/set", self._handle_llm_provider_command)
             self.mqtt.subscribe(f"{base}/log_llm/set", self._handle_log_llm_command)
+            # Model selection for each provider
+            self.mqtt.subscribe(f"{base}/openai_model/set", self._handle_openai_model_command)
+            self.mqtt.subscribe(f"{base}/gemini_model/set", self._handle_gemini_model_command)
+            self.mqtt.subscribe(f"{base}/anthropic_model/set", self._handle_anthropic_model_command)
+            self.mqtt.subscribe(f"{base}/groq_model/set", self._handle_groq_model_command)
+            self.mqtt.subscribe(f"{base}/mistral_model/set", self._handle_mistral_model_command)
+            self.mqtt.subscribe(f"{base}/openrouter_model/set", self._handle_openrouter_model_command)
             # Sound preferences
             self.mqtt.subscribe(f"{base}/sound_alarm/set", self._handle_sound_alarm_command)
             self.mqtt.subscribe(f"{base}/sound_timer/set", self._handle_sound_timer_command)
@@ -2713,15 +2726,57 @@ class PulseAssistant:
         value = payload.strip().lower()
         if not value:
             self._llm_provider_override = None
-        elif value in {"openai", "gemini"}:
+        elif value in get_supported_providers():
             self._llm_provider_override = value
         else:
-            LOGGER.debug("Ignoring invalid LLM provider: %s", payload)
+            supported = ", ".join(get_supported_providers().keys())
+            LOGGER.warning(f"Invalid LLM provider '{payload}'. Supported: {supported}")
             return
         self.llm = self._build_llm_provider()
         provider = self._active_llm_provider()
         self._publish_preference_state("llm_provider", provider)
         persist_preference("llm_provider", provider, logger=LOGGER)
+
+    def _handle_model_command(self, provider: str, payload: str) -> None:
+        """Generic handler for model selection commands across all providers.
+
+        Args:
+            provider: Provider name (e.g., "openai", "anthropic")
+            payload: Model name from MQTT command
+        """
+        value = payload.strip()
+        override_attr = f"_{provider}_model_override"
+        config_attr = f"{provider}_model"
+
+        # Update the model override for this provider
+        setattr(self, override_attr, value if value else None)
+
+        # Rebuild LLM provider if this provider is currently active
+        if self._active_llm_provider() == provider:
+            self.llm = self._build_llm_provider()
+
+        # Publish state and persist preference
+        default_model = getattr(self.config.llm, config_attr)
+        self._publish_preference_state(config_attr, value or default_model)
+        persist_preference(config_attr, value, logger=LOGGER)
+
+    def _handle_openai_model_command(self, payload: str) -> None:
+        self._handle_model_command("openai", payload)
+
+    def _handle_gemini_model_command(self, payload: str) -> None:
+        self._handle_model_command("gemini", payload)
+
+    def _handle_anthropic_model_command(self, payload: str) -> None:
+        self._handle_model_command("anthropic", payload)
+
+    def _handle_groq_model_command(self, payload: str) -> None:
+        self._handle_model_command("groq", payload)
+
+    def _handle_mistral_model_command(self, payload: str) -> None:
+        self._handle_model_command("mistral", payload)
+
+    def _handle_openrouter_model_command(self, payload: str) -> None:
+        self._handle_model_command("openrouter", payload)
 
     def _active_llm_provider(self) -> str:
         provider = self._llm_provider_override or self.config.llm.provider or "openai"
@@ -2729,7 +2784,22 @@ class PulseAssistant:
 
     def _build_llm_provider(self) -> LLMProvider:
         provider = self._active_llm_provider()
-        llm_config = replace(self.config.llm, provider=provider)
+        # Apply model overrides for all providers
+        llm_config = replace(
+            self.config.llm,
+            provider=provider,
+            openai_model=self._openai_model_override or self.config.llm.openai_model,
+            gemini_model=self._gemini_model_override or self.config.llm.gemini_model,
+            anthropic_model=self._anthropic_model_override or self.config.llm.anthropic_model,
+            groq_model=self._groq_model_override or self.config.llm.groq_model,
+            mistral_model=self._mistral_model_override or self.config.llm.mistral_model,
+            openrouter_model=self._openrouter_model_override or self.config.llm.openrouter_model,
+        )
+
+        # Log which provider and model we're using (helpful for debugging)
+        model = getattr(llm_config, f"{provider}_model", "unknown")
+        LOGGER.info(f"Using LLM provider: {provider} (model: {model})")
+
         return build_llm_provider(llm_config, LOGGER)
 
     def _publish_assistant_discovery(self) -> None:
