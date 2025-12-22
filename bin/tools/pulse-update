@@ -10,7 +10,8 @@ usage() {
 Usage: bin/tools/pulse-update [hosts...]
 
 Updates pulse.conf on the given hosts (or hosts from pulse-devices.conf if none provided)
-by rerunning setup.sh on each host via SSH.
+by rerunning setup.sh on each host via SSH. Runs hosts in parallel and hides setup.sh output
+for faster, quieter updates.
 
 Environment:
   REPO_DIR       Override repo root (default /opt/pulse-os)
@@ -65,7 +66,7 @@ fi
 run_host() {
   host="$1"
   echo "Updating $host..."
-  if ssh "$host" "cd $REPO_DIR && ./setup.sh"; then
+  if ssh "$host" "cd $REPO_DIR && ./setup.sh >/dev/null 2>&1"; then
     echo "OK: $host"
   else
     echo "FAIL: $host" >&2
@@ -74,8 +75,20 @@ run_host() {
 }
 
 fails=0
+pids=()
+declare -A pid_to_host
+
 for h in "${hosts[@]}"; do
-  run_host "$h" || fails=$((fails + 1))
+  run_host "$h" &
+  pid=$!
+  pids+=("$pid")
+  pid_to_host["$pid"]="$h"
+done
+
+for pid in "${pids[@]}"; do
+  if ! wait "$pid"; then
+    fails=$((fails + 1))
+  fi
 done
 
 exit $fails

@@ -22,9 +22,10 @@ See `docs/pulse-config-align.md` for full details.
 bin/tools/pulse-update [hosts...]
 ```
 
-- Runs `setup.sh` on each host (SSH) to update/apply config.
+- Runs `setup.sh` on each host (SSH) to update/apply config. Output from `setup.sh` is suppressed for brevity.
 - Hosts: CLI list or `pulse-devices.conf` if omitted.
 - Env: `REPO_DIR` (default `/opt/pulse-os`), `DEVICES_FILE` to override list path.
+- Runs hosts in parallel for faster fleet updates.
 
 ## pulse-reboot
 
