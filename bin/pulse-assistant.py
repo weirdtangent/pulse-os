@@ -507,12 +507,8 @@ class PulseAssistant:
         }
 
     async def _maybe_publish_light_overlay(self, executed_actions: list[str]) -> None:
-        if not executed_actions or not self.home_assistant:
-            return
-        action_prefixes = ("ha.light", "ha.turn_on", "ha.turn_off", "ha.scene")
-        if not any(action.startswith(action_prefixes) for action in executed_actions):
-            return
-        await self._publish_light_overlay()
+        # Suppress light overlay for HA actions (no info card needed)
+        return
 
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
