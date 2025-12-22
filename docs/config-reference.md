@@ -109,6 +109,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_ASSISTANT_WAKE_SOUND` | `true` | Plays a chime when a wake word fires. |
 | `PULSE_ASSISTANT_SPEAKING_STYLE` | `normal` | Assistant persona (`relaxed`, `normal`, `aggressive`). |
 | `PULSE_ASSISTANT_WAKE_SENSITIVITY` | `normal` | openWakeWord trigger sensitivity (`low`, `normal`, `high`). |
+| `PULSE_ASSISTANT_HA_RESPONSE_MODE` | `full` | ⚡ Spoken response style for HA actions (`none`, `tone`, `minimal`, `full`). |
+| `PULSE_ASSISTANT_HA_TONE_SOUND` | `alarm-sonar` | ⚡ Sound id to play when `HA_RESPONSE_MODE` is `tone` (built-in or custom sound id). |
 | `PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL` | `7` | Trigger level enforced while kiosk audio is playing (min 2). |
 | `PULSE_ASSISTANT_LOG_LEVEL` | `INFO` | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Set to `DEBUG` to see detailed logs including transcripts, responses, LLM actions, and calendar sync/event processing. |
 | `PULSE_ASSISTANT_LOG_LLM` | `true` | Publish transcripts/responses to MQTT (for dashboards/automation). |

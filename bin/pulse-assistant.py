@@ -36,12 +36,13 @@ from pulse.assistant.info_service import InfoService
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
+from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
-from pulse.audio import play_volume_feedback
+from pulse.audio import play_sound, play_volume_feedback
 from pulse.config_persist import persist_preference
 from pulse.datetime_utils import parse_datetime, parse_duration_seconds
 from pulse.sound_library import SoundKind, SoundLibrary, SoundSettings
@@ -530,6 +531,25 @@ class PulseAssistant:
             except Exception:
                 LOGGER.debug("Wake sound playback failed", exc_info=True)
 
+    async def _play_ack_tone(self, sound_id: str | None) -> None:
+        """Play a short acknowledgement tone for HA actions."""
+        sound_path = None
+        if sound_id:
+            info = self._sound_library.resolve_sound(sound_id)
+            if info:
+                sound_path = info.path
+        if sound_path is None:
+            sound_path = self._sound_library.resolve_with_default(
+                None,
+                kind="notification",
+                settings=self.config.sounds,
+            )
+        if sound_path is None:
+            LOGGER.debug("No acknowledgement tone available (sound_id=%s)", sound_id)
+            return
+        async with self.wake_detector.local_audio_block():
+            await asyncio.to_thread(play_sound, sound_path)
+
     async def _run_pulse_pipeline(self, wake_word: str) -> None:
         self.media_controller.cancel_media_resume_task()
         tracker = AssistRunTracker("pulse", wake_word)
@@ -771,24 +791,37 @@ class PulseAssistant:
             await self._maybe_publish_light_overlay(executed_actions)
             if routine_actions:
                 self._publish_routine_overlay()
-        if llm_result.response:
+        response_text, play_tone = select_ha_response(
+            self.preferences.ha_response_mode, executed_actions, llm_result.response
+        )
+        if response_text:
             if self._log_transcripts:
-                LOGGER.info("Response [%s]: %s", wake_word, llm_result.response)
+                LOGGER.info("Response [%s]: %s", wake_word, response_text)
             tracker.begin_stage("speaking")
             stage_extra = {"wake_word": wake_word}
             if follow_up:
                 stage_extra["follow_up"] = True
             self._set_assist_stage("pulse", "speaking", stage_extra)
             response_payload = {
-                "text": llm_result.response,
+                "text": response_text,
                 "wake_word": wake_word,
             }
             if follow_up:
                 response_payload["follow_up"] = True
             self._publish_message(self.config.response_topic, json.dumps(response_payload))
             tag = "follow_up" if follow_up else wake_word
-            self._log_assistant_response(tag, llm_result.response, pipeline="pulse")
-            await self._speak(llm_result.response)
+            self._log_assistant_response(tag, response_text, pipeline="pulse")
+            await self._speak(response_text)
+            speech_finished_at = time.monotonic()
+            self.conversation_manager.update_last_response_end(speech_finished_at)
+            self.media_controller.trigger_media_resume_after_response()
+        elif play_tone:
+            tracker.begin_stage("speaking")
+            stage_extra = {"wake_word": wake_word}
+            if follow_up:
+                stage_extra["follow_up"] = True
+            self._set_assist_stage("pulse", "speaking", stage_extra)
+            await self._play_ack_tone(self.preferences.ha_tone_sound)
             speech_finished_at = time.monotonic()
             self.conversation_manager.update_last_response_end(speech_finished_at)
             self.media_controller.trigger_media_resume_after_response()
@@ -945,6 +978,8 @@ class PulseAssistant:
             self.mqtt.subscribe(f"{base}/wake_sound/set", self._handle_wake_sound_command)
             self.mqtt.subscribe(f"{base}/speaking_style/set", self._handle_speaking_style_command)
             self.mqtt.subscribe(f"{base}/wake_sensitivity/set", self._handle_wake_sensitivity_command)
+            self.mqtt.subscribe(f"{base}/ha_response_mode/set", self._handle_ha_response_mode_command)
+            self.mqtt.subscribe(f"{base}/ha_tone_sound/set", self._handle_ha_tone_sound_command)
             self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
             self.mqtt.subscribe(f"{base}/llm_provider/set", self._handle_llm_provider_command)
             self.mqtt.subscribe(f"{base}/log_llm/set", self._handle_log_llm_command)
@@ -1010,6 +1045,29 @@ class PulseAssistant:
         state = "on" if enabled else "off"
         self._publish_preference_state("log_llm", state)
         persist_preference("log_llm", state, logger=LOGGER)
+
+    def _handle_ha_response_mode_command(self, payload: str) -> None:
+        value = payload.strip().lower()
+        if value not in {"none", "tone", "minimal", "full"}:
+            LOGGER.debug("Ignoring invalid HA response mode: %s", payload)
+            return
+        if value == self.preferences.ha_response_mode:
+            return
+        self.preferences = replace(self.preferences, ha_response_mode=value)  # type: ignore[arg-type]
+        self._publish_preference_state("ha_response_mode", value)
+        persist_preference("ha_response_mode", value, logger=LOGGER)
+
+    def _handle_ha_tone_sound_command(self, payload: str) -> None:
+        label = payload.strip()
+        if not label:
+            return
+        sound_id = self._get_sound_id_by_label("notification", label) or label
+        if sound_id == self.preferences.ha_tone_sound:
+            return
+        self.preferences = replace(self.preferences, ha_tone_sound=sound_id)
+        label_or_id = self._get_sound_label_by_id("notification", sound_id) or label
+        self._publish_preference_state("ha_tone_sound", label_or_id)
+        persist_preference("ha_tone_sound", sound_id, logger=LOGGER)
 
     def _refresh_sound_options(self) -> None:
         """Build sound option lists for each kind from the sound library."""
@@ -1215,6 +1273,12 @@ class PulseAssistant:
         self._publish_preference_state("wake_sound", "on" if self.preferences.wake_sound else "off")
         self._publish_preference_state("speaking_style", self.preferences.speaking_style)
         self._publish_preference_state("wake_sensitivity", self.preferences.wake_sensitivity)
+        self._publish_preference_state("ha_response_mode", self.preferences.ha_response_mode)
+        tone_label = (
+            self._get_sound_label_by_id("notification", self.preferences.ha_tone_sound)
+            or self.preferences.ha_tone_sound
+        )
+        self._publish_preference_state("ha_tone_sound", tone_label)
         self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
         self._publish_preference_state("llm_provider", self._active_llm_provider())
         self._publish_preference_state("log_llm", "on" if self._log_llm_messages else "off")
@@ -2824,6 +2888,40 @@ class PulseAssistant:
             ),
             retain=True,
         )
+        # HA response mode select
+        self._publish_message(
+            f"{prefix}/select/{hostname_safe}_ha_response_mode/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} HA Response Mode",
+                    "unique_id": f"{self.config.hostname}-ha-response-mode",
+                    "state_topic": f"{self._preferences_topic}/ha_response_mode/state",
+                    "command_topic": f"{self._preferences_topic}/ha_response_mode/set",
+                    "options": ["none", "tone", "minimal", "full"],
+                    "device": device,
+                    "entity_category": "config",
+                }
+            ),
+            retain=True,
+        )
+        tone_options = self._get_sound_options_for_kind("notification")
+        if tone_options:
+            self._publish_message(
+                f"{prefix}/select/{hostname_safe}_ha_tone_sound/config",
+                json.dumps(
+                    {
+                        "name": f"{self.config.device_name} HA Tone Sound",
+                        "unique_id": f"{self.config.hostname}-ha-tone-sound",
+                        "state_topic": f"{self._preferences_topic}/ha_tone_sound/state",
+                        "command_topic": f"{self._preferences_topic}/ha_tone_sound/set",
+                        "options": tone_options,
+                        "device": device,
+                        "entity_category": "config",
+                        "icon": "mdi:volume-medium",
+                    }
+                ),
+                retain=True,
+            )
         # Sound preference selects
         sound_configs = [
             ("alarm", "Alarm Sound", "mdi:alarm"),

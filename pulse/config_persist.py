@@ -301,6 +301,8 @@ PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
     "wake_sound": ("PULSE_ASSISTANT_WAKE_SOUND", lambda v: "true" if v == "on" else "false"),
     "speaking_style": ("PULSE_ASSISTANT_SPEAKING_STYLE", str),
     "wake_sensitivity": ("PULSE_ASSISTANT_WAKE_SENSITIVITY", str),
+    "ha_response_mode": ("PULSE_ASSISTANT_HA_RESPONSE_MODE", str),
+    "ha_tone_sound": ("PULSE_ASSISTANT_HA_TONE_SOUND", str),
     # Home Assistant integration (ha_ is shorthand for HOME_ASSISTANT_)
     "ha_pipeline": ("HOME_ASSISTANT_ASSIST_PIPELINE", str),
     # LLM settings (llm_ prefix clarifies the MQTT key refers to LLM provider choice)

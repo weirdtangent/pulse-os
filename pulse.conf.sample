@@ -243,6 +243,12 @@ PULSE_ASSISTANT_SPEAKING_STYLE="normal"
 # PULSE_ASSISTANT_WAKE_SENSITIVITY — maps to openWakeWord trigger levels (low=5, normal=3, high=2).
 PULSE_ASSISTANT_WAKE_SENSITIVITY="normal"
 
+# PULSE_ASSISTANT_HA_RESPONSE_MODE — spoken response style for HA actions (none, tone, minimal, full).
+PULSE_ASSISTANT_HA_RESPONSE_MODE="full"
+
+# PULSE_ASSISTANT_HA_TONE_SOUND — sound id used when HA response mode is "tone".
+PULSE_ASSISTANT_HA_TONE_SOUND="alarm-sonar"
+
 # PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL — enforced trigger level while self audio is active (minimum 2).
 PULSE_ASSISTANT_SELF_AUDIO_TRIGGER_LEVEL="7"
 

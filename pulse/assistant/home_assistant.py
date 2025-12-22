@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import ssl
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -48,12 +49,25 @@ class HomeAssistantClient:
             "Authorization": f"Bearer {self.config.token}",
             "Content-Type": "application/json",
         }
-        self._client = httpx.AsyncClient(
-            base_url=base_url,
-            headers=headers,
-            timeout=self.timeout,
-            verify=self.config.verify_ssl,
-        )
+        try:
+            self._client = httpx.AsyncClient(
+                base_url=base_url,
+                headers=headers,
+                timeout=self.timeout,
+                verify=self.config.verify_ssl,
+                trust_env=False,
+            )
+        except PermissionError:
+            logging.getLogger(__name__).warning(
+                "Falling back to insecure SSL verification for Home Assistant client due to permission error"
+            )
+            self._client = httpx.AsyncClient(
+                base_url=base_url,
+                headers=headers,
+                timeout=self.timeout,
+                verify=False,
+                trust_env=False,
+            )
         self._closed = False
 
     async def close(self) -> None:

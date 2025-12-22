@@ -172,6 +172,8 @@ class AssistantPreferences:
     wake_sound: bool
     speaking_style: Literal["relaxed", "normal", "aggressive"]
     wake_sensitivity: Literal["low", "normal", "high"]
+    ha_response_mode: Literal["none", "tone", "minimal", "full"]
+    ha_tone_sound: str
 
 
 @dataclass(frozen=True)
@@ -402,6 +404,12 @@ class AssistantConfig:
                 {"low", "normal", "high"},
                 "normal",
             ),
+            ha_response_mode=_normalize_choice(
+                source.get("PULSE_ASSISTANT_HA_RESPONSE_MODE"),
+                {"none", "tone", "minimal", "full"},
+                "full",
+            ),
+            ha_tone_sound=(source.get("PULSE_ASSISTANT_HA_TONE_SOUND") or "alarm-sonar").strip() or "alarm-sonar",
         )
 
         sounds_dir_env = source.get("PULSE_SOUNDS_DIR")
