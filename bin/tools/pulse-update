@@ -66,7 +66,7 @@ fi
 run_host() {
   host="$1"
   echo "Updating $host..."
-  if ssh "$host" "cd $REPO_DIR && ./setup.sh >/dev/null 2>&1"; then
+  if ssh "$host" "cd $REPO_DIR && git pull --ff-only >/dev/null 2>&1 && ./setup.sh >/dev/null 2>&1"; then
     echo "OK: $host"
   else
     echo "FAIL: $host" >&2
