@@ -76,13 +76,11 @@ run_host() {
 
 fails=0
 pids=()
-declare -A pid_to_host
 
 for h in "${hosts[@]}"; do
   run_host "$h" &
   pid=$!
   pids+=("$pid")
-  pid_to_host["$pid"]="$h"
 done
 
 for pid in "${pids[@]}"; do
