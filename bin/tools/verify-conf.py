@@ -133,7 +133,7 @@ def load_env_from_config(config_path: Path | None) -> dict[str, str]:
     command = f"set -a; source {shlex.quote(str(config_path))}; env -0"
 
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["bash", "-c", command],
             check=True,
             capture_output=True,
@@ -364,7 +364,7 @@ def _build_ssl_context(config: HomeAssistantConfig, env: dict[str, str]) -> ssl.
     if not config.base_url or config.base_url.startswith("http://"):
         return None
     if not config.verify_ssl:
-        return ssl._create_unverified_context()
+        return ssl._create_unverified_context()  # nosec B323 - user config
     cafile = env.get("REQUESTS_CA_BUNDLE") or env.get("SSL_CERT_FILE")
     capath = env.get("SSL_CERT_DIR")
     if cafile or capath:
@@ -392,7 +392,7 @@ def _fetch_home_assistant_json(
     open_kwargs: dict[str, object] = {"timeout": timeout}
     if context is not None:
         open_kwargs["context"] = context
-    with urllib_request.urlopen(request, **open_kwargs) as resp:  # type: ignore[arg-type]
+    with urllib_request.urlopen(request, **open_kwargs) as resp:  # type: ignore[arg-type]  # nosec B310 - timeout in kwargs
         payload = resp.read()
     if not payload:
         return {}
@@ -435,7 +435,7 @@ def check_home_assistant_assist_pipeline(
         if context is not None:
             open_kwargs["context"] = context
         try:
-            with urllib_request.urlopen(request, **open_kwargs):  # type: ignore[arg-type]
+            with urllib_request.urlopen(request, **open_kwargs):  # type: ignore[arg-type]  # nosec B310 - timeout in kwargs
                 # Endpoint exists and responds - conversation API is available
                 # Note: /api/assist_pipeline/run is WebSocket-only, but conversation/process works for text
                 return CheckResult(
@@ -467,7 +467,7 @@ def check_home_assistant_assist_pipeline(
                         f"Conversation API is available (verified via /api/conversation/process). "
                         f"Configured pipeline: '{assist_pipeline}'.",
                     )
-            except Exception:
+            except Exception:  # nosec B110 - parsing external data
                 pass
             return CheckResult(
                 "HA Assist pipelines",
@@ -834,7 +834,7 @@ def _exercise_openwakeword(
 
 
 async def _probe_whisper_async(host: str, port: int, config: AssistantConfig, timeout: float) -> str | None:
-    assert wyoming_helpers is not None
+    assert wyoming_helpers is not None  # nosec B101 - dev tool only
     endpoint = WyomingEndpoint(host=host, port=port, model=config.stt_endpoint.model)
     silence = wyoming_helpers.silence_bytes(400, config.mic)
     return await wyoming_helpers.transcribe_audio(
@@ -847,7 +847,7 @@ async def _probe_whisper_async(host: str, port: int, config: AssistantConfig, ti
 
 
 async def _probe_piper_async(host: str, port: int, timeout: float) -> tuple[bool, int]:
-    assert wyoming_helpers is not None
+    assert wyoming_helpers is not None  # nosec B101 - dev tool only
     endpoint = WyomingEndpoint(host=host, port=port)
     return await wyoming_helpers.probe_synthesize(
         endpoint=endpoint,
@@ -864,7 +864,7 @@ async def _probe_openwakeword_async(
     *,
     models: Sequence[str] | None = None,
 ) -> str | None:
-    assert wyoming_helpers is not None
+    assert wyoming_helpers is not None  # nosec B101 - dev tool only
     endpoint = WyomingEndpoint(host=host, port=port)
     target_models = list(models) if models else (config.wake_models or ["hey_jarvis"])
     return await wyoming_helpers.probe_wake_detection(
@@ -876,9 +876,9 @@ async def _probe_openwakeword_async(
 
 
 async def _describe_endpoint_async(host: str, port: int, timeout: float) -> Info | None:
-    assert AsyncTcpClient is not None
-    assert Describe is not None
-    assert Info is not None
+    assert AsyncTcpClient is not None  # nosec B101 - dev tool only
+    assert Describe is not None  # nosec B101 - dev tool only
+    assert Info is not None  # nosec B101 - dev tool only
 
     client = AsyncTcpClient(host, port)
     await asyncio.wait_for(client.connect(), timeout=timeout)

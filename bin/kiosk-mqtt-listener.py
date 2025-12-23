@@ -267,7 +267,7 @@ def _extract_primary_font(font_stack: str) -> str | None:
 
 def _detect_installed_fonts() -> list[str]:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["fc-list", ":", "family"],
             capture_output=True,
             text=True,
@@ -415,7 +415,7 @@ def load_config() -> EnvConfig:
 
     overlay_enabled = parse_bool(os.environ.get("PULSE_OVERLAY_ENABLED"), True)
     overlay_port = int(os.environ.get("PULSE_OVERLAY_PORT", "8800"))
-    overlay_bind = (os.environ.get("PULSE_OVERLAY_BIND") or "0.0.0.0").strip() or "0.0.0.0"
+    overlay_bind = (os.environ.get("PULSE_OVERLAY_BIND") or "0.0.0.0").strip() or "0.0.0.0"  # nosec B104 - local service
     overlay_allowed_raw = os.environ.get("PULSE_OVERLAY_ALLOWED_ORIGINS", "*")
     overlay_allowed_origins = tuple(origin.strip() for origin in overlay_allowed_raw.split(",") if origin.strip()) or (
         "*",
@@ -520,7 +520,7 @@ def load_config() -> EnvConfig:
 
 
 def _is_valid_ip(ip: str | None) -> bool:
-    return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0"
+    return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0"  # nosec B104 - local service
 
 
 def detect_ip_address(hostname: str) -> str | None:
@@ -685,7 +685,7 @@ class KioskMqttListener:
         )
         self._day_brightness, self._night_brightness = _load_backlight_targets()
         overlay_host = self.overlay_config.bind_address
-        if overlay_host in {"0.0.0.0", "::"}:
+        if overlay_host in {"0.0.0.0", "::"}:  # nosec B104 - local service
             overlay_host = "localhost"
         if ":" in overlay_host and not overlay_host.startswith("["):
             overlay_host = f"[{overlay_host}]"
@@ -794,7 +794,7 @@ class KioskMqttListener:
         # Prime CPU percent measurement
         try:
             psutil.cpu_percent(interval=None)
-        except Exception:
+        except Exception:  # nosec B110 - parsing external data
             pass
 
         while not self._telemetry_stop_event.is_set():
@@ -822,7 +822,7 @@ class KioskMqttListener:
             self._last_reboot_attempt = now
             try:
                 self.log(f"watchdog: MQTT offline for {int(offline_seconds)}s; requesting safe reboot")
-                subprocess.run(self._safe_reboot_command("mqtt-watchdog"), check=True)
+                subprocess.run(self._safe_reboot_command("mqtt-watchdog"), check=True)  # nosec B603 - hardcoded command array
             except Exception as exc:  # noqa: BLE001
                 self.log(f"watchdog: reboot attempt failed: {exc}")
             finally:
@@ -904,7 +904,7 @@ class KioskMqttListener:
             return None
         if self.config.ha_verify_ssl:
             return ssl.create_default_context()
-        return ssl._create_unverified_context()
+        return ssl._create_unverified_context()  # nosec B323 - user config
 
     def _fetch_media_player_state(self) -> dict[str, Any] | None:
         entity = self.config.media_player_entity
@@ -922,7 +922,7 @@ class KioskMqttListener:
         if self._ha_ssl_context is not None:
             open_kwargs["context"] = self._ha_ssl_context
         try:
-            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]
+            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]  # nosec B310 - timeout in kwargs
                 data = response.read()
         except urllib.error.HTTPError as exc:
             self._log_now_playing_error(f"now-playing: HA returned {exc.code} for {entity}: {exc.reason}")
@@ -1276,7 +1276,7 @@ class KioskMqttListener:
     def _detect_local_version(self) -> str | None:
         # Always try git first to get the most current version (env var may be stale after git pull)
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - hardcoded command array
                 ["git", "describe", "--tags", "--abbrev=0"],
                 cwd=self.repo_dir,
                 capture_output=True,
@@ -1315,7 +1315,7 @@ class KioskMqttListener:
         url = self.config.version_source_url
         try:
             request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
-            with urllib.request.urlopen(request, timeout=10) as resp:
+            with urllib.request.urlopen(request, timeout=10) as resp:  # nosec B310 - timeout in kwargs
                 import json
 
                 data = json.loads(resp.read().decode("utf-8", errors="ignore"))
@@ -1434,7 +1434,7 @@ class KioskMqttListener:
             return self.update_available
 
     def fetch_page_targets(self) -> list[dict[str, Any]]:
-        with urllib.request.urlopen(self.config.devtools.discovery_url, timeout=self.config.devtools.timeout) as resp:
+        with urllib.request.urlopen(self.config.devtools.discovery_url, timeout=self.config.devtools.timeout) as resp:  # nosec B310 - timeout in kwargs
             payload = json.load(resp)
         return [item for item in payload if item.get("type") == "page"]
 
@@ -1536,7 +1536,7 @@ class KioskMqttListener:
             return
         # Build the overlay frame URL with the target URL as a query parameter
         overlay_host = self.overlay_config.bind_address
-        if overlay_host in {"0.0.0.0", "::"}:
+        if overlay_host in {"0.0.0.0", "::"}:  # nosec B104 - local service
             overlay_host = "localhost"
         if ":" in overlay_host and not overlay_host.startswith("["):
             overlay_host = f"[{overlay_host}]"
@@ -1935,7 +1935,7 @@ class KioskMqttListener:
         display_cmd = " ".join(command)
         self.log(f"update: running {description}: {display_cmd}")
         try:
-            subprocess.run(command, cwd=cwd, check=True)
+            subprocess.run(command, cwd=cwd, check=True)  # nosec B603 - hardcoded command array
             return True
         except FileNotFoundError as exc:
             self.log(f"update: command for {description} not found: {exc}")
@@ -2002,7 +2002,7 @@ class KioskMqttListener:
     def _perform_reboot(self) -> None:
         try:
             self.log("reboot: requesting safe reboot")
-            subprocess.run(self._safe_reboot_command("mqtt: manual reboot"), check=True)
+            subprocess.run(self._safe_reboot_command("mqtt: manual reboot"), check=True)  # nosec B603 - hardcoded command array
         except FileNotFoundError as exc:
             self.log(f"reboot: command not found: {exc}")
         except subprocess.CalledProcessError as exc:

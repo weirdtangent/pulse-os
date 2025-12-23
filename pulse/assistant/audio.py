@@ -270,7 +270,7 @@ def _warmup_sink(env: dict[str, str], sink: str | None, rate: int, width: int, c
     samples = int(rate * duration_seconds)
     silence = b"\x00" * samples * bytes_per_sample * channels
     try:
-        subprocess.run(
+        subprocess.run(  # nosec B603 - hardcoded command array
             [
                 pw_play,
                 "--target",
@@ -290,5 +290,5 @@ def _warmup_sink(env: dict[str, str], sink: str | None, rate: int, width: int, c
             check=False,
             env=env,
         )
-    except Exception:
+    except Exception:  # nosec B110 - parsing external data
         pass

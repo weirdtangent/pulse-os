@@ -43,7 +43,7 @@ def _runtime_env() -> dict[str, str]:
 
 def _run_pactl(args: list[str]) -> subprocess.CompletedProcess[str] | None:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["pactl", *args],
             capture_output=True,
             text=True,
@@ -278,7 +278,7 @@ def get_current_volume(sink: str | None = None) -> int | None:
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Fallback: try list sinks if get-sink-volume fails
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - hardcoded command array
                 ["pactl", "list", "sinks"],
                 capture_output=True,
                 text=True,
@@ -355,7 +355,7 @@ def _play_sample(sample_path: Path | None) -> None:
         _LOGGER.debug("No audio player available")
         return
     try:
-        subprocess.run(
+        subprocess.run(  # nosec B603 - hardcoded command array
             [player, str(sample_path)],
             check=False,
             stdout=subprocess.DEVNULL,

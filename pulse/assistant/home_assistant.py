@@ -65,7 +65,7 @@ class HomeAssistantClient:
                 base_url=base_url,
                 headers=headers,
                 timeout=self.timeout,
-                verify=False,
+                verify=False,  # nosec B501 - Intentional fallback for local HA instances without SSL certs
                 trust_env=False,
             )
         self._closed = False

@@ -60,7 +60,7 @@ def get_current_brightness(device_path: str | None = None) -> int | None:
 
     try:
         # Try brightnessctl first
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["brightnessctl", "get"],
             capture_output=True,
             text=True,
@@ -68,7 +68,7 @@ def get_current_brightness(device_path: str | None = None) -> int | None:
         )
         if result.returncode == 0:
             # brightnessctl get returns raw value, need max to calculate %
-            max_result = subprocess.run(
+            max_result = subprocess.run(  # nosec B603 B607 - hardcoded command array
                 ["brightnessctl", "max"],
                 capture_output=True,
                 text=True,
@@ -117,7 +117,7 @@ def set_brightness(percent: int, device_path: str | None = None) -> bool:
 
     try:
         # Try brightnessctl first (easier and more portable)
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["brightnessctl", "set", f"{percent}%"],
             check=False,
             capture_output=True,

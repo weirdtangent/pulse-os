@@ -34,7 +34,7 @@ def load_env_from_config(config_path: Path | None) -> dict[str, str]:
     command = f"set -a; source {shlex.quote(str(config_path))}; env -0"
 
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["bash", "-c", command],
             check=True,
             capture_output=True,

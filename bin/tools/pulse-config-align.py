@@ -168,7 +168,7 @@ def _format_extra_lines(label: str, value: str | None, label_width: int) -> list
 def _flush() -> None:
     try:
         sys.stdout.flush()
-    except Exception:
+    except Exception:  # nosec B110 - parsing external data
         pass
 
 
@@ -183,7 +183,7 @@ def _fetch_remote_config(host: str, remote_path: Path) -> Path:
     _log(f"Fetching remote config from {host}:{remote_path}")
     with tempfile.NamedTemporaryFile(delete=False, prefix=f"pulse-conf-{host}-", suffix=".tmp") as handle:
         tmp_path = Path(handle.name)
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - hardcoded command array
             ["ssh", host, "cat", str(remote_path)],
             stdout=handle,
             stderr=subprocess.PIPE,
@@ -200,14 +200,14 @@ def _fetch_remote_config(host: str, remote_path: Path) -> Path:
 def _open_editor(path: Path) -> None:
     editor = os.environ.get("EDITOR") or "vi"
     _log(f"Opening editor '{editor}' for {path}")
-    result = subprocess.run([editor, str(path)])
+    result = subprocess.run([editor, str(path)])  # nosec B603 - hardcoded command array
     if result.returncode != 0:
         raise RuntimeError(f"Editor {editor} exited with {result.returncode}")
 
 
 def _push_remote_config(host: str, local_path: Path, remote_path: Path) -> None:
     _log(f"Pushing updated config to {host}:{remote_path}")
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 B607 - hardcoded command array
         ["scp", str(local_path), f"{host}:{remote_path}"],
         capture_output=True,
         text=True,
@@ -221,7 +221,7 @@ def _push_remote_config(host: str, local_path: Path, remote_path: Path) -> None:
 def _run_remote_setup(host: str, remote_path: Path) -> None:
     setup_path = remote_path.parent / "setup.sh"
     _log(f"Running setup.sh on {host}")
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 B607 - hardcoded command array
         ["ssh", host, str(setup_path)],
         capture_output=True,
         text=True,

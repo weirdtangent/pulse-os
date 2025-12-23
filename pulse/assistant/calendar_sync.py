@@ -386,7 +386,7 @@ class CalendarSyncService:
             due_value = component.decoded("DUE")
             if due_value:
                 start_value = due_value
-        except Exception:
+        except Exception:  # nosec B110 - parsing external data
             pass
         if not start_value:
             try:
@@ -402,7 +402,7 @@ class CalendarSyncService:
             duration_value = component.decoded("DURATION")
             if duration_value and isinstance(duration_value, timedelta):
                 end_dt = start_dt + duration_value
-        except Exception:
+        except Exception:  # nosec B110 - parsing external data
             pass
         # If no DURATION, try DTEND (some implementations use it)
         if not end_dt:
@@ -410,7 +410,7 @@ class CalendarSyncService:
                 end_value = component.decoded("DTEND")
                 if end_value:
                     end_dt, _ = self._coerce_datetime(end_value, start_dt.tzinfo or now.tzinfo)
-            except Exception:
+            except Exception:  # nosec B110 - parsing external data
                 pass
         summary = str(component.get("SUMMARY") or "Task").strip() or "Task"
         description = str(component.get("DESCRIPTION")).strip() if component.get("DESCRIPTION") else None
@@ -496,7 +496,7 @@ class CalendarSyncService:
                 continue
             try:
                 decoded = alarm.decoded("TRIGGER")
-            except Exception:
+            except Exception:  # nosec B112 - parsing external data
                 continue
             trigger_dt: datetime | None = None
             if isinstance(decoded, timedelta):

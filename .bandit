@@ -1,0 +1,25 @@
+# Bandit security scanner configuration
+# See: https://bandit.readthedocs.io/en/latest/config.html
+
+# Exclude test files and example scripts
+exclude_dirs:
+  - /tests/
+  - /examples/
+  - /.venv/
+  - /venv/
+
+# Only skip truly informational checks that aren't actionable:
+# B404 - import subprocess (informational only, the actual usage is checked by B603/B607)
+skips:
+  - B404
+
+# All other checks remain ACTIVE to catch new security issues.
+# Use inline "# nosec BXXX" comments on specific lines where usage is verified safe.
+#
+# Common patterns requiring # nosec annotations:
+# - B603/B607: subprocess with hardcoded command arrays (safe)
+# - B310: urllib with timeout in **kwargs (safe, but Bandit can't detect)
+# - B110/B112: try/except/pass for parsing external data (safe if intentional)
+# - B101: assert in dev tools only (safe in non-production code)
+# - B104: bind 0.0.0.0 for local services (safe if intentional)
+# - B323/B501: unverified SSL when user explicitly disables (safe if logged/warned)
