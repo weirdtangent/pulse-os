@@ -17,7 +17,7 @@ dependencies = [
     "psutil==6.1.0",
     "websocket==0.2.1",
     "websockets==14.1",
-    "wyoming==1.6.0",
+    "wyoming==1.8.0",
     "openlocationcode==1.0.1",
 ]
 
