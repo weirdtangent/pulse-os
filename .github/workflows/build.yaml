@@ -20,7 +20,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Check for Python changes
         id: filter
@@ -43,7 +43,7 @@ jobs:
 
       - name: Checkout repository
         if: needs.changes.outputs.python == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Python
         if: needs.changes.outputs.python == 'true'
@@ -92,7 +92,7 @@ jobs:
 
       - name: Checkout repository
         if: needs.changes.outputs.python == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Python ${{ matrix.python-version }}
         if: needs.changes.outputs.python == 'true'
@@ -152,7 +152,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
