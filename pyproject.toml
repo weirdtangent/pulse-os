@@ -14,7 +14,7 @@ dependencies = [
     "icalendar==6.0.1",
     "packaging==24.2",
     "paho-mqtt==2.1.0",
-    "psutil==6.1.0",
+    "psutil==7.1.3",
     "websocket==0.2.1",
     "websockets==14.1",
     "wyoming==1.6.0",
