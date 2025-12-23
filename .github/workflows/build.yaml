@@ -10,7 +10,8 @@ on:
   workflow_dispatch:
 
 # Default to least privilege; elevate per job only when needed.
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   changes:
