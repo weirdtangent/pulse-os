@@ -60,3 +60,11 @@ This project uses automated security scanning:
 - **OpenSSF Scorecard:** Supply chain security metrics
 
 See our [Security Status](README.md#security-status) badges for current scan results.
+
+## Secure development practices
+- At least one primary maintainer is experienced with secure design for Python services and mitigations for common classes of vulnerabilities (injection, authn/z bypass, SSRF, insecure deserialization, path traversal, weak crypto, hardcoded secrets).
+- We require static analysis (Ruff, CodeQL) and tests (`pytest`) on every PR and before releases; medium+ severity findings are fixed before publishing.
+- Dynamic checks: the pytest suite (with assertions enabled) runs on every PR and main-branch push.
+- Delivery integrity: source and releases are distributed via HTTPS or SSH; we do not fetch unsigned hashes over HTTP. Verify tags and checksums where applicable.
+- Vulnerability response: initial response ≤14 days (target 48h) and no medium-or-higher vulnerability remains unpatched for >60 days; critical issues are addressed as quickly as possible.
+- Secrets policy: we do not commit credentials; PRs are scanned for secrets. If a secret is exposed, rotate immediately and remove it from history.

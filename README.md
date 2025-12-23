@@ -19,6 +19,13 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - Sunrise/sunset-aware backlight control, Bluetooth autoconnect for external speakers, and one-touch audio tests to confirm volume changes.
 - Printable hardware accessories (mic stand, speaker cups, Pi 5 case) and ready-made scripts for kiosk recovery, calendar snapshots, and service restarts.
 
+### How to obtain, get help, and contribute
+- Obtain: clone from GitHub (`git clone https://github.com/weirdtangent/pulse-os.git`) and follow the setup steps below (we publish interim commits, not just tagged drops).
+- Bugs & enhancements: open [issues](https://github.com/weirdtangent/pulse-os/issues) with repro details and expected behavior.
+- Contribute: follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`TESTING.md`](TESTING.md) for coding standards (Black 120 cols, Ruff) and required checks (ruff, black, pytest).
+- Security reports: use the process in [`SECURITY.md`](SECURITY.md); please do not open public issues for vulnerabilities.
+- CPE: not published / N/A.
+
 ---
 
 ## Jump to…
@@ -38,6 +45,11 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - [notes-and-extras](docs/notes-and-extras.md) — Voice assistant tips, MQTT knobs, hardware accessories, boot splash notes, and other odds & ends
 - [public-photo-sources](docs/public-photo-sources.md) — Open-licensed image feeds (NASA, Smithsonian, Met, etc.) for `pulse-photo-card`
 - [config-reference](docs/config-reference.md) — Comprehensive `pulse.conf` option list with defaults and usage notes
+
+### External interfaces (APIs, inputs/outputs)
+- Configuration surface: [`docs/config-reference.md`](docs/config-reference.md) details every `pulse.conf` key and default.
+- MQTT control & telemetry topics: [`docs/mqtt-and-telemetry.md`](docs/mqtt-and-telemetry.md).
+- Voice assistant intents & CLI: [`docs/assistant-commands.md`](docs/assistant-commands.md) and [`docs/voice-assistant.md`](docs/voice-assistant.md).
 
 ## Hardware Guide
 <details>
@@ -162,6 +174,16 @@ All of the voice-assistant tips, MQTT knobs, Home Assistant snippets, printable 
 
 See the dedicated [troubleshooting guide](docs/troubleshooting.md) for the full Pi 5 + Touch Display checklist (black strip, touch calibration, autologin, etc.).
 <a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
+
+### Releases, versioning, and release notes
+- Semantic versioning (major.minor.patch); version metadata is managed by `release.config.js` and tagged in git.
+- Interim commits are pushed to `main`; formal releases are tagged and summarized in [`CHANGELOG.md`](CHANGELOG.md).
+- Release artifacts and source are delivered over HTTPS/SSH; verify tags and checksums where applicable.
+
+### Quality gates and analysis
+- CI runs on every PR and main push: `ruff check`, `black --check`, `pytest`, dependency auditing, and CodeQL analysis.
+- Static analysis (Ruff, CodeQL) is required before releases; medium+ findings must be fixed before publishing.
+- Dynamic checks: pytest suite (with assertions enabled) runs per PR and release.
 
 ### Build & Quality Status
 
