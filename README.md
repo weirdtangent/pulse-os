@@ -173,3 +173,10 @@ See the dedicated [troubleshooting guide](docs/troubleshooting.md) for the full 
 ![License](https://img.shields.io/github/license/weirdtangent/pulse-os)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+### Security Status
+
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/weirdtangent/pulse-os/codeql.yaml?branch=main&label=CodeQL&logo=github)](https://github.com/weirdtangent/pulse-os/security/code-scanning)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/weirdtangent/pulse-os/badge)](https://scorecard.dev/viewer/?uri=github.com/weirdtangent/pulse-os)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9999/badge)](https://www.bestpractices.dev/projects/9999)
+![Dependabot](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)
