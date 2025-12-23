@@ -25,7 +25,7 @@ dependencies = [
 dev = [
     "black==24.10.0",
     "pytest==9.0.1",
-    "ruff==0.8.4",
+    "ruff==0.14.10",
 ]
 
 [tool.setuptools.packages.find]
