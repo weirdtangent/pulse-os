@@ -8,7 +8,7 @@ import json
 import os
 import shlex
 import ssl
-import subprocess
+import subprocess  # nosec B404 - required for env sourcing shell invocation
 import sys
 from pathlib import Path
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-import subprocess
+import subprocess  # nosec B404 - brightness control relies on CLI calls
 from pathlib import Path
 
 CONF_PATH = Path("/etc/pulse-backlight.conf")

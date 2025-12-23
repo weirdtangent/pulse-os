@@ -7,7 +7,7 @@ import argparse
 import concurrent.futures
 import importlib.util
 import os
-import subprocess
+import subprocess  # nosec B404 - required for controlled sync subprocesses
 import sys
 import tempfile
 from collections.abc import Callable

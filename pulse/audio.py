@@ -6,7 +6,7 @@ import logging
 import math
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 - subprocess used for pactl interactions
 import wave
 from collections.abc import Callable
 from pathlib import Path

@@ -7,7 +7,7 @@ import contextlib
 import logging
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 - subprocess used for audio helpers
 from asyncio.subprocess import Process
 
 from pulse import audio as pulse_audio

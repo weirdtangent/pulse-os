@@ -13,7 +13,7 @@ import shlex
 import shutil
 import socket
 import ssl
-import subprocess
+import subprocess  # nosec B404 - required for env sourcing shell invocation
 import sys
 import threading
 import time
