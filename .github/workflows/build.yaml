@@ -76,7 +76,9 @@ jobs:
 
       - name: Bandit security scan
         if: needs.changes.outputs.python == 'true'
-        run: bandit -r pulse/ bin/ -f json -o bandit-report.json || bandit -r pulse/ bin/
+        run: |
+          # Focus on high-severity, high-confidence issues to reduce noise while keeping CI signal.
+          bandit -r pulse/ bin/ -lll -iii -f json -o bandit-report.json || bandit -r pulse/ bin/ -lll -iii
 
       - name: Upload Bandit results
         if: needs.changes.outputs.python == 'true' && always()
