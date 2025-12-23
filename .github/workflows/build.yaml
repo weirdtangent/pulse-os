@@ -9,18 +9,22 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: write
+# Default to least privilege; elevate per job only when needed.
+permissions: read-all
 
 jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       python: ${{ steps.filter.outputs.python }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Check for Python changes
         id: filter
@@ -36,6 +40,9 @@ jobs:
     name: Lint & Format
     runs-on: ubuntu-latest
     needs: changes
+    permissions:
+      contents: read
+      actions: write  # required for upload-artifact
     steps:
       - name: Skip lint (no python changes)
         if: needs.changes.outputs.python != 'true'
@@ -44,6 +51,8 @@ jobs:
       - name: Checkout repository
         if: needs.changes.outputs.python == 'true'
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         if: needs.changes.outputs.python == 'true'
@@ -93,6 +102,8 @@ jobs:
       - name: Checkout repository
         if: needs.changes.outputs.python == 'true'
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup Python ${{ matrix.python-version }}
         if: needs.changes.outputs.python == 'true'
@@ -143,6 +154,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - ci
+    permissions:
+      contents: write
 
     outputs:
       published: ${{ steps.semrel.outputs.new_release_published }}
