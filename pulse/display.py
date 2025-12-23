@@ -117,7 +117,8 @@ def set_brightness(percent: int, device_path: str | None = None) -> bool:
 
     try:
         # Try brightnessctl first (easier and more portable)
-        result = subprocess.run(  # nosec B603 B607 - hardcoded command array
+        # nosec B603: command is hardcoded and percent is clamped to 0-100
+        result = subprocess.run(
             ["brightnessctl", "set", f"{percent}%"],
             check=False,
             capture_output=True,
