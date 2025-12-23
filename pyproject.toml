@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "astral==3.2",
-    "httpx==0.27.2",
+    "httpx==0.28.1",
     "icalendar==6.0.1",
     "packaging==24.2",
     "paho-mqtt==2.1.0",
