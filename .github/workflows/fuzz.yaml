@@ -37,15 +37,16 @@ jobs:
           python - <<'PY'
           from hypothesis import given, settings
           from hypothesis import strategies as st
-          from pulse.overlay_server import OverlayServer, OverlayConfig
+          from pulse.overlay_server import OverlayHttpServer
 
-          config = OverlayConfig(bind_address="127.0.0.1", port=0, allowed_origins=("example.com",))
-          server = OverlayServer(config)
+          # Use a minimal instance (bypass __init__) to exercise the sanitizer.
+          dummy = object.__new__(OverlayHttpServer)
+          dummy.logger = None
 
           @settings(max_examples=100, deadline=None)
           @given(st.text())
           def test_sanitize(value):
-            server._sanitize_header_value(value)
+            OverlayHttpServer._sanitize_header_value(dummy, value)
 
           test_sanitize()
           PY
