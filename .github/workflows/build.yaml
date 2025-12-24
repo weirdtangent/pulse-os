@@ -218,7 +218,7 @@ jobs:
           missing=0
           for name in "pulse-os-${version}.tar.gz" "pulse-os-${version}.tar.gz.sig" "pulse-os-${version}.tar.gz.bundle"; do
             if ! echo "$json" | jq -e --arg name "$name" '.assets[] | select(.name==$name)' >/dev/null; then
-              echo "::error ::Missing release asset: $name"
+              echo "::error::Missing release asset: $name"
               missing=1
             fi
           done
