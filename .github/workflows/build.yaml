@@ -169,6 +169,15 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install cosign (for signing in semantic-release)
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: v2.4.0
+
+      - name: Install semantic-release plugins
+        run: |
+          npm install --no-progress --no-audit @semantic-release/exec@6.0.3
+
       - name: Run semantic-release
         id: semrel
         uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
