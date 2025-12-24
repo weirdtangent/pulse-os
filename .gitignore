@@ -18,6 +18,7 @@ node_modules/
 .venv
 venv/
 .vscode/
+.cursor/
 
 # Apple
 .DS_Store
