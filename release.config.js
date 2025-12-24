@@ -9,7 +9,7 @@ module.exports = {
       {
         // Build and sign the release archive so assets exist before publish.
         prepareCmd:
-          'tarball="pulse-os-<%= nextRelease.version %>.tar.gz"; ' +
+          'tarball="pulse-os.tar.gz"; ' +
           'git archive --format=tar.gz --prefix="pulse-os-<%= nextRelease.version %>/" HEAD > "$tarball"; ' +
           'COSIGN_EXPERIMENTAL=1 cosign sign-blob --yes --bundle "$tarball.bundle" --output-signature "$tarball.sig" "$tarball"',
       },
@@ -40,9 +40,9 @@ module.exports = {
       "@semantic-release/github",
       {
         assets: [
-          "pulse-os-${nextRelease.version}.tar.gz",
-          "pulse-os-${nextRelease.version}.tar.gz.sig",
-          "pulse-os-${nextRelease.version}.tar.gz.bundle",
+          "pulse-os.tar.gz",
+          "pulse-os.tar.gz.sig",
+          "pulse-os.tar.gz.bundle",
         ],
       },
     ],

@@ -216,7 +216,7 @@ jobs:
           echo "Release assets for ${tag}:"
           echo "$json" | jq -r '.assets[].name'
           missing=0
-          for name in "pulse-os-${version}.tar.gz" "pulse-os-${version}.tar.gz.sig" "pulse-os-${version}.tar.gz.bundle"; do
+          for name in "pulse-os.tar.gz" "pulse-os.tar.gz.sig" "pulse-os.tar.gz.bundle"; do
             if ! echo "$json" | jq -e --arg name "$name" '.assets[] | select(.name==$name)' >/dev/null; then
               echo "::error::Missing release asset: $name"
               missing=1
