@@ -159,7 +159,7 @@ ANTHROPIC_MODEL="claude-3-5-haiku-20241022"  # Fast and cost-effective
 **Models:**
 - `claude-3-5-haiku-20241022` - Fastest, most cost-effective
 - `claude-3-5-sonnet-20241022` - Balanced performance and quality
-- `claude-opus-4-20250514` - Highest quality, slowest
+- `claude-opus-4-5-20251101` - Highest quality (Claude Opus 4.5)
 
 ### Groq (Ultra-Fast Inference)
 

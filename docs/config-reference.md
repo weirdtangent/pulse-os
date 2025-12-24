@@ -131,48 +131,6 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_ALERT_TOPICS` | *(empty)* | Comma-separated MQTT alert topics to subscribe to. |
 | `PULSE_INTERCOM_TOPIC` | `pulse/<hostname>/assistant/intercom` | Custom intercom topic override. |
 
-## News
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `PULSE_NEWS_API_KEY` | *(empty)* | NewsAPI key (or compatible endpoint). |
-| `PULSE_NEWS_BASE_URL` | `https://newsapi.org/v2` | News API base URL. |
-| `PULSE_NEWS_COUNTRY` | `us` | News country filter. |
-| `PULSE_NEWS_CATEGORY` | `general` | News category filter. |
-| `PULSE_NEWS_MAX_ARTICLES` | `5` | Max headlines returned. |
-| *(override)* `PULSE_NEWS_LANGUAGE` | *(empty)* | Optional language override (defaults to `PULSE_LANGUAGE`). |
-
-## Weather
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `PULSE_LOCATION` | *(empty)* | Location (lat,lon, city, ZIP, plus code, or what3words). |
-| `PULSE_WEATHER_BASE_URL` | `https://api.open-meteo.com/v1/forecast` | Weather API base URL. |
-| `PULSE_WEATHER_UNITS` | `auto` | Units for forecast (auto/imperial/metric). |
-| `PULSE_WEATHER_FORECAST_DAYS` | `3` | Days of forecast (1–5). |
-| *(override)* `PULSE_WEATHER_LANGUAGE` | *(empty)* | Optional language override (defaults to `PULSE_LANGUAGE`). |
-
-## Sports
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `PULSE_SPORTS_BASE_URL` | `https://site.api.espn.com/apis` | Sports API base URL. |
-| `PULSE_SPORTS_DEFAULT_COUNTRY` | `us` | Default country for sports headlines. |
-| `PULSE_SPORTS_HEADLINE_COUNTRY` | `us` | Country for headline feed. |
-| `PULSE_SPORTS_DEFAULT_LEAGUES` | `nfl,nba,mlb,nhl` | Default leagues. |
-| `PULSE_SPORTS_FAVORITE_TEAMS` | *(empty)* | Comma-separated favorite teams. |
-
-## Calendar
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `PULSE_CALENDAR_ICS_URLS` | *(empty)* | Comma-separated ICS/WebCal URLs. |
-| `PULSE_CALENDAR_REFRESH_MINUTES` | `5` | Minutes between calendar polls (min 1). |
-| `PULSE_CALENDAR_LOOKAHEAD_HOURS` | `72` | Hours ahead to schedule reminders. |
-| `PULSE_CALENDAR_OWNER_EMAILS` | *(empty)* | Comma-separated attendee emails treated as “me”. |
-| `PULSE_CALENDAR_DEFAULT_NOTIFICATIONS` | *(empty)* | Comma-separated minutes-before defaults (e.g., 10,5). |
-| `PULSE_CALENDAR_HIDE_DECLINED` | `false` | Hide declined events entirely when true. |
-
 ### Wyoming Endpoints
 
 | Key | Default | Description |
@@ -315,5 +273,5 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 
 ---
 
-Need a quick refresher on what each feature does? Check the [README](../README.md) for the high-level overview, then come back to this reference when you’re wiring up a new kiosk or migrating settings. Any new variables will always appear in `pulse.conf.sample`, and this document mirrors that file so you can diff the two during upgrades.***
+Need a quick refresher on what each feature does? Check the [README](../README.md) for the high-level overview, then come back to this reference when you're wiring up a new kiosk or migrating settings. Any new variables will always appear in `pulse.conf.sample`, and this document mirrors that file so you can diff the two during upgrades.
 

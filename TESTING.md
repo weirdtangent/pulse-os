@@ -74,4 +74,4 @@ High-priority modules still needing tests:
 - `pulse/datetime_utils.py` - Datetime parsing utilities
 - Main orchestration files (`bin/pulse-assistant.py`, `bin/kiosk-mqtt-listener.py`)
 
-See [docs/plans/refactoring-plan.md](docs/plans/refactoring-plan.md) for comprehensive improvement roadmap.
+See [docs/plans/2025-12 - refactoring-plan.md](docs/plans/2025-12%20-%20refactoring-plan.md) for comprehensive improvement roadmap.
