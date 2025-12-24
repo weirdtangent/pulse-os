@@ -9,9 +9,8 @@ module.exports = {
       {
         // Build and sign the release archive so assets exist before publish.
         prepareCmd:
-          'version=${nextRelease.version}; ' +
-          'tarball="pulse-os-${version}.tar.gz"; ' +
-          'git archive --format=tar.gz --prefix="pulse-os-${version}/" HEAD > "$tarball"; ' +
+          'tarball="pulse-os-<%= nextRelease.version %>.tar.gz"; ' +
+          'git archive --format=tar.gz --prefix="pulse-os-<%= nextRelease.version %>/" HEAD > "$tarball"; ' +
           'COSIGN_EXPERIMENTAL=1 cosign sign-blob --yes --bundle "${tarball}.bundle" --output-signature "${tarball}.sig" "$tarball"',
       },
     ],
