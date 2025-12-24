@@ -195,14 +195,36 @@ jobs:
           echo "value=${version}" >> "$GITHUB_OUTPUT"
           echo "PULSE_VERSION=${version}"
 
-      - name: Install cosign
+      - name: Check release assets (skip if already uploaded)
+        id: release_assets
         if: steps.semrel.outputs.new_release_published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.semrel.outputs.new_release_git_tag }}"
+          version="${{ steps.pulse_version.outputs.value }}"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
+          json="$(curl -sSf -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "${api}" || true)"
+          if [ -z "$json" ]; then
+            echo "release_missing=true" >> "$GITHUB_OUTPUT"
+            echo "assets_exist=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "release_missing=false" >> "$GITHUB_OUTPUT"
+          if echo "$json" | jq -e --arg name "pulse-os-${version}.tar.gz" '.assets[] | select(.name==$name)' >/dev/null; then
+            echo "assets_exist=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "assets_exist=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install cosign
+        if: steps.semrel.outputs.new_release_published == 'true' && steps.release_assets.outputs.assets_exist != 'true'
         uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
         with:
           cosign-release: v2.4.0
 
       - name: Build release archive
-        if: steps.semrel.outputs.new_release_published == 'true'
+        if: steps.semrel.outputs.new_release_published == 'true' && steps.release_assets.outputs.assets_exist != 'true'
         run: |
           version="${{ steps.pulse_version.outputs.value }}"
           tarball="pulse-os-${version}.tar.gz"
@@ -210,7 +232,7 @@ jobs:
           ls -lh "$tarball"
 
       - name: Sign release archive (keyless)
-        if: steps.semrel.outputs.new_release_published == 'true'
+        if: steps.semrel.outputs.new_release_published == 'true' && steps.release_assets.outputs.assets_exist != 'true'
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
@@ -220,7 +242,7 @@ jobs:
           ls -lh "${tarball}.sig" "${tarball}.bundle"
 
       - name: Upload signed assets to release
-        if: steps.semrel.outputs.new_release_published == 'true'
+        if: steps.semrel.outputs.new_release_published == 'true' && steps.release_assets.outputs.assets_exist != 'true'
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           tag_name: ${{ steps.semrel.outputs.new_release_git_tag }}
