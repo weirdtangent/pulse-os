@@ -1,7 +1,6 @@
 import sys
 
 import atheris
-
 from pulse.overlay_server import OverlayHttpServer
 
 
