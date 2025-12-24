@@ -256,16 +256,18 @@ def parse_datetime(text: str) -> datetime | None:
     relative = _parse_relative_datetime(text, lowered)
     if relative is not None:
         return relative
+    # Max duration: ~100 years in seconds (avoids timedelta overflow)
+    max_duration = 100 * 365 * 24 * 3600
     if lowered.startswith("in "):
         duration = parse_duration_seconds(lowered[3:])
-        if duration <= 0:
+        if duration <= 0 or duration > max_duration:
             return None
         return utc_now() + timedelta(seconds=duration)
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
         duration = parse_duration_seconds(text)
-        if duration > 0:
+        if 0 < duration <= max_duration:
             return utc_now() + timedelta(seconds=duration)
         return None
     return ensure_utc(parsed)
