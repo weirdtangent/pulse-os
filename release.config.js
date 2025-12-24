@@ -5,6 +5,17 @@ module.exports = {
   branches: ["main"],
   plugins: [
     [
+      "@semantic-release/exec",
+      {
+        // Build and sign the release archive so assets exist before publish.
+        prepareCmd:
+          'version=${nextRelease.version} && ' +
+          'tarball="pulse-os-${version}.tar.gz" && ' +
+          'git archive --format=tar.gz --prefix="pulse-os-${version}/" HEAD > "$tarball" && ' +
+          'COSIGN_EXPERIMENTAL=1 cosign sign-blob --yes --bundle "${tarball}.bundle" --output-signature "${tarball}.sig" "$tarball"',
+      },
+    ],
+    [
       "@semantic-release/commit-analyzer",
       {
         preset: "angular",
@@ -26,7 +37,16 @@ module.exports = {
       },
     ],
     "@semantic-release/release-notes-generator",
-    "@semantic-release/github",
+    [
+      "@semantic-release/github",
+      {
+        assets: [
+          "pulse-os-${nextRelease.version}.tar.gz",
+          "pulse-os-${nextRelease.version}.tar.gz.sig",
+          "pulse-os-${nextRelease.version}.tar.gz.bundle",
+        ],
+      },
+    ],
   ],
 };
 
