@@ -6,7 +6,7 @@ on:
   # To guarantee Maintained check is occasionally updated. See
   # https://github.com/ossf/scorecard/blob/main/docs/checks.md#maintained
   schedule:
-    - cron: '30 2 * * 0'  # Weekly on Sundays at 2:30 AM UTC
+    - cron: '30 6 * * 0'  # Weekly on Sundays at 6:30 AM UTC (staggered from CodeQL at 1:30 AM)
   push:
     branches: [ "main" ]
   workflow_dispatch:

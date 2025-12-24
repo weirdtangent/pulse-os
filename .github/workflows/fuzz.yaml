@@ -7,6 +7,11 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# Cancel in-progress runs when a new commit is pushed to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -30,27 +35,118 @@ jobs:
           pip install -e .
           pip install hypothesis atheris
 
-      - name: Run lightweight fuzz (overlay CORS header sanitizer)
+      - name: Hypothesis property-based tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          # Hypothesis quick-check
           python - <<'PY'
           from hypothesis import given, settings
           from hypothesis import strategies as st
           from pulse.overlay_server import OverlayHttpServer
+          from pulse.datetime_utils import (
+              parse_datetime,
+              parse_duration_seconds,
+              parse_iso_duration,
+              parse_time_of_day,
+          )
+          from pulse.utils import (
+              parse_bool,
+              parse_float,
+              parse_int,
+              sanitize_hostname_for_entity_id,
+              split_csv,
+          )
 
+          # Overlay header sanitizer
           dummy = object.__new__(OverlayHttpServer)
           dummy.logger = None
 
-          @settings(max_examples=100, deadline=None)
+          @settings(max_examples=200, deadline=None)
           @given(st.text())
-          def test_sanitize(value):
-            OverlayHttpServer._sanitize_header_value(dummy, value)
+          def test_sanitize_header(value):
+              OverlayHttpServer._sanitize_header_value(dummy, value)
 
-          test_sanitize()
+          # Datetime parsing functions
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_datetime(value):
+              parse_datetime(value)
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_duration_seconds(value):
+              try:
+                  parse_duration_seconds(value)
+              except ValueError:
+                  pass
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_iso_duration(value):
+              try:
+                  parse_iso_duration(value)
+              except ValueError:
+                  pass
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_time_of_day(value):
+              try:
+                  parse_time_of_day(value)
+              except ValueError:
+                  pass
+
+          # Utility parsing functions
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_sanitize_hostname(value):
+              sanitize_hostname_for_entity_id(value)
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_bool(value):
+              parse_bool(value)
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_int(value):
+              parse_int(value, default=0)
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_parse_float(value):
+              parse_float(value, default=0.0)
+
+          @settings(max_examples=200, deadline=None)
+          @given(st.text())
+          def test_split_csv(value):
+              split_csv(value)
+
+          # Run all tests
+          test_sanitize_header()
+          test_parse_datetime()
+          test_parse_duration_seconds()
+          test_parse_iso_duration()
+          test_parse_time_of_day()
+          test_sanitize_hostname()
+          test_parse_bool()
+          test_parse_int()
+          test_parse_float()
+          test_split_csv()
+          print("All Hypothesis tests passed!")
           PY
 
-          # Atheris fuzz run (short)
-          python fuzz/fuzz_overlay_header.py -runs=10000
+      - name: Atheris fuzz harnesses
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # Run each harness with 50k iterations for better coverage
+          echo "Fuzzing overlay header sanitizer..."
+          python fuzz/fuzz_overlay_header.py -runs=50000
+
+          echo "Fuzzing datetime parsing..."
+          python fuzz/fuzz_datetime_parsing.py -runs=50000
+
+          echo "Fuzzing utility functions..."
+          python fuzz/fuzz_utils.py -runs=50000
 

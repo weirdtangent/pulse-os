@@ -9,6 +9,11 @@ on:
       - main
   workflow_dispatch:
 
+# Cancel in-progress runs when a new commit is pushed to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Default to least privilege; elevate per job only when needed.
 permissions:
   contents: read
@@ -110,7 +115,7 @@ jobs:
         if: needs.changes.outputs.python == 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]" || pip install -e .
+          pip install -e ".[dev]"
           pip install "pip-audit==2.7.3"
 
       - name: Run tests
