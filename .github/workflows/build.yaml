@@ -43,7 +43,6 @@ jobs:
     needs: changes
     permissions:
       contents: read
-      actions: write  # required for upload-artifact
     steps:
       - name: Skip lint (no python changes)
         if: needs.changes.outputs.python != 'true'
@@ -80,14 +79,6 @@ jobs:
         run: |
           # Focus on high-severity, high-confidence issues to reduce noise while keeping CI signal.
           bandit -r pulse/ bin/ -lll -iii -f json -o bandit-report.json || bandit -r pulse/ bin/ -lll -iii
-
-      - name: Upload Bandit results
-        if: needs.changes.outputs.python == 'true' && always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: bandit-report
-          path: bandit-report.json
-          retention-days: 30
 
   test:
     name: Test (Python ${{ matrix.python-version }})
