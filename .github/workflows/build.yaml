@@ -204,4 +204,24 @@ jobs:
           echo "value=${version}" >> "$GITHUB_OUTPUT"
           echo "PULSE_VERSION=${version}"
 
+      - name: Verify signed release assets
+        if: steps.semrel.outputs.new_release_published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.semrel.outputs.new_release_git_tag }}"
+          version="${{ steps.semrel.outputs.new_release_version }}"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
+          json="$(curl -sSf -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "${api}")"
+          echo "Release assets for ${tag}:"
+          echo "$json" | jq -r '.assets[].name'
+          missing=0
+          for name in "pulse-os-${version}.tar.gz" "pulse-os-${version}.tar.gz.sig" "pulse-os-${version}.tar.gz.bundle"; do
+            if ! echo "$json" | jq -e --arg name "$name" '.assets[] | select(.name==$name)' >/dev/null; then
+              echo "::error ::Missing release asset: $name"
+              missing=1
+            fi
+          done
+          exit $missing
+
       # Artifact signing is now handled inside semantic-release (prepare phase) and uploaded in the GitHub publish step.
