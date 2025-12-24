@@ -542,10 +542,20 @@ html, body {{
 
         return OverlayRequestHandler
 
+    def _sanitize_header_value(self, value: str | None) -> str | None:
+        """Prevent response-splitting by blocking CR/LF in header values."""
+        if not value:
+            return None
+        if "\r" in value or "\n" in value:
+            if self.logger:
+                self.logger("overlay http: dropped header value containing CR/LF")
+            return None
+        return value
+
     def _allowed_origin(self, origin: str | None) -> str | None:
         allowed = self.config.allowed_origins
         if not allowed or allowed == ("*",):
             return "*"
         if origin and origin in allowed:
-            return origin
+            return self._sanitize_header_value(origin)
         return None
