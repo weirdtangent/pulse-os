@@ -640,16 +640,22 @@
     if (!eventId) {
       return;
     }
+    // Icon-only buttons (cancel X) have no meaningful textContent - just disable them
+    const isIconButton = button.classList.contains('overlay-timer__cancel');
     const previous = button.textContent;
     button.disabled = true;
-    button.textContent = 'Stopping...';
+    if (!isIconButton) {
+      button.textContent = 'Stopping...';
+    }
     fetch(stopEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop', event_id: eventId })
     }).catch(() => {
       button.disabled = false;
-      button.textContent = previous || 'Stop';
+      if (!isIconButton) {
+        button.textContent = previous || 'Stop';
+      }
     });
   });
 
