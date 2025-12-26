@@ -675,8 +675,26 @@ def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
         position = positions[idx]
         label = html_escape(entry["label"])
         target_ms = int(entry["target"] * 1000)
+        event_id = entry.get("id")
+        cancel_button = ""
+        if event_id:
+            event_id_escaped = html_escape(str(event_id), quote=True)
+            # Material Design close/X icon path
+            x_path = (
+                "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 "
+                "5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+            )
+            cancel_button = (
+                f'<button class="overlay-timer__cancel" data-stop-timer '
+                f'data-event-id="{event_id_escaped}" aria-label="Cancel timer">'
+                f'<svg viewBox="0 0 24 24" fill="currentColor"><path d="{x_path}"/></svg>'
+                f"</button>"
+            )
+        event_id_attr = html_escape(str(event_id), quote=True) if event_id else ""
         card = f"""
-<div class="overlay-card overlay-card--alert overlay-card--timer" data-timer data-target-ms="{target_ms}">
+<div class="overlay-card overlay-card--alert overlay-card--timer" data-timer data-target-ms="{target_ms}"\
+ data-event-id="{event_id_attr}">
+  {cancel_button}
   <div class="overlay-card__title">{label}</div>
   <div class="overlay-timer__remaining" data-timer-remaining>00:00</div>
 </div>
@@ -1839,9 +1857,9 @@ def _render_earmuffs_badge(enabled: bool) -> str:
     return badge_html
 
 
-def _extract_active_timers(snapshot: OverlaySnapshot, limit: int = 4) -> list[dict[str, float | str]]:
+def _extract_active_timers(snapshot: OverlaySnapshot, limit: int = 4) -> list[dict[str, Any]]:
     now = time.time()
-    timers: list[dict[str, float | str]] = []
+    timers: list[dict[str, Any]] = []
     for item in snapshot.timers:
         if not isinstance(item, dict):
             continue
@@ -1852,7 +1870,16 @@ def _extract_active_timers(snapshot: OverlaySnapshot, limit: int = 4) -> list[di
         if target_ts <= now:
             continue
         label = str(item.get("label") or item.get("name") or "Timer")
-        timers.append({"label": label, "target": target_ts})
+        event_id = None
+        event = item.get("event")
+        if isinstance(event, dict) and event.get("id") is not None:
+            event_id = str(event["id"])
+        elif item.get("id") is not None:
+            event_id = str(item["id"])
+        entry: dict[str, Any] = {"label": label, "target": target_ts}
+        if event_id:
+            entry["id"] = event_id
+        timers.append(entry)
     timers.sort(key=lambda entry: entry["target"])
     return timers[:limit]
 

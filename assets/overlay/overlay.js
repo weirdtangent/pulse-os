@@ -139,6 +139,18 @@
       }
       if (targetMs - nowMs <= 1000) {
         node.classList.add('overlay-card--expired');
+        // Add fallback STOP button if not already present
+        if (!node.querySelector('[data-stop-timer-fallback]')) {
+          const eventId = node.dataset.eventId;
+          if (eventId) {
+            const remainingEl = node.querySelector('[data-timer-remaining]');
+            if (remainingEl) {
+              remainingEl.outerHTML =
+                '<button class="overlay-button overlay-button--primary overlay-timer__stop-fallback" ' +
+                'data-stop-timer data-stop-timer-fallback data-event-id="' + eventId + '">Stop</button>';
+            }
+          }
+        }
       } else {
         node.classList.remove('overlay-card--expired');
       }
