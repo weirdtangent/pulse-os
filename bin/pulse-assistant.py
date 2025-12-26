@@ -2923,6 +2923,24 @@ class PulseAssistant:
             ),
             retain=True,
         )
+        # Earmuffs switch (disable LLM listening)
+        self._publish_message(
+            f"{prefix}/switch/{hostname_safe}_earmuffs/config",
+            json.dumps(
+                {
+                    "name": f"{self.config.device_name} Earmuffs",
+                    "unique_id": f"{self.config.hostname}-earmuffs",
+                    "state_topic": self._earmuffs_state_topic,
+                    "command_topic": self._earmuffs_set_topic,
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "device": device,
+                    "entity_category": "config",
+                    "icon": "mdi:ear-hearing-off",
+                }
+            ),
+            retain=True,
+        )
         # HA pipeline text entity
         self._publish_message(
             f"{prefix}/text/{hostname_safe}_ha_pipeline/config",

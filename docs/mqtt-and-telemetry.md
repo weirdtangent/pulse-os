@@ -285,3 +285,157 @@ The MQTT keys intentionally differ slightly from config variable names to be sho
 
 Changes made via MQTT are debounced (2 second delay) before being written to `pulse.conf`, so rapid adjustments don't cause excessive disk I/O. A backup is created automatically before each write.
 
+---
+
+## Earmuffs Switch (LLM Listening Control)
+
+Home Assistant discovers an **Earmuffs** switch entity for each Pulse device. When enabled ("on"), the voice assistant stops listening for wake words—useful for privacy during meetings, overnight hours, or any time you want to temporarily disable voice control without shutting down the kiosk.
+
+| Entity | Topic (Command/State) | Notes |
+| ------ | --------------------- | ----- |
+| `switch.pulse_<hostname>_earmuffs` | `pulse/<hostname>/assistant/earmuffs/set` / `pulse/<hostname>/assistant/earmuffs/state` | Payloads: `on`, `off`, or `toggle` |
+
+The switch also accepts `toggle` as a command payload, which is what the on-screen overlay button uses.
+
+---
+
+## Scheduling Settings with Home Assistant Automations
+
+All Pulse entities (switches, numbers, selects) can be controlled via Home Assistant automations. This lets you schedule changes based on time, presence, sun position, or any other trigger.
+
+### Example: Schedule earmuffs (quiet hours)
+
+Disable voice listening at night and re-enable in the morning:
+
+```yaml
+alias: "Pulse Kitchen - Quiet Hours"
+description: "Disable LLM listening 10pm-8am"
+triggers:
+  - trigger: time
+    at: "22:00:00"
+    id: night
+  - trigger: time
+    at: "08:00:00"
+    id: morning
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: night
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: switch.pulse_kitchen_earmuffs
+      - conditions:
+          - condition: trigger
+            id: morning
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: switch.pulse_kitchen_earmuffs
+mode: single
+```
+
+### Example: Schedule volume levels
+
+Set different volume levels for morning, daytime, and evening:
+
+```yaml
+alias: "Pulse Bedroom - Volume Schedule"
+description: "Quiet at night, louder during the day"
+triggers:
+  - trigger: time
+    at: "07:00:00"
+    id: morning
+  - trigger: time
+    at: "09:00:00"
+    id: day
+  - trigger: time
+    at: "21:00:00"
+    id: evening
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: morning
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: number.pulse_bedroom_audio_volume
+            data:
+              value: 40
+      - conditions:
+          - condition: trigger
+            id: day
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: number.pulse_bedroom_audio_volume
+            data:
+              value: 70
+      - conditions:
+          - condition: trigger
+            id: evening
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: number.pulse_bedroom_audio_volume
+            data:
+              value: 30
+mode: single
+```
+
+### Example: Adjust brightness based on sun
+
+Use sunrise/sunset triggers for natural brightness transitions:
+
+```yaml
+alias: "Pulse Living Room - Sun-Based Brightness"
+description: "Dim at sunset, brighten at sunrise"
+triggers:
+  - trigger: sun
+    event: sunrise
+    offset: "00:30:00"
+    id: sunrise
+  - trigger: sun
+    event: sunset
+    offset: "-00:30:00"
+    id: sunset
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: sunrise
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: number.pulse_living_room_day_brightness
+            data:
+              value: 80
+      - conditions:
+          - condition: trigger
+            id: sunset
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: number.pulse_living_room_night_brightness
+            data:
+              value: 20
+mode: single
+```
+
+### Available entities for scheduling
+
+| Entity Type | Example Entity ID | What It Controls |
+| ----------- | ----------------- | ---------------- |
+| `switch` | `switch.pulse_kitchen_earmuffs` | LLM listening on/off |
+| `switch` | `switch.pulse_kitchen_wake_sound` | Wake word chime on/off |
+| `number` | `number.pulse_kitchen_audio_volume` | Audio volume (0-100%) |
+| `number` | `number.pulse_kitchen_screen_brightness` | Immediate brightness (0-100%) |
+| `number` | `number.pulse_kitchen_day_brightness` | Sunrise target brightness |
+| `number` | `number.pulse_kitchen_night_brightness` | Sunset target brightness |
+| `select` | `select.pulse_kitchen_speaking_style` | Voice response pacing |
+| `button` | `button.pulse_kitchen_home` | Return to home URL |
+
+Replace `pulse_kitchen` with your device's hostname (underscores replace hyphens).
+
