@@ -145,9 +145,13 @@
           if (eventId) {
             const remainingEl = node.querySelector('[data-timer-remaining]');
             if (remainingEl) {
-              remainingEl.outerHTML =
-                '<button class="overlay-button overlay-button--primary overlay-timer__stop-fallback" ' +
-                'data-stop-timer data-stop-timer-fallback data-event-id="' + eventId + '">Stop</button>';
+              const btn = document.createElement('button');
+              btn.className = 'overlay-button overlay-button--primary overlay-timer__stop-fallback';
+              btn.dataset.stopTimer = '';
+              btn.dataset.stopTimerFallback = '';
+              btn.dataset.eventId = eventId;
+              btn.textContent = 'Stop';
+              remainingEl.replaceWith(btn);
             }
           }
         }
