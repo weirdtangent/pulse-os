@@ -695,6 +695,46 @@ body {
   opacity: 0.75;
 }
 
+.overlay-card--timer {
+  position: relative;
+}
+
+.overlay-timer__cancel {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.overlay-timer__cancel:hover,
+.overlay-timer__cancel:focus {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.overlay-timer__cancel svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.overlay-timer__stop-fallback {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  padding: 0.8rem 1.5rem;
+  animation: overlayPulse 1.2s ease-in-out infinite alternate;
+}
+
 .overlay-card--now-playing {
   min-width: 16rem;
   margin-top: auto;

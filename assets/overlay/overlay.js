@@ -139,6 +139,22 @@
       }
       if (targetMs - nowMs <= 1000) {
         node.classList.add('overlay-card--expired');
+        // Add fallback STOP button if not already present
+        if (!node.querySelector('[data-stop-timer-fallback]')) {
+          const eventId = node.dataset.eventId;
+          if (eventId) {
+            const remainingEl = node.querySelector('[data-timer-remaining]');
+            if (remainingEl) {
+              const btn = document.createElement('button');
+              btn.className = 'overlay-button overlay-button--primary overlay-timer__stop-fallback';
+              btn.dataset.stopTimer = '';
+              btn.dataset.stopTimerFallback = '';
+              btn.dataset.eventId = eventId;
+              btn.textContent = 'Stop';
+              remainingEl.replaceWith(btn);
+            }
+          }
+        }
       } else {
         node.classList.remove('overlay-card--expired');
       }
@@ -624,16 +640,22 @@
     if (!eventId) {
       return;
     }
+    // Icon-only buttons (cancel X) have no meaningful textContent - just disable them
+    const isIconButton = button.classList.contains('overlay-timer__cancel');
     const previous = button.textContent;
     button.disabled = true;
-    button.textContent = 'Stopping...';
+    if (!isIconButton) {
+      button.textContent = 'Stopping...';
+    }
     fetch(stopEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop', event_id: eventId })
     }).catch(() => {
       button.disabled = false;
-      button.textContent = previous || 'Stop';
+      if (!isIconButton) {
+        button.textContent = previous || 'Stop';
+      }
     });
   });
 
