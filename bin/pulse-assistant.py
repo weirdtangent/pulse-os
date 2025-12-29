@@ -1417,7 +1417,21 @@ class PulseAssistant:
         ooo_dates: set[str] = set()
         for reminder in future_reminders:
             if reminder.all_day and ooo_marker and ooo_marker in (reminder.summary or "").lower():
-                ooo_dates.add(reminder.start.date().isoformat())
+                start_date = reminder.start.date()
+                if reminder.end:
+                    try:
+                        # All-day ICS end is typically exclusive; subtract one day.
+                        last = reminder.end.date() - timedelta(days=1)
+                    except Exception:
+                        last = start_date
+                else:
+                    last = start_date
+                if last < start_date:
+                    last = start_date
+                current = start_date
+                while current <= last:
+                    ooo_dates.add(current.isoformat())
+                    current += timedelta(days=1)
         service = getattr(self, "schedule_service", None)
         if service:
             await service.set_ooo_skip_dates(ooo_dates)
