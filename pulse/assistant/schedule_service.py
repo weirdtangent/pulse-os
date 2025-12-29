@@ -999,7 +999,7 @@ class ScheduleService:
             if task:
                 task.cancel()
             if not paused and event.time_of_day:
-                event.set_next_fire(_compute_next_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
                 self._schedule_event(event)
             await self._persist_events()
             await self._publish_state()
@@ -1044,7 +1044,7 @@ class ScheduleService:
                         task.cancel()
                 elif stored_event.repeat_days:
                     stored_event.set_next_fire(
-                        _compute_next_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
+                        self._compute_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
                     )
                     self._reschedule_event(stored_event)
                 else:
