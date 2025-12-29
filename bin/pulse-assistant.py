@@ -149,7 +149,7 @@ class PulseAssistant:
                 )
             else:
                 LOGGER.warning(
-                    "[assistant] Calendar sync is enabled but no feeds are configured (PULSE_CALENDAR_ICS_URLS is empty)"
+                    "[assistant] Calendar sync enabled but no feeds configured " "(PULSE_CALENDAR_ICS_URLS is empty)"
                 )
         else:
             pass
@@ -772,7 +772,9 @@ class PulseAssistant:
     ) -> LLMResult | None:
         prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
         llm_result = await self.llm.generate(transcript, prompt_actions)
-        LOGGER.debug("[assistant] LLM response [%s]: actions=%s, response=%s", wake_word, llm_result.actions, llm_result.response)
+        LOGGER.debug(
+            "[assistant] LLM response [%s]: actions=%s, response=%s", wake_word, llm_result.actions, llm_result.response
+        )
         routine_actions = await self.routines.execute(llm_result.actions, self.home_assistant)
         executed_actions = list(routine_actions)
         executed_actions.extend(
@@ -1173,7 +1175,9 @@ class PulseAssistant:
         changed = self.wake_detector.set_remote_audio_active(active)
         if changed:
             detail = normalized[:80] or "idle"
-            LOGGER.debug("[assistant] Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail)
+            LOGGER.debug(
+                "[assistant] Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail
+            )
 
     def _handle_speaking_style_command(self, payload: str) -> None:
         value = payload.strip().lower()

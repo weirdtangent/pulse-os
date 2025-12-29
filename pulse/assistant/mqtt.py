@@ -88,7 +88,9 @@ class AssistantMqtt:
                 payload = message.payload.decode("utf-8", errors="ignore")
                 on_message(payload)
             except Exception as exc:
-                self._logger.error("[mqtt] MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True)
+                self._logger.error(
+                    "[mqtt] MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True
+                )
 
         result, mid = client.subscribe(topic)
         if result != mqtt.MQTT_ERR_SUCCESS:

@@ -707,7 +707,9 @@ class CalendarSyncService:
         self._failed_feeds.add(feed_url)
         retry_delay = 120  # 2 minutes for retry
         feed_label = self._feed_label(self._feed_states.get(feed_url))
-        self._logger.warning("[calendar] Scheduling retry for failed calendar feed %s in %d seconds", feed_label, retry_delay)
+        self._logger.warning(
+            "[calendar] Scheduling retry for failed calendar feed %s in %d seconds", feed_label, retry_delay
+        )
         task = asyncio.create_task(self._retry_feed_after_delay(feed_url, retry_delay))
         self._retry_tasks[feed_url] = task
 

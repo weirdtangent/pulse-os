@@ -618,7 +618,9 @@ class PlaybackHandle:
             or _default_media_player_entity(self.hostname)
         )
         if not entity:
-            LOGGER.warning("[schedule] Music alarm requested but no media_player entity available; falling back to beep")
+            LOGGER.warning(
+                "[schedule] Music alarm requested but no media_player entity available; falling back to beep"
+            )
             self.playback = PlaybackConfig()
             self._task = asyncio.create_task(self._beep_loop())
             return
