@@ -771,15 +771,15 @@ class ScheduleService:
         async with self._lock:
             self._manual_skip_dates = set(dates)
             await self._reschedule_all_alarms_locked()
-        await self._persist_events()
-        await self._publish_state()
+            await self._persist_events()
+            await self._publish_state()
 
     async def set_ooo_skip_dates(self, dates: set[str]) -> None:
         async with self._lock:
             self._ooo_skip_dates = set(dates)
             await self._reschedule_all_alarms_locked()
-        await self._persist_events()
-        await self._publish_state()
+            await self._persist_events()
+            await self._publish_state()
 
     async def set_ui_pause_date(self, date_str: str, paused: bool) -> None:
         date_str = date_str.strip()
@@ -791,8 +791,8 @@ class ScheduleService:
             else:
                 self._ui_pause_dates.discard(date_str)
             await self._reschedule_all_alarms_locked()
-        await self._persist_events()
-        await self._publish_state()
+            await self._persist_events()
+            await self._publish_state()
 
     async def start(self) -> None:
         if self._started:
