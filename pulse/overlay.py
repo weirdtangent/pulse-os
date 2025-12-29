@@ -991,6 +991,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
     schedule_meta = snapshot.schedule_snapshot or {}
     paused_dates = set(schedule_meta.get("paused_dates") or [])
     effective_paused = set(schedule_meta.get("effective_skip_dates") or paused_dates)
+    skip_weekdays = {int(day) % 7 for day in schedule_meta.get("skip_weekdays") or []}
     entries = _format_alarm_info_entries(alarms)
     title = str(card.get("title") or "Alarms").strip() or "Alarms"
     subtitle = card.get("text") or "Use the buttons to pause, resume, or delete an alarm."
@@ -1002,7 +1003,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         target = today + timedelta(days=offset)
         date_str = target.date().isoformat()
         label = target.strftime("%a %m/%d")
-        is_paused = date_str in effective_paused
+        is_paused = date_str in effective_paused or target.weekday() in skip_weekdays
         button_label = "Resume" if is_paused else "Pause"
         emoji = "▶️" if is_paused else "⏸️"
         aria = f"{button_label} alarms for {label}"
