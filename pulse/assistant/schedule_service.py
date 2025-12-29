@@ -387,10 +387,20 @@ def _compute_next_alarm_fire(
         if _is_skipped(attempt):
             continue
         return attempt
-    # Fallback: advance one day until not skipped
+    # Fallback: advance until we find a matching repeat day that is not skipped.
     attempt = candidate + timedelta(days=1)
-    while _is_skipped(attempt):
-        attempt += timedelta(days=1)
+    for _ in range(60):
+        if attempt <= now:
+            attempt += timedelta(days=1)
+            continue
+        if attempt.weekday() not in day_set:
+            attempt += timedelta(days=1)
+            continue
+        if _is_skipped(attempt):
+            attempt += timedelta(days=1)
+            continue
+        return attempt
+    # If we somehow didn't find a valid day, return the last attempt.
     return attempt
 
 

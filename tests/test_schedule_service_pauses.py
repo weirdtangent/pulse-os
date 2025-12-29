@@ -43,3 +43,22 @@ async def test_single_shot_alarm_ignores_skip_lists(tmp_path: Path, fixed_now: d
     alarm = next(ev for ev in svc._events.values())
     # Single-shot alarms should not be forced to skip, only move to next day if already past
     assert alarm.next_fire_dt().date().isoformat() == fixed_now.date().isoformat()
+
+
+@pytest.mark.anyio
+async def test_fallback_respects_repeat_day(tmp_path: Path, fixed_now: datetime) -> None:
+    # Monday-only alarm; skip the next three Mondays so fallback must still land on a Monday.
+    svc = ScheduleService(
+        storage_path=tmp_path / "sched.json",
+        hostname="test",
+        skip_dates={
+            fixed_now.date().isoformat(),
+            (fixed_now.date() + timedelta(days=7)).isoformat(),
+            (fixed_now.date() + timedelta(days=14)).isoformat(),
+        },
+        skip_weekdays=set(),
+    )
+    await svc.create_alarm(time_of_day="07:45", days=[fixed_now.weekday()])
+    alarm = next(ev for ev in svc._events.values())
+    expected = fixed_now.date() + timedelta(days=21)  # first Monday not skipped
+    assert alarm.next_fire_dt().date().isoformat() == expected.isoformat()
