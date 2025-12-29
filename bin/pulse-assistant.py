@@ -1194,7 +1194,7 @@ class PulseAssistant:
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
         self._publish_preference_state("wake_sensitivity", value)
         persist_preference("wake_sensitivity", value, logger=LOGGER)
-        self._mark_wake_context_dirty()
+        self.wake_detector.mark_wake_context_dirty()
 
     def _handle_earmuffs_state_restore(self, payload: str) -> None:
         """Restore earmuffs state from retained MQTT message on startup."""
