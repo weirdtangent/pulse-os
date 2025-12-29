@@ -476,6 +476,19 @@ PULSE_CALENDAR_OWNER_EMAILS=""
 # are automatically deduplicated.
 PULSE_CALENDAR_DEFAULT_NOTIFICATIONS=""
 
+# Marker used to detect all-day OOO events (case-insensitive match on SUMMARY).
+PULSE_CALENDAR_OOO_MARKER="OOO"
+
+# ============================================================================
+# Work alarms & pauses
+# ============================================================================
+
+# Comma-separated ISO dates (YYYY-MM-DD) to skip alarms entirely.
+PULSE_WORK_ALARM_SKIP_DATES=""
+
+# Comma-separated weekdays to skip alarms (0=Mon..6=Sun or names like Mon,Fri).
+PULSE_WORK_ALARM_SKIP_DAYS=""
+
 # Set to "true" to hide declined events entirely (defaults to "false" - declined events
 # are shown but reminders are suppressed).
 # PULSE_CALENDAR_HIDE_DECLINED="false"

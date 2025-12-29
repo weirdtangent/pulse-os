@@ -209,7 +209,7 @@
     }
     const upArrow = infoCard.querySelector(`.overlay-info-card__scroll-indicator--up[data-scroll-target="${scrollId}"]`);
     const downArrow = infoCard.querySelector(`.overlay-info-card__scroll-indicator--down[data-scroll-target="${scrollId}"]`);
-    
+
     if (!upArrow || !downArrow) {
       return;
     }
@@ -257,7 +257,7 @@
 
       const existingUp = infoCard.querySelector(`.overlay-info-card__scroll-indicator--up[data-scroll-target="${scrollId}"]`);
       const existingDown = infoCard.querySelector(`.overlay-info-card__scroll-indicator--down[data-scroll-target="${scrollId}"]`);
-      
+
       if (existingUp && existingDown) {
         // Already set up, just update
         updateScrollIndicators(scrollableElement);
@@ -266,9 +266,9 @@
 
       // Ensure parent is a wrapper
       let wrapper = scrollableElement.parentElement;
-      const needsWrapper = !wrapper.classList.contains('overlay-info-card__body-wrapper') && 
+      const needsWrapper = !wrapper.classList.contains('overlay-info-card__body-wrapper') &&
                            !wrapper.classList.contains('overlay-info-card__text-wrapper');
-      
+
       if (needsWrapper) {
         // Create wrapper if needed
         wrapper = document.createElement('div');
@@ -308,7 +308,7 @@
         updateScrollIndicators(scrollableElement);
       };
       scrollableElement.addEventListener('scroll', handleScroll);
-      
+
       // Also check on resize
       const handleResize = () => {
         // Use requestAnimationFrame to ensure layout is complete
@@ -535,6 +535,28 @@
       }).catch(() => {
         toggleAlarmButton.disabled = false;
         toggleAlarmButton.textContent = previous;
+      });
+      return;
+    }
+
+    const toggleDayButton = e.target.closest('[data-toggle-pause-day]');
+    if (toggleDayButton) {
+      const date = toggleDayButton.dataset.date;
+      const paused = toggleDayButton.dataset.paused === 'true';
+      if (!date) {
+        return;
+      }
+      const previous = toggleDayButton.textContent;
+      toggleDayButton.disabled = true;
+      toggleDayButton.textContent = '…';
+      const action = paused ? 'resume_day' : 'pause_day';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, date })
+      }).catch(() => {
+        toggleDayButton.disabled = false;
+        toggleDayButton.textContent = previous;
       });
       return;
     }

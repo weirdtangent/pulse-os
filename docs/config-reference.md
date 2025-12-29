@@ -239,6 +239,9 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_CALENDAR_OWNER_EMAILS` | *(empty)* | Comma-separated attendee emails treated as "me" (declined events are shown but reminders are suppressed). |
 | `PULSE_CALENDAR_DEFAULT_NOTIFICATIONS` | *(empty)* | Comma-separated default notification times (minutes before event start) to apply to all events. Supplements VALARM entries in ICS files. **Note:** Google Calendar's default notification (usually 10 minutes before) is NOT included in the ICS export, so you should set at least `"10"` here to mimic that behavior. Example: `"10,5"` adds 10-minute and 5-minute reminders to all events. You can add additional default notifications that will apply to ALL events. Duplicates (within 30 seconds) are automatically deduplicated. |
 | `PULSE_CALENDAR_HIDE_DECLINED` | `false` | Set to `true` to hide declined events entirely. When `false` (default), declined events are shown but reminders are suppressed. |
+| `PULSE_CALENDAR_OOO_MARKER` | `OOO` | Case-insensitive marker matched against all-day event summaries to treat them as “out of office” and skip alarms on those dates. |
+| `PULSE_WORK_ALARM_SKIP_DATES` | *(empty)* | Comma-separated ISO dates (`YYYY-MM-DD`) to skip all alarms (useful for holidays). |
+| `PULSE_WORK_ALARM_SKIP_DAYS` | *(empty)* | Comma-separated weekdays to skip alarms (`0`=Mon … `6`=Sun or names such as `Mon,Fri`). |
 
 ## Snapcast Client (Optional)
 

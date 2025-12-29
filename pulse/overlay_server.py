@@ -51,6 +51,8 @@ class OverlayHttpServer:
         on_delete_reminder: Callable[[str], None] | None = None,
         on_pause_alarm: Callable[[str], None] | None = None,
         on_resume_alarm: Callable[[str], None] | None = None,
+        on_pause_day: Callable[[str], None] | None = None,
+        on_resume_day: Callable[[str], None] | None = None,
         on_toggle_earmuffs: Callable[[], None] | None = None,
         on_trigger_update: Callable[[], None] | None = None,
         on_set_volume: Callable[[int], bool] | None = None,
@@ -70,6 +72,8 @@ class OverlayHttpServer:
         self._on_delete_reminder = on_delete_reminder
         self._on_pause_alarm = on_pause_alarm
         self._on_resume_alarm = on_resume_alarm
+        self._on_pause_day = on_pause_day
+        self._on_resume_day = on_resume_day
         self._on_toggle_earmuffs = on_toggle_earmuffs
         self._on_trigger_update = on_trigger_update
         self._on_set_volume = on_set_volume
@@ -381,6 +385,13 @@ html, body {{
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
                         return
                     handler(str(event_id))
+                elif action in {"pause_day", "resume_day"}:
+                    target_date = data.get("date")
+                    handler = outer._on_pause_day if action == "pause_day" else outer._on_resume_day
+                    if not target_date or not handler:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing date")
+                        return
+                    handler(str(target_date))
                 elif action == "complete_reminder":
                     event_id = data.get("event_id")
                     if not event_id or not outer._on_complete_reminder:

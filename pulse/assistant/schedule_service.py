@@ -350,22 +350,59 @@ def day_indexes_to_names(indexes: list[int] | None) -> list[str]:
     return [names[i % 7] for i in indexes]
 
 
-def _compute_next_alarm_fire(time_str: str, repeat_days: list[int] | None) -> datetime:
+def _compute_next_alarm_fire(
+    time_str: str,
+    repeat_days: list[int] | None,
+    *,
+    after: datetime | None = None,
+    skip_dates: set[str] | None = None,
+    skip_weekdays: set[int] | None = None,
+) -> datetime:
+    """Compute the next alarm fire time honoring skip dates/weekdays for recurring alarms."""
     hour, minute = parse_time_string(time_str)
-    now = _now()
+    now = after or _now()
     candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    effective_skip_weekdays = None if skip_weekdays and len(set(skip_weekdays)) >= 7 else skip_weekdays
+
+    def _is_skipped(dt: datetime) -> bool:
+        date_str = dt.date().isoformat()
+        if skip_dates and date_str in skip_dates:
+            return True
+        if effective_skip_weekdays and dt.weekday() in effective_skip_weekdays:
+            return True
+        return False
+
     if not repeat_days:
+        # For one-time alarms, do not apply skip lists; just move to the next day if already past.
         if candidate <= now:
             candidate += timedelta(days=1)
         return candidate
-    day_set = [d % 7 for d in repeat_days]
-    for offset in range(0, 8):
+
+    day_set = {d % 7 for d in repeat_days}
+    for offset in range(0, 21):
         attempt = candidate + timedelta(days=offset)
-        if attempt.weekday() in day_set and attempt > now:
-            return attempt
-        if attempt.weekday() in day_set and offset == 0 and attempt > now:
-            return attempt
-    return candidate + timedelta(days=1)
+        if attempt <= now:
+            continue
+        if attempt.weekday() not in day_set:
+            continue
+        if _is_skipped(attempt):
+            continue
+        return attempt
+    # Fallback: advance until we find a matching repeat day that is not skipped.
+    attempt = candidate + timedelta(days=1)
+    for _ in range(60):
+        if attempt <= now:
+            attempt += timedelta(days=1)
+            continue
+        if attempt.weekday() not in day_set:
+            attempt += timedelta(days=1)
+            continue
+        if _is_skipped(attempt):
+            attempt += timedelta(days=1)
+            continue
+        return attempt
+    # If we somehow didn't find a valid day, return the last attempt.
+    return attempt
 
 
 @dataclass(slots=True)
@@ -706,6 +743,8 @@ class ScheduleService:
         on_active_event: ActiveCallback | None = None,
         ha_client: HomeAssistantClient | None = None,
         sound_settings: SoundSettings | None = None,
+        skip_dates: set[str] | None = None,
+        skip_weekdays: set[int] | None = None,
     ) -> None:
         self._storage_path = storage_path
         self._hostname = hostname
@@ -720,6 +759,40 @@ class ScheduleService:
         self._active: dict[str, ActiveEvent] = {}
         self._lock = asyncio.Lock()
         self._started = False
+        self._manual_skip_dates: set[str] = set(skip_dates or set())
+        self._skip_weekdays: set[int] = {d % 7 for d in (skip_weekdays or set())}
+        self._ooo_skip_dates: set[str] = set()
+        self._ui_pause_dates: set[str] = set()
+
+    def _effective_skip_dates(self) -> set[str]:
+        return set(self._manual_skip_dates) | set(self._ooo_skip_dates) | set(self._ui_pause_dates)
+
+    async def set_manual_skip_dates(self, dates: set[str]) -> None:
+        async with self._lock:
+            self._manual_skip_dates = set(dates)
+            await self._reschedule_all_alarms_locked()
+            await self._persist_events()
+            await self._publish_state()
+
+    async def set_ooo_skip_dates(self, dates: set[str]) -> None:
+        async with self._lock:
+            self._ooo_skip_dates = set(dates)
+            await self._reschedule_all_alarms_locked()
+            await self._persist_events()
+            await self._publish_state()
+
+    async def set_ui_pause_date(self, date_str: str, paused: bool) -> None:
+        date_str = date_str.strip()
+        if not date_str:
+            return
+        async with self._lock:
+            if paused:
+                self._ui_pause_dates.add(date_str)
+            else:
+                self._ui_pause_dates.discard(date_str)
+            await self._reschedule_all_alarms_locked()
+            await self._persist_events()
+            await self._publish_state()
 
     async def start(self) -> None:
         if self._started:
@@ -759,6 +832,23 @@ class ScheduleService:
             return_exceptions=True,
         )
 
+    def _compute_alarm_fire(self, time_str: str, days: list[int] | None, after: datetime | None = None) -> datetime:
+        return _compute_next_alarm_fire(
+            time_str,
+            days,
+            after=after or _now(),
+            skip_dates=self._effective_skip_dates(),
+            skip_weekdays=self._skip_weekdays,
+        )
+
+    async def _reschedule_all_alarms_locked(self) -> None:
+        for event in self._events.values():
+            if event.event_type != "alarm":
+                continue
+            if event.time_of_day:
+                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
+                self._reschedule_event(event)
+
     async def create_alarm(
         self,
         *,
@@ -768,7 +858,7 @@ class ScheduleService:
         playback: PlaybackConfig | None = None,
         single_shot: bool | None = None,
     ) -> ScheduledEvent:
-        next_fire = _compute_next_alarm_fire(time_of_day, days)
+        next_fire = self._compute_alarm_fire(time_of_day, days)
         event = ScheduledEvent(
             event_id=uuid4().hex,
             event_type="alarm",
@@ -885,7 +975,7 @@ class ScheduleService:
             if playback:
                 event.playback = playback
             if event.time_of_day:
-                event.set_next_fire(_compute_next_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
             self._reschedule_event(event)
             await self._persist_events()
             await self._publish_state()
@@ -909,7 +999,7 @@ class ScheduleService:
             if task:
                 task.cancel()
             if not paused and event.time_of_day:
-                event.set_next_fire(_compute_next_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
                 self._schedule_event(event)
             await self._persist_events()
             await self._publish_state()
@@ -954,7 +1044,7 @@ class ScheduleService:
                         task.cancel()
                 elif stored_event.repeat_days:
                     stored_event.set_next_fire(
-                        _compute_next_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
+                        self._compute_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
                     )
                     self._reschedule_event(stored_event)
                 else:
@@ -1197,7 +1287,10 @@ class ScheduleService:
         await self.stop_event(event_id, reason="auto_timeout")
 
     async def _persist_events(self) -> None:
-        payload = {"events": [event.to_json_dict() for event in self._events.values()]}
+        payload = {
+            "events": [event.to_json_dict() for event in self._events.values()],
+            "paused_dates": sorted(self._ui_pause_dates),
+        }
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._storage_path.with_suffix(".tmp")
         tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -1211,6 +1304,9 @@ class ScheduleService:
         except (json.JSONDecodeError, OSError) as exc:
             LOGGER.warning("Failed to load schedules file %s: %s", self._storage_path, exc)
             return
+        paused_dates = data.get("paused_dates") or []
+        if isinstance(paused_dates, list):
+            self._ui_pause_dates = {item for item in paused_dates if isinstance(item, str)}
         for item in data.get("events", []):
             try:
                 event = ScheduledEvent.from_dict(item)
@@ -1218,7 +1314,7 @@ class ScheduleService:
                 LOGGER.debug("Skipping invalid schedule entry: %s", item, exc_info=True)
                 continue
             if event.event_type == "alarm" and event.time_of_day:
-                event.set_next_fire(_compute_next_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
             elif event.event_type == "timer":
                 target = event.target_dt()
                 if not target or target <= _now():
@@ -1228,7 +1324,15 @@ class ScheduleService:
     async def _publish_state(self) -> None:
         if not self._state_cb:
             return
-        snapshot = {"alarms": [], "timers": [], "reminders": [], "updated_at": _serialize_dt(_now())}
+        snapshot = {
+            "alarms": [],
+            "timers": [],
+            "reminders": [],
+            "paused_dates": sorted(self._ui_pause_dates),
+            "effective_skip_dates": sorted(self._effective_skip_dates()),
+            "skip_weekdays": sorted(self._skip_weekdays),
+            "updated_at": _serialize_dt(_now()),
+        }
         for event in self._events.values():
             if event.paused:
                 status = "paused"
