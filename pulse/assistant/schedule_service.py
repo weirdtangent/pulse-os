@@ -618,7 +618,7 @@ class PlaybackHandle:
             or _default_media_player_entity(self.hostname)
         )
         if not entity:
-            LOGGER.warning("Music alarm requested but no media_player entity available; falling back to beep")
+            LOGGER.warning("[schedule] Music alarm requested but no media_player entity available; falling back to beep")
             self.playback = PlaybackConfig()
             self._task = asyncio.create_task(self._beep_loop())
             return
@@ -630,7 +630,7 @@ class PlaybackHandle:
         try:
             await self.ha_client.call_service("media_player", "play_media", payload)
         except Exception as exc:
-            LOGGER.warning("Failed to start music alarm via Home Assistant: %s", exc)
+            LOGGER.warning("[schedule] Failed to start music alarm via Home Assistant: %s", exc)
             self.playback = PlaybackConfig()
             self._task = asyncio.create_task(self._beep_loop())
 
@@ -645,7 +645,7 @@ class PlaybackHandle:
         try:
             await self.ha_client.call_service("media_player", "media_stop", {"entity_id": entity})
         except Exception:
-            LOGGER.debug("Failed to stop media_player for alarm", exc_info=True)
+            LOGGER.debug("[schedule] Failed to stop media_player for alarm", exc_info=True)
         self._music_paused = False
 
     async def _pause_music(self) -> None:
@@ -660,7 +660,7 @@ class PlaybackHandle:
             await self.ha_client.call_service("media_player", "media_pause", {"entity_id": entity})
             self._music_paused = True
         except Exception:
-            LOGGER.debug("Failed to pause media_player for alarm", exc_info=True)
+            LOGGER.debug("[schedule] Failed to pause media_player for alarm", exc_info=True)
 
     async def _resume_music(self) -> None:
         entity = (
@@ -674,7 +674,7 @@ class PlaybackHandle:
             await self.ha_client.call_service("media_player", "media_play", {"entity_id": entity})
             self._music_paused = False
         except Exception:
-            LOGGER.debug("Failed to resume media_player for alarm", exc_info=True)
+            LOGGER.debug("[schedule] Failed to resume media_player for alarm", exc_info=True)
 
     async def _beep_loop(self) -> None:
         self._sink = pulse_audio.find_audio_sink()
@@ -1302,7 +1302,7 @@ class ScheduleService:
         try:
             data = json.loads(self._storage_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
-            LOGGER.warning("Failed to load schedules file %s: %s", self._storage_path, exc)
+            LOGGER.warning("[schedule] Failed to load schedules file %s: %s", self._storage_path, exc)
             return
         paused_dates = data.get("paused_dates") or []
         if isinstance(paused_dates, list):
@@ -1311,7 +1311,7 @@ class ScheduleService:
             try:
                 event = ScheduledEvent.from_dict(item)
             except Exception:
-                LOGGER.debug("Skipping invalid schedule entry: %s", item, exc_info=True)
+                LOGGER.debug("[schedule] Skipping invalid schedule entry: %s", item, exc_info=True)
                 continue
             if event.event_type == "alarm" and event.time_of_day:
                 event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))

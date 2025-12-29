@@ -549,7 +549,7 @@ def _expand_geocode_queries(query: str) -> list[str]:
 
 def _decode_plus_code(code: str) -> _Location | None:
     if olc is None:
-        LOGGER.debug("Plus Code support unavailable (openlocationcode not installed)")
+        LOGGER.debug("[info] Plus Code support unavailable (openlocationcode not installed)")
         return None
     try:
         decoded = olc.decode(code.strip().upper())

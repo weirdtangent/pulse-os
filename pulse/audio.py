@@ -52,7 +52,7 @@ def _run_pactl(args: list[str]) -> subprocess.CompletedProcess[str] | None:
         )
         return result
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        _LOGGER.debug("pactl %s failed: %s", " ".join(args), exc)
+        _LOGGER.debug("[audio] pactl %s failed: %s", " ".join(args), exc)
         return None
 
 
@@ -103,7 +103,7 @@ def render_notification_sample(destination: Path) -> Path | None:
             _write_notification_beep(wav_file)
         return destination
     except OSError as exc:
-        _LOGGER.debug("Unable to create thump sample at %s: %s", destination, exc)
+        _LOGGER.debug("[audio] Unable to create thump sample at %s: %s", destination, exc)
         return None
 
 
@@ -154,7 +154,7 @@ def _ensure_notification_sample() -> Path | None:
             shutil.copyfile(bundled, path)
             return path
         except OSError as exc:
-            _LOGGER.debug("Unable to copy bundled thump sample: %s", exc)
+            _LOGGER.debug("[audio] Unable to copy bundled thump sample: %s", exc)
             return bundled
     return render_notification_sample(path)
 
@@ -170,7 +170,7 @@ def render_alarm_sample(destination: Path) -> Path | None:
             _write_alarm_beep(wav_file)
         return destination
     except OSError as exc:
-        _LOGGER.debug("Unable to create alarm sample at %s: %s", destination, exc)
+        _LOGGER.debug("[audio] Unable to create alarm sample at %s: %s", destination, exc)
         return None
 
 
@@ -185,7 +185,7 @@ def _ensure_alarm_sample() -> Path | None:
             shutil.copyfile(bundled, path)
             return path
         except OSError as exc:
-            _LOGGER.debug("Unable to copy bundled alarm sample: %s", exc)
+            _LOGGER.debug("[audio] Unable to copy bundled alarm sample: %s", exc)
             return bundled
     return render_alarm_sample(path)
 
@@ -201,7 +201,7 @@ def render_reminder_sample(destination: Path) -> Path | None:
             _write_reminder_beep(wav_file)
         return destination
     except OSError as exc:
-        _LOGGER.debug("Unable to create reminder sample at %s: %s", destination, exc)
+        _LOGGER.debug("[audio] Unable to create reminder sample at %s: %s", destination, exc)
         return None
 
 
@@ -216,7 +216,7 @@ def _ensure_reminder_sample() -> Path | None:
             shutil.copyfile(bundled, path)
             return path
         except OSError as exc:
-            _LOGGER.debug("Unable to copy bundled reminder sample: %s", exc)
+            _LOGGER.debug("[audio] Unable to copy bundled reminder sample: %s", exc)
             return bundled
     return render_reminder_sample(path)
 
@@ -234,7 +234,7 @@ def find_audio_sink() -> str | None:
     if result:
         default_sink = result.stdout.strip()
         if default_sink:
-            _LOGGER.debug("Detected default sink: %s", default_sink)
+            _LOGGER.debug("[audio] Detected default sink: %s", default_sink)
             return default_sink
 
     result = _run_pactl(["list", "sinks", "short"])
@@ -245,9 +245,9 @@ def find_audio_sink() -> str | None:
                 if len(parts) > 1:
                     sink_name = parts[1]
                     if not sink_name.endswith(".monitor"):
-                        _LOGGER.debug("Using fallback sink: %s", sink_name)
+                        _LOGGER.debug("[audio] Using fallback sink: %s", sink_name)
                         return sink_name
-    _LOGGER.warning("find_audio_sink: no sinks detected (XDG_RUNTIME_DIR=%s)", _runtime_env().get("XDG_RUNTIME_DIR"))
+    _LOGGER.warning("[audio] No audio sinks detected (XDG_RUNTIME_DIR=%s)", _runtime_env().get("XDG_RUNTIME_DIR"))
     return None
 
 
@@ -323,7 +323,7 @@ def set_volume(percent: int, sink: str | None = None, *, play_feedback: bool = F
     # Clamp to valid range, but prevent setting to 0% unless explicitly allowed
     percent = max(0, min(100, percent))
     if not allow_zero and percent == 0:
-        _LOGGER.warning("Prevented setting volume to 0% (use allow_zero=True to override)")
+        _LOGGER.warning("[audio] Prevented setting volume to 0%% (use allow_zero=True to override)")
         percent = 20  # Use minimum safe volume instead
 
     try:
@@ -352,7 +352,7 @@ def _play_sample(sample_path: Path | None) -> None:
             player = candidate
             break
     if not player:
-        _LOGGER.debug("No audio player available")
+        _LOGGER.debug("[audio] No audio player available")
         return
     try:
         subprocess.run(  # nosec B603 - hardcoded command array
@@ -363,7 +363,7 @@ def _play_sample(sample_path: Path | None) -> None:
             env=_runtime_env(),
         )
     except OSError as exc:
-        _LOGGER.debug("Failed to play sample: %s", exc)
+        _LOGGER.debug("[audio] Failed to play sample: %s", exc)
 
 
 def play_sound(sound_path: Path | None, fallback: Callable[[], None] | None = None) -> None:
@@ -389,7 +389,7 @@ def play_volume_feedback() -> None:
                 _play_sample(override_path)
                 return
         except Exception:
-            _LOGGER.debug("Failed to play override notification sound '%s'", override_id, exc_info=True)
+            _LOGGER.debug("[audio] Failed to play override notification sound '%s'", override_id, exc_info=True)
     sample = _ensure_notification_sample()
     _play_sample(sample)
 

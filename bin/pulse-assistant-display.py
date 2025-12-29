@@ -114,7 +114,7 @@ class AssistantDisplay:
             for topic in self._subscribed_topics:
                 client.subscribe(topic)
         else:
-            LOGGER.error("Failed to connect to MQTT (reason=%s, properties=%s)", reason_code, properties)
+            LOGGER.error("[display] Failed to connect to MQTT (reason=%s, properties=%s)", reason_code, properties)
 
     @staticmethod
     def _is_connect_success(reason_code) -> bool:
@@ -158,7 +158,7 @@ class AssistantDisplay:
                     self._state_queue.put(data)
                 return
         except Exception as exc:
-            LOGGER.debug("Failed to process assistant message: %s", exc)
+            LOGGER.debug("[display] Failed to process assistant message: %s", exc)
 
     def _poll_queue(self) -> None:
         try:
@@ -329,7 +329,7 @@ class AlarmOverlay:
         try:
             self._client.publish(self._command_topic, json.dumps(data))
         except Exception:
-            LOGGER.debug("Failed to publish schedule command", exc_info=True)
+            LOGGER.debug("[display] Failed to publish schedule command", exc_info=True)
 
     @staticmethod
     def _format_time(next_fire: str) -> str:

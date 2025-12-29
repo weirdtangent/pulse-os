@@ -134,7 +134,7 @@ class CalendarSyncService:
 
     async def start(self) -> None:
         if not self._config.feeds:
-            self._logger.warning("Calendar sync start() called but no feeds configured")
+            self._logger.warning("[calendar] Calendar sync start() called but no feeds configured")
             return
         if self._runner:
             return
@@ -175,9 +175,9 @@ class CalendarSyncService:
                 await asyncio.wait_for(self._sync_once(), timeout=30.0)
             except TimeoutError:
                 # Avoid noisy tracebacks when a slow sync exceeds the loop budget
-                self._logger.warning("Calendar sync loop timed out after 30s; continuing")
+                self._logger.warning("[calendar] Calendar sync loop timed out after 30s; continuing")
             except Exception:
-                self._logger.exception("Calendar sync loop failed; continuing")
+                self._logger.exception("[calendar] Calendar sync loop failed; continuing")
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=refresh_seconds)
             except TimeoutError:
@@ -190,7 +190,7 @@ class CalendarSyncService:
                 last_start = self._last_sync_started.isoformat() if self._last_sync_started else "never"
                 last_done = self._last_sync_completed.isoformat() if self._last_sync_completed else "never"
                 self._logger.warning(
-                    "Calendar sync has not completed in %d seconds (last_start=%s, last_done=%s)",
+                    "[calendar] Calendar sync has not completed in %d seconds (last_start=%s, last_done=%s)",
                     stale_after,
                     last_start,
                     last_done,
@@ -206,13 +206,13 @@ class CalendarSyncService:
             try:
                 await asyncio.wait_for(self._sync_feed(state, now), timeout=60.0)
             except TimeoutError:
-                self._logger.warning("Calendar sync timed out for feed '%s'", feed_label)
+                self._logger.warning("[calendar] Calendar sync timed out for feed '%s'", feed_label)
             except Exception:
-                self._logger.exception("Calendar sync failed for feed '%s'", feed_label)
+                self._logger.exception("[calendar] Calendar sync failed for feed '%s'", feed_label)
         try:
             await self._emit_event_snapshot()
         except Exception:
-            self._logger.exception("Calendar snapshot emit failed")
+            self._logger.exception("[calendar] Calendar snapshot emit failed")
         else:
             self._last_sync_completed = _now()
 
@@ -228,11 +228,11 @@ class CalendarSyncService:
         try:
             response = await self._client.get(state.url, headers=headers)
         except httpx.ReadTimeout as exc:
-            self._logger.warning("Calendar fetch timed out for '%s': %s", feed_label, exc)
+            self._logger.warning("[calendar] Calendar fetch timed out for '%s': %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         except httpx.HTTPError as exc:
-            self._logger.warning("Calendar fetch failed for '%s': %s", feed_label, exc)
+            self._logger.warning("[calendar] Calendar fetch failed for '%s': %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         if response.status_code == 304:
@@ -240,7 +240,7 @@ class CalendarSyncService:
             self._cancel_retry(state.url)
             return
         if response.status_code >= 400:
-            self._logger.warning("Calendar fetch returned %s for '%s'", response.status_code, feed_label)
+            self._logger.warning("[calendar] Calendar fetch returned %s for '%s'", response.status_code, feed_label)
             self._schedule_retry(state.url)
             return
         # Successful fetch - clear any retry
@@ -250,7 +250,7 @@ class CalendarSyncService:
         try:
             calendar = Calendar.from_ical(response.content)
         except Exception as exc:
-            self._logger.warning("Calendar parse failed for '%s': %s", feed_label, exc)
+            self._logger.warning("[calendar] Calendar parse failed for '%s': %s", feed_label, exc)
             self._schedule_retry(state.url)
             return
         calendar_name = calendar.get("X-WR-CALNAME")
@@ -259,8 +259,8 @@ class CalendarSyncService:
             state.label = state.calendar_name
         reminders = self._collect_reminders(calendar, state, now)
         if not reminders:
-            self._logger.warning(
-                "Calendar feed '%s' produced no reminders at %s",
+            self._logger.debug(
+                "[calendar] Calendar feed '%s' produced no reminders at %s",
                 self._feed_label(state),
                 now.isoformat(),
             )
@@ -600,7 +600,7 @@ class CalendarSyncService:
         state.active_keys = {key for key in valid_keys if key in self._scheduled}
         if reminders and not valid_reminders:
             self._logger.warning(
-                "Calendar feed '%s' had %d reminder(s) but none were scheduled "
+                "[calendar] Calendar feed '%s' had %d reminder(s) but none were scheduled "
                 "(past events=%d, past triggers=%d, beyond lookahead=%d)",
                 self._feed_label(state),
                 len(reminders),
@@ -624,7 +624,7 @@ class CalendarSyncService:
                 await self._trigger_callback(reminder)
         except Exception:
             self._logger.exception(
-                "Failed to trigger calendar reminder %s (%s)",
+                "[calendar] Failed to trigger calendar reminder %s (%s)",
                 reminder.uid,
                 reminder.summary,
             )
@@ -682,8 +682,8 @@ class CalendarSyncService:
     async def _emit_event_snapshot(self) -> None:
         ordered = sorted(self._windowed_events.values(), key=lambda reminder: (reminder.start, reminder.trigger_time))
         if not ordered:
-            self._logger.warning(
-                "No upcoming calendar events found within the next %d hour(s); check calendar feed configuration",
+            self._logger.debug(
+                "[calendar] No upcoming calendar events found within the next %d hour(s)",
                 self._config.lookahead_hours,
             )
         self._latest_events = list(ordered)
@@ -691,7 +691,7 @@ class CalendarSyncService:
             try:
                 await self._snapshot_callback(list(ordered))
             except Exception:
-                self._logger.exception("Calendar snapshot callback failed")
+                self._logger.exception("[calendar] Calendar snapshot callback failed")
 
     def cached_events(self) -> list[CalendarReminder]:
         return list(self._latest_events)
@@ -707,7 +707,7 @@ class CalendarSyncService:
         self._failed_feeds.add(feed_url)
         retry_delay = 120  # 2 minutes for retry
         feed_label = self._feed_label(self._feed_states.get(feed_url))
-        self._logger.warning("Scheduling retry for failed calendar feed %s in %d seconds", feed_label, retry_delay)
+        self._logger.warning("[calendar] Scheduling retry for failed calendar feed %s in %d seconds", feed_label, retry_delay)
         task = asyncio.create_task(self._retry_feed_after_delay(feed_url, retry_delay))
         self._retry_tasks[feed_url] = task
 
@@ -727,7 +727,7 @@ class CalendarSyncService:
             state = self._feed_states.get(feed_url)
             if not state:
                 return
-            self._logger.warning("Retrying calendar fetch for %s after failure", self._feed_label(state))
+            self._logger.warning("[calendar] Retrying calendar fetch for %s after failure", self._feed_label(state))
             now = _now()
             await self._sync_feed(state, now)
             # Emit snapshot after retry to update any changes
@@ -736,7 +736,7 @@ class CalendarSyncService:
             pass
         except Exception:
             feed_label = self._feed_label(self._feed_states.get(feed_url))
-            self._logger.exception("Error in calendar feed retry for %s", feed_label)
+            self._logger.exception("[calendar] Error in calendar feed retry for %s", feed_label)
         finally:
             self._retry_tasks.pop(feed_url, None)
 

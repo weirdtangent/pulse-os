@@ -115,7 +115,7 @@ class WakeDetector:
         now = time.monotonic()
         last = self._log_throttle.get(key, 0.0)
         if now - last >= interval:
-            LOGGER.debug(message, *args)
+            LOGGER.debug("[wake] " + message, *args)
             self._log_throttle[key] = now
 
     def increment_local_audio_depth(self) -> None:
@@ -219,7 +219,7 @@ class WakeDetector:
             try:
                 return await self.run_wake_detector_session()
             except WakeContextChanged:
-                LOGGER.debug("Wake context updated; restarting wake detector")
+                LOGGER.debug("[wake] Wake context updated; restarting wake detector")
                 continue
         return None
 
@@ -228,7 +228,7 @@ class WakeDetector:
         detect_context, context_version = self.stable_detect_context()
         streams = self._wake_endpoint_streams()
         if not streams:
-            LOGGER.warning("No wake models configured; skipping wake detection session")
+            LOGGER.warning("[wake] No wake models configured; skipping wake detection session")
             await asyncio.sleep(1.0)
             return None
         timestamp = 0
@@ -287,7 +287,7 @@ class WakeDetector:
                     try:
                         detection = task.result()
                     except Exception:
-                        LOGGER.warning("Wake detector stream %s failed", stream.display_label, exc_info=True)
+                        LOGGER.warning("[wake] Wake detector stream %s failed", stream.display_label, exc_info=True)
                         continue
                     if detection:
                         detected_word = detection
@@ -319,5 +319,5 @@ class WakeDetector:
                 detected_name = detection.name or self.config.wake_models[0]
                 return detected_name
             if NotDetected.is_type(event.type):
-                LOGGER.debug("OpenWakeWord (%s) reported NotDetected", endpoint_label)
+                LOGGER.debug("[wake] OpenWakeWord (%s) reported NotDetected", endpoint_label)
                 return None
