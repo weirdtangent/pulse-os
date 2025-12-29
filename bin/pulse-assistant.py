@@ -802,11 +802,11 @@ class PulseAssistant:
             if self._log_transcripts:
                 LOGGER.info("[assistant] Response [%s]: %s", wake_word, response_text)
             tracker.begin_stage("speaking")
-            stage_extra = {"wake_word": wake_word}
+            stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
             if follow_up:
                 stage_extra["follow_up"] = True
             self._set_assist_stage("pulse", "speaking", stage_extra)
-            response_payload = {
+            response_payload: dict[str, str | bool] = {
                 "text": response_text,
                 "wake_word": wake_word,
             }
@@ -821,7 +821,7 @@ class PulseAssistant:
             self.media_controller.trigger_media_resume_after_response()
         elif play_tone:
             tracker.begin_stage("speaking")
-            stage_extra = {"wake_word": wake_word}
+            stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
             if follow_up:
                 stage_extra["follow_up"] = True
             self._set_assist_stage("pulse", "speaking", stage_extra)
@@ -2021,11 +2021,11 @@ class PulseAssistant:
         tracker = self._current_tracker
         if tracker:
             tracker.begin_stage("speaking")
-        stage_extra = {"wake_word": wake_word, "info_category": response.category}
+        stage_extra: dict[str, str | bool] = {"wake_word": wake_word, "info_category": response.category}
         if follow_up:
             stage_extra["follow_up"] = True
         self._set_assist_stage("pulse", "speaking", stage_extra)
-        payload = {
+        payload: dict[str, str | bool] = {
             "text": response.text,
             "wake_word": wake_word,
             "info_category": response.category,
@@ -2063,12 +2063,12 @@ class PulseAssistant:
             return False
         if tracker:
             tracker.begin_stage("speaking")
-        stage_extra = {"wake_word": wake_word}
+        stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
         if follow_up:
             stage_extra["follow_up"] = True
         self._set_assist_stage("pulse", "speaking", stage_extra)
         response_text = "Okay, no problem."
-        payload = {"text": response_text, "wake_word": wake_word}
+        payload: dict[str, str | bool] = {"text": response_text, "wake_word": wake_word}
         if follow_up:
             payload["follow_up"] = True
         self._publish_message(self.config.response_topic, json.dumps(payload))
