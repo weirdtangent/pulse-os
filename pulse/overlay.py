@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from html import escape as html_escape
 from pathlib import Path
@@ -988,11 +988,37 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         alarms: Iterable[dict[str, Any]] = tuple(item for item in payload_alarms if isinstance(item, dict))
     else:
         alarms = snapshot.alarms or ()
+    schedule_meta = snapshot.schedule_snapshot or {}
+    paused_dates = set(schedule_meta.get("paused_dates") or [])
+    effective_paused = set(schedule_meta.get("effective_skip_dates") or paused_dates)
     entries = _format_alarm_info_entries(alarms)
     title = str(card.get("title") or "Alarms").strip() or "Alarms"
     subtitle = card.get("text") or "Use the buttons to pause, resume, or delete an alarm."
     safe_title = html_escape(title)
     safe_subtitle = html_escape(subtitle)
+    today = datetime.now().astimezone()
+    day_buttons: list[str] = []
+    for offset in range(7):
+        target = today + timedelta(days=offset)
+        date_str = target.date().isoformat()
+        label = target.strftime("%a %m/%d")
+        is_paused = date_str in effective_paused
+        button_label = "Resume" if is_paused else "Pause"
+        emoji = "▶️" if is_paused else "⏸️"
+        aria = f"{button_label} alarms for {label}"
+        day_buttons.append(
+            f"""
+      <button class="overlay-info-card__pause-day"
+        data-toggle-pause-day
+        data-date="{html_escape(date_str, quote=True)}"
+        data-paused="{'true' if is_paused else 'false'}"
+        aria-label="{html_escape(aria, quote=True)}">{emoji} {html_escape(label)}</button>
+            """.strip()
+        )
+    day_toggle_html = (
+        '<div class="overlay-info-card__pause-days"><div class="overlay-info-card__pause-days-label">'
+        "Pause alarms per day (next 7)</div>" + "".join(day_buttons) + "</div>"
+    )
     if not entries:
         body = '<div class="overlay-info-card__empty">No alarms scheduled.</div>'
     else:
@@ -1044,6 +1070,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close alarms list">&times;</button>
   </div>
   <div class="overlay-info-card__body">
+    {day_toggle_html}
     {body}
   </div>
 </div>

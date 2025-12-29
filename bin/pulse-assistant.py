@@ -128,6 +128,8 @@ class PulseAssistant:
             on_state_changed=self._handle_schedule_state_changed,
             on_active_event=self._handle_active_schedule_event,
             sound_settings=self.config.sounds,
+            skip_dates=set(self.config.work_pause.skip_dates),
+            skip_weekdays=set(self.config.work_pause.skip_weekdays),
         )
         # Sound library for dynamic sound options
         self._sound_library = SoundLibrary(custom_dir=self.config.sounds.custom_dir)
@@ -1411,6 +1413,12 @@ class PulseAssistant:
         # Filter out events that have already ended (or started if no end time)
         now = datetime.now().astimezone()
         future_reminders = [reminder for reminder in unique_reminders if (reminder.end or reminder.start) > now]
+        ooo_marker = (self.config.calendar.ooo_summary_marker or "OOO").lower()
+        ooo_dates: set[str] = set()
+        for reminder in future_reminders:
+            if reminder.all_day and ooo_marker and ooo_marker in (reminder.summary or "").lower():
+                ooo_dates.add(reminder.start.date().isoformat())
+        await self.schedule_service.set_ooo_skip_dates(ooo_dates)
         events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         if self.config.calendar.enabled and self.config.calendar.feeds and not events:
             LOGGER.warning(
@@ -1585,6 +1593,16 @@ class PulseAssistant:
                 event_id = payload.get("event_id")
                 if event_id:
                     await self.schedule_service.resume_alarm(str(event_id))
+            elif action == "pause_day":
+                date_str = str(payload.get("date") or "").strip()
+                if not date_str:
+                    raise ValueError("date is required for pause_day")
+                await self.schedule_service.set_ui_pause_date(date_str, True)
+            elif action in {"resume_day", "unpause_day"}:
+                date_str = str(payload.get("date") or "").strip()
+                if not date_str:
+                    raise ValueError("date is required for resume_day")
+                await self.schedule_service.set_ui_pause_date(date_str, False)
             elif action in {"start_timer", "create_timer"}:
                 seconds = self._coerce_duration_seconds(payload.get("duration") or payload.get("seconds"))
                 playback = self._playback_from_payload(payload.get("playback"))

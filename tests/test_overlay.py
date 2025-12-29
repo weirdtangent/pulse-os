@@ -175,6 +175,23 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-toggle-alarm="resume"', html)
         self.assertIn("Paused", html)
 
+    def test_alarm_info_card_renders_pause_day_toggles(self) -> None:
+        snapshot = self._snapshot(
+            alarms=(),
+            info_card={"type": "alarms", "title": "Alarms"},
+            schedule_snapshot={
+                "alarms": [],
+                "timers": [],
+                "reminders": [],
+                "paused_dates": ["2025-12-28"],
+                "effective_skip_dates": ["2025-12-28"],
+                "skip_weekdays": [],
+            },
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("data-toggle-pause-day", html)
+        self.assertIn("Pause alarms per day", html)
+
     def test_notification_bar_shows_reminder_badge(self) -> None:
         future = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
         reminders = ({"id": "rem1", "label": "Trash", "next_fire": future},)

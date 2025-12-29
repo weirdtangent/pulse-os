@@ -237,6 +237,14 @@ class CalendarConfig:
     attendee_emails: tuple[str, ...]
     default_notifications: tuple[int, ...]  # Minutes before event start (e.g., (10, 5) for 10-min and 5-min reminders)
     hide_declined_events: bool  # If True, filter out declined events entirely (default False)
+    ooo_summary_marker: str
+
+
+@dataclass(frozen=True)
+class WorkPauseConfig:
+    skip_dates: tuple[str, ...]  # ISO dates YYYY-MM-DD
+    skip_weekdays: tuple[int, ...]  # 0=Mon .. 6=Sun
+    ooo_marker: str  # Summary marker for all-day OOO events
 
 
 @dataclass(frozen=True)
@@ -272,6 +280,7 @@ class AssistantConfig:
     info: InfoConfig
     calendar: CalendarConfig
     sounds: SoundSettings
+    work_pause: WorkPauseConfig
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> AssistantConfig:
@@ -571,6 +580,7 @@ class AssistantConfig:
             )
 
         hide_declined_events = parse_bool(source.get("PULSE_CALENDAR_HIDE_DECLINED"), False)
+        ooo_marker = (source.get("PULSE_CALENDAR_OOO_MARKER") or "OOO").strip() or "OOO"
         calendar_config = CalendarConfig(
             enabled=bool(feeds),
             feeds=feeds,
@@ -579,6 +589,59 @@ class AssistantConfig:
             attendee_emails=owner_emails,
             default_notifications=default_notifications,
             hide_declined_events=hide_declined_events,
+            ooo_summary_marker=ooo_marker,
+        )
+
+        def _parse_skip_dates(raw: str | None) -> tuple[str, ...]:
+            dates: list[str] = []
+            for item in split_csv(raw or ""):
+                item = item.strip()
+                if not item:
+                    continue
+                # Basic YYYY-MM-DD validation
+                parts = item.split("-")
+                if len(parts) == 3 and all(part.isdigit() for part in parts):
+                    dates.append(item)
+            return tuple(sorted(set(dates)))
+
+        def _parse_skip_weekdays(raw: str | None) -> tuple[int, ...]:
+            days: set[int] = set()
+            name_map = {
+                "mon": 0,
+                "monday": 0,
+                "tue": 1,
+                "tues": 1,
+                "tuesday": 1,
+                "wed": 2,
+                "wednesday": 2,
+                "thu": 3,
+                "thur": 3,
+                "thurs": 3,
+                "thursday": 3,
+                "fri": 4,
+                "friday": 4,
+                "sat": 5,
+                "saturday": 5,
+                "sun": 6,
+                "sunday": 6,
+            }
+            for item in split_csv(raw or ""):
+                token = item.strip().lower()
+                if not token:
+                    continue
+                if token.isdigit():
+                    try:
+                        days.add(int(token) % 7)
+                    except Exception:
+                        continue
+                elif token in name_map:
+                    days.add(name_map[token])
+            return tuple(sorted(days))
+
+        work_pause_config = WorkPauseConfig(
+            skip_dates=_parse_skip_dates(source.get("PULSE_WORK_ALARM_SKIP_DATES")),
+            skip_weekdays=_parse_skip_weekdays(source.get("PULSE_WORK_ALARM_SKIP_DAYS")),
+            ooo_marker=ooo_marker,
         )
 
         return AssistantConfig(
@@ -613,6 +676,7 @@ class AssistantConfig:
             info=info_config,
             calendar=calendar_config,
             sounds=sounds,
+            work_pause=work_pause_config,
         )
 
 
