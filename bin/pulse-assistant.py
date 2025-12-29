@@ -1413,12 +1413,14 @@ class PulseAssistant:
         # Filter out events that have already ended (or started if no end time)
         now = datetime.now().astimezone()
         future_reminders = [reminder for reminder in unique_reminders if (reminder.end or reminder.start) > now]
-        ooo_marker = (self.config.calendar.ooo_summary_marker or "OOO").lower()
+        ooo_marker = str(getattr(self.config.calendar, "ooo_summary_marker", "OOO") or "OOO").lower()
         ooo_dates: set[str] = set()
         for reminder in future_reminders:
             if reminder.all_day and ooo_marker and ooo_marker in (reminder.summary or "").lower():
                 ooo_dates.add(reminder.start.date().isoformat())
-        await self.schedule_service.set_ooo_skip_dates(ooo_dates)
+        service = getattr(self, "schedule_service", None)
+        if service:
+            await service.set_ooo_skip_dates(ooo_dates)
         events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         if self.config.calendar.enabled and self.config.calendar.feeds and not events:
             LOGGER.warning(

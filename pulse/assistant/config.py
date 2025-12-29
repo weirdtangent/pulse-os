@@ -237,7 +237,7 @@ class CalendarConfig:
     attendee_emails: tuple[str, ...]
     default_notifications: tuple[int, ...]  # Minutes before event start (e.g., (10, 5) for 10-min and 5-min reminders)
     hide_declined_events: bool  # If True, filter out declined events entirely (default False)
-    ooo_summary_marker: str
+    ooo_summary_marker: str = "OOO"
 
 
 @dataclass(frozen=True)
