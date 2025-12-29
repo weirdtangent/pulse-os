@@ -362,12 +362,13 @@ def _compute_next_alarm_fire(
     hour, minute = parse_time_string(time_str)
     now = after or _now()
     candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    effective_skip_weekdays = None if skip_weekdays and len(set(skip_weekdays)) >= 7 else skip_weekdays
 
     def _is_skipped(dt: datetime) -> bool:
         date_str = dt.date().isoformat()
         if skip_dates and date_str in skip_dates:
             return True
-        if skip_weekdays and dt.weekday() in skip_weekdays:
+        if effective_skip_weekdays and dt.weekday() in effective_skip_weekdays:
             return True
         return False
 

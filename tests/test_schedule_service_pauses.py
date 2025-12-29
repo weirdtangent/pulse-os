@@ -62,3 +62,18 @@ async def test_fallback_respects_repeat_day(tmp_path: Path, fixed_now: datetime)
     alarm = next(ev for ev in svc._events.values())
     expected = fixed_now.date() + timedelta(days=21)  # first Monday not skipped
     assert alarm.next_fire_dt().date().isoformat() == expected.isoformat()
+
+
+@pytest.mark.anyio
+async def test_skip_weekdays_all_days_does_not_hang(tmp_path: Path, fixed_now: datetime) -> None:
+    # All weekdays skipped should not loop forever; we ignore over-broad skip_weekdays.
+    svc = ScheduleService(
+        storage_path=tmp_path / "sched.json",
+        hostname="test",
+        skip_dates=set(),
+        skip_weekdays={0, 1, 2, 3, 4, 5, 6},
+    )
+    await svc.create_alarm(time_of_day="07:45", days=[fixed_now.weekday()])
+    alarm = next(ev for ev in svc._events.values())
+    # Should schedule for today (Monday) because skip_weekdays is ignored when all days are listed.
+    assert alarm.next_fire_dt().date().isoformat() == fixed_now.date().isoformat()
