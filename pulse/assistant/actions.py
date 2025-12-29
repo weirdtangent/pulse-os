@@ -195,7 +195,7 @@ def _entity_domain(entity_id: str | None) -> str:
 
 
 def _log_resolution(slug: str, targets: list[str], domains: list[str | None]) -> None:
-    LOGGER.debug("Resolved %s to %s (domain_order=%s)", slug, targets, domains)
+    LOGGER.debug("[actions] Resolved %s to %s (domain_order=%s)", slug, targets, domains)
 
 
 def _parse_brightness_pct(args: dict[str, str]) -> float | None:
@@ -758,7 +758,7 @@ async def _maybe_execute_media_action(
         if percent is None:
             return False
         sink = args.get("sink")
-        LOGGER.debug('Setting volume to %s%% (sink="%s")', percent, sink or "default")
+        LOGGER.debug('[actions] Setting volume to %s%% (sink="%s")', percent, sink or "default")
         set_volume(percent, sink)
         return True
     return False

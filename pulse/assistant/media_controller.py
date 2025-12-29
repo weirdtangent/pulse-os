@@ -66,7 +66,7 @@ class MediaController:
             await self._call_media_service("media_pause")
             self._media_pause_pending = True
         except HomeAssistantError as exc:
-            LOGGER.debug("Unable to pause media player %s: %s", self.media_player_entity, exc)
+            LOGGER.debug("[media] Unable to pause media player %s: %s", self.media_player_entity, exc)
 
     def trigger_media_resume_after_response(self) -> None:
         """Schedule media resume after assistant response."""
@@ -91,11 +91,11 @@ class MediaController:
 
             await asyncio.sleep(delay)
             await self._call_media_service("media_play")
-            LOGGER.debug("Resumed media players %s", self._entities)
+            LOGGER.debug("[media] Resumed media players %s", self._entities)
         except asyncio.CancelledError:
             raise
         except HomeAssistantError as exc:
-            LOGGER.debug("Unable to resume media player %s: %s", self.media_player_entity, exc)
+            LOGGER.debug("[media] Unable to resume media player %s: %s", self.media_player_entity, exc)
         finally:
             self._media_pause_pending = False
             self._media_resume_task = None
@@ -111,7 +111,7 @@ class MediaController:
 
             return await ha_client.get_state(entity)
         except HomeAssistantError as exc:
-            LOGGER.debug("Unable to read media_player %s: %s", entity, exc)
+            LOGGER.debug("[media] Unable to read media_player %s: %s", entity, exc)
             return None
 
     async def pause_all(self) -> None:
