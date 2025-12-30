@@ -28,7 +28,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -55,7 +55,7 @@ jobs:
 
       - name: Checkout repository
         if: needs.changes.outputs.python == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -100,7 +100,7 @@ jobs:
 
       - name: Checkout repository
         if: needs.changes.outputs.python == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -165,7 +165,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
