@@ -1376,7 +1376,9 @@ class ScheduleService:
         enabled_dates = data.get("enabled_dates") or {}
         if isinstance(enabled_dates, dict):
             # dict[str, str] of date -> alarm_id
-            self._ui_enable_dates = {k: v for k, v in enabled_dates.items() if isinstance(k, str) and isinstance(v, str)}
+            self._ui_enable_dates = {
+                k: v for k, v in enabled_dates.items() if isinstance(k, str) and isinstance(v, str)
+            }
         elif isinstance(enabled_dates, list):
             # Legacy format: convert list to dict with empty alarm_id (will be cleaned up)
             self._ui_enable_dates = {item: "" for item in enabled_dates if isinstance(item, str)}

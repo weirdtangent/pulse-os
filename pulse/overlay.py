@@ -1051,7 +1051,11 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
                         emoji = "▶️" if button_paused else "⏸️"
                         aria = f"{'Enable' if button_paused else 'Disable'} alarm for {label_date}"
 
-                        alarm_id_attr = f'data-alarm-id="{html_escape(entry["id"], quote=True)}"' if is_paused_alarm else ""
+                        alarm_id_attr = (
+                            f'data-alarm-id="{html_escape(entry["id"], quote=True)}"'
+                            if is_paused_alarm
+                            else ""
+                        )
                         fire_buttons.append(
                             f'<button class="overlay-info-card__pause-day" '
                             f"{action_attr} "
