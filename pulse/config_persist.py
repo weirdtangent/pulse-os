@@ -91,13 +91,13 @@ class ConfigPersister:
         try:
             self._write_changes(changes)
         except Exception as exc:
-            self._logger.error("Failed to persist config changes: %s", exc)
+            self._logger.error("[config] Failed to persist config changes: %s", exc)
 
     def _write_changes(self, changes: dict[str, str]) -> None:
         """Write multiple variable changes to the config file."""
         if not self._config_path.exists():
             self._logger.warning(
-                "Config file '%s' does not exist, skipping persistence",
+                "[config] Config file '%s' does not exist, skipping persistence",
                 self._config_path,
             )
             return
@@ -122,14 +122,14 @@ class ConfigPersister:
                 lock_fd = open(lock_path, "w")
                 fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
             except OSError as exc:
-                self._logger.warning("Could not acquire config lock: %s", exc)
+                self._logger.warning("[config] Could not acquire config lock: %s", exc)
                 # Continue anyway - worst case we have a race condition
 
             # Read current config
             try:
                 content = self._config_path.read_text(encoding="utf-8")
             except OSError as exc:
-                self._logger.error("Failed to read config file: %s", exc)
+                self._logger.error("[config] Failed to read config file: %s", exc)
                 return
 
             # Create backup
@@ -142,7 +142,7 @@ class ConfigPersister:
                 except OSError:
                     pass
             except OSError as exc:
-                self._logger.warning("Failed to create config backup: %s", exc)
+                self._logger.warning("[config] Failed to create config backup: %s", exc)
 
             # Apply changes
             new_content = self._apply_changes(content, changes)
@@ -151,13 +151,13 @@ class ConfigPersister:
             try:
                 self._config_path.write_text(new_content, encoding="utf-8")
                 self._logger.info(
-                    "Persisted %d config change(s) to '%s': %s",
+                    "[config] Persisted %d config change(s) to '%s': %s",
                     len(changes),
                     self._config_path,
                     ", ".join(f"{k}={v!r}" for k, v in changes.items()),
                 )
             except OSError as exc:
-                self._logger.error("Failed to write config file: %s", exc)
+                self._logger.error("[config] Failed to write config file: %s", exc)
 
         finally:
             if lock_fd is not None:
@@ -212,7 +212,7 @@ class ConfigPersister:
         # (they might be new or in a bash block - don't add them automatically)
         for var_name in remaining:
             self._logger.warning(
-                "Variable '%s' not found in config file, change not persisted",
+                "[config] Variable '%s' not found in config file, change not persisted",
                 var_name,
             )
 
@@ -232,7 +232,7 @@ class ConfigPersister:
         try:
             self._write_changes(changes)
         except Exception as exc:
-            self._logger.error("Failed to persist config changes: %s", exc)
+            self._logger.error("[config] Failed to persist config changes: %s", exc)
 
     def stop(self) -> None:
         """Stop the persister and flush any pending changes."""
@@ -341,7 +341,7 @@ def persist_preference(
     mapping = PREFERENCE_TO_CONFIG.get(preference_key)
     if mapping is None:
         if logger:
-            logger.warning("Unknown preference key '%s', not persisting", preference_key)
+            logger.warning("[config] Unknown preference key '%s', not persisting", preference_key)
         return False
 
     var_name, transformer = mapping

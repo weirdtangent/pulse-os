@@ -72,7 +72,7 @@ async def transcribe_audio(
             event = await await_with_timeout(client.read_event(), timeout)
             if event is None:
                 if logger:
-                    logger.debug("Wyoming STT connection closed before transcript returned")
+                    logger.debug("[stt] Wyoming STT connection closed before transcript returned")
                 return None
             if Transcript.is_type(event.type):
                 transcript = Transcript.from_event(event)

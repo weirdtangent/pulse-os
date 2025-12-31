@@ -90,7 +90,7 @@ class AplaySink:
             cmd = self._build_command(player, rate, width, channels)
         except ValueError as exc:
             self._logger.warning(
-                "Player %s cannot handle width=%s (%s); falling back to aplay",
+                "[playback] Player %s cannot handle width=%s (%s); falling back to aplay",
                 player,
                 width,
                 exc,
@@ -98,7 +98,7 @@ class AplaySink:
             player = "aplay"
             cmd = _build_aplay_command(rate, width, channels)
         sink_detail = f" (sink={sink})" if sink else ""
-        self._logger.debug("Starting playback (%s): %s%s", player, " ".join(cmd), sink_detail)
+        self._logger.debug("[playback] Starting playback (%s): %s%s", player, " ".join(cmd), sink_detail)
         self._proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -122,7 +122,7 @@ class AplaySink:
     async def stop(self) -> None:
         if not self._proc:
             return
-        self._logger.debug("Stopping playback")
+        self._logger.debug("[playback] Stopping playback")
         if self._proc.stdin:
             self._proc.stdin.close()
             with contextlib.suppress(BrokenPipeError):

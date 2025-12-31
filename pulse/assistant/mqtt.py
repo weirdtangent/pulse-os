@@ -21,7 +21,7 @@ class AssistantMqtt:
 
     def connect(self) -> None:
         if not self.config.host:
-            self._logger.debug("MQTT host not configured; assistant telemetry disabled")
+            self._logger.debug("[mqtt] MQTT host not configured; assistant telemetry disabled")
             return
         with self._lock:
             if self._client is not None:
@@ -49,7 +49,7 @@ class AssistantMqtt:
             try:
                 client.connect(self.config.host, self.config.port, keepalive=30)
             except Exception as exc:
-                self._logger.warning("Failed to connect to MQTT: %s", exc)
+                self._logger.warning("[mqtt] Failed to connect to MQTT: %s", exc)
                 return
             client.loop_start()
             self._client = client
@@ -76,7 +76,7 @@ class AssistantMqtt:
         try:
             client.publish(topic, payload=payload, qos=qos, retain=retain)
         except Exception as exc:
-            self._logger.debug("Failed to publish MQTT message: %s", exc)
+            self._logger.debug("[mqtt] Failed to publish MQTT message: %s", exc)
 
     def subscribe(self, topic: str, on_message: Callable[[str], None]) -> None:
         client = self._client
@@ -88,9 +88,11 @@ class AssistantMqtt:
                 payload = message.payload.decode("utf-8", errors="ignore")
                 on_message(payload)
             except Exception as exc:
-                self._logger.error("MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True)
+                self._logger.error(
+                    "[mqtt] MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True
+                )
 
         result, mid = client.subscribe(topic)
         if result != mqtt.MQTT_ERR_SUCCESS:
-            self._logger.warning("Failed to subscribe to topic: %s (rc=%s)", topic, result)
+            self._logger.warning("[mqtt] Failed to subscribe to topic: %s (rc=%s)", topic, result)
         client.message_callback_add(topic, _callback)

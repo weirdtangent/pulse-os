@@ -115,7 +115,7 @@ class PulseAssistant:
             try:
                 self.home_assistant = HomeAssistantClient(config.home_assistant)
             except ValueError as exc:
-                LOGGER.warning("Home Assistant config invalid: %s", exc)
+                LOGGER.warning("[assistant] Home Assistant config invalid: %s", exc)
         self.info_service = InfoService(config.info, logger=LOGGER)
         self.scheduler = AssistantScheduler(
             self.home_assistant, config.home_assistant, self._handle_scheduler_notification
@@ -149,7 +149,7 @@ class PulseAssistant:
                 )
             else:
                 LOGGER.warning(
-                    "Calendar sync is enabled but no feeds are configured (PULSE_CALENDAR_ICS_URLS is empty)"
+                    "[assistant] Calendar sync enabled but no feeds configured " "(PULSE_CALENDAR_ICS_URLS is empty)"
                 )
         else:
             pass
@@ -233,23 +233,23 @@ class PulseAssistant:
             try:
                 await asyncio.wait_for(self.schedule_service.start(), timeout=8.0)
             except TimeoutError:
-                LOGGER.exception("Schedule service start() timed out")
+                LOGGER.exception("[assistant] Schedule service start() timed out")
                 raise
             except Exception as exc:
-                LOGGER.exception("Schedule service start() failed: %s", exc)
+                LOGGER.exception("[assistant] Schedule service start() failed: %s", exc)
                 raise
             if self.calendar_sync:
                 try:
                     await self.calendar_sync.start()
                 except Exception as exc:
-                    LOGGER.exception("Failed to start calendar sync service: %s", exc)
+                    LOGGER.exception("[assistant] Failed to start calendar sync service: %s", exc)
                 # Clear any stale calendar events on startup
                 self._calendar_events = []
                 self._calendar_updated_at = None
                 # Publish empty schedule state to clear overlay cache
                 self._publish_schedule_state({})
             else:
-                LOGGER.warning("calendar_sync is None, cannot start calendar sync service")
+                LOGGER.warning("[assistant] calendar_sync is None, cannot start calendar sync service")
 
             # Publish preferences and retained-state after services are running
             self._publish_preferences()
@@ -260,14 +260,14 @@ class PulseAssistant:
                 try:
                     self._publish_earmuffs_state()
                 except Exception as exc:
-                    LOGGER.exception("Failed to publish earmuffs state: %s", exc)
+                    LOGGER.exception("[assistant] Failed to publish earmuffs state: %s", exc)
 
             self._publish_assistant_discovery()
             self._publish_routine_overlay()
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
         except Exception as exc:
-            LOGGER.exception("Fatal error in assistant.run(): %s", exc)
+            LOGGER.exception("[assistant] Fatal error in assistant.run(): %s", exc)
             raise
         while not self._shutdown.is_set():
             wake_word = await self.wake_detector.wait_for_wake_word(self._shutdown, self._get_earmuffs_enabled)
@@ -280,7 +280,7 @@ class PulseAssistant:
                 else:
                     await self._run_pulse_pipeline(wake_word)
             except Exception as exc:
-                LOGGER.exception("Pipeline %s failed for wake word %s: %s", pipeline, wake_word, exc)
+                LOGGER.exception("[assistant] Pipeline %s failed for wake word %s: %s", pipeline, wake_word, exc)
                 self._set_assist_stage(pipeline, "error", {"wake_word": wake_word, "error": str(exc)})
                 self._finalize_assist_run(status="error")
 
@@ -329,7 +329,7 @@ class PulseAssistant:
     async def _transcribe(self, audio_bytes: bytes, endpoint: WyomingEndpoint | None = None) -> str | None:
         target = endpoint or self.config.stt_endpoint
         if not target:
-            LOGGER.warning("No STT endpoint configured")
+            LOGGER.warning("[assistant] No STT endpoint configured")
             return None
         return await transcribe_audio(
             audio_bytes,
@@ -350,7 +350,7 @@ class PulseAssistant:
     ) -> None:
         target = endpoint or self.config.tts_endpoint
         if not target:
-            LOGGER.warning("No TTS endpoint configured; cannot speak response")
+            LOGGER.warning("[assistant] No TTS endpoint configured; cannot speak response")
             return
         await play_tts_stream(
             text,
@@ -419,7 +419,7 @@ class PulseAssistant:
         try:
             return json.loads(json.dumps(snapshot))
         except TypeError:
-            LOGGER.debug("Unable to serialize schedule snapshot: %s", snapshot)
+            LOGGER.warning("[assistant] Unable to serialize schedule snapshot: %s", snapshot)
             return None
 
     def _publish_schedule_state(self, snapshot: dict[str, Any]) -> None:
@@ -436,7 +436,7 @@ class PulseAssistant:
         try:
             message = json.dumps(payload)
         except TypeError:
-            LOGGER.debug("Unable to serialize schedule snapshot: %s", payload)
+            LOGGER.warning("[assistant] Unable to serialize schedule snapshot: %s", payload)
             return
         self._publish_message(self._schedules_state_topic, message, retain=True)
 
@@ -447,7 +447,7 @@ class PulseAssistant:
         try:
             lights = await ha_client.list_entities("light")
         except HomeAssistantError as exc:
-            LOGGER.debug("Failed to fetch Home Assistant lights for overlay: %s", exc)
+            LOGGER.info("[assistant] Failed to fetch Home Assistant lights for overlay: %s", exc)
             return
         payload = self._format_lights_card(lights)
         if not payload:
@@ -533,7 +533,7 @@ class PulseAssistant:
             try:
                 await asyncio.to_thread(play_volume_feedback)
             except Exception:
-                LOGGER.debug("Wake sound playback failed", exc_info=True)
+                LOGGER.info("[assistant] Wake sound playback failed", exc_info=True)
 
     async def _play_ack_tone(self, sound_id: str | None) -> None:
         """Play a short acknowledgement tone for HA actions."""
@@ -566,7 +566,7 @@ class PulseAssistant:
         try:
             audio_bytes = await self._record_phrase()
             if not audio_bytes:
-                LOGGER.debug("No speech captured for wake word %s", wake_word)
+                LOGGER.info("[assistant] No speech captured for wake word %s", wake_word)
                 self._finalize_assist_run(status="no_audio")
                 return
             tracker.begin_stage("thinking")
@@ -576,7 +576,7 @@ class PulseAssistant:
                 self._finalize_assist_run(status="no_transcript")
                 return
             if self._log_transcripts:
-                LOGGER.info("Transcript [%s]: %s", wake_word, transcript)
+                LOGGER.info("[assistant] Transcript [%s]: %s", wake_word, transcript)
             if self._log_llm_messages:
                 transcript_payload = {"text": transcript, "wake_word": wake_word}
                 self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
@@ -682,20 +682,20 @@ class PulseAssistant:
         ha_client = self.home_assistant
         if not ha_config.base_url or not ha_config.token:
             LOGGER.warning(
-                "Home Assistant pipeline invoked for wake word '%s' but base URL/token are missing",
+                "[assistant] Home Assistant pipeline invoked for wake word '%s' but base URL/token are missing",
                 wake_word,
             )
             self._finalize_assist_run(status="config_error")
             return
         if not ha_client:
-            LOGGER.warning("Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
+            LOGGER.warning("[assistant] Home Assistant client not initialized; cannot handle wake word '%s'", wake_word)
             self._finalize_assist_run(status="config_error")
             return
         await self.schedule_service.pause_active_audio()
         try:
             audio_bytes = await self._record_phrase()
             if not audio_bytes:
-                LOGGER.debug("No speech captured for Home Assistant wake word %s", wake_word)
+                LOGGER.info("[assistant] No speech captured for Home Assistant wake word %s", wake_word)
                 self._finalize_assist_run(status="no_audio")
                 return
             tracker.begin_stage("thinking")
@@ -710,7 +710,7 @@ class PulseAssistant:
                     language=self.config.language,
                 )
             except HomeAssistantError as exc:
-                LOGGER.warning("Home Assistant Assist call failed: %s", exc)
+                LOGGER.warning("[assistant] Home Assistant Assist call failed: %s", exc)
                 self._set_assist_stage(
                     "home_assistant",
                     "error",
@@ -721,7 +721,7 @@ class PulseAssistant:
             transcript = self._extract_ha_transcript(ha_result)
             if transcript:
                 if self._log_transcripts:
-                    LOGGER.info("Transcript [%s/HA]: %s", wake_word, transcript)
+                    LOGGER.info("[assistant] Transcript [%s/HA]: %s", wake_word, transcript)
                 if self._log_llm_messages:
                     self._publish_message(
                         self.config.transcript_topic,
@@ -729,7 +729,7 @@ class PulseAssistant:
                     )
             speech_text = self._extract_ha_speech(ha_result) or "Okay."
             if self._log_transcripts:
-                LOGGER.info("Response [%s/HA]: %s", wake_word, speech_text)
+                LOGGER.info("[assistant] Response [%s/HA]: %s", wake_word, speech_text)
             tracker.begin_stage("speaking")
             self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
             self._publish_message(
@@ -772,7 +772,9 @@ class PulseAssistant:
     ) -> LLMResult | None:
         prompt_actions = self.actions.describe_for_prompt() + self._home_assistant_prompt_actions()
         llm_result = await self.llm.generate(transcript, prompt_actions)
-        LOGGER.debug("LLM response [%s]: actions=%s, response=%s", wake_word, llm_result.actions, llm_result.response)
+        LOGGER.debug(
+            "[assistant] LLM response [%s]: actions=%s, response=%s", wake_word, llm_result.actions, llm_result.response
+        )
         routine_actions = await self.routines.execute(llm_result.actions, self.home_assistant)
         executed_actions = list(routine_actions)
         executed_actions.extend(
@@ -786,7 +788,7 @@ class PulseAssistant:
             )
         )
         if executed_actions:
-            LOGGER.debug("Executed actions [%s]: %s", wake_word, executed_actions)
+            LOGGER.debug("[assistant] Executed actions [%s]: %s", wake_word, executed_actions)
         if executed_actions:
             self._publish_message(
                 self.config.action_topic,
@@ -800,13 +802,13 @@ class PulseAssistant:
         )
         if response_text:
             if self._log_transcripts:
-                LOGGER.info("Response [%s]: %s", wake_word, response_text)
+                LOGGER.info("[assistant] Response [%s]: %s", wake_word, response_text)
             tracker.begin_stage("speaking")
-            stage_extra = {"wake_word": wake_word}
+            stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
             if follow_up:
                 stage_extra["follow_up"] = True
             self._set_assist_stage("pulse", "speaking", stage_extra)
-            response_payload = {
+            response_payload: dict[str, str | bool] = {
                 "text": response_text,
                 "wake_word": wake_word,
             }
@@ -821,7 +823,7 @@ class PulseAssistant:
             self.media_controller.trigger_media_resume_after_response()
         elif play_tone:
             tracker.begin_stage("speaking")
-            stage_extra = {"wake_word": wake_word}
+            stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
             if follow_up:
                 stage_extra["follow_up"] = True
             self._set_assist_stage("pulse", "speaking", stage_extra)
@@ -919,7 +921,7 @@ class PulseAssistant:
         try:
             await self._speak(message)
         except Exception as exc:
-            LOGGER.warning("Failed to speak scheduler message: %s", exc)
+            LOGGER.warning("[assistant] Failed to speak scheduler message: %s", exc)
 
     @staticmethod
     def _extract_ha_speech(result: dict) -> str | None:
@@ -1000,19 +1002,19 @@ class PulseAssistant:
             self.mqtt.subscribe(f"{base}/sound_reminder/set", self._handle_sound_reminder_command)
             self.mqtt.subscribe(f"{base}/sound_notification/set", self._handle_sound_notification_command)
         except RuntimeError:
-            LOGGER.debug("MQTT client not ready for preference subscriptions")
+            LOGGER.debug("[assistant] MQTT client not ready for preference subscriptions")
 
     def _subscribe_schedule_topics(self) -> None:
         try:
             self.mqtt.subscribe(self._schedule_command_topic, self._handle_schedule_command_message)
         except RuntimeError:
-            LOGGER.debug("MQTT client not ready for schedule command subscription")
+            LOGGER.debug("[assistant] MQTT client not ready for schedule command subscription")
 
     def _subscribe_playback_topic(self) -> None:
         try:
             self.mqtt.subscribe(self._playback_topic, self._handle_now_playing_message)
         except RuntimeError:
-            LOGGER.debug("MQTT client not ready for playback telemetry subscription")
+            LOGGER.debug("[assistant] MQTT client not ready for playback telemetry subscription")
 
     def _subscribe_earmuffs_topic(self) -> None:
         try:
@@ -1020,16 +1022,16 @@ class PulseAssistant:
             # Also subscribe to state topic to restore retained state on startup
             self.mqtt.subscribe(self._earmuffs_state_topic, self._handle_earmuffs_state_restore)
         except RuntimeError as exc:
-            LOGGER.warning("MQTT client not ready for earmuffs subscription: %s", exc)
+            LOGGER.debug("[assistant] MQTT client not ready for earmuffs subscription: %s", exc)
         except Exception as exc:
-            LOGGER.error("Failed to subscribe to earmuffs topic: %s", exc, exc_info=True)
+            LOGGER.error("[assistant] Failed to subscribe to earmuffs topic: %s", exc, exc_info=True)
 
     def _subscribe_alert_topics(self) -> None:
         for topic in self._alert_topics:
             try:
                 self.mqtt.subscribe(topic, lambda payload, t=topic: self._handle_alert_message(t, payload))
             except Exception as exc:
-                LOGGER.debug("Failed to subscribe to alert topic %s: %s", topic, exc)
+                LOGGER.warning("[assistant] Failed to subscribe to alert topic %s: %s", topic, exc)
 
     def _subscribe_intercom_topic(self) -> None:
         if not self._intercom_topic:
@@ -1037,7 +1039,7 @@ class PulseAssistant:
         try:
             self.mqtt.subscribe(self._intercom_topic, self._handle_intercom_message)
         except Exception as exc:
-            LOGGER.debug("Failed to subscribe to intercom topic %s: %s", self._intercom_topic, exc)
+            LOGGER.warning("[assistant] Failed to subscribe to intercom topic %s: %s", self._intercom_topic, exc)
 
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()
@@ -1120,7 +1122,7 @@ class PulseAssistant:
             return
         sound_id = self._get_sound_id_by_label(kind, label)
         if sound_id is None:
-            LOGGER.debug("Ignoring unknown %s sound: '%s'", kind, label)
+            LOGGER.debug("[assistant] Ignoring unknown %s sound: '%s'", kind, label)
             return
         current_id = self._get_current_sound_id(kind)
         if sound_id == current_id:
@@ -1129,7 +1131,7 @@ class PulseAssistant:
         self._update_sound_setting(kind, sound_id)
         self._publish_preference_state(f"sound_{kind}", label)
         persist_preference(f"sound_{kind}", sound_id, logger=LOGGER)
-        LOGGER.info("Set %s sound to '%s' (%s)", kind, label, sound_id)
+        LOGGER.info("[assistant] Set %s sound to '%s' (%s)", kind, label, sound_id)
 
     def _get_current_sound_id(self, kind: SoundKind) -> str:
         """Get the current sound_id for a given kind."""
@@ -1173,12 +1175,14 @@ class PulseAssistant:
         changed = self.wake_detector.set_remote_audio_active(active)
         if changed:
             detail = normalized[:80] or "idle"
-            LOGGER.debug("Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail)
+            LOGGER.debug(
+                "[assistant] Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail
+            )
 
     def _handle_speaking_style_command(self, payload: str) -> None:
         value = payload.strip().lower()
         if value not in {"relaxed", "normal", "aggressive"}:
-            LOGGER.debug("Ignoring invalid speaking style: %s", payload)
+            LOGGER.debug("[assistant] Ignoring invalid speaking style: %s", payload)
             return
         self.preferences = replace(self.preferences, speaking_style=value)  # type: ignore[arg-type]
         self._publish_preference_state("speaking_style", value)
@@ -1187,14 +1191,14 @@ class PulseAssistant:
     def _handle_wake_sensitivity_command(self, payload: str) -> None:
         value = payload.strip().lower()
         if value not in {"low", "normal", "high"}:
-            LOGGER.debug("Ignoring invalid wake sensitivity: %s", payload)
+            LOGGER.debug("[assistant] Ignoring invalid wake sensitivity: %s", payload)
             return
         if value == self.preferences.wake_sensitivity:
             return
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
         self._publish_preference_state("wake_sensitivity", value)
         persist_preference("wake_sensitivity", value, logger=LOGGER)
-        self._mark_wake_context_dirty()
+        self.wake_detector.mark_wake_context_dirty()
 
     def _handle_earmuffs_state_restore(self, payload: str) -> None:
         """Restore earmuffs state from retained MQTT message on startup."""
@@ -1337,7 +1341,7 @@ class PulseAssistant:
         try:
             await self.home_assistant.call_service("logbook", "log", payload)
         except Exception:
-            LOGGER.debug("Failed to log event to Home Assistant activity log", exc_info=True)
+            LOGGER.debug("[assistant] Failed to log event to Home Assistant activity log", exc_info=True)
 
     def _build_activity_message(self, event_type: str, event: dict[str, Any]) -> str | None:
         label = (event.get("label") or "").strip()
@@ -1406,7 +1410,7 @@ class PulseAssistant:
                 auto_clear_seconds=900,
             )
         except Exception as exc:
-            LOGGER.exception("Calendar reminder dispatch failed for %s: %s", label, exc)
+            LOGGER.exception("[assistant] Calendar reminder dispatch failed for %s: %s", label, exc)
 
     async def _handle_calendar_snapshot(self, reminders: list[CalendarReminder]) -> None:
         unique_reminders = self._deduplicate_calendar_reminders(reminders)
@@ -1438,7 +1442,7 @@ class PulseAssistant:
         events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
         if self.config.calendar.enabled and self.config.calendar.feeds and not events:
             LOGGER.warning(
-                "Calendar snapshot contained no upcoming events within the lookahead window (now=%s)",
+                "[assistant] Calendar snapshot contained no upcoming events within the lookahead window (now=%s)",
                 now.isoformat(),
             )
         self._calendar_events = events
@@ -1528,7 +1532,7 @@ class PulseAssistant:
         try:
             data = json.loads(payload)
         except json.JSONDecodeError:
-            LOGGER.debug("Ignoring malformed schedule command: %s", payload)
+            LOGGER.debug("[assistant] Ignoring malformed schedule command: %s", payload)
             return
         asyncio.run_coroutine_threadsafe(self._process_schedule_command(data), self._loop)
 
@@ -1687,7 +1691,7 @@ class PulseAssistant:
                 if event_id and seconds > 0:
                     await self.schedule_service.delay_reminder(str(event_id), int(seconds))
         except Exception as exc:
-            LOGGER.debug("Schedule command %s failed: %s", action, exc)
+            LOGGER.debug("[assistant] Schedule command %s failed: %s", action, exc)
 
     @staticmethod
     def _playback_from_payload(payload: dict[str, Any] | None) -> PlaybackConfig:
@@ -2031,11 +2035,11 @@ class PulseAssistant:
         tracker = self._current_tracker
         if tracker:
             tracker.begin_stage("speaking")
-        stage_extra = {"wake_word": wake_word, "info_category": response.category}
+        stage_extra: dict[str, str | bool] = {"wake_word": wake_word, "info_category": response.category}
         if follow_up:
             stage_extra["follow_up"] = True
         self._set_assist_stage("pulse", "speaking", stage_extra)
-        payload = {
+        payload: dict[str, str | bool] = {
             "text": response.text,
             "wake_word": wake_word,
             "info_category": response.category,
@@ -2073,12 +2077,12 @@ class PulseAssistant:
             return False
         if tracker:
             tracker.begin_stage("speaking")
-        stage_extra = {"wake_word": wake_word}
+        stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
         if follow_up:
             stage_extra["follow_up"] = True
         self._set_assist_stage("pulse", "speaking", stage_extra)
         response_text = "Okay, no problem."
-        payload = {"text": response_text, "wake_word": wake_word}
+        payload: dict[str, str | bool] = {"text": response_text, "wake_word": wake_word}
         if follow_up:
             payload["follow_up"] = True
         self._publish_message(self.config.response_topic, json.dumps(payload))
@@ -2711,7 +2715,7 @@ class PulseAssistant:
         try:
             await ha_client.call_service("media_player", service, {"entity_id": entity})
         except HomeAssistantError as exc:
-            LOGGER.debug("Music control %s failed for %s: %s", service, entity, exc)
+            LOGGER.debug("[assistant] Music control %s failed for %s: %s", service, entity, exc)
             spoken = "I couldn't control the music right now."
             await self._speak(spoken)
             self._log_assistant_response("music", spoken, pipeline="pulse")
@@ -2774,7 +2778,7 @@ class PulseAssistant:
             self._llm_provider_override = value
         else:
             supported = ", ".join(get_supported_providers().keys())
-            LOGGER.warning(f"Invalid LLM provider '{payload}'. Supported: {supported}")
+            LOGGER.warning("[assistant] Invalid LLM provider '%s'. Supported: %s", payload, supported)
             return
         self.llm = self._build_llm_provider()
         provider = self._active_llm_provider()
