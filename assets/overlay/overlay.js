@@ -565,8 +565,9 @@
     const toggleEnableDayButton = e.target.closest('[data-toggle-enable-day]');
     if (toggleEnableDayButton) {
       const date = toggleEnableDayButton.dataset.date;
+      const alarmId = toggleEnableDayButton.dataset.alarmId;
       const paused = toggleEnableDayButton.dataset.paused === 'true';
-      if (!date) {
+      if (!date || !alarmId) {
         return;
       }
       const previous = toggleEnableDayButton.textContent;
@@ -576,7 +577,7 @@
       fetch(infoEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, date })
+        body: JSON.stringify({ action, date, alarm_id: alarmId })
       }).catch(() => {
         toggleEnableDayButton.disabled = false;
         toggleEnableDayButton.textContent = previous;

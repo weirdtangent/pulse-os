@@ -990,7 +990,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         alarms = snapshot.alarms or ()
     schedule_meta = snapshot.schedule_snapshot or {}
     paused_dates = set(schedule_meta.get("paused_dates") or [])
-    enabled_dates = set(schedule_meta.get("enabled_dates") or [])
+    enabled_dates_dict = schedule_meta.get("enabled_dates") or {}  # dict[str, str] of date -> alarm_id
     effective_paused = set(schedule_meta.get("effective_skip_dates") or paused_dates)
     skip_weekdays = {int(day) % 7 for day in schedule_meta.get("skip_weekdays") or []}
     entries = _format_alarm_info_entries(alarms)
@@ -1026,13 +1026,8 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
 
             if alarm_data:
                 is_paused_alarm = status == "paused"
-                fire_times = _compute_next_n_alarm_fires(
-                    alarm_data,
-                    7,
-                    skip_dates=None if is_paused_alarm else effective_paused,
-                    skip_weekdays=set() if is_paused_alarm else skip_weekdays,
-                    enable_dates=enabled_dates if is_paused_alarm else None,
-                )
+                # Get all potential fire times based on repeat_days only
+                fire_times = _compute_next_n_alarm_fires(alarm_data, 7)
 
                 if fire_times:
                     fire_buttons = []
@@ -1041,10 +1036,10 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
                         date_str = fire_dt.date().isoformat()
                         label_date = fire_dt.strftime("%a %m/%d")
 
-                        # Determine button state based on alarm type
+                        # Determine button state based on alarm type and current pause/enable state
                         if is_paused_alarm:
-                            # For paused alarms: check if date is in enable list
-                            will_fire = date_str in enabled_dates
+                            # For paused alarms: check if date is enabled for THIS alarm
+                            will_fire = enabled_dates_dict.get(date_str) == entry["id"]
                             action_attr = "data-toggle-enable-day"
                         else:
                             # For active alarms: check if date is NOT in pause list
@@ -1056,10 +1051,12 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
                         emoji = "▶️" if button_paused else "⏸️"
                         aria = f"{'Enable' if button_paused else 'Disable'} alarm for {label_date}"
 
+                        alarm_id_attr = f'data-alarm-id="{html_escape(entry["id"], quote=True)}"' if is_paused_alarm else ""
                         fire_buttons.append(
                             f'<button class="overlay-info-card__pause-day" '
                             f"{action_attr} "
                             f'data-date="{html_escape(date_str, quote=True)}" '
+                            f"{alarm_id_attr} "
                             f'data-paused="{"true" if button_paused else "false"}"'
                             f' aria-label="{html_escape(aria, quote=True)}">'
                             f"{emoji} {html_escape(label_date)}</button>"
@@ -1809,23 +1806,19 @@ def _format_alarm_days_phrase(alarm: dict[str, Any]) -> str:
 def _compute_next_n_alarm_fires(
     alarm: dict[str, Any],
     n: int,
-    *,
-    skip_dates: set[str] | None = None,
-    skip_weekdays: set[int] | None = None,
-    enable_dates: set[str] | None = None,
 ) -> list[datetime]:
-    """Compute the next N fire times for an alarm.
+    """Compute the next N potential fire times for an alarm based on repeat_days only.
+
+    This returns ALL potential fire times regardless of pause/skip state.
+    Button state (will fire vs won't fire) is determined separately in the UI.
 
     Args:
         alarm: Alarm dict with 'time', 'repeat_days' keys
         n: Number of fire times to compute
-        skip_dates: Set of ISO date strings to skip (for active alarms)
-        skip_weekdays: Set of weekday indexes (0=Mon, 6=Sun) to skip (for active alarms)
-        enable_dates: Set of ISO date strings to enable (for paused alarms)
 
     Returns:
-        List of datetime objects representing next N fire times.
-        May return fewer than N if alarm is sparse or heavily paused.
+        List of datetime objects representing next N potential fire times.
+        May return fewer than N if alarm is very sparse.
     """
     time_str = alarm.get("time")
     if not time_str:
@@ -1851,7 +1844,7 @@ def _compute_next_n_alarm_fires(
             candidate += timedelta(days=1)
         return [candidate]
 
-    # For repeating alarms
+    # For repeating alarms - show all potential fire times based on repeat_days
     day_set = set(d % 7 for d in repeat_days)
     search_limit = 90  # Search up to 90 days
 
@@ -1861,20 +1854,6 @@ def _compute_next_n_alarm_fires(
             continue
         if attempt.weekday() not in day_set:
             continue
-
-        # Check if skipped/enabled
-        date_str = attempt.date().isoformat()
-
-        # If enable_dates is set (paused alarm), only fire on enabled dates
-        if enable_dates is not None:
-            if date_str not in enable_dates:
-                continue
-        else:
-            # Normal skip logic for active alarms
-            if skip_dates and date_str in skip_dates:
-                continue
-            if skip_weekdays and attempt.weekday() in skip_weekdays:
-                continue
 
         fire_times.append(attempt)
         if len(fire_times) >= n:
