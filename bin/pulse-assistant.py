@@ -1619,6 +1619,16 @@ class PulseAssistant:
                 if not date_str:
                     raise ValueError("date is required for resume_day")
                 await self.schedule_service.set_ui_pause_date(date_str, False)
+            elif action == "enable_day":
+                date_str = str(payload.get("date") or "").strip()
+                if not date_str:
+                    raise ValueError("date is required for enable_day")
+                await self.schedule_service.set_ui_enable_date(date_str, True)
+            elif action == "disable_day":
+                date_str = str(payload.get("date") or "").strip()
+                if not date_str:
+                    raise ValueError("date is required for disable_day")
+                await self.schedule_service.set_ui_enable_date(date_str, False)
             elif action in {"start_timer", "create_timer"}:
                 seconds = self._coerce_duration_seconds(payload.get("duration") or payload.get("seconds"))
                 playback = self._playback_from_payload(payload.get("playback"))

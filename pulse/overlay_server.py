@@ -53,6 +53,8 @@ class OverlayHttpServer:
         on_resume_alarm: Callable[[str], None] | None = None,
         on_pause_day: Callable[[str], None] | None = None,
         on_resume_day: Callable[[str], None] | None = None,
+        on_enable_day: Callable[[str], None] | None = None,
+        on_disable_day: Callable[[str], None] | None = None,
         on_toggle_earmuffs: Callable[[], None] | None = None,
         on_trigger_update: Callable[[], None] | None = None,
         on_set_volume: Callable[[int], bool] | None = None,
@@ -74,6 +76,8 @@ class OverlayHttpServer:
         self._on_resume_alarm = on_resume_alarm
         self._on_pause_day = on_pause_day
         self._on_resume_day = on_resume_day
+        self._on_enable_day = on_enable_day
+        self._on_disable_day = on_disable_day
         self._on_toggle_earmuffs = on_toggle_earmuffs
         self._on_trigger_update = on_trigger_update
         self._on_set_volume = on_set_volume
@@ -388,6 +392,13 @@ html, body {{
                 elif action in {"pause_day", "resume_day"}:
                     target_date = data.get("date")
                     handler = outer._on_pause_day if action == "pause_day" else outer._on_resume_day
+                    if not target_date or not handler:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing date")
+                        return
+                    handler(str(target_date))
+                elif action in {"enable_day", "disable_day"}:
+                    target_date = data.get("date")
+                    handler = outer._on_enable_day if action == "enable_day" else outer._on_disable_day
                     if not target_date or not handler:
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing date")
                         return
