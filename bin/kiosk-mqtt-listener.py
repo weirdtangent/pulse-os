@@ -1105,12 +1105,12 @@ class KioskMqttListener:
         payload = json.dumps({"action": "resume_day", "date": date_str})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
-    def _handle_overlay_enable_day_request(self, date_str: str) -> None:
-        payload = json.dumps({"action": "enable_day", "date": date_str})
+    def _handle_overlay_enable_day_request(self, date_str: str, alarm_id: str) -> None:
+        payload = json.dumps({"action": "enable_day", "date": date_str, "alarm_id": alarm_id})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
-    def _handle_overlay_disable_day_request(self, date_str: str) -> None:
-        payload = json.dumps({"action": "disable_day", "date": date_str})
+    def _handle_overlay_disable_day_request(self, date_str: str, alarm_id: str) -> None:
+        payload = json.dumps({"action": "disable_day", "date": date_str, "alarm_id": alarm_id})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
 
     def _handle_overlay_complete_reminder_request(self, event_id: str) -> None:

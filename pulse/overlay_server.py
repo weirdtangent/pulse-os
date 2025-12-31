@@ -53,8 +53,8 @@ class OverlayHttpServer:
         on_resume_alarm: Callable[[str], None] | None = None,
         on_pause_day: Callable[[str], None] | None = None,
         on_resume_day: Callable[[str], None] | None = None,
-        on_enable_day: Callable[[str], None] | None = None,
-        on_disable_day: Callable[[str], None] | None = None,
+        on_enable_day: Callable[[str, str], None] | None = None,  # (date, alarm_id)
+        on_disable_day: Callable[[str, str], None] | None = None,  # (date, alarm_id)
         on_toggle_earmuffs: Callable[[], None] | None = None,
         on_trigger_update: Callable[[], None] | None = None,
         on_set_volume: Callable[[int], bool] | None = None,
@@ -398,11 +398,12 @@ html, body {{
                     handler(str(target_date))
                 elif action in {"enable_day", "disable_day"}:
                     target_date = data.get("date")
+                    alarm_id = data.get("alarm_id")
                     handler = outer._on_enable_day if action == "enable_day" else outer._on_disable_day
-                    if not target_date or not handler:
-                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing date")
+                    if not target_date or not alarm_id or not handler:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing date or alarm_id")
                         return
-                    handler(str(target_date))
+                    handler(str(target_date), str(alarm_id))
                 elif action == "complete_reminder":
                     event_id = data.get("event_id")
                     if not event_id or not outer._on_complete_reminder:

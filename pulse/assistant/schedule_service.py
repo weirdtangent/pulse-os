@@ -1074,6 +1074,8 @@ class ScheduleService:
             task = self._tasks.pop(event_id, None)
             if task:
                 task.cancel()
+            # Clean up enable dates for this alarm
+            self._ui_enable_dates = {d: aid for d, aid in self._ui_enable_dates.items() if aid != event_id}
             await self._persist_events()
             await self._publish_state()
             return True
