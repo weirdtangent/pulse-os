@@ -990,7 +990,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         alarms = snapshot.alarms or ()
     schedule_meta = snapshot.schedule_snapshot or {}
     paused_dates = set(schedule_meta.get("paused_dates") or [])
-    enabled_dates_dict = schedule_meta.get("enabled_dates") or {}  # dict[str, str] of date -> alarm_id
+    enabled_dates_dict = schedule_meta.get("enabled_dates") or {}  # dict[str, list[str]] of date -> alarm_ids
     effective_paused = set(schedule_meta.get("effective_skip_dates") or paused_dates)
     skip_weekdays = {int(day) % 7 for day in schedule_meta.get("skip_weekdays") or []}
     entries = _format_alarm_info_entries(alarms)
@@ -1039,7 +1039,8 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
                         # Determine button state based on alarm type and current pause/enable state
                         if is_paused_alarm:
                             # For paused alarms: check if date is enabled for THIS alarm
-                            will_fire = enabled_dates_dict.get(date_str) == entry["id"]
+                            alarm_ids = enabled_dates_dict.get(date_str, [])
+                            will_fire = entry["id"] in alarm_ids
                             action_attr = "data-toggle-enable-day"
                         else:
                             # For active alarms: check if date is NOT in pause list

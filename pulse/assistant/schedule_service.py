@@ -772,7 +772,7 @@ class ScheduleService:
         self._skip_weekdays: set[int] = {d % 7 for d in (skip_weekdays or set())}
         self._ooo_skip_dates: set[str] = set()
         self._ui_pause_dates: set[str] = set()
-        self._ui_enable_dates: dict[str, str] = {}  # date -> alarm_id mapping for paused alarms
+        self._ui_enable_dates: dict[str, set[str]] = {}  # date -> set of alarm_ids for paused alarms
 
     def _effective_skip_dates(self) -> set[str]:
         return set(self._manual_skip_dates) | set(self._ooo_skip_dates) | set(self._ui_pause_dates)
@@ -810,12 +810,21 @@ class ScheduleService:
         if not date_str or not alarm_id:
             return
         async with self._lock:
+            # Validate alarm exists and is paused
+            event = self._events.get(alarm_id)
+            if not event or event.event_type != "alarm" or not event.paused:
+                return
+
             if enabled:
-                self._ui_enable_dates[date_str] = alarm_id
+                if date_str not in self._ui_enable_dates:
+                    self._ui_enable_dates[date_str] = set()
+                self._ui_enable_dates[date_str].add(alarm_id)
             else:
-                # Only remove if this date belongs to this alarm
-                if self._ui_enable_dates.get(date_str) == alarm_id:
-                    self._ui_enable_dates.pop(date_str, None)
+                if date_str in self._ui_enable_dates:
+                    self._ui_enable_dates[date_str].discard(alarm_id)
+                    # Clean up empty sets
+                    if not self._ui_enable_dates[date_str]:
+                        del self._ui_enable_dates[date_str]
             await self._reschedule_all_alarms_locked()
             await self._persist_events()
             await self._publish_state()
@@ -871,7 +880,7 @@ class ScheduleService:
         # For paused alarms, get enable dates that belong to this specific alarm
         enable_dates: set[str] | None = None
         if is_paused_alarm and event_id:
-            enable_dates = {date for date, alarm_id in self._ui_enable_dates.items() if alarm_id == event_id}
+            enable_dates = {date for date, alarm_ids in self._ui_enable_dates.items() if event_id in alarm_ids}
 
         return _compute_next_alarm_fire(
             time_str,
@@ -1054,13 +1063,13 @@ class ScheduleService:
                     )
                 )
                 self._schedule_event(event)
-            # Clean up old enable dates and dates for this alarm if resumed
+            # Clean up enable dates: remove this alarm from all dates when resuming, prune past dates
             today = _now().date().isoformat()
-            if not paused:
-                # Remove all enable dates for this alarm when resuming
-                self._ui_enable_dates = {d: aid for d, aid in self._ui_enable_dates.items() if aid != event_id}
-            # Also clean up past dates
-            self._ui_enable_dates = {d: aid for d, aid in self._ui_enable_dates.items() if d >= today}
+            for date_str in list(self._ui_enable_dates.keys()):
+                if date_str < today or (not paused and event_id in self._ui_enable_dates[date_str]):
+                    self._ui_enable_dates[date_str].discard(event_id)
+                    if not self._ui_enable_dates[date_str]:
+                        del self._ui_enable_dates[date_str]
             await self._persist_events()
             await self._publish_state()
             return True
@@ -1075,7 +1084,10 @@ class ScheduleService:
             if task:
                 task.cancel()
             # Clean up enable dates for this alarm
-            self._ui_enable_dates = {d: aid for d, aid in self._ui_enable_dates.items() if aid != event_id}
+            for date_str in list(self._ui_enable_dates.keys()):
+                self._ui_enable_dates[date_str].discard(event_id)
+                if not self._ui_enable_dates[date_str]:
+                    del self._ui_enable_dates[date_str]
             await self._persist_events()
             await self._publish_state()
             return True
@@ -1357,7 +1369,9 @@ class ScheduleService:
         payload = {
             "events": [event.to_json_dict() for event in self._events.values()],
             "paused_dates": sorted(self._ui_pause_dates),
-            "enabled_dates": self._ui_enable_dates,  # dict[str, str] of date -> alarm_id
+            "enabled_dates": {
+                date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
+            },  # dict[str, list[str]] of date -> alarm_ids
         }
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._storage_path.with_suffix(".tmp")
@@ -1377,13 +1391,21 @@ class ScheduleService:
             self._ui_pause_dates = {item for item in paused_dates if isinstance(item, str)}
         enabled_dates = data.get("enabled_dates") or {}
         if isinstance(enabled_dates, dict):
-            # dict[str, str] of date -> alarm_id
-            self._ui_enable_dates = {
-                k: v for k, v in enabled_dates.items() if isinstance(k, str) and isinstance(v, str)
-            }
+            # New format: dict[str, list[str]] of date -> alarm_ids
+            # Also handle legacy dict[str, str] format (single alarm_id per date)
+            for date_str, value in enabled_dates.items():
+                if not isinstance(date_str, str):
+                    continue
+                if isinstance(value, list):
+                    # New format: list of alarm_ids
+                    self._ui_enable_dates[date_str] = {aid for aid in value if isinstance(aid, str)}
+                elif isinstance(value, str) and value.strip():
+                    # Legacy format: single alarm_id (non-empty)
+                    self._ui_enable_dates[date_str] = {value}
+                # Skip entries with empty alarm_id (legacy orphaned data)
         elif isinstance(enabled_dates, list):
-            # Legacy format: convert list to dict with empty alarm_id (will be cleaned up)
-            self._ui_enable_dates = {item: "" for item in enabled_dates if isinstance(item, str)}
+            # Very old legacy format: list of dates without alarm_ids - cannot be migrated, drop
+            pass
         for item in data.get("events", []):
             try:
                 event = ScheduledEvent.from_dict(item)
@@ -1410,7 +1432,9 @@ class ScheduleService:
             "timers": [],
             "reminders": [],
             "paused_dates": sorted(self._ui_pause_dates),
-            "enabled_dates": self._ui_enable_dates,  # dict[str, str] of date -> alarm_id
+            "enabled_dates": {
+                date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
+            },  # dict[str, list[str]] of date -> alarm_ids
             "effective_skip_dates": sorted(self._effective_skip_dates()),
             "skip_weekdays": sorted(self._skip_weekdays),
             "updated_at": _serialize_dt(_now()),
