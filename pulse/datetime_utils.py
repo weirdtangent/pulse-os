@@ -1,4 +1,19 @@
-"""Shared datetime parsing and manipulation utilities."""
+"""
+Datetime parsing and manipulation for natural language inputs
+
+Provides robust parsing of user-friendly datetime expressions for alarms, timers, and reminders.
+
+Supported formats:
+- Relative phrases: "tomorrow at 3pm", "next Monday", "in 5 minutes"
+- Time expressions: "3pm", "15:30", "noon", "midnight", "morning"
+- Weekday references: "next Friday at 9am", "every Monday"
+- ISO durations: "PT5M", "PT1H30M" (ISO 8601)
+- Simple durations: "5m", "10s", "2h"
+- ISO timestamps: Full datetime.fromisoformat() support
+
+Handles timezone-aware parsing, converting to UTC where needed. Designed for
+voice assistant input where users speak naturally rather than using strict formats.
+"""
 
 from __future__ import annotations
 

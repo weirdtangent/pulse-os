@@ -1,4 +1,18 @@
-"""Sound catalog and resolution helpers for built-in and custom sounds."""
+"""
+Sound library and file resolution system
+
+Manages sound files for alarms, timers, reminders, and notifications with support
+for both built-in and custom sounds.
+
+Key features:
+- Sound catalog: Reads manifest.json to discover built-in sounds with metadata
+- Custom sounds: Loads user-provided .wav/.ogg files from custom directory
+- Sound resolution: Maps sound IDs to file paths with fallback to defaults
+- Kind-based filtering: Sounds can be tagged for specific purposes (alarm, timer, etc.)
+
+Built-in sounds are packaged in assets/sounds/pack/, custom sounds in ~/.local/share/pulse/sounds/
+(or PULSE_SOUNDS_DIR). Each sound has an ID, display label, file path, and supported kinds.
+"""
 
 from __future__ import annotations
 
