@@ -357,8 +357,9 @@ def _compute_next_alarm_fire(
     after: datetime | None = None,
     skip_dates: set[str] | None = None,
     skip_weekdays: set[int] | None = None,
+    enable_dates: set[str] | None = None,
 ) -> datetime:
-    """Compute the next alarm fire time honoring skip dates/weekdays for recurring alarms."""
+    """Compute the next alarm fire time honoring skip/enable dates for recurring alarms."""
     hour, minute = parse_time_string(time_str)
     now = after or _now()
     candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -366,6 +367,12 @@ def _compute_next_alarm_fire(
 
     def _is_skipped(dt: datetime) -> bool:
         date_str = dt.date().isoformat()
+
+        # If enable_dates is set (paused alarm), only fire on enabled dates
+        if enable_dates is not None:
+            return date_str not in enable_dates
+
+        # Normal skip logic for active alarms
         if skip_dates and date_str in skip_dates:
             return True
         if effective_skip_weekdays and dt.weekday() in effective_skip_weekdays:
@@ -765,6 +772,7 @@ class ScheduleService:
         self._skip_weekdays: set[int] = {d % 7 for d in (skip_weekdays or set())}
         self._ooo_skip_dates: set[str] = set()
         self._ui_pause_dates: set[str] = set()
+        self._ui_enable_dates: dict[str, set[str]] = {}  # date -> set of alarm_ids for paused alarms
 
     def _effective_skip_dates(self) -> set[str]:
         return set(self._manual_skip_dates) | set(self._ooo_skip_dates) | set(self._ui_pause_dates)
@@ -792,6 +800,31 @@ class ScheduleService:
                 self._ui_pause_dates.add(date_str)
             else:
                 self._ui_pause_dates.discard(date_str)
+            await self._reschedule_all_alarms_locked()
+            await self._persist_events()
+            await self._publish_state()
+
+    async def set_ui_enable_date(self, date_str: str, alarm_id: str, enabled: bool) -> None:
+        """Set UI enable for a specific day on a specific paused alarm."""
+        date_str = date_str.strip()
+        if not date_str or not alarm_id:
+            return
+        async with self._lock:
+            # Validate alarm exists and is paused
+            event = self._events.get(alarm_id)
+            if not event or event.event_type != "alarm" or not event.paused:
+                return
+
+            if enabled:
+                if date_str not in self._ui_enable_dates:
+                    self._ui_enable_dates[date_str] = set()
+                self._ui_enable_dates[date_str].add(alarm_id)
+            else:
+                if date_str in self._ui_enable_dates:
+                    self._ui_enable_dates[date_str].discard(alarm_id)
+                    # Clean up empty sets
+                    if not self._ui_enable_dates[date_str]:
+                        del self._ui_enable_dates[date_str]
             await self._reschedule_all_alarms_locked()
             await self._persist_events()
             await self._publish_state()
@@ -834,13 +867,28 @@ class ScheduleService:
             return_exceptions=True,
         )
 
-    def _compute_alarm_fire(self, time_str: str, days: list[int] | None, after: datetime | None = None) -> datetime:
+    def _compute_alarm_fire(
+        self,
+        time_str: str,
+        days: list[int] | None,
+        after: datetime | None = None,
+        *,
+        is_paused_alarm: bool = False,
+        event_id: str | None = None,
+    ) -> datetime:
+        skip_dates = None if is_paused_alarm else self._effective_skip_dates()
+        # For paused alarms, get enable dates that belong to this specific alarm
+        enable_dates: set[str] | None = None
+        if is_paused_alarm and event_id:
+            enable_dates = {date for date, alarm_ids in self._ui_enable_dates.items() if event_id in alarm_ids}
+
         return _compute_next_alarm_fire(
             time_str,
             days,
             after=after or _now(),
-            skip_dates=self._effective_skip_dates(),
-            skip_weekdays=self._skip_weekdays,
+            skip_dates=skip_dates,
+            skip_weekdays=None if is_paused_alarm else self._skip_weekdays,
+            enable_dates=enable_dates,
         )
 
     async def _reschedule_all_alarms_locked(self) -> None:
@@ -848,7 +896,11 @@ class ScheduleService:
             if event.event_type != "alarm":
                 continue
             if event.time_of_day:
-                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(
+                    self._compute_alarm_fire(
+                        event.time_of_day, event.repeat_days, is_paused_alarm=event.paused, event_id=event.event_id
+                    )
+                )
                 self._reschedule_event(event)
 
     async def create_alarm(
@@ -977,7 +1029,11 @@ class ScheduleService:
             if playback:
                 event.playback = playback
             if event.time_of_day:
-                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(
+                    self._compute_alarm_fire(
+                        event.time_of_day, event.repeat_days, is_paused_alarm=event.paused, event_id=event.event_id
+                    )
+                )
             self._reschedule_event(event)
             await self._persist_events()
             await self._publish_state()
@@ -1001,8 +1057,19 @@ class ScheduleService:
             if task:
                 task.cancel()
             if not paused and event.time_of_day:
-                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(
+                    self._compute_alarm_fire(
+                        event.time_of_day, event.repeat_days, is_paused_alarm=False, event_id=event.event_id
+                    )
+                )
                 self._schedule_event(event)
+            # Clean up enable dates: remove this alarm from all dates when resuming, prune past dates
+            today = _now().date().isoformat()
+            for date_str in list(self._ui_enable_dates.keys()):
+                if date_str < today or (not paused and event_id in self._ui_enable_dates[date_str]):
+                    self._ui_enable_dates[date_str].discard(event_id)
+                    if not self._ui_enable_dates[date_str]:
+                        del self._ui_enable_dates[date_str]
             await self._persist_events()
             await self._publish_state()
             return True
@@ -1016,6 +1083,11 @@ class ScheduleService:
             task = self._tasks.pop(event_id, None)
             if task:
                 task.cancel()
+            # Clean up enable dates for this alarm
+            for date_str in list(self._ui_enable_dates.keys()):
+                self._ui_enable_dates[date_str].discard(event_id)
+                if not self._ui_enable_dates[date_str]:
+                    del self._ui_enable_dates[date_str]
             await self._persist_events()
             await self._publish_state()
             return True
@@ -1046,7 +1118,12 @@ class ScheduleService:
                         task.cancel()
                 elif stored_event.repeat_days:
                     stored_event.set_next_fire(
-                        self._compute_alarm_fire(stored_event.time_of_day or "08:00", stored_event.repeat_days)
+                        self._compute_alarm_fire(
+                            stored_event.time_of_day or "08:00",
+                            stored_event.repeat_days,
+                            is_paused_alarm=stored_event.paused,
+                            event_id=stored_event.event_id,
+                        )
                     )
                     self._reschedule_event(stored_event)
                 else:
@@ -1292,6 +1369,9 @@ class ScheduleService:
         payload = {
             "events": [event.to_json_dict() for event in self._events.values()],
             "paused_dates": sorted(self._ui_pause_dates),
+            "enabled_dates": {
+                date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
+            },  # dict[str, list[str]] of date -> alarm_ids
         }
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._storage_path.with_suffix(".tmp")
@@ -1309,6 +1389,23 @@ class ScheduleService:
         paused_dates = data.get("paused_dates") or []
         if isinstance(paused_dates, list):
             self._ui_pause_dates = {item for item in paused_dates if isinstance(item, str)}
+        enabled_dates = data.get("enabled_dates") or {}
+        if isinstance(enabled_dates, dict):
+            # New format: dict[str, list[str]] of date -> alarm_ids
+            # Also handle legacy dict[str, str] format (single alarm_id per date)
+            for date_str, value in enabled_dates.items():
+                if not isinstance(date_str, str):
+                    continue
+                if isinstance(value, list):
+                    # New format: list of alarm_ids
+                    self._ui_enable_dates[date_str] = {aid for aid in value if isinstance(aid, str)}
+                elif isinstance(value, str) and value.strip():
+                    # Legacy format: single alarm_id (non-empty)
+                    self._ui_enable_dates[date_str] = {value}
+                # Skip entries with empty alarm_id (legacy orphaned data)
+        elif isinstance(enabled_dates, list):
+            # Very old legacy format: list of dates without alarm_ids - cannot be migrated, drop
+            pass
         for item in data.get("events", []):
             try:
                 event = ScheduledEvent.from_dict(item)
@@ -1316,7 +1413,11 @@ class ScheduleService:
                 LOGGER.debug("[schedule] Skipping invalid schedule entry: %s", item, exc_info=True)
                 continue
             if event.event_type == "alarm" and event.time_of_day:
-                event.set_next_fire(self._compute_alarm_fire(event.time_of_day, event.repeat_days))
+                event.set_next_fire(
+                    self._compute_alarm_fire(
+                        event.time_of_day, event.repeat_days, is_paused_alarm=event.paused, event_id=event.event_id
+                    )
+                )
             elif event.event_type == "timer":
                 target = event.target_dt()
                 if not target or target <= _now():
@@ -1331,6 +1432,9 @@ class ScheduleService:
             "timers": [],
             "reminders": [],
             "paused_dates": sorted(self._ui_pause_dates),
+            "enabled_dates": {
+                date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
+            },  # dict[str, list[str]] of date -> alarm_ids
             "effective_skip_dates": sorted(self._effective_skip_dates()),
             "skip_weekdays": sorted(self._skip_weekdays),
             "updated_at": _serialize_dt(_now()),

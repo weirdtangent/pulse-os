@@ -561,6 +561,30 @@
       return;
     }
 
+    // Handle enable/disable day clicks (for paused alarms)
+    const toggleEnableDayButton = e.target.closest('[data-toggle-enable-day]');
+    if (toggleEnableDayButton) {
+      const date = toggleEnableDayButton.dataset.date;
+      const alarmId = toggleEnableDayButton.dataset.alarmId;
+      const paused = toggleEnableDayButton.dataset.paused === 'true';
+      if (!date || !alarmId) {
+        return;
+      }
+      const previous = toggleEnableDayButton.textContent;
+      toggleEnableDayButton.disabled = true;
+      toggleEnableDayButton.textContent = '…';
+      const action = paused ? 'enable_day' : 'disable_day';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, date, alarm_id: alarmId })
+      }).catch(() => {
+        toggleEnableDayButton.disabled = false;
+        toggleEnableDayButton.textContent = previous;
+      });
+      return;
+    }
+
     const deleteReminderButton = e.target.closest('[data-delete-reminder]');
     if (deleteReminderButton) {
       const reminderId = deleteReminderButton.dataset.deleteReminder;
