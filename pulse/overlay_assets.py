@@ -1,4 +1,13 @@
-"""Static CSS/JS assets for the Pulse overlay renderer."""
+"""
+Static asset loader for overlay UI
+
+Loads and caches CSS and JavaScript files from the assets/overlay/ directory.
+Assets are loaded once at module import time and exposed as module-level constants:
+- OVERLAY_CSS: Overlay styling
+- OVERLAY_JS: Client-side interactivity
+
+Used by overlay.py to inject static assets into the rendered HTML.
+"""
 
 from __future__ import annotations
 

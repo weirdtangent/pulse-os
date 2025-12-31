@@ -1,4 +1,26 @@
-"""Shared overlay state helpers for PulseOS."""
+"""
+Overlay state management and HTML rendering
+
+Manages the state of the browser overlay and renders it to HTML.
+
+Architecture:
+- OverlayStateManager: Thread-safe state container with change detection
+- OverlaySnapshot: Immutable view of current state for rendering
+- render_overlay_html(): Converts snapshot to complete HTML document
+
+Overlay content includes:
+- Clock display with timezone support
+- Active timers with countdown and cancel buttons
+- Ringing alarms/timers with stop/snooze controls
+- Active reminders with completion/delay actions
+- Now playing indicator for media
+- Notification bar with badges for upcoming events
+- Info cards: Alarms, reminders, calendar, weather, device controls, sounds
+
+State is updated via methods like update_schedule_snapshot(), update_active_event(),
+and update_info_card(). Each update returns an OverlayChange indicating if rendering
+is needed. The HTML includes embedded CSS and JavaScript for client-side interactivity.
+"""
 
 from __future__ import annotations
 

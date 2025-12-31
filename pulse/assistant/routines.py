@@ -1,4 +1,24 @@
-"""Simple routine definitions and execution helpers."""
+"""
+Routine/scene execution for home automation workflows
+
+Defines and executes named routines that trigger Home Assistant scenes.
+
+Built-in routines:
+- Morning: Warm lights on, morning scene
+- Leaving: Turn everything off when heading out
+- Movie: Dim lights for movie time
+
+Each routine has:
+- slug: Unique identifier (e.g., "routine.morning")
+- label: Display name
+- description: User-facing explanation
+- scene_id: Home Assistant scene entity to activate
+- overlay_hint: Optional status message for overlay
+
+Routines are executed via RoutineEngine which calls scene.turn_on in Home Assistant.
+The LLM can invoke routines based on user intent, and they appear in the overlay UI
+for manual triggering.
+"""
 
 from __future__ import annotations
 

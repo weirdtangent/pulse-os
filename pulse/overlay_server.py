@@ -1,4 +1,20 @@
-"""Reusable HTTP server for the Pulse overlay."""
+"""
+HTTP server for browser-based overlay UI
+
+Serves the Pulse overlay as an HTML page with REST API for interaction.
+
+Features:
+- Static overlay rendering: GET /overlay returns rendered HTML from overlay state
+- Frame mode: GET /overlay/frame?url=... embeds target URL with overlay on top
+- User actions: POST /overlay/stop, /overlay/info-card for timer/alarm control
+- Sound preview: Audition built-in and custom sounds
+- Device controls: Adjust volume and brightness from overlay UI
+- CORS support: Configurable allowed origins for cross-origin requests
+
+The server uses ThreadingHTTPServer for concurrent request handling. State updates
+trigger callbacks to notify the main application. Supports showing alarm/timer lists,
+calendar events, weather cards, device controls, and sound picker in the info overlay.
+"""
 
 from __future__ import annotations
 

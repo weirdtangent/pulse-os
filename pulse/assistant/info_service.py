@@ -1,4 +1,20 @@
-"""Intent detector + formatter for real-time information answers."""
+"""
+Real-time information service for weather, news, and sports
+
+Detects user intents for factual information queries and formats responses.
+
+Supported queries:
+- Weather: "What's the weather?", "Weather forecast" → Open-Meteo API
+- News: "Top headlines", "Tech news", "Sports news" → NewsAPI
+- Sports: Team scores, standings, schedules → ESPN API
+
+Intent detection uses keyword matching and phrase analysis. Responses are formatted
+for both spoken output (natural language) and visual display (structured text/cards).
+
+Weather responses include current conditions and multi-day forecast with high/low temps
+and precipitation chance. News provides article summaries with source attribution.
+Sports shows team records, recent/upcoming games, and league standings.
+"""
 
 from __future__ import annotations
 
