@@ -1049,7 +1049,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
             if alarm_data:
                 is_paused_alarm = status == "paused"
                 # Get all potential fire times based on repeat_days only
-                fire_times = _compute_next_n_alarm_fires(alarm_data, 7)
+                fire_times = _compute_next_n_alarm_fires(alarm_data, 12)
 
                 if fire_times:
                     fire_buttons = []
