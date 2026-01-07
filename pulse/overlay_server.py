@@ -260,11 +260,72 @@ html, body {{
 <div class="frame-container">
   <iframe src="{safe_url}" allow="autoplay; fullscreen" allowfullscreen></iframe>
 </div>
-<div class="overlay-container">
+<div class="overlay-container" id="overlay-content" data-version="{snapshot.version}">
 {overlay_body}
 </div>
 <script>
 {OVERLAY_JS}
+
+// Auto-refresh overlay content to show pop-ups and info cards
+// Uses a simple polling approach with version checking to reload the page when state changes
+(function() {{
+  const POLL_INTERVAL = 3000; // 3 seconds
+  const overlayContainer = document.getElementById('overlay-content');
+  const initialVersion = overlayContainer ? overlayContainer.dataset.version : null;
+  let currentVersion = initialVersion ? `"${{initialVersion}}"` : null;
+  let errorCount = 0;
+  const MAX_ERRORS = 5;
+
+  async function checkForUpdates() {{
+    try {{
+      const response = await fetch('/overlay', {{
+        method: 'HEAD',
+        cache: 'no-store'
+      }});
+
+      if (!response.ok) {{
+        errorCount++;
+        if (errorCount >= MAX_ERRORS) {{
+          console.error('Overlay version check: too many failures, stopping');
+          return 'stop';
+        }}
+        return;
+      }}
+
+      errorCount = 0;
+
+      // Use ETag header as a version indicator
+      const etag = response.headers.get('ETag');
+      if (!etag) return;
+
+      if (currentVersion !== etag) {{
+        // Version changed, reload the page to get new content
+        console.log(`Overlay version changed (${{currentVersion}} -> ${{etag}}), reloading...`);
+        window.location.reload();
+      }}
+    }} catch (err) {{
+      errorCount++;
+      if (errorCount >= MAX_ERRORS) {{
+        console.error('Overlay version check failed, stopping:', err);
+        return 'stop';
+      }}
+    }}
+  }}
+
+  // Start checking after initial page load settles
+  setTimeout(() => {{
+    checkForUpdates().then(result => {{
+      if (result === 'stop') return;
+
+      const intervalId = setInterval(async () => {{
+        const result = await checkForUpdates();
+        if (result === 'stop') {{
+          clearInterval(intervalId);
+        }}
+      }}, POLL_INTERVAL);
+    }});
+  }}, 3000);
+}})();
 </script>
 </body>
 </html>
@@ -557,6 +618,8 @@ html, body {{
                 self._set_common_headers()
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(html)))
+                # Send version as ETag for change detection
+                self.send_header("ETag", f'"{snapshot.version}"')
                 self.end_headers()
                 if include_body:
                     self.wfile.write(html)
