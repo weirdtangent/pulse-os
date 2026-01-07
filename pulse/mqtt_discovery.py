@@ -1,4 +1,17 @@
-"""MQTT discovery message builders for Home Assistant."""
+"""
+Home Assistant MQTT discovery entity builders
+
+Constructs MQTT discovery payloads for registering entities with Home Assistant.
+
+Supported entity types:
+- Buttons: Triggerable actions
+- Numbers: Numeric controls with min/max/step
+- Selects: Dropdown/choice inputs
+- Sensors: Read-only state values
+
+Each builder follows Home Assistant's MQTT discovery protocol with abbreviated
+keys (e.g., 'cmd_t' for command_topic) for compact payloads.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,19 @@
-"""Local timer/reminder helpers with optional Home Assistant integration."""
+"""
+Timer and reminder scheduling with Home Assistant fallback
+
+Provides timer/reminder functionality that can route to Home Assistant entities
+or use local asyncio timers as fallback.
+
+Features:
+- Start timers with duration and optional label
+- Schedule reminders for specific datetime
+- Home Assistant integration: Uses timer.start and reminder services when available
+- Local fallback: asyncio-based timers when HA unavailable
+- Automatic routing: Checks HA client availability before choosing strategy
+
+The scheduler maintains a set of running tasks and notifies via callback when
+timers/reminders fire.
+"""
 
 from __future__ import annotations
 

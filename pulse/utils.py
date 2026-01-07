@@ -1,4 +1,14 @@
-"""Shared helper utilities for Pulse."""
+"""
+Shared utility functions for parsing and data manipulation
+
+Provides common helpers for:
+- String parsing: Environment variable conversion (parse_bool, parse_int, parse_float, split_csv)
+- Entity ID sanitization: Converting hostnames to Home Assistant-safe entity IDs
+- Async utilities: Timeout wrappers, byte chunking
+- Data coercion: Safe type conversion with fallback defaults
+
+These utilities are used throughout PulseOS for configuration parsing and data handling.
+"""
 
 from __future__ import annotations
 

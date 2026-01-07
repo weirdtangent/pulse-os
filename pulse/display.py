@@ -1,4 +1,17 @@
-"""Display control utilities for PulseOS."""
+"""
+Screen brightness management for embedded displays
+
+Provides cross-platform brightness control with automatic device detection.
+
+Strategies:
+1. brightnessctl command (preferred, works with most devices)
+2. Direct sysfs writes to /sys/class/backlight/*/brightness (fallback)
+3. Configuration file (/etc/pulse-backlight.conf) for explicit device path
+4. Auto-detection from /sys/class/backlight/
+
+Brightness is controlled via percentage (0-100) regardless of hardware max value.
+Supports various backlight devices including I2C-connected displays (e.g., ReSpeaker, HyperPixel).
+"""
 
 from __future__ import annotations
 

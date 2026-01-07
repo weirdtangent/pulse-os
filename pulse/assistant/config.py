@@ -1,4 +1,24 @@
-"""Configuration helpers for the Pulse voice assistant."""
+"""
+Configuration management for voice assistant
+
+Loads and parses environment variables into typed configuration objects.
+
+Major config sections:
+- AssistantConfig: Wake word detection, speech recognition, TTS, LLM providers
+- HomeAssistantConfig: HA connection, Assist pipeline, entity IDs
+- InfoConfig: Weather, news, sports API configuration
+- MicConfig: Audio input settings (sample rate, channels, chunk size)
+- PhraseConfig: Phrase recording parameters (silence detection, max duration)
+
+Wake word routing:
+- Supports multiple wake words with pipeline routing (pulse vs home_assistant)
+- Auto-routing: HA wake words route to HA Assist pipeline when available
+- Fallback: Routes to local Pulse pipeline if HA wake endpoint unconfigured
+
+All config is loaded from environment variables with sensible defaults. Includes
+utilities for parsing CSV lists, boolean flags, wake word routing rules, and
+location resolution for weather queries.
+"""
 
 from __future__ import annotations
 
