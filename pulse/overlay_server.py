@@ -260,7 +260,7 @@ html, body {{
 <div class="frame-container">
   <iframe src="{safe_url}" allow="autoplay; fullscreen" allowfullscreen></iframe>
 </div>
-<div class="overlay-container" id="overlay-content">
+<div class="overlay-container" id="overlay-content" data-version="{snapshot.version}">
 {overlay_body}
 </div>
 <script>
@@ -270,7 +270,9 @@ html, body {{
 // Uses a simple polling approach with version checking to reload the page when state changes
 (function() {{
   const POLL_INTERVAL = 3000; // 3 seconds
-  let currentVersion = null;
+  const overlayContainer = document.getElementById('overlay-content');
+  const initialVersion = overlayContainer ? overlayContainer.dataset.version : null;
+  let currentVersion = initialVersion ? `"${{initialVersion}}"` : null;
   let errorCount = 0;
   const MAX_ERRORS = 5;
 
@@ -296,12 +298,9 @@ html, body {{
       const etag = response.headers.get('ETag');
       if (!etag) return;
 
-      if (currentVersion === null) {{
-        // First check, just store the version
-        currentVersion = etag;
-      }} else if (currentVersion !== etag) {{
+      if (currentVersion !== etag) {{
         // Version changed, reload the page to get new content
-        console.log('Overlay content updated, reloading...');
+        console.log(`Overlay version changed (${{currentVersion}} -> ${{etag}}), reloading...`);
         window.location.reload();
       }}
     }} catch (err) {{
