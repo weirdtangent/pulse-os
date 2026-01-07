@@ -247,99 +247,65 @@ html, body {{
 {OVERLAY_JS}
 
 // Auto-refresh overlay content to show pop-ups and info cards
+// Uses a simple polling approach with version checking to reload the page when state changes
 (function() {{
-  const REFRESH_INTERVAL = 5000; // 5 seconds
-  const overlayContainer = document.getElementById('overlay-content');
-  if (!overlayContainer) return;
-
-  let lastStateHash = '';
+  const POLL_INTERVAL = 3000; // 3 seconds
+  let currentVersion = null;
   let errorCount = 0;
-  const MAX_ERRORS = 3;
+  const MAX_ERRORS = 5;
 
-  // Hash function for change detection
-  async function hashString(str) {{
-    const encoder = new TextEncoder();
-    const data = encoder.encode(str);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }}
-
-  async function refreshOverlay() {{
+  async function checkForUpdates() {{
     try {{
       const response = await fetch('/overlay', {{
-        headers: {{ 'Accept': 'text/html' }},
+        method: 'HEAD',
         cache: 'no-store'
       }});
 
       if (!response.ok) {{
-        console.warn(`Overlay refresh failed: ${{response.status}}`);
         errorCount++;
         if (errorCount >= MAX_ERRORS) {{
-          console.error('Too many overlay refresh failures, stopping auto-refresh');
+          console.error('Overlay version check: too many failures, stopping');
           return 'stop';
         }}
         return;
       }}
 
-      errorCount = 0; // Reset on success
-      const html = await response.text();
+      errorCount = 0;
 
-      // Use DOMParser for reliable HTML parsing
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      const body = doc.querySelector('body');
+      // Use ETag header as a version indicator
+      const etag = response.headers.get('ETag');
+      if (!etag) return;
 
-      if (!body) {{
-        console.warn('Overlay refresh: no body element found');
-        return;
-      }}
-
-      const newContent = body.innerHTML;
-      const newHash = await hashString(newContent);
-
-      // Only update if content actually changed
-      if (newHash !== lastStateHash) {{
-        lastStateHash = newHash;
-
-        // Use a temporary container to parse and sanitize
-        const temp = document.createElement('div');
-        temp.innerHTML = newContent;
-
-        // Clear and repopulate container
-        overlayContainer.innerHTML = '';
-        while (temp.firstChild) {{
-          overlayContainer.appendChild(temp.firstChild);
-        }}
-
-        // Re-initialize any dynamic elements (info card observers, etc.)
-        const event = new CustomEvent('overlay-refreshed');
-        overlayContainer.dispatchEvent(event);
+      if (currentVersion === null) {{
+        // First check, just store the version
+        currentVersion = etag;
+      }} else if (currentVersion !== etag) {{
+        // Version changed, reload the page to get new content
+        console.log('Overlay content updated, reloading...');
+        window.location.reload();
       }}
     }} catch (err) {{
-      console.error('Overlay refresh error:', err);
       errorCount++;
       if (errorCount >= MAX_ERRORS) {{
-        console.error('Too many overlay refresh failures, stopping auto-refresh');
+        console.error('Overlay version check failed, stopping:', err);
         return 'stop';
       }}
     }}
   }}
 
-  // Initial refresh after a brief delay to avoid competing with page load
+  // Start checking after initial page load settles
   setTimeout(() => {{
-    refreshOverlay().then(result => {{
+    checkForUpdates().then(result => {{
       if (result === 'stop') return;
 
-      // Start periodic refresh
       const intervalId = setInterval(async () => {{
-        const result = await refreshOverlay();
+        const result = await checkForUpdates();
         if (result === 'stop') {{
           clearInterval(intervalId);
         }}
-      }}, REFRESH_INTERVAL);
+      }}, POLL_INTERVAL);
     }});
-  }}, 2000);
+  }}, 3000);
 }})();
 </script>
 </body>
@@ -625,6 +591,8 @@ html, body {{
                 self._set_common_headers()
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(html)))
+                # Send version as ETag for change detection
+                self.send_header("ETag", f'"{snapshot.version}"')
                 self.end_headers()
                 if include_body:
                     self.wfile.write(html)
