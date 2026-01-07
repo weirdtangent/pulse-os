@@ -252,28 +252,94 @@ html, body {{
   const overlayContainer = document.getElementById('overlay-content');
   if (!overlayContainer) return;
 
+  let lastStateHash = '';
+  let errorCount = 0;
+  const MAX_ERRORS = 3;
+
+  // Hash function for change detection
+  async function hashString(str) {{
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }}
+
   async function refreshOverlay() {{
     try {{
       const response = await fetch('/overlay', {{
-        headers: {{ 'Accept': 'text/html' }}
+        headers: {{ 'Accept': 'text/html' }},
+        cache: 'no-store'
       }});
-      if (!response.ok) return;
 
+      if (!response.ok) {{
+        console.warn(`Overlay refresh failed: ${{response.status}}`);
+        errorCount++;
+        if (errorCount >= MAX_ERRORS) {{
+          console.error('Too many overlay refresh failures, stopping auto-refresh');
+          return 'stop';
+        }}
+        return;
+      }}
+
+      errorCount = 0; // Reset on success
       const html = await response.text();
-      const bodyStart = html.indexOf('<body>');
-      const bodyEnd = html.indexOf('</body>');
-      if (bodyStart === -1 || bodyEnd === -1) return;
 
-      const newContent = html.substring(bodyStart + 6, bodyEnd);
-      if (overlayContainer.innerHTML !== newContent) {{
-        overlayContainer.innerHTML = newContent;
+      // Use DOMParser for reliable HTML parsing
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const body = doc.querySelector('body');
+
+      if (!body) {{
+        console.warn('Overlay refresh: no body element found');
+        return;
+      }}
+
+      const newContent = body.innerHTML;
+      const newHash = await hashString(newContent);
+
+      // Only update if content actually changed
+      if (newHash !== lastStateHash) {{
+        lastStateHash = newHash;
+
+        // Use a temporary container to parse and sanitize
+        const temp = document.createElement('div');
+        temp.innerHTML = newContent;
+
+        // Clear and repopulate container
+        overlayContainer.innerHTML = '';
+        while (temp.firstChild) {{
+          overlayContainer.appendChild(temp.firstChild);
+        }}
+
+        // Re-initialize any dynamic elements (info card observers, etc.)
+        const event = new CustomEvent('overlay-refreshed');
+        overlayContainer.dispatchEvent(event);
       }}
     }} catch (err) {{
-      // Silently ignore fetch errors
+      console.error('Overlay refresh error:', err);
+      errorCount++;
+      if (errorCount >= MAX_ERRORS) {{
+        console.error('Too many overlay refresh failures, stopping auto-refresh');
+        return 'stop';
+      }}
     }}
   }}
 
-  setInterval(refreshOverlay, REFRESH_INTERVAL);
+  // Initial refresh after a brief delay to avoid competing with page load
+  setTimeout(() => {{
+    refreshOverlay().then(result => {{
+      if (result === 'stop') return;
+
+      // Start periodic refresh
+      const intervalId = setInterval(async () => {{
+        const result = await refreshOverlay();
+        if (result === 'stop') {{
+          clearInterval(intervalId);
+        }}
+      }}, REFRESH_INTERVAL);
+    }});
+  }}, 2000);
 }})();
 </script>
 </body>
