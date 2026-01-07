@@ -240,11 +240,41 @@ html, body {{
 <div class="frame-container">
   <iframe src="{safe_url}" allow="autoplay; fullscreen" allowfullscreen></iframe>
 </div>
-<div class="overlay-container">
+<div class="overlay-container" id="overlay-content">
 {overlay_body}
 </div>
 <script>
 {OVERLAY_JS}
+
+// Auto-refresh overlay content to show pop-ups and info cards
+(function() {{
+  const REFRESH_INTERVAL = 5000; // 5 seconds
+  const overlayContainer = document.getElementById('overlay-content');
+  if (!overlayContainer) return;
+
+  async function refreshOverlay() {{
+    try {{
+      const response = await fetch('/overlay', {{
+        headers: {{ 'Accept': 'text/html' }}
+      }});
+      if (!response.ok) return;
+
+      const html = await response.text();
+      const bodyStart = html.indexOf('<body>');
+      const bodyEnd = html.indexOf('</body>');
+      if (bodyStart === -1 || bodyEnd === -1) return;
+
+      const newContent = html.substring(bodyStart + 6, bodyEnd);
+      if (overlayContainer.innerHTML !== newContent) {{
+        overlayContainer.innerHTML = newContent;
+      }}
+    }} catch (err) {{
+      // Silently ignore fetch errors
+    }}
+  }}
+
+  setInterval(refreshOverlay, REFRESH_INTERVAL);
+}})();
 </script>
 </body>
 </html>
