@@ -1,4 +1,28 @@
-"""Action parsing and execution helpers."""
+"""
+Action parsing and execution engine
+
+Parses and executes actions extracted from LLM responses.
+
+Supported action types:
+- ha.*: Home Assistant entity control (lights, switches, climate, etc.)
+- alarm.*: Set/delete/pause/resume alarms with repeat schedules
+- timer.*: Start/cancel timers with duration and labels
+- reminder.*: Schedule/complete/delete reminders
+- volume.*: Adjust system volume
+- routine.*: Trigger automation routines/scenes
+- media.*: Control media playback (play/pause/skip, Spotify search)
+
+Action format: Each action is a string like "alarm.set: tomorrow at 7am"
+The engine parses these, validates parameters, and executes via appropriate services.
+
+Home Assistant actions support:
+- Entity control: turn_on, turn_off, toggle
+- Attribute setting: brightness, temperature, color
+- Service calls: Generic domain.service invocation
+
+Schedule actions use natural language datetime parsing and persist to MQTT
+for cross-device synchronization and reboot survival.
+"""
 
 from __future__ import annotations
 

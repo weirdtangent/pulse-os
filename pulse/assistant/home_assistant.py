@@ -1,4 +1,22 @@
-"""Async client helpers for Home Assistant REST/Assist APIs."""
+"""
+Async HTTP and WebSocket client for Home Assistant integration
+
+Provides a typed async client for interacting with Home Assistant's REST and
+WebSocket APIs.
+
+Features:
+- REST API: Get/list states, call services, activate scenes, update entities
+- WebSocket API: Assist pipeline (speech-to-speech), real-time event streaming
+- Authentication: Bearer token auth with automatic header injection
+- SSL verification: Configurable for local HA instances without certificates
+- Entity queries: List entities by domain (light, switch, sensor, etc.)
+- Service calls: Generic service invocation with JSON payloads
+- Assist pipeline: Speech-to-speech conversation via Wyoming protocol integration
+
+The client handles connection management, error handling (401/403 auth errors),
+and provides type-safe methods for common HA operations. WebSocket support requires
+the websockets library for Assist pipeline functionality.
+"""
 
 from __future__ import annotations
 

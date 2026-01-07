@@ -1,4 +1,21 @@
-"""Multi-turn conversation handling and follow-up logic."""
+"""
+Multi-turn conversation management and follow-up detection
+
+Handles conversation flow including follow-up phrase recording and stop detection.
+
+Features:
+- Follow-up recording: Captures additional user speech after assistant response
+- Conversation stop detection: Recognizes phrases like "never mind", "that's all"
+- Phrase normalization: Cleans transcripts for reliable stop phrase matching
+- Microphone management: Records phrases with silence detection and max duration
+- Wake word prefix handling: Strips wake words from conversation stop commands
+
+Follow-ups are currently disabled by design (should_listen_for_follow_up returns False)
+but the infrastructure supports re-enabling multi-turn conversations.
+
+Stop phrases include common dismissals (never mind, forget it, cancel) and are
+normalized to handle variations in punctuation, capitalization, and wake word prefixes.
+"""
 
 from __future__ import annotations
 

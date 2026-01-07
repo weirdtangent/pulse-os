@@ -1,4 +1,26 @@
-"""Shared overlay state helpers for PulseOS."""
+"""
+Overlay state management and HTML rendering
+
+Manages the state of the browser overlay and renders it to HTML.
+
+Architecture:
+- OverlayStateManager: Thread-safe state container with change detection
+- OverlaySnapshot: Immutable view of current state for rendering
+- render_overlay_html(): Converts snapshot to complete HTML document
+
+Overlay content includes:
+- Clock display with timezone support
+- Active timers with countdown and cancel buttons
+- Ringing alarms/timers with stop/snooze controls
+- Active reminders with completion/delay actions
+- Now playing indicator for media
+- Notification bar with badges for upcoming events
+- Info cards: Alarms, reminders, calendar, weather, device controls, sounds
+
+State is updated via methods like update_schedule_snapshot(), update_active_event(),
+and update_info_card(). Each update returns an OverlayChange indicating if rendering
+is needed. The HTML includes embedded CSS and JavaScript for client-side interactivity.
+"""
 
 from __future__ import annotations
 
@@ -990,6 +1012,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         alarms = snapshot.alarms or ()
     schedule_meta = snapshot.schedule_snapshot or {}
     paused_dates = set(schedule_meta.get("paused_dates") or [])
+    enabled_dates_dict = schedule_meta.get("enabled_dates") or {}  # dict[str, list[str]] of date -> alarm_ids
     effective_paused = set(schedule_meta.get("effective_skip_dates") or paused_dates)
     skip_weekdays = {int(day) % 7 for day in schedule_meta.get("skip_weekdays") or []}
     entries = _format_alarm_info_entries(alarms)
@@ -997,29 +1020,6 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
     subtitle = card.get("text") or "Use the buttons to pause, resume, or delete an alarm."
     safe_title = html_escape(title)
     safe_subtitle = html_escape(subtitle)
-    today = datetime.now().astimezone()
-    day_buttons: list[str] = []
-    for offset in range(7):
-        target = today + timedelta(days=offset)
-        date_str = target.date().isoformat()
-        label = target.strftime("%a %m/%d")
-        is_paused = date_str in effective_paused or target.weekday() in skip_weekdays
-        button_label = "Resume" if is_paused else "Pause"
-        emoji = "▶️" if is_paused else "⏸️"
-        aria = f"{button_label} alarms for {label}"
-        day_buttons.append(
-            f"""
-      <button class="overlay-info-card__pause-day"
-        data-toggle-pause-day
-        data-date="{html_escape(date_str, quote=True)}"
-        data-paused="{'true' if is_paused else 'false'}"
-        aria-label="{html_escape(aria, quote=True)}">{emoji} {html_escape(label)}</button>
-            """.strip()
-        )
-    day_toggle_html = (
-        '<div class="overlay-info-card__pause-days"><div class="overlay-info-card__pause-days-label">'
-        "Pause alarms per day (next 7)</div>" + "".join(day_buttons) + "</div>"
-    )
     if not entries:
         body = '<div class="overlay-info-card__empty">No alarms scheduled.</div>'
     else:
@@ -1041,6 +1041,63 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
             toggle_label = "Resume" if toggle_action == "resume" else "Pause"
             toggle_emoji = "▶️" if toggle_action == "resume" else "⏸️"
             aria_label = html_escape(raw_label, quote=True)
+
+            # Get alarm data to compute fire times
+            alarm_data = next((a for a in alarms if str(a.get("id")) == entry["id"]), None)
+            fire_buttons_html = ""
+
+            if alarm_data:
+                is_paused_alarm = status == "paused"
+                # Get all potential fire times based on repeat_days only
+                fire_times = _compute_next_n_alarm_fires(alarm_data, 12)
+
+                if fire_times:
+                    fire_buttons = []
+
+                    for fire_dt in fire_times:
+                        date_str = fire_dt.date().isoformat()
+                        label_date = fire_dt.strftime("%a %m/%d")
+
+                        # Determine button state based on alarm type and current pause/enable state
+                        if is_paused_alarm:
+                            # For paused alarms: check if date is enabled for THIS alarm
+                            alarm_ids = enabled_dates_dict.get(date_str, [])
+                            will_fire = entry["id"] in alarm_ids
+                            action_attr = "data-toggle-enable-day"
+                        else:
+                            # For active alarms: check if date is NOT in pause list
+                            will_fire = date_str not in effective_paused and fire_dt.weekday() not in skip_weekdays
+                            action_attr = "data-toggle-pause-day"
+
+                        # Green if will fire, Red if won't fire
+                        button_paused = not will_fire
+                        emoji = "▶️" if button_paused else "⏸️"
+                        aria = f"{'Enable' if button_paused else 'Disable'} alarm for {label_date}"
+
+                        alarm_id_attr = (
+                            f'data-alarm-id="{html_escape(entry["id"], quote=True)}"' if is_paused_alarm else ""
+                        )
+                        fire_buttons.append(
+                            f'<button class="overlay-info-card__pause-day" '
+                            f"{action_attr} "
+                            f'data-date="{html_escape(date_str, quote=True)}" '
+                            f"{alarm_id_attr} "
+                            f'data-paused="{"true" if button_paused else "false"}"'
+                            f' aria-label="{html_escape(aria, quote=True)}">'
+                            f"{emoji} {html_escape(label_date)}</button>"
+                        )
+
+                    fire_buttons_html = (
+                        '<div class="overlay-info-card__alarm-fire-times">' + "".join(fire_buttons) + "</div>"
+                    )
+                else:
+                    # No valid fire times
+                    fire_buttons_html = (
+                        '<div class="overlay-info-card__alarm-fire-times">'
+                        '<div style="font-size: 0.85rem; opacity: 0.7;">No scheduled fire times</div>'
+                        "</div>"
+                    )
+
             body_rows.append(
                 f"""
   <div class="overlay-info-card__alarm">
@@ -1058,6 +1115,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
         aria-label="Delete {aria_label}">🗑️</button>
     </div>
   </div>
+  {fire_buttons_html}
                 """.strip()
             )
         body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
@@ -1071,7 +1129,6 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close alarms list">&times;</button>
   </div>
   <div class="overlay-info-card__body">
-    {day_toggle_html}
     {body}
   </div>
 </div>
@@ -1769,6 +1826,65 @@ def _format_alarm_days_phrase(alarm: dict[str, Any]) -> str:
         return "Every day"
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     return ", ".join(names[idx % 7] for idx in normalized)
+
+
+def _compute_next_n_alarm_fires(
+    alarm: dict[str, Any],
+    n: int,
+) -> list[datetime]:
+    """Compute the next N potential fire times for an alarm based on repeat_days only.
+
+    This returns ALL potential fire times regardless of pause/skip state.
+    Button state (will fire vs won't fire) is determined separately in the UI.
+
+    Args:
+        alarm: Alarm dict with 'time', 'repeat_days' keys
+        n: Number of fire times to compute
+
+    Returns:
+        List of datetime objects representing next N potential fire times.
+        May return fewer than N if alarm is very sparse.
+    """
+    time_str = alarm.get("time")
+    if not time_str:
+        return []
+
+    repeat_days = _normalize_repeat_day_indexes(alarm)
+    now = datetime.now().astimezone()
+
+    # Parse time
+    try:
+        parts = time_str.split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, AttributeError, IndexError):
+        return []
+
+    fire_times: list[datetime] = []
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    # For one-time alarms
+    if not repeat_days:
+        if candidate <= now:
+            candidate += timedelta(days=1)
+        return [candidate]
+
+    # For repeating alarms - show all potential fire times based on repeat_days
+    day_set = set(d % 7 for d in repeat_days)
+    search_limit = 90  # Search up to 90 days
+
+    for offset in range(search_limit):
+        attempt = candidate + timedelta(days=offset)
+        if attempt <= now:
+            continue
+        if attempt.weekday() not in day_set:
+            continue
+
+        fire_times.append(attempt)
+        if len(fire_times) >= n:
+            break
+
+    return fire_times
 
 
 def _format_reminder_meta_text(reminder: dict[str, Any]) -> str:
