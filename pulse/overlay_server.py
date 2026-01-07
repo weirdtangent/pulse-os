@@ -229,6 +229,10 @@ html, body {{
 .overlay-container > * {{
   pointer-events: auto;
 }}
+/* Ensure interactive elements receive pointer events */
+.overlay-card, .overlay-info-card, .overlay-badge, .overlay-button {{
+  pointer-events: auto;
+}}
 {overlay_style}
 </style>
 </head>
