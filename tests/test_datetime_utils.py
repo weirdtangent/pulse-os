@@ -10,7 +10,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
-
 from pulse.datetime_utils import (
     combine_time,
     ensure_local,
@@ -23,7 +22,6 @@ from pulse.datetime_utils import (
     parse_time_string,
     utc_now,
 )
-
 
 # Fixtures
 
@@ -55,7 +53,8 @@ def test_local_now_returns_local_aware():
     """Test local_now returns timezone-aware local datetime."""
     result = local_now()
     assert result.tzinfo is not None
-    assert result.tzinfo != UTC
+    # Note: On CI or systems with UTC as local time, tzinfo may equal UTC
+    # The important thing is it's timezone-aware
 
 
 def test_ensure_utc_converts_naive():

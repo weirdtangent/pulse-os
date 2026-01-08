@@ -12,10 +12,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 import paho.mqtt.client as mqtt
 import pytest
-
 from pulse.assistant.config import MqttConfig
 from pulse.assistant.mqtt import AssistantMqtt
-
 
 # Fixtures
 
@@ -284,9 +282,7 @@ def test_mqtt_publish_success(mock_client_class, mqtt_config, mock_logger):
     client.connect()
     client.publish("test/topic", "test payload", retain=False, qos=0)
 
-    mock_client_instance.publish.assert_called_once_with(
-        "test/topic", payload="test payload", qos=0, retain=False
-    )
+    mock_client_instance.publish.assert_called_once_with("test/topic", payload="test payload", qos=0, retain=False)
 
 
 @patch("paho.mqtt.client.Client")
@@ -299,9 +295,7 @@ def test_mqtt_publish_with_qos_and_retain(mock_client_class, mqtt_config, mock_l
     client.connect()
     client.publish("test/topic", "test payload", retain=True, qos=2)
 
-    mock_client_instance.publish.assert_called_once_with(
-        "test/topic", payload="test payload", qos=2, retain=True
-    )
+    mock_client_instance.publish.assert_called_once_with("test/topic", payload="test payload", qos=2, retain=True)
 
 
 def test_mqtt_publish_when_not_connected(mqtt_config, mock_logger):
