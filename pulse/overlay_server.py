@@ -269,7 +269,7 @@ html, body {{
 // Auto-refresh overlay content to show pop-ups and info cards
 // Fetches only the overlay div content, preserving the camera iframe
 (function() {{
-  const POLL_INTERVAL = 5000; // 5 seconds
+  const POLL_INTERVAL = 2000; // 2 seconds - snappy updates without disrupting camera
   const overlayContainer = document.getElementById('overlay-content');
   if (!overlayContainer) return;
 
@@ -333,7 +333,7 @@ html, body {{
     }}
   }}
 
-  // Start polling after initial page load
+  // Start polling after initial page load settles
   setTimeout(() => {{
     refreshOverlay().then(result => {{
       if (result === 'stop') return;
@@ -345,7 +345,7 @@ html, body {{
         }}
       }}, POLL_INTERVAL);
     }});
-  }}, 5000);
+  }}, 2000);
 }})();
 </script>
 </body>
