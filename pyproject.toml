@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pulse-os"
-version = "0.1.0"
+version = "0.101.7"
 description = "Container project for PulseOS related python scripts"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -25,6 +25,7 @@ dependencies = [
 dev = [
     "black==25.12.0",
     "pytest==9.0.1",
+    "pytest-cov==6.0.0",
     "ruff==0.14.10",
 ]
 
