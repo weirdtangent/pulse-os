@@ -20,7 +20,7 @@ import paho.mqtt.client as mqtt
 import psutil
 import websocket
 from packaging.version import InvalidVersion, Version
-from pulse import audio, display
+from pulse import __version__, audio, display
 from pulse.config_persist import ConfigPersister, persist_preference
 from pulse.location_resolver import resolve_location
 from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_select_entity
@@ -387,7 +387,7 @@ def load_config() -> EnvConfig:
     friendly_name = os.environ.get("PULSE_NAME") or hostname.replace("-", " ").title()
     manufacturer = os.environ.get("PULSE_MANUFACTURER", "Pulse")
     model = os.environ.get("PULSE_MODEL", "Pulse Kiosk")
-    sw_version = os.environ.get("PULSE_VERSION")
+    sw_version = os.environ.get("PULSE_VERSION") or __version__
 
     topics = Topics(
         home=f"pulse/{hostname}/kiosk/home",
