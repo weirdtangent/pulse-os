@@ -34,8 +34,10 @@ def fixed_utc_time():
 
 @pytest.fixture
 def fixed_local_time():
-    """Fixed local time for consistent testing (assumes UTC-5)."""
-    # Wednesday, 2025-01-15 09:30:00 local (14:30 UTC)
+    """Fixed local time for consistent testing."""
+    # Wednesday, 2025-01-15 09:30:00 in the system's local timezone
+    # Note: This creates a timezone-aware datetime using the system's current timezone
+    # The actual UTC value will vary by system, which is intentional for testing local_now()
     return datetime(2025, 1, 15, 9, 30, 0).astimezone()
 
 
