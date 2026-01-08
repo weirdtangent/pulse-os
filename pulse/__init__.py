@@ -13,4 +13,4 @@ Core modules:
 - location_resolver: Geographic location parsing and resolution
 """
 
-__version__ = "0.1.0"
+__version__ = "0.101.7"
