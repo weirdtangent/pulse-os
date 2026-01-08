@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from pulse import __version__
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
@@ -2858,6 +2859,7 @@ class PulseAssistant:
             "manufacturer": "Pulse",
             "model": "Pulse Kiosk",
             "name": self.config.device_name,
+            "sw_version": os.environ.get("PULSE_VERSION") or __version__,
         }
         prefix = "homeassistant"
         hostname_safe = self.config.hostname.replace(" ", "_").replace("/", "_")
