@@ -87,7 +87,7 @@ def test_ensure_local_converts_naive():
     assert result.tzinfo is not None
 
 
-def test_ensure_local_preserves_aware():
+def test_ensure_local_converts_aware_to_local():
     """Test ensure_local converts aware datetime to local."""
     utc_dt = datetime(2025, 1, 15, 10, 30, 0, tzinfo=UTC)
     result = ensure_local(utc_dt)
