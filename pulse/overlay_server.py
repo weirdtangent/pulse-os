@@ -267,64 +267,85 @@ html, body {{
 {OVERLAY_JS}
 
 // Auto-refresh overlay content to show pop-ups and info cards
-// Uses a simple polling approach with version checking to reload the page when state changes
+// Fetches only the overlay div content, preserving the camera iframe
 (function() {{
-  const POLL_INTERVAL = 3000; // 3 seconds
+  const POLL_INTERVAL = 5000; // 5 seconds
   const overlayContainer = document.getElementById('overlay-content');
-  const initialVersion = overlayContainer ? overlayContainer.dataset.version : null;
-  let currentVersion = initialVersion ? `"${{initialVersion}}"` : null;
+  if (!overlayContainer) return;
+
+  const overlayRoot = document.getElementById('pulse-overlay-root');
+  const initialVersion = overlayContainer.dataset.version;
+  let currentVersion = initialVersion;
   let errorCount = 0;
   const MAX_ERRORS = 5;
 
-  async function checkForUpdates() {{
+  async function refreshOverlay() {{
     try {{
       const response = await fetch('/overlay', {{
-        method: 'HEAD',
+        headers: {{ 'Accept': 'text/html' }},
         cache: 'no-store'
       }});
 
       if (!response.ok) {{
         errorCount++;
         if (errorCount >= MAX_ERRORS) {{
-          console.error('Overlay version check: too many failures, stopping');
+          console.error('Overlay refresh: too many failures, stopping');
           return 'stop';
         }}
         return;
       }}
 
       errorCount = 0;
+      const html = await response.text();
 
-      // Use ETag header as a version indicator
-      const etag = response.headers.get('ETag');
-      if (!etag) return;
+      // Parse HTML to extract version and body content
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const newRoot = doc.getElementById('pulse-overlay-root');
 
-      if (currentVersion !== etag) {{
-        // Version changed, reload the page to get new content
-        console.log(`Overlay version changed (${{currentVersion}} -> ${{etag}}), reloading...`);
-        window.location.reload();
+      if (!newRoot) return;
+
+      const newVersion = newRoot.dataset.version;
+
+      // Only update if version changed
+      if (newVersion && newVersion !== currentVersion) {{
+        console.log(`Overlay updated (v${{currentVersion}} -> v${{newVersion}})`);
+        currentVersion = newVersion;
+
+        // Replace overlay content without touching the iframe
+        while (overlayContainer.firstChild) {{
+          overlayContainer.removeChild(overlayContainer.firstChild);
+        }}
+
+        while (newRoot.firstChild) {{
+          overlayContainer.appendChild(newRoot.firstChild);
+        }}
+
+        // Update data-version attribute
+        overlayContainer.dataset.version = newVersion;
       }}
     }} catch (err) {{
       errorCount++;
       if (errorCount >= MAX_ERRORS) {{
-        console.error('Overlay version check failed, stopping:', err);
+        console.error('Overlay refresh failed, stopping:', err);
         return 'stop';
       }}
     }}
   }}
 
-  // Start checking after initial page load settles
+  // Start polling after initial page load
   setTimeout(() => {{
-    checkForUpdates().then(result => {{
+    refreshOverlay().then(result => {{
       if (result === 'stop') return;
 
       const intervalId = setInterval(async () => {{
-        const result = await checkForUpdates();
+        const result = await refreshOverlay();
         if (result === 'stop') {{
           clearInterval(intervalId);
         }}
       }}, POLL_INTERVAL);
     }});
-  }}, 3000);
+  }}, 5000);
 }})();
 </script>
 </body>
@@ -618,8 +639,13 @@ html, body {{
                 self._set_common_headers()
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(html)))
-                # Send version as ETag for change detection
-                self.send_header("ETag", f'"{snapshot.version}"')
+                # Use content hash for ETag instead of version number
+                # Version changes frequently (timers counting, now_playing updates)
+                # but HTML only changes when reminders/info cards appear
+                import hashlib
+
+                content_hash = hashlib.sha256(html).hexdigest()[:16]
+                self.send_header("ETag", f'"{content_hash}"')
                 self.end_headers()
                 if include_body:
                     self.wfile.write(html)
