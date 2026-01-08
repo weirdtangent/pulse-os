@@ -7,9 +7,8 @@ Target: 20+ tests, 80%+ coverage.
 from __future__ import annotations
 
 import logging
-import ssl
 import threading
-from unittest.mock import MagicMock, Mock, patch, call
+from unittest.mock import MagicMock, Mock, patch
 
 import paho.mqtt.client as mqtt
 import pytest
