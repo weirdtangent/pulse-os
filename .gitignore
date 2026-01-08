@@ -19,11 +19,12 @@ node_modules/
 venv/
 .vscode/
 .cursor/
+.claude/
 
 # Apple
 .DS_Store
 
-#  dev work
+# dev work
 NOTES
 tmp/
 
