@@ -34,10 +34,13 @@ def fixed_utc_time():
 
 @pytest.fixture
 def fixed_local_time():
-    """Fixed local time for consistent testing."""
-    # Wednesday, 2025-01-15 09:30:00 in the system's local timezone
-    # Note: This creates a timezone-aware datetime using the system's current timezone
-    # The actual UTC value will vary by system, which is intentional for testing local_now()
+    """Fixed local time for consistent testing.
+
+    Returns Wednesday, 2025-01-15 09:30:00 in the system's local timezone.
+    The UTC equivalent will vary by system timezone (e.g., 14:30 UTC on UTC-5 systems,
+    09:30 UTC on UTC systems). This is intentional - tests should assert relative
+    time relationships (e.g., "next day") rather than absolute UTC values.
+    """
     return datetime(2025, 1, 15, 9, 30, 0).astimezone()
 
 
@@ -273,8 +276,11 @@ def test_parse_datetime_tomorrow(mock_utc_now, mock_local_now, fixed_local_time,
 
     result = parse_datetime("tomorrow")
     assert result is not None
-    # Should be next day at 9am local
-    assert result.day == 16
+    # Should be next day at 9am local (convert result back to local to verify)
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    assert result_local.date() == fixed_local_time.date() + timedelta(days=1)
+    assert result_local.hour == 9
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -287,9 +293,10 @@ def test_parse_datetime_tomorrow_at_time(mock_utc_now, mock_local_now, fixed_loc
     result = parse_datetime("tomorrow at 3pm")
     assert result is not None
     # Convert to local to check time
-    local = result.astimezone()
-    assert local.day == 16
-    assert local.hour == 15
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    assert result_local.date() == fixed_local_time.date() + timedelta(days=1)
+    assert result_local.hour == 15
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -301,9 +308,10 @@ def test_parse_datetime_today(mock_utc_now, mock_local_now, fixed_local_time, fi
 
     result = parse_datetime("today at 5pm")
     assert result is not None
-    local = result.astimezone()
-    assert local.day == 15
-    assert local.hour == 17
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    assert result_local.date() == fixed_local_time.date()
+    assert result_local.hour == 17
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -315,9 +323,10 @@ def test_parse_datetime_tonight(mock_utc_now, mock_local_now, fixed_local_time, 
 
     result = parse_datetime("tonight")
     assert result is not None
-    local = result.astimezone()
-    assert local.day == 15
-    assert local.hour == 21  # Default 'tonight' hour
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    assert result_local.date() == fixed_local_time.date()
+    assert result_local.hour == 21  # Default 'tonight' hour
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -329,7 +338,10 @@ def test_parse_datetime_day_after_tomorrow(mock_utc_now, mock_local_now, fixed_l
 
     result = parse_datetime("day after tomorrow")
     assert result is not None
-    assert result.day == 17
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    assert result_local.date() == fixed_local_time.date() + timedelta(days=2)
+    assert result_local.hour == 9  # Default hour
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -341,8 +353,11 @@ def test_parse_datetime_next_weekday(mock_utc_now, mock_local_now, fixed_local_t
 
     result = parse_datetime("next Monday")
     assert result is not None
-    # Next Monday from Wednesday Jan 15 is Jan 20
-    assert result.day == 20
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    # Next Monday from Wednesday Jan 15 is Jan 20 (5 days ahead)
+    assert result_local.date() == fixed_local_time.date() + timedelta(days=5)
+    assert result_local.hour == 9  # Default hour
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -354,8 +369,11 @@ def test_parse_datetime_this_friday(mock_utc_now, mock_local_now, fixed_local_ti
 
     result = parse_datetime("this Friday")
     assert result is not None
-    # This Friday from Wednesday Jan 15 is Jan 17
-    assert result.day == 17
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    # This Friday from Wednesday Jan 15 is Jan 17 (2 days ahead)
+    assert result_local.date() == fixed_local_time.date() + timedelta(days=2)
+    assert result_local.hour == 9  # Default hour
+    assert result_local.minute == 0
 
 
 @patch("pulse.datetime_utils.local_now")
@@ -367,9 +385,10 @@ def test_parse_datetime_weekday_with_time(mock_utc_now, mock_local_now, fixed_lo
 
     result = parse_datetime("Monday at 9am")
     assert result is not None
-    local = result.astimezone()
-    assert local.weekday() == 0  # Monday
-    assert local.hour == 9
+    result_local = result.astimezone(fixed_local_time.tzinfo)
+    assert result_local.weekday() == 0  # Monday
+    assert result_local.hour == 9
+    assert result_local.minute == 0
 
 
 # Duration-Based Parsing Tests
