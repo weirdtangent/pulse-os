@@ -128,9 +128,14 @@ def test_parse_iso_duration_fractional_seconds():
 
 
 def test_parse_iso_duration_case_insensitive():
-    """Test ISO duration parsing - P can be any case, T must be uppercase."""
+    """Test ISO duration parsing case sensitivity.
+
+    P can be any case, T must be uppercase, H/M/S can be any case.
+    The implementation requires uppercase T after stripping P (line 101 checks startswith('T') or 'T' in value).
+    """
     assert parse_iso_duration("PT1H30M") == 5400
-    assert parse_iso_duration("pT1H30M") == 5400  # P can be lowercase, T must be uppercase
+    assert parse_iso_duration("pT1H30M") == 5400  # P can be lowercase
+    assert parse_iso_duration("PT1h30m") == 5400  # H, M, S can be lowercase
 
 
 def test_parse_iso_duration_invalid_format():
