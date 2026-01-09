@@ -1,7 +1,18 @@
+window.PulseOverlay = window.PulseOverlay || {};
+window.PulseOverlay.clockInterval = null;
+
+// Expose initialization function for use after DOM updates
+window.PulseOverlay.initialize = function() {
 (function () {
   const root = document.getElementById('pulse-overlay-root');
   if (!root) {
     return;
+  }
+
+  // Clear any existing clock interval to prevent duplicates
+  if (window.PulseOverlay.clockInterval) {
+    clearInterval(window.PulseOverlay.clockInterval);
+    window.PulseOverlay.clockInterval = null;
   }
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const timerNodes = root.querySelectorAll('[data-timer]');
@@ -163,7 +174,7 @@
 
   // Initial tick to set clock immediately
   tick();
-  window.setInterval(tick, 1000);
+  window.PulseOverlay.clockInterval = window.setInterval(tick, 1000);
   alignNowPlayingCard();
   window.addEventListener('resize', alignNowPlayingCard);
 
@@ -720,4 +731,8 @@
     queueDeviceControl(kind, value);
   });
 })();
+};
+
+// Initialize on first load
+window.PulseOverlay.initialize();
 
