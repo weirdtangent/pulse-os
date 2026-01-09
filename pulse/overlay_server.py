@@ -317,11 +317,10 @@ html, body {{
           overlayContainer.removeChild(overlayContainer.firstChild);
         }}
 
-        while (newRoot.firstChild) {{
-          overlayContainer.appendChild(newRoot.firstChild);
-        }}
+        // Append the entire pulse-overlay-root element to preserve its CSS classes and structure
+        overlayContainer.appendChild(newRoot);
 
-        // Update data-version attribute
+        // Update data-version attribute on the container (used by polling)
         overlayContainer.dataset.version = newVersion;
       }}
     }} catch (err) {{

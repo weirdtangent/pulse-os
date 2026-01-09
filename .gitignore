@@ -37,3 +37,9 @@ pulse.conf.backup
 certs/
 pulse-devices.conf
 
+# Test coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
