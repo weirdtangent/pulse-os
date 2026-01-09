@@ -2,6 +2,8 @@ window.PulseOverlay = window.PulseOverlay || {};
 window.PulseOverlay.clockInterval = null;
 window.PulseOverlay.eventHandlers = null;
 window.PulseOverlay.mutationObserver = null;
+window.PulseOverlay.autoDismissTimer = null;
+window.PulseOverlay.scrollHandlers = [];
 
 // Expose initialization function for use after DOM updates
 window.PulseOverlay.initialize = function() {
@@ -34,10 +36,22 @@ window.PulseOverlay.initialize = function() {
     window.PulseOverlay.mutationObserver.disconnect();
     window.PulseOverlay.mutationObserver = null;
   }
+
+  if (window.PulseOverlay.autoDismissTimer) {
+    clearTimeout(window.PulseOverlay.autoDismissTimer);
+    window.PulseOverlay.autoDismissTimer = null;
+  }
+
+  // Clean up scroll-related event listeners
+  if (window.PulseOverlay.scrollHandlers.length > 0) {
+    window.PulseOverlay.scrollHandlers.forEach(({ element, handler, eventType }) => {
+      element.removeEventListener(eventType, handler);
+    });
+    window.PulseOverlay.scrollHandlers = [];
+  }
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const timerNodes = root.querySelectorAll('[data-timer]');
   const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
-  let autoDismissTimer = null;
   const AUTO_DISMISS_DELAY = 120000; // 2 minutes in milliseconds
   const pendingDeviceUpdates = {};
   const sizeClassMap = [
@@ -208,15 +222,15 @@ window.PulseOverlay.initialize = function() {
   };
 
   const clearAutoDismissTimer = () => {
-    if (autoDismissTimer) {
-      clearTimeout(autoDismissTimer);
-      autoDismissTimer = null;
+    if (window.PulseOverlay.autoDismissTimer) {
+      clearTimeout(window.PulseOverlay.autoDismissTimer);
+      window.PulseOverlay.autoDismissTimer = null;
     }
   };
 
   const startAutoDismissTimer = () => {
     clearAutoDismissTimer();
-    autoDismissTimer = setTimeout(() => {
+    window.PulseOverlay.autoDismissTimer = setTimeout(() => {
       const infoCard = root.querySelector('.overlay-info-card');
       if (infoCard) {
         fetch(infoEndpoint, {
@@ -225,7 +239,7 @@ window.PulseOverlay.initialize = function() {
           body: JSON.stringify({ action: 'clear' })
         }).catch(() => {});
       }
-      autoDismissTimer = null;
+      window.PulseOverlay.autoDismissTimer = null;
     }, AUTO_DISMISS_DELAY);
   };
 
@@ -342,6 +356,7 @@ window.PulseOverlay.initialize = function() {
         updateScrollIndicators(scrollableElement);
       };
       scrollableElement.addEventListener('scroll', handleScroll);
+      window.PulseOverlay.scrollHandlers.push({ element: scrollableElement, handler: handleScroll, eventType: 'scroll' });
 
       // Also check on resize
       const handleResize = () => {
@@ -351,6 +366,7 @@ window.PulseOverlay.initialize = function() {
         });
       };
       window.addEventListener('resize', handleResize);
+      window.PulseOverlay.scrollHandlers.push({ element: window, handler: handleResize, eventType: 'resize' });
     };
 
     if (scrollableBody) {
