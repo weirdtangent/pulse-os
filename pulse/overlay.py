@@ -1278,7 +1278,7 @@ def _build_config_info_overlay() -> str:
       <button class="overlay-button" data-config-action="show_sounds">
         <span aria-hidden="true">🔊</span> Sound picker
       </button>
-      <button class="overlay-button" data-config-action="show_device_controls">
+      <button class="overlay-button overlay-button--ghost" data-config-action="show_device_controls">
         <span aria-hidden="true">⚙️</span> Device controls
       </button>
     </div>
