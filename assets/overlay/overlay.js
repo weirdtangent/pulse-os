@@ -1,6 +1,7 @@
 window.PulseOverlay = window.PulseOverlay || {};
 window.PulseOverlay.clockInterval = null;
 window.PulseOverlay.eventHandlers = null;
+window.PulseOverlay.mutationObserver = null;
 
 // Expose initialization function for use after DOM updates
 window.PulseOverlay.initialize = function() {
@@ -27,6 +28,11 @@ window.PulseOverlay.initialize = function() {
       window.removeEventListener('resize', resizeHandler);
     }
     window.PulseOverlay.eventHandlers = null;
+  }
+
+  if (window.PulseOverlay.mutationObserver) {
+    window.PulseOverlay.mutationObserver.disconnect();
+    window.PulseOverlay.mutationObserver = null;
   }
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const timerNodes = root.querySelectorAll('[data-timer]');
@@ -373,6 +379,9 @@ window.PulseOverlay.initialize = function() {
     childList: true,
     subtree: true
   });
+
+  // Store observer reference for cleanup on next initialization
+  window.PulseOverlay.mutationObserver = infoCardObserver;
 
   // Check on initial load
   const initialInfoCard = root.querySelector('.overlay-info-card');
