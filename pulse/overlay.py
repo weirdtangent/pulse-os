@@ -34,10 +34,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from html import escape as html_escape
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as get_package_version
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from pulse import __version__
 from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 
@@ -1220,20 +1223,80 @@ def _build_update_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) 
 """.strip()
 
 
+def _get_library_versions() -> str:
+    """Get versions of key libraries, formatted for display."""
+    libraries = ["astral", "httpx", "icalendar", "paho-mqtt", "websockets", "wyoming"]
+    versions = []
+    for lib in libraries:
+        try:
+            ver = get_package_version(lib)
+            safe_lib = html_escape(lib)
+            safe_ver = html_escape(ver)
+            versions.append(f"{safe_lib} {safe_ver}")
+        except PackageNotFoundError:
+            versions.append(html_escape(lib))
+    # Split into two lines for better readability
+    if len(versions) >= 3:
+        line1 = " &bull; ".join(versions[:3])
+        line2 = " &bull; ".join(versions[3:])
+        return f"{line1}<br/>{line2}"
+    return " &bull; ".join(versions)
+
+
 def _build_config_info_overlay() -> str:
-    return """
+    library_versions = _get_library_versions()
+    safe_version = html_escape(__version__)
+    return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--config">
   <div class="overlay-info-card__header">
     <div class="overlay-info-card__title">Config</div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close config">&times;</button>
   </div>
   <div class="overlay-info-card__body">
+    <div class="overlay-config-logo">
+      <svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg"
+           role="img" aria-label="Graystorm Pulse logo"
+           style="width: 180px; height: auto; margin: 0 auto 1rem; display: block;">
+        <defs>
+          <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#ffd700;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <path d="M 20 40 L 60 40 L 75 10 L 90 70 L 105 40 L 180 40"
+              stroke="url(#pulseGradient)"
+              stroke-width="3"
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"/>
+        <text x="100" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold"
+              fill="rgba(255,255,255,0.9)" text-anchor="middle">GRAYSTORM PULSE</text>
+      </svg>
+    </div>
     <div class="overlay-card__actions overlay-card__actions--split">
       <button class="overlay-button" data-config-action="show_sounds">Sound picker</button>
       <button
         class="overlay-button overlay-button--ghost"
         data-config-action="show_device_controls"
       >Device controls</button>
+    </div>
+    <div class="overlay-config-about">
+      <div class="overlay-config-about__title">About</div>
+      <div class="overlay-config-about__section">
+        <div class="overlay-config-about__label">Version</div>
+        <div class="overlay-config-about__value">{safe_version}</div>
+      </div>
+      <div class="overlay-config-about__section">
+        <div class="overlay-config-about__label">License</div>
+        <div class="overlay-config-about__value">MIT License &copy; 2025 Jeffrey Culverhouse</div>
+      </div>
+      <div class="overlay-config-about__section">
+        <div class="overlay-config-about__label">Key Libraries</div>
+        <div class="overlay-config-about__value">
+          {library_versions}
+        </div>
+      </div>
     </div>
   </div>
 </div>

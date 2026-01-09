@@ -1068,3 +1068,47 @@ body {
   }
 }
 
+/* Config About Section */
+.overlay-config-logo {
+  text-align: center;
+  padding: 1rem 0 0.5rem;
+}
+
+.overlay-config-about {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.overlay-config-about__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.overlay-config-about__section {
+  margin-bottom: 0.875rem;
+}
+
+.overlay-config-about__section:last-child {
+  margin-bottom: 0;
+}
+
+.overlay-config-about__label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.overlay-config-about__value {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.4;
+}
+
