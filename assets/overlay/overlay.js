@@ -1,5 +1,6 @@
 window.PulseOverlay = window.PulseOverlay || {};
 window.PulseOverlay.clockInterval = null;
+window.PulseOverlay.eventHandlers = null;
 
 // Expose initialization function for use after DOM updates
 window.PulseOverlay.initialize = function() {
@@ -9,10 +10,23 @@ window.PulseOverlay.initialize = function() {
     return;
   }
 
-  // Clear any existing clock interval to prevent duplicates
+  // Clean up previous event listeners to prevent duplicates
   if (window.PulseOverlay.clockInterval) {
     clearInterval(window.PulseOverlay.clockInterval);
     window.PulseOverlay.clockInterval = null;
+  }
+
+  if (window.PulseOverlay.eventHandlers) {
+    const { clickHandler, inputHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
+    const oldRoot = window.PulseOverlay.eventHandlers.root;
+    if (oldRoot) {
+      oldRoot.removeEventListener('click', clickHandler);
+      oldRoot.removeEventListener('input', inputHandler);
+    }
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler);
+    }
+    window.PulseOverlay.eventHandlers = null;
   }
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const timerNodes = root.querySelectorAll('[data-timer]');
@@ -176,7 +190,10 @@ window.PulseOverlay.initialize = function() {
   tick();
   window.PulseOverlay.clockInterval = window.setInterval(tick, 1000);
   alignNowPlayingCard();
-  window.addEventListener('resize', alignNowPlayingCard);
+
+  // Store resize handler reference for cleanup
+  const resizeHandler = alignNowPlayingCard;
+  window.addEventListener('resize', resizeHandler);
 
   const forwardBlankTapToParent = () => {
     if (window.parent && window.parent !== window) {
@@ -367,7 +384,7 @@ window.PulseOverlay.initialize = function() {
   }
 
   // Handle stop timer button clicks
-  root.addEventListener('click', (e) => {
+  const clickHandler = (e) => {
     const closeCardButton = e.target.closest('[data-info-card-close]');
     if (closeCardButton) {
       clearAutoDismissTimer();
@@ -714,9 +731,9 @@ window.PulseOverlay.initialize = function() {
         button.textContent = previous || 'Stop';
       }
     });
-  });
+  };
 
-  root.addEventListener('input', (e) => {
+  const inputHandler = (e) => {
     const slider = e.target.closest('[data-control-slider]');
     if (!slider || slider.disabled) {
       return;
@@ -729,7 +746,19 @@ window.PulseOverlay.initialize = function() {
     clearAutoDismissTimer();
     startAutoDismissTimer();
     queueDeviceControl(kind, value);
-  });
+  };
+
+  // Attach event listeners
+  root.addEventListener('click', clickHandler);
+  root.addEventListener('input', inputHandler);
+
+  // Store handler references for cleanup on next initialization
+  window.PulseOverlay.eventHandlers = {
+    root,
+    clickHandler,
+    inputHandler,
+    resizeHandler
+  };
 })();
 };
 
