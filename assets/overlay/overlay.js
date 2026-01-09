@@ -1,12 +1,57 @@
+window.PulseOverlay = window.PulseOverlay || {};
+window.PulseOverlay.clockInterval = null;
+window.PulseOverlay.eventHandlers = null;
+window.PulseOverlay.mutationObserver = null;
+window.PulseOverlay.autoDismissTimer = null;
+window.PulseOverlay.scrollHandlers = [];
+
+// Expose initialization function for use after DOM updates
+window.PulseOverlay.initialize = function() {
 (function () {
   const root = document.getElementById('pulse-overlay-root');
   if (!root) {
     return;
   }
+
+  // Clean up previous event listeners to prevent duplicates
+  if (window.PulseOverlay.clockInterval) {
+    clearInterval(window.PulseOverlay.clockInterval);
+    window.PulseOverlay.clockInterval = null;
+  }
+
+  if (window.PulseOverlay.eventHandlers) {
+    const { clickHandler, inputHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
+    const oldRoot = window.PulseOverlay.eventHandlers.root;
+    if (oldRoot) {
+      oldRoot.removeEventListener('click', clickHandler);
+      oldRoot.removeEventListener('input', inputHandler);
+    }
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler);
+    }
+    window.PulseOverlay.eventHandlers = null;
+  }
+
+  if (window.PulseOverlay.mutationObserver) {
+    window.PulseOverlay.mutationObserver.disconnect();
+    window.PulseOverlay.mutationObserver = null;
+  }
+
+  if (window.PulseOverlay.autoDismissTimer) {
+    clearTimeout(window.PulseOverlay.autoDismissTimer);
+    window.PulseOverlay.autoDismissTimer = null;
+  }
+
+  // Clean up scroll-related event listeners
+  if (window.PulseOverlay.scrollHandlers.length > 0) {
+    window.PulseOverlay.scrollHandlers.forEach(({ element, handler, eventType }) => {
+      element.removeEventListener(eventType, handler);
+    });
+    window.PulseOverlay.scrollHandlers = [];
+  }
   const stopEndpoint = root.dataset.stopEndpoint || '/overlay/stop';
   const timerNodes = root.querySelectorAll('[data-timer]');
   const infoEndpoint = root.dataset.infoEndpoint || '/overlay/info-card';
-  let autoDismissTimer = null;
   const AUTO_DISMISS_DELAY = 120000; // 2 minutes in milliseconds
   const pendingDeviceUpdates = {};
   const sizeClassMap = [
@@ -163,9 +208,12 @@
 
   // Initial tick to set clock immediately
   tick();
-  window.setInterval(tick, 1000);
+  window.PulseOverlay.clockInterval = window.setInterval(tick, 1000);
   alignNowPlayingCard();
-  window.addEventListener('resize', alignNowPlayingCard);
+
+  // Store resize handler reference for cleanup
+  const resizeHandler = alignNowPlayingCard;
+  window.addEventListener('resize', resizeHandler);
 
   const forwardBlankTapToParent = () => {
     if (window.parent && window.parent !== window) {
@@ -174,15 +222,15 @@
   };
 
   const clearAutoDismissTimer = () => {
-    if (autoDismissTimer) {
-      clearTimeout(autoDismissTimer);
-      autoDismissTimer = null;
+    if (window.PulseOverlay.autoDismissTimer) {
+      clearTimeout(window.PulseOverlay.autoDismissTimer);
+      window.PulseOverlay.autoDismissTimer = null;
     }
   };
 
   const startAutoDismissTimer = () => {
     clearAutoDismissTimer();
-    autoDismissTimer = setTimeout(() => {
+    window.PulseOverlay.autoDismissTimer = setTimeout(() => {
       const infoCard = root.querySelector('.overlay-info-card');
       if (infoCard) {
         fetch(infoEndpoint, {
@@ -191,7 +239,7 @@
           body: JSON.stringify({ action: 'clear' })
         }).catch(() => {});
       }
-      autoDismissTimer = null;
+      window.PulseOverlay.autoDismissTimer = null;
     }, AUTO_DISMISS_DELAY);
   };
 
@@ -308,6 +356,7 @@
         updateScrollIndicators(scrollableElement);
       };
       scrollableElement.addEventListener('scroll', handleScroll);
+      window.PulseOverlay.scrollHandlers.push({ element: scrollableElement, handler: handleScroll, eventType: 'scroll' });
 
       // Also check on resize
       const handleResize = () => {
@@ -317,6 +366,7 @@
         });
       };
       window.addEventListener('resize', handleResize);
+      window.PulseOverlay.scrollHandlers.push({ element: window, handler: handleResize, eventType: 'resize' });
     };
 
     if (scrollableBody) {
@@ -346,6 +396,9 @@
     subtree: true
   });
 
+  // Store observer reference for cleanup on next initialization
+  window.PulseOverlay.mutationObserver = infoCardObserver;
+
   // Check on initial load
   const initialInfoCard = root.querySelector('.overlay-info-card');
   if (initialInfoCard) {
@@ -356,7 +409,7 @@
   }
 
   // Handle stop timer button clicks
-  root.addEventListener('click', (e) => {
+  const clickHandler = (e) => {
     const closeCardButton = e.target.closest('[data-info-card-close]');
     if (closeCardButton) {
       clearAutoDismissTimer();
@@ -703,9 +756,9 @@
         button.textContent = previous || 'Stop';
       }
     });
-  });
+  };
 
-  root.addEventListener('input', (e) => {
+  const inputHandler = (e) => {
     const slider = e.target.closest('[data-control-slider]');
     if (!slider || slider.disabled) {
       return;
@@ -718,6 +771,22 @@
     clearAutoDismissTimer();
     startAutoDismissTimer();
     queueDeviceControl(kind, value);
-  });
+  };
+
+  // Attach event listeners
+  root.addEventListener('click', clickHandler);
+  root.addEventListener('input', inputHandler);
+
+  // Store handler references for cleanup on next initialization
+  window.PulseOverlay.eventHandlers = {
+    root,
+    clickHandler,
+    inputHandler,
+    resizeHandler
+  };
 })();
+};
+
+// Initialize on first load
+window.PulseOverlay.initialize();
 

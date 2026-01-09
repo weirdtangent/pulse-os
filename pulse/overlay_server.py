@@ -322,6 +322,11 @@ html, body {{
 
         // Update data-version attribute on the container (used by polling)
         overlayContainer.dataset.version = newVersion;
+
+        // Reinitialize clock and other dynamic elements after DOM replacement
+        if (window.PulseOverlay && window.PulseOverlay.initialize) {{
+          window.PulseOverlay.initialize();
+        }}
       }}
     }} catch (err) {{
       errorCount++;
