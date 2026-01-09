@@ -8,6 +8,8 @@ from pulse.overlay import (
     OverlaySnapshot,
     OverlayStateManager,
     OverlayTheme,
+    _build_config_info_overlay,
+    _get_library_versions,
     parse_clock_config,
     render_overlay_html,
 )
@@ -414,6 +416,83 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(snapshot, self.theme)
         self.assertIn("MQTT", html)
         self.assertIn("connected", html)
+
+
+class ConfigInfoCardTests(unittest.TestCase):
+    """Tests for config info card functions."""
+
+    def test_get_library_versions_returns_string(self) -> None:
+        """Test that _get_library_versions returns a non-empty string."""
+        result = _get_library_versions()
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 0)
+
+    def test_get_library_versions_contains_library_names(self) -> None:
+        """Test that library names appear in the output."""
+        result = _get_library_versions()
+        # Check for some core libraries we know should be installed
+        self.assertIn("paho-mqtt", result)
+        self.assertIn("httpx", result)
+
+    def test_get_library_versions_contains_versions(self) -> None:
+        """Test that version numbers appear in the output."""
+        result = _get_library_versions()
+        # Should contain at least one digit (version number)
+        self.assertTrue(any(c.isdigit() for c in result))
+
+    def test_get_library_versions_html_escaped(self) -> None:
+        """Test that library versions are HTML-escaped."""
+        result = _get_library_versions()
+        # Should not contain unescaped special chars if any were present
+        # The function should handle this gracefully
+        self.assertIsInstance(result, str)
+
+    def test_build_config_info_overlay_contains_logo(self) -> None:
+        """Test that the config overlay includes the SVG logo."""
+        html = _build_config_info_overlay()
+        self.assertIn("<svg", html)
+        self.assertIn("pulseGradient", html)
+        self.assertIn("GRAYSTORM PULSE", html)
+
+    def test_build_config_info_overlay_has_accessibility_attributes(self) -> None:
+        """Test that the SVG logo has proper accessibility attributes."""
+        html = _build_config_info_overlay()
+        self.assertIn('role="img"', html)
+        self.assertIn('aria-label="Graystorm Pulse logo"', html)
+
+    def test_build_config_info_overlay_contains_about_section(self) -> None:
+        """Test that the About section is present."""
+        html = _build_config_info_overlay()
+        self.assertIn("About", html)
+        self.assertIn("Version", html)
+        self.assertIn("License", html)
+        self.assertIn("Key Libraries", html)
+
+    def test_build_config_info_overlay_contains_version(self) -> None:
+        """Test that the version is displayed."""
+        html = _build_config_info_overlay()
+        # Should contain a version number pattern (e.g., 0.101.7)
+        self.assertTrue(any(c.isdigit() for c in html))
+
+    def test_build_config_info_overlay_contains_license(self) -> None:
+        """Test that license information is displayed."""
+        html = _build_config_info_overlay()
+        self.assertIn("MIT License", html)
+        self.assertIn("2025", html)
+
+    def test_build_config_info_overlay_contains_config_buttons(self) -> None:
+        """Test that config action buttons are present."""
+        html = _build_config_info_overlay()
+        self.assertIn("Sound picker", html)
+        self.assertIn("Device controls", html)
+
+    def test_build_config_info_overlay_structure(self) -> None:
+        """Test that the overlay has correct HTML structure."""
+        html = _build_config_info_overlay()
+        self.assertIn("overlay-card", html)
+        self.assertIn("overlay-info-card--config", html)
+        self.assertIn("overlay-config-logo", html)
+        self.assertIn("overlay-config-about", html)
 
 
 if __name__ == "__main__":

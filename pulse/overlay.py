@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from html import escape as html_escape
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_package_version
 from pathlib import Path
 from typing import Any
@@ -1229,9 +1230,11 @@ def _get_library_versions() -> str:
     for lib in libraries:
         try:
             ver = get_package_version(lib)
-            versions.append(f"{lib} {ver}")
-        except Exception:
-            versions.append(lib)
+            safe_lib = html_escape(lib)
+            safe_ver = html_escape(ver)
+            versions.append(f"{safe_lib} {safe_ver}")
+        except PackageNotFoundError:
+            versions.append(html_escape(lib))
     # Split into two lines for better readability
     if len(versions) >= 3:
         line1 = " &bull; ".join(versions[:3])
@@ -1242,6 +1245,7 @@ def _get_library_versions() -> str:
 
 def _build_config_info_overlay() -> str:
     library_versions = _get_library_versions()
+    safe_version = html_escape(__version__)
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--config">
   <div class="overlay-info-card__header">
@@ -1251,6 +1255,7 @@ def _build_config_info_overlay() -> str:
   <div class="overlay-info-card__body">
     <div class="overlay-config-logo">
       <svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg"
+           role="img" aria-label="Graystorm Pulse logo"
            style="width: 180px; height: auto; margin: 0 auto 1rem; display: block;">
         <defs>
           <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1280,7 +1285,7 @@ def _build_config_info_overlay() -> str:
       <div class="overlay-config-about__title">About</div>
       <div class="overlay-config-about__section">
         <div class="overlay-config-about__label">Version</div>
-        <div class="overlay-config-about__value">{__version__}</div>
+        <div class="overlay-config-about__value">{safe_version}</div>
       </div>
       <div class="overlay-config-about__section">
         <div class="overlay-config-about__label">License</div>
