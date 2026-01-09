@@ -1254,7 +1254,7 @@ def _build_config_info_overlay() -> str:
   </div>
   <div class="overlay-info-card__body">
     <div class="overlay-config-logo">
-      <svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg"
+      <svg viewBox="0 0 200 90" xmlns="http://www.w3.org/2000/svg"
            role="img" aria-label="Graystorm Pulse logo"
            style="width: 180px; height: auto; margin: 0 auto 1rem; display: block;">
         <defs>
@@ -1264,7 +1264,7 @@ def _build_config_info_overlay() -> str:
             <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
           </linearGradient>
         </defs>
-        <path d="M 20 40 L 60 40 L 75 10 L 90 70 L 105 40 L 180 40"
+        <path d="M 20 30 L 60 30 L 75 10 L 90 50 L 105 30 L 180 30"
               stroke="url(#pulseGradient)"
               stroke-width="3"
               fill="none"
@@ -1274,12 +1274,13 @@ def _build_config_info_overlay() -> str:
               fill="rgba(255,255,255,0.9)" text-anchor="middle">GRAYSTORM PULSE</text>
       </svg>
     </div>
-    <div class="overlay-card__actions overlay-card__actions--split">
-      <button class="overlay-button" data-config-action="show_sounds">Sound picker</button>
-      <button
-        class="overlay-button overlay-button--ghost"
-        data-config-action="show_device_controls"
-      >Device controls</button>
+    <div class="overlay-card__actions">
+      <button class="overlay-button" data-config-action="show_sounds">
+        <span aria-hidden="true">🔊</span> Sound picker
+      </button>
+      <button class="overlay-button overlay-button--ghost" data-config-action="show_device_controls">
+        <span aria-hidden="true">⚙️</span> Device controls
+      </button>
     </div>
     <div class="overlay-config-about">
       <div class="overlay-config-about__title">About</div>
