@@ -1264,7 +1264,7 @@ def _build_config_info_overlay() -> str:
             <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
           </linearGradient>
         </defs>
-        <path d="M 20 30 L 60 30 L 75 10 L 90 50 L 105 30 L 180 30"
+        <path d="M 30 30 L 70 30 L 85 10 L 100 50 L 115 30 L 170 30"
               stroke="url(#pulseGradient)"
               stroke-width="3"
               fill="none"
