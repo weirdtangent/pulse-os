@@ -16,7 +16,7 @@ dependencies = [
     "paho-mqtt==2.1.0",
     "psutil==7.2.1",
     "websocket==0.2.1",
-    "websockets==15.0.1",
+    "websockets==16.0",
     "wyoming==1.8.0",
     "openlocationcode==1.0.1",
 ]
