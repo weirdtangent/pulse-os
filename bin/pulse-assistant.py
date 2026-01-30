@@ -169,6 +169,7 @@ class PulseAssistant:
         self._timers_active_topic = f"{base_topic}/timers/active"
         self._reminders_active_topic = f"{base_topic}/reminders/active"
         self._info_card_topic = f"{base_topic}/info_card"
+        self._heartbeat_topic = f"{base_topic}/assistant/heartbeat"
         self._assist_stage = "idle"
         self._assist_pipeline: str | None = None
         self._current_tracker: AssistRunTracker | None = None
@@ -267,6 +268,7 @@ class PulseAssistant:
             self._publish_routine_overlay()
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         except Exception as exc:
             LOGGER.exception("[assistant] Fatal error in assistant.run(): %s", exc)
             raise
@@ -285,8 +287,21 @@ class PulseAssistant:
                 self._set_assist_stage(pipeline, "error", {"wake_word": wake_word, "error": str(exc)})
                 self._finalize_assist_run(status="error")
 
+    async def _heartbeat_loop(self) -> None:
+        """Publish periodic heartbeat so the kiosk can detect an unresponsive assistant."""
+        while not self._shutdown.is_set():
+            self._publish_message(self._heartbeat_topic, str(int(time.time())))
+            await asyncio.sleep(30)
+
     async def shutdown(self) -> None:
         self._shutdown.set()
+        heartbeat = getattr(self, "_heartbeat_task", None)
+        if heartbeat:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass  # expected during shutdown
         if self.calendar_sync:
             await self.calendar_sync.stop()
         await self.mic.stop()

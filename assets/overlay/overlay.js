@@ -709,11 +709,18 @@ window.PulseOverlay.initialize = function() {
       const previous = snoozeButton.textContent;
       snoozeButton.disabled = true;
       snoozeButton.textContent = 'Snoozing...';
+      // UI-level timeout: restore button if the overlay hasn't changed within 5s
+      // (the HTTP 204 returns immediately, so we can't rely on fetch success alone)
+      const snoozeUiTimer = setTimeout(() => {
+        snoozeButton.disabled = false;
+        snoozeButton.textContent = previous;
+      }, 5000);
       fetch(stopEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'snooze', event_id: eventId, minutes })
       }).catch(() => {
+        clearTimeout(snoozeUiTimer);
         snoozeButton.disabled = false;
         snoozeButton.textContent = previous;
       });
@@ -746,15 +753,31 @@ window.PulseOverlay.initialize = function() {
     if (!isIconButton) {
       button.textContent = 'Stopping...';
     }
+    const restoreButton = () => {
+      button.disabled = false;
+      if (!isIconButton) {
+        button.textContent = previous || 'Stop';
+      }
+    };
+    // UI-level timeout: restore button if the overlay hasn't changed within 5s.
+    // The HTTP 204 returns immediately (it only publishes to MQTT), so a fetch
+    // timeout alone cannot detect an unresponsive assistant.
+    const stopUiTimer = setTimeout(() => {
+      restoreButton();
+      // Auto-retry once in case the first MQTT message was lost
+      fetch(stopEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop', event_id: eventId })
+      }).catch(() => {});
+    }, 5000);
     fetch(stopEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop', event_id: eventId })
     }).catch(() => {
-      button.disabled = false;
-      if (!isIconButton) {
-        button.textContent = previous || 'Stop';
-      }
+      clearTimeout(stopUiTimer);
+      restoreButton();
     });
   };
 

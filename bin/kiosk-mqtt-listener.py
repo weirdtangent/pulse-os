@@ -71,6 +71,8 @@ class AssistantTopics:
     reminders_active: str
     command: str
     info_card: str
+    heartbeat: str
+    available: str
 
 
 @dataclass(frozen=True)
@@ -487,6 +489,8 @@ def load_config() -> EnvConfig:
         reminders_active=f"{assistant_base}/reminders/active",
         command=f"{assistant_base}/schedules/command",
         info_card=f"{assistant_base}/info_card",
+        heartbeat=f"{assistant_base}/assistant/heartbeat",
+        available=f"{assistant_base}/assistant/available",
     )
 
     return EnvConfig(
@@ -662,6 +666,9 @@ class KioskMqttListener:
         self._watchdog_stop_event = threading.Event()
         self._last_mqtt_ok: float = time.monotonic()
         self._last_reboot_attempt: float = 0.0
+        self._last_assistant_heartbeat: float = time.monotonic()
+        self._assistant_available: bool = True
+        self._last_assistant_restart_attempt: float = 0.0
         self._ha_ssl_context = self._build_ha_ssl_context()
         self._last_now_playing_error: float = 0.0
         self.assistant_topics = config.assistant_topics
@@ -814,8 +821,30 @@ class KioskMqttListener:
         grace_seconds = 180
         min_interval_seconds = 900
         check_interval = 60
+        assistant_grace_seconds = 90
+        assistant_restart_min_interval = 120
         while not self._watchdog_stop_event.wait(check_interval):
             now = time.monotonic()
+
+            # Check assistant health: restart service if heartbeat is stale
+            assistant_silence = now - self._last_assistant_heartbeat
+            if assistant_silence >= assistant_grace_seconds:
+                if now - self._last_assistant_restart_attempt >= assistant_restart_min_interval:
+                    self._last_assistant_restart_attempt = now
+                    self.log(
+                        f"watchdog: assistant heartbeat missing for {int(assistant_silence)}s; "
+                        "restarting pulse-assistant.service"
+                    )
+                    try:
+                        subprocess.run(  # nosec B603 - hardcoded command array
+                            ["sudo", "systemctl", "restart", "pulse-assistant.service"],
+                            check=True,
+                            timeout=30,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        self.log(f"watchdog: assistant restart failed: {exc}")
+
+            # Check own MQTT connectivity: reboot if broker unreachable
             offline_seconds = now - self._last_mqtt_ok
             if offline_seconds < grace_seconds:
                 continue
@@ -1767,6 +1796,9 @@ class KioskMqttListener:
             client.subscribe(earmuffs_state_topic)
             # Request current state by subscribing (retained message will be delivered)
             self.log("earmuffs: subscribed to state topic, waiting for retained message")
+        # Subscribe to assistant heartbeat and availability for watchdog monitoring
+        client.subscribe(self.assistant_topics.heartbeat)
+        client.subscribe(self.assistant_topics.available)
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_overlay_font_state(client)
@@ -1815,6 +1847,13 @@ class KioskMqttListener:
             self.handle_overlay_font(msg.payload)
         elif self.overlay_state and msg.topic == self.assistant_topics.info_card:
             self._handle_overlay_info_card(msg.payload)
+        elif msg.topic == self.assistant_topics.heartbeat:
+            self._last_assistant_heartbeat = time.monotonic()
+        elif msg.topic == self.assistant_topics.available:
+            value = msg.payload.decode("utf-8", errors="ignore").strip().lower() if msg.payload else ""
+            self._assistant_available = value == "online"
+            if self._assistant_available:
+                self._last_assistant_heartbeat = time.monotonic()
         elif self.overlay_state and msg.topic in self._overlay_topic_handlers:
             handler = self._overlay_topic_handlers.get(msg.topic)
             if handler:

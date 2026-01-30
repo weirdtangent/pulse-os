@@ -280,6 +280,8 @@ def test_mqtt_publish_success(mock_client_class, mqtt_config, mock_logger):
 
     client = AssistantMqtt(mqtt_config, mock_logger)
     client.connect()
+    # connect() publishes "online" availability; reset to isolate the test publish
+    mock_client_instance.publish.reset_mock()
     client.publish("test/topic", "test payload", retain=False, qos=0)
 
     mock_client_instance.publish.assert_called_once_with("test/topic", payload="test payload", qos=0, retain=False)
@@ -293,6 +295,7 @@ def test_mqtt_publish_with_qos_and_retain(mock_client_class, mqtt_config, mock_l
 
     client = AssistantMqtt(mqtt_config, mock_logger)
     client.connect()
+    mock_client_instance.publish.reset_mock()
     client.publish("test/topic", "test payload", retain=True, qos=2)
 
     mock_client_instance.publish.assert_called_once_with("test/topic", payload="test payload", qos=2, retain=True)
@@ -308,11 +311,12 @@ def test_mqtt_publish_when_not_connected(mqtt_config, mock_logger):
 def test_mqtt_publish_handles_exception(mock_client_class, mqtt_config, mock_logger):
     """Test publish handles exceptions gracefully."""
     mock_client_instance = MagicMock()
-    mock_client_instance.publish.side_effect = RuntimeError("Publish failed")
     mock_client_class.return_value = mock_client_instance
 
     client = AssistantMqtt(mqtt_config, mock_logger)
     client.connect()
+    # Set side_effect after connect so the availability publish succeeds
+    mock_client_instance.publish.side_effect = RuntimeError("Publish failed")
     client.publish("test/topic", "test payload")
 
     # Should log debug message but not crash
@@ -467,3 +471,55 @@ def test_mqtt_disconnect_thread_safe(mock_client_class, mqtt_config, mock_logger
 
     # Lock should have been used
     assert client._client is None
+
+
+# Availability / LWT Tests
+
+
+@patch("paho.mqtt.client.Client")
+def test_mqtt_connect_sets_lwt(mock_client_class, mqtt_config, mock_logger):
+    """Test that connect() sets an MQTT Last Will for the availability topic."""
+    mock_client_instance = MagicMock()
+    mock_client_class.return_value = mock_client_instance
+
+    client = AssistantMqtt(mqtt_config, mock_logger)
+    client.connect()
+
+    mock_client_instance.will_set.assert_called_once_with(
+        "test-device/assistant/available", payload="offline", qos=1, retain=True
+    )
+
+
+@patch("paho.mqtt.client.Client")
+def test_mqtt_connect_publishes_online(mock_client_class, mqtt_config, mock_logger):
+    """Test that connect() publishes 'online' to the availability topic."""
+    mock_client_instance = MagicMock()
+    mock_client_class.return_value = mock_client_instance
+
+    client = AssistantMqtt(mqtt_config, mock_logger)
+    client.connect()
+
+    mock_client_instance.publish.assert_any_call(
+        "test-device/assistant/available", payload="online", qos=1, retain=True
+    )
+
+
+@patch("paho.mqtt.client.Client")
+def test_mqtt_disconnect_publishes_offline(mock_client_class, mqtt_config, mock_logger):
+    """Test that disconnect() publishes 'offline' and waits for delivery."""
+    mock_client_instance = MagicMock()
+    mock_publish_info = MagicMock()
+    mock_publish_info.is_published.return_value = True
+    # First call is connect's "online", second is disconnect's "offline"
+    mock_client_instance.publish.return_value = mock_publish_info
+    mock_client_class.return_value = mock_client_instance
+
+    client = AssistantMqtt(mqtt_config, mock_logger)
+    client.connect()
+    mock_client_instance.publish.reset_mock()
+    client.disconnect()
+
+    mock_client_instance.publish.assert_called_once_with(
+        "test-device/assistant/available", payload="offline", qos=1, retain=True
+    )
+    mock_publish_info.wait_for_publish.assert_called_once_with(timeout=2.0)
