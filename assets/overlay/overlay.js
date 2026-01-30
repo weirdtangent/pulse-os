@@ -709,11 +709,21 @@ window.PulseOverlay.initialize = function() {
       const previous = snoozeButton.textContent;
       snoozeButton.disabled = true;
       snoozeButton.textContent = 'Snoozing...';
+      const snoozeAbort = new AbortController();
+      const snoozeTimer = setTimeout(() => snoozeAbort.abort(), 5000);
       fetch(stopEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'snooze', event_id: eventId, minutes })
+        body: JSON.stringify({ action: 'snooze', event_id: eventId, minutes }),
+        signal: snoozeAbort.signal
+      }).then(resp => {
+        clearTimeout(snoozeTimer);
+        if (!resp.ok) {
+          snoozeButton.disabled = false;
+          snoozeButton.textContent = previous;
+        }
       }).catch(() => {
+        clearTimeout(snoozeTimer);
         snoozeButton.disabled = false;
         snoozeButton.textContent = previous;
       });
@@ -746,15 +756,33 @@ window.PulseOverlay.initialize = function() {
     if (!isIconButton) {
       button.textContent = 'Stopping...';
     }
-    fetch(stopEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'stop', event_id: eventId })
-    }).catch(() => {
+    const stopAbort = new AbortController();
+    const stopTimer = setTimeout(() => stopAbort.abort(), 5000);
+    const restoreButton = () => {
       button.disabled = false;
       if (!isIconButton) {
         button.textContent = previous || 'Stop';
       }
+    };
+    fetch(stopEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop', event_id: eventId }),
+      signal: stopAbort.signal
+    }).then(resp => {
+      clearTimeout(stopTimer);
+      if (!resp.ok) { restoreButton(); }
+    }).catch(() => {
+      clearTimeout(stopTimer);
+      restoreButton();
+      // Auto-retry once after a short delay
+      setTimeout(() => {
+        fetch(stopEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'stop', event_id: eventId })
+        }).catch(() => {});
+      }, 1000);
     });
   };
 

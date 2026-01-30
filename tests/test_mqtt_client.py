@@ -280,6 +280,8 @@ def test_mqtt_publish_success(mock_client_class, mqtt_config, mock_logger):
 
     client = AssistantMqtt(mqtt_config, mock_logger)
     client.connect()
+    # connect() publishes "online" availability; reset to isolate the test publish
+    mock_client_instance.publish.reset_mock()
     client.publish("test/topic", "test payload", retain=False, qos=0)
 
     mock_client_instance.publish.assert_called_once_with("test/topic", payload="test payload", qos=0, retain=False)
@@ -293,6 +295,7 @@ def test_mqtt_publish_with_qos_and_retain(mock_client_class, mqtt_config, mock_l
 
     client = AssistantMqtt(mqtt_config, mock_logger)
     client.connect()
+    mock_client_instance.publish.reset_mock()
     client.publish("test/topic", "test payload", retain=True, qos=2)
 
     mock_client_instance.publish.assert_called_once_with("test/topic", payload="test payload", qos=2, retain=True)
@@ -308,11 +311,12 @@ def test_mqtt_publish_when_not_connected(mqtt_config, mock_logger):
 def test_mqtt_publish_handles_exception(mock_client_class, mqtt_config, mock_logger):
     """Test publish handles exceptions gracefully."""
     mock_client_instance = MagicMock()
-    mock_client_instance.publish.side_effect = RuntimeError("Publish failed")
     mock_client_class.return_value = mock_client_instance
 
     client = AssistantMqtt(mqtt_config, mock_logger)
     client.connect()
+    # Set side_effect after connect so the availability publish succeeds
+    mock_client_instance.publish.side_effect = RuntimeError("Publish failed")
     client.publish("test/topic", "test payload")
 
     # Should log debug message but not crash

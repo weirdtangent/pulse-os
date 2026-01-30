@@ -46,6 +46,9 @@ class AssistantMqtt:
                     tls_kwargs["keyfile"] = self.config.key
                 tls_kwargs["tls_version"] = getattr(ssl, "PROTOCOL_TLS_CLIENT", ssl.PROTOCOL_TLS)
                 client.tls_set(**tls_kwargs)
+            # Set Last Will so broker publishes "offline" if we disconnect unexpectedly
+            available_topic = f"{self.config.topic_base}/assistant/available"
+            client.will_set(available_topic, payload="offline", qos=1, retain=True)
             try:
                 client.connect(self.config.host, self.config.port, keepalive=30)
             except Exception as exc:
@@ -53,12 +56,22 @@ class AssistantMqtt:
                 return
             client.loop_start()
             self._client = client
+            self._available_topic = available_topic
+            # Announce online status (retained so new subscribers see current state)
+            client.publish(available_topic, payload="online", qos=1, retain=True)
 
     def disconnect(self) -> None:
         with self._lock:
             client = self._client
             self._client = None
         if client:
+            # Publish offline before graceful disconnect (LWT only fires on ungraceful)
+            available_topic = getattr(self, "_available_topic", None)
+            if available_topic:
+                try:
+                    client.publish(available_topic, payload="offline", qos=1, retain=True)
+                except Exception:
+                    pass
             client.loop_stop()
             client.disconnect()
 
