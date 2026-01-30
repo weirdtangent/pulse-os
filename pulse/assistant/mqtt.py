@@ -70,7 +70,7 @@ class AssistantMqtt:
             if available_topic:
                 try:
                     client.publish(available_topic, payload="offline", qos=1, retain=True)
-                except Exception:
+                except Exception:  # noqa: BLE001 - best-effort during shutdown
                     pass
             client.loop_stop()
             client.disconnect()

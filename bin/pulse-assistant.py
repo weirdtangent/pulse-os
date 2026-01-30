@@ -289,20 +289,19 @@ class PulseAssistant:
 
     async def _heartbeat_loop(self) -> None:
         """Publish periodic heartbeat so the kiosk can detect an unresponsive assistant."""
-        try:
-            while not self._shutdown.is_set():
-                self._publish_message(self._heartbeat_topic, str(int(time.time())))
-                await asyncio.sleep(30)
-        except asyncio.CancelledError:
-            pass
+        while not self._shutdown.is_set():
+            self._publish_message(self._heartbeat_topic, str(int(time.time())))
+            await asyncio.sleep(30)
 
     async def shutdown(self) -> None:
         self._shutdown.set()
         heartbeat = getattr(self, "_heartbeat_task", None)
         if heartbeat:
             heartbeat.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            try:
                 await heartbeat
+            except asyncio.CancelledError:
+                pass  # expected during shutdown
         if self.calendar_sync:
             await self.calendar_sync.stop()
         await self.mic.stop()
