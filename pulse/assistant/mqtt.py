@@ -69,9 +69,12 @@ class AssistantMqtt:
             available_topic = getattr(self, "_available_topic", None)
             if available_topic:
                 try:
-                    client.publish(available_topic, payload="offline", qos=1, retain=True)
-                except Exception:  # noqa: BLE001 - best-effort during shutdown
-                    pass
+                    info = client.publish(available_topic, payload="offline", qos=1, retain=True)
+                    info.wait_for_publish(timeout=2.0)
+                    if not info.is_published():
+                        self._logger.debug("[mqtt] Offline status publish did not complete before disconnect")
+                except Exception as exc:  # noqa: BLE001 - best-effort during shutdown
+                    self._logger.debug("[mqtt] Failed to publish offline status during disconnect: %s", exc)
             client.loop_stop()
             client.disconnect()
 
