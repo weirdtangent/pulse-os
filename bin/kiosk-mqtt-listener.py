@@ -823,7 +823,10 @@ class KioskMqttListener:
         check_interval = 60
         assistant_grace_seconds = 90
         assistant_restart_min_interval = 120
+        from pulse.systemd_notify import watchdog as sd_watchdog
+
         while not self._watchdog_stop_event.wait(check_interval):
+            sd_watchdog()
             now = time.monotonic()
 
             # Check assistant health: restart service if heartbeat is stale
@@ -1820,6 +1823,9 @@ class KioskMqttListener:
             if self._overlay_http:
                 self._overlay_http.start()
         self._start_watchdog()
+        from pulse.systemd_notify import ready as sd_ready
+
+        sd_ready()
 
     def on_disconnect(self, _client, _userdata, reason_code, properties=None):
         self.log(f"MQTT disconnected (reason={reason_code}, properties={properties})")

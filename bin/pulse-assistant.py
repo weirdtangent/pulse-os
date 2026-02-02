@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import signal
+import subprocess
 import threading
 import time
 from collections.abc import Sequence
@@ -170,6 +171,10 @@ class PulseAssistant:
         self._reminders_active_topic = f"{base_topic}/reminders/active"
         self._info_card_topic = f"{base_topic}/info_card"
         self._heartbeat_topic = f"{base_topic}/assistant/heartbeat"
+        self._kiosk_availability_topic = f"homeassistant/device/{self.config.hostname}/availability"
+        self._kiosk_available: bool = True
+        self._last_kiosk_online: float = time.monotonic()
+        self._last_kiosk_restart_attempt: float = 0.0
         self._assist_stage = "idle"
         self._assist_pipeline: str | None = None
         self._current_tracker: AssistRunTracker | None = None
@@ -230,6 +235,7 @@ class PulseAssistant:
             self._subscribe_earmuffs_topic()
             self._subscribe_alert_topics()
             self._subscribe_intercom_topic()
+            self._subscribe_kiosk_availability()
 
             # Start schedule + calendar before any retained-message waits
             try:
@@ -269,6 +275,9 @@ class PulseAssistant:
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+            from pulse.systemd_notify import ready as sd_ready
+
+            sd_ready()
         except Exception as exc:
             LOGGER.exception("[assistant] Fatal error in assistant.run(): %s", exc)
             raise
@@ -288,9 +297,33 @@ class PulseAssistant:
                 self._finalize_assist_run(status="error")
 
     async def _heartbeat_loop(self) -> None:
-        """Publish periodic heartbeat so the kiosk can detect an unresponsive assistant."""
+        """Publish periodic heartbeat and monitor kiosk availability."""
+        from pulse.systemd_notify import watchdog as sd_watchdog
+
+        kiosk_grace_seconds = 90
+        kiosk_restart_min_interval = 120
         while not self._shutdown.is_set():
             self._publish_message(self._heartbeat_topic, str(int(time.time())))
+            sd_watchdog()
+            # Check kiosk health and restart if needed
+            now = time.monotonic()
+            kiosk_silence = now - self._last_kiosk_online
+            if not self._kiosk_available and kiosk_silence >= kiosk_grace_seconds:
+                if now - self._last_kiosk_restart_attempt >= kiosk_restart_min_interval:
+                    self._last_kiosk_restart_attempt = now
+                    LOGGER.warning(
+                        "[assistant] kiosk offline for %ds; restarting pulse-kiosk-mqtt.service",
+                        int(kiosk_silence),
+                    )
+                    try:
+                        await asyncio.to_thread(
+                            subprocess.run,  # nosec B603 - hardcoded command array
+                            ["sudo", "systemctl", "restart", "pulse-kiosk-mqtt.service"],
+                            check=True,
+                            timeout=30,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        LOGGER.warning("[assistant] kiosk restart failed: %s", exc)
             await asyncio.sleep(30)
 
     async def shutdown(self) -> None:
@@ -1056,6 +1089,22 @@ class PulseAssistant:
             self.mqtt.subscribe(self._intercom_topic, self._handle_intercom_message)
         except Exception as exc:
             LOGGER.warning("[assistant] Failed to subscribe to intercom topic %s: %s", self._intercom_topic, exc)
+
+    def _subscribe_kiosk_availability(self) -> None:
+        try:
+            self.mqtt.subscribe(self._kiosk_availability_topic, self._handle_kiosk_availability)
+        except Exception as exc:
+            LOGGER.warning(
+                "[assistant] Failed to subscribe to kiosk availability topic %s: %s",
+                self._kiosk_availability_topic,
+                exc,
+            )
+
+    def _handle_kiosk_availability(self, payload: str) -> None:
+        value = payload.strip().lower()
+        self._kiosk_available = value == "online"
+        if self._kiosk_available:
+            self._last_kiosk_online = time.monotonic()
 
     def _handle_wake_sound_command(self, payload: str) -> None:
         value = payload.strip().lower()

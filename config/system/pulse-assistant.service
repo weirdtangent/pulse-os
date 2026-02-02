@@ -4,13 +4,14 @@ After=network-online.target sound.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
 User=pulse
 WorkingDirectory=/opt/pulse-os
 Environment=PYTHONPATH=/opt/pulse-os
 ExecStart=/opt/pulse-os/bin/pulse-assistant-wrapper.sh
 Restart=on-failure
 RestartSec=3
+WatchdogSec=180
 TimeoutStopSec=10
 TimeoutStartSec=30
 KillMode=mixed
