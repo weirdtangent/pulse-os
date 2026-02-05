@@ -470,7 +470,8 @@ class AssistantConfig:
                 {"none", "tone", "minimal", "full"},
                 "full",
             ),
-            ha_tone_sound=(source.get("PULSE_ASSISTANT_HA_TONE_SOUND") or "alarm-sonar").strip() or "alarm-sonar",
+            ha_tone_sound=(source.get("PULSE_ASSISTANT_HA_TONE_SOUND") or "notify-soft-chime").strip()
+            or "notify-soft-chime",
         )
 
         sounds_dir_env = source.get("PULSE_SOUNDS_DIR")

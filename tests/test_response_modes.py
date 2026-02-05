@@ -34,7 +34,7 @@ def test_config_defaults_include_ha_response_and_tone() -> None:
     }
     config = AssistantConfig.from_env(env)
     assert config.preferences.ha_response_mode == "full"
-    assert config.preferences.ha_tone_sound == "alarm-sonar"
+    assert config.preferences.ha_tone_sound == "notify-soft-chime"
 
 
 def test_config_respects_env_for_ha_response_and_tone() -> None:
