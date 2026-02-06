@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 
 import asyncssh
-
 from config import SshConfig
 
 logger = logging.getLogger("pulse-mcp.ssh")
@@ -52,11 +51,11 @@ class PulseSSH:
 
     async def close_all(self) -> None:
         """Close all cached SSH connections."""
-        for hostname, conn in list(self._connections.items()):
+        for _hostname, conn in list(self._connections.items()):
             try:
                 conn.close()
                 await conn.wait_closed()
-            except Exception:
+            except Exception:  # noqa: S110 — best-effort cleanup during shutdown
                 pass
         self._connections.clear()
 
@@ -66,7 +65,7 @@ class PulseSSH:
         if conn is not None:
             # Verify the connection is still alive
             try:
-                result = await asyncssh.wait_for(conn.run("true", check=False), timeout=3)
+                await asyncssh.wait_for(conn.run("true", check=False), timeout=3)
                 return conn
             except Exception:
                 logger.debug("[%s] Stale connection, reconnecting", hostname)

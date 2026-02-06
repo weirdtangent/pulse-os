@@ -6,9 +6,8 @@ from __future__ import annotations
 import logging
 import sys
 
-from mcp.server.fastmcp import FastMCP
-
 from config import load_config
+from mcp.server.fastmcp import FastMCP
 from ssh import PulseSSH
 
 # All logging to stderr (stdout is reserved for JSON-RPC in STDIO transport)
