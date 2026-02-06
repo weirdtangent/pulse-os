@@ -2932,7 +2932,7 @@ class PulseAssistant:
             f"{prefix}/binary_sensor/{hostname_safe}_assist_in_progress/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Assist In Progress",
+                    "name": "Assist In Progress",
                     "unique_id": f"{self.config.hostname}-assist-in-progress",
                     "state_topic": self._assist_in_progress_topic,
                     "payload_on": "ON",
@@ -2948,7 +2948,7 @@ class PulseAssistant:
             f"{prefix}/sensor/{hostname_safe}_assist_stage/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Assist Stage",
+                    "name": "Assist Stage",
                     "unique_id": f"{self.config.hostname}-assist-stage",
                     "state_topic": self._assist_stage_topic,
                     "device": device,
@@ -2963,7 +2963,7 @@ class PulseAssistant:
             f"{prefix}/sensor/{hostname_safe}_last_wake_word/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Last Wake Word",
+                    "name": "Last Wake Word",
                     "unique_id": f"{self.config.hostname}-last-wake-word",
                     "state_topic": self._assist_wake_topic,
                     "device": device,
@@ -2978,7 +2978,7 @@ class PulseAssistant:
             f"{prefix}/select/{hostname_safe}_speaking_style/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Speaking Style",
+                    "name": "Speaking Style",
                     "unique_id": f"{self.config.hostname}-speaking-style",
                     "state_topic": f"{self._preferences_topic}/speaking_style/state",
                     "command_topic": f"{self._preferences_topic}/speaking_style/set",
@@ -2994,7 +2994,7 @@ class PulseAssistant:
             f"{prefix}/select/{hostname_safe}_wake_sensitivity/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Wake Sensitivity",
+                    "name": "Wake Sensitivity",
                     "unique_id": f"{self.config.hostname}-wake-sensitivity",
                     "state_topic": f"{self._preferences_topic}/wake_sensitivity/state",
                     "command_topic": f"{self._preferences_topic}/wake_sensitivity/set",
@@ -3010,7 +3010,7 @@ class PulseAssistant:
             f"{prefix}/switch/{hostname_safe}_wake_sound/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Wake Sound",
+                    "name": "Wake Sound",
                     "unique_id": f"{self.config.hostname}-wake-sound",
                     "state_topic": f"{self._preferences_topic}/wake_sound/state",
                     "command_topic": f"{self._preferences_topic}/wake_sound/set",
@@ -3027,7 +3027,7 @@ class PulseAssistant:
             f"{prefix}/switch/{hostname_safe}_log_llm/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Log LLM Responses",
+                    "name": "Log LLM Responses",
                     "unique_id": f"{self.config.hostname}-log-llm",
                     "state_topic": f"{self._preferences_topic}/log_llm/state",
                     "command_topic": f"{self._preferences_topic}/log_llm/set",
@@ -3044,7 +3044,7 @@ class PulseAssistant:
             f"{prefix}/switch/{hostname_safe}_earmuffs/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} Earmuffs",
+                    "name": "Earmuffs",
                     "unique_id": f"{self.config.hostname}-earmuffs",
                     "state_topic": self._earmuffs_state_topic,
                     "command_topic": self._earmuffs_set_topic,
@@ -3062,7 +3062,7 @@ class PulseAssistant:
             f"{prefix}/text/{hostname_safe}_ha_pipeline/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} HA Assist Pipeline",
+                    "name": "HA Assist Pipeline",
                     "unique_id": f"{self.config.hostname}-ha-assist-pipeline",
                     "state_topic": f"{self._preferences_topic}/ha_pipeline/state",
                     "command_topic": f"{self._preferences_topic}/ha_pipeline/set",
@@ -3077,7 +3077,7 @@ class PulseAssistant:
             f"{prefix}/select/{hostname_safe}_llm_provider/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} LLM Provider",
+                    "name": "LLM Provider",
                     "unique_id": f"{self.config.hostname}-llm-provider",
                     "state_topic": f"{self._preferences_topic}/llm_provider/state",
                     "command_topic": f"{self._preferences_topic}/llm_provider/set",
@@ -3093,7 +3093,7 @@ class PulseAssistant:
             f"{prefix}/select/{hostname_safe}_ha_response_mode/config",
             json.dumps(
                 {
-                    "name": f"{self.config.device_name} HA Response Mode",
+                    "name": "HA Response Mode",
                     "unique_id": f"{self.config.hostname}-ha-response-mode",
                     "state_topic": f"{self._preferences_topic}/ha_response_mode/state",
                     "command_topic": f"{self._preferences_topic}/ha_response_mode/set",
@@ -3110,7 +3110,7 @@ class PulseAssistant:
                 f"{prefix}/select/{hostname_safe}_ha_tone_sound/config",
                 json.dumps(
                     {
-                        "name": f"{self.config.device_name} HA Tone Sound",
+                        "name": "HA Tone Sound",
                         "unique_id": f"{self.config.hostname}-ha-tone-sound",
                         "state_topic": f"{self._preferences_topic}/ha_tone_sound/state",
                         "command_topic": f"{self._preferences_topic}/ha_tone_sound/set",
@@ -3137,7 +3137,7 @@ class PulseAssistant:
                 f"{prefix}/select/{hostname_safe}_sound_{kind}/config",
                 json.dumps(
                     {
-                        "name": f"{self.config.device_name} {name}",
+                        "name": name,
                         "unique_id": f"{self.config.hostname}-sound-{kind}",
                         "state_topic": f"{self._preferences_topic}/sound_{kind}/state",
                         "command_topic": f"{self._preferences_topic}/sound_{kind}/set",
