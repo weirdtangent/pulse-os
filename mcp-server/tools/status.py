@@ -105,7 +105,8 @@ def _register(mcp, ssh, config):
         # OS info
         os_info = results.get("os", "")
         if os_info and "error" not in os_info:
-            sections.extend(["", "OS:", f"  {os_info}"])
+            os_lines = [f"  {line}" for line in os_info.splitlines()]
+            sections.extend(["", "OS:", *os_lines])
 
         return "\n".join(sections)
 

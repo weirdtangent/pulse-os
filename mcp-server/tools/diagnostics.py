@@ -106,11 +106,13 @@ def _register(mcp, ssh, config):
         except Exception as exc:
             results.append(f"  Services: error ({exc})")
 
-        # MQTT broker reachability (from the device's perspective)
+        # MQTT broker reachability (from the device's perspective, using device config)
         try:
+            remote_conf = config.ssh.remote_path
             mqtt_check = await ssh.run(
                 device,
-                "timeout 3 bash -c '</dev/tcp/${MQTT_HOST:-localhost}/${MQTT_PORT:-1883}' 2>&1"
+                f"source {remote_conf}/pulse.conf 2>/dev/null;"
+                " timeout 3 bash -c '</dev/tcp/${{MQTT_HOST:-localhost}}/${{MQTT_PORT:-1883}}' 2>&1"
                 " && echo 'OK' || echo 'FAIL'",
                 timeout=10,
             )

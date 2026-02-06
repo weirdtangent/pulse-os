@@ -26,6 +26,7 @@ class SshConfig:
     key_path: str = "~/.ssh/id_ed25519"
     remote_path: str = "/opt/pulse-os"
     timeout: int = 10
+    disable_host_key_check: bool = True
 
 
 @dataclass

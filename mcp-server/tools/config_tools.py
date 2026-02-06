@@ -145,13 +145,14 @@ def _register(mcp, ssh, config):
         if not diffs:
             lines.append("All configurations match (excluding per-device variables).")
         else:
-            masked_diffs = {k: mask_secrets(v) for k, v in diffs.items()}
             lines.append(f"Found {len(diffs)} differing variable(s):")
             lines.append("")
-            for key, values in masked_diffs.items():
+            for key, values in diffs.items():
+                # Mask based on the variable name, not the hostname keys
+                is_secret = mask_secrets({key: "x"}).get(key) == "***"
                 lines.append(f"  {key}:")
                 for hostname, val in values.items():
-                    lines.append(f"    {hostname:<25} = {val}")
+                    lines.append(f"    {hostname:<25} = {'***' if is_secret else val}")
                 lines.append("")
 
         return "\n".join(lines)
