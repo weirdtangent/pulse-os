@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shlex
 from pathlib import Path
@@ -28,7 +29,7 @@ class PulseSSH:
         conn = await self._get_connection(hostname)
         t = timeout or self._config.timeout
         try:
-            result = await asyncssh.wait_for(conn.run(command, check=False), timeout=t)
+            result = await asyncio.wait_for(conn.run(command, check=False), timeout=t)
             if result.stderr and result.stderr.strip():
                 logger.debug("[%s] stderr: %s", hostname, result.stderr.strip()[:200])
             # Surface stderr when command failed and stdout is empty
@@ -38,7 +39,7 @@ class PulseSSH:
                 if not stdout_text and result.stderr:
                     return result.stderr
             return result.stdout or ""
-        except asyncssh.TimeoutError:
+        except TimeoutError:
             logger.warning("[%s] Command timed out after %ds: %s", hostname, t, command[:80])
             self._connections.pop(hostname, None)
             raise
@@ -75,7 +76,7 @@ class PulseSSH:
         if conn is not None:
             # Verify the connection is still alive
             try:
-                await asyncssh.wait_for(conn.run("true", check=False), timeout=3)
+                await asyncio.wait_for(conn.run("true", check=False), timeout=3)
                 return conn
             except Exception:
                 logger.debug("[%s] Stale connection, reconnecting", hostname)
@@ -83,9 +84,9 @@ class PulseSSH:
 
         logger.info("[%s] Opening SSH connection (user=%s)", hostname, self._config.user)
         key_path = Path(self._config.key_path).expanduser()
-        known_hosts: object = None
-        if not self._config.disable_host_key_check:
-            known_hosts = ()  # use default system known_hosts
+        known_hosts: object = None  # default: use system known_hosts
+        if self._config.disable_host_key_check:
+            known_hosts = ()  # accept any host key
         conn = await asyncssh.connect(
             hostname,
             username=self._config.user,
