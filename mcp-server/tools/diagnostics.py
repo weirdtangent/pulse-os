@@ -4,15 +4,9 @@ from __future__ import annotations
 
 import logging
 
-logger = logging.getLogger("pulse-mcp.diagnostics")
+from tools import PULSE_SERVICES, normalize_service, validate_device
 
-_ALLOWED_SERVICES = {
-    "pulse-kiosk-mqtt",
-    "pulse-assistant",
-    "pulse-assistant-display",
-    "pulse-backlight-sun",
-    "pulse-snapclient",
-}
+logger = logging.getLogger("pulse-mcp.diagnostics")
 
 
 def _register(mcp, ssh, config):
@@ -27,6 +21,9 @@ def _register(mcp, ssh, config):
         Args:
             device: Hostname of the Pulse device (e.g. 'pulse-kitchen')
         """
+        if err := validate_device(device, config):
+            return err
+
         cmd = (
             f"cd {config.ssh.remote_path} &&"
             f" {config.ssh.remote_path}/.venv/bin/python"
@@ -54,10 +51,14 @@ def _register(mcp, ssh, config):
                      pulse-kiosk-mqtt, pulse-assistant, pulse-assistant-display,
                      pulse-backlight-sun, pulse-snapclient
         """
-        if service not in _ALLOWED_SERVICES:
+        if err := validate_device(device, config):
+            return err
+
+        service = normalize_service(service)
+        if service not in PULSE_SERVICES:
             return (
                 f"Service '{service}' is not in the allowed list.\n"
-                f"Allowed services: {', '.join(sorted(_ALLOWED_SERVICES))}"
+                f"Allowed services: {', '.join(sorted(PULSE_SERVICES))}"
             )
 
         try:
@@ -82,6 +83,9 @@ def _register(mcp, ssh, config):
         Args:
             device: Hostname of the Pulse device (e.g. 'pulse-kitchen')
         """
+        if err := validate_device(device, config):
+            return err
+
         results = []
 
         # SSH check

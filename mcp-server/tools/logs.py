@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import shlex
 
+from tools import normalize_service, validate_device
+
 logger = logging.getLogger("pulse-mcp.logs")
 
 MAX_LINES = 500
@@ -34,6 +36,10 @@ def _register(mcp, ssh, config):
                       'warning', 'notice', 'info', 'debug'. Empty for all.
             grep: Text pattern to filter log lines (journalctl --grep). Empty for all.
         """
+        if err := validate_device(device, config):
+            return err
+
+        service = normalize_service(service)
         lines = min(max(1, lines), MAX_LINES)
 
         cmd_parts = [
@@ -72,6 +78,9 @@ def _register(mcp, ssh, config):
             since: Time window (default '1 hour ago'). Use '24 hours ago' for
                    a full day, 'today' for since midnight, etc.
         """
+        if err := validate_device(device, config):
+            return err
+
         cmd = f"journalctl -u 'pulse-*' --no-pager -p err" f" --since {shlex.quote(since)} -n 200 2>&1 || true"
         try:
             output = await ssh.run(device, cmd, timeout=15)
@@ -100,6 +109,10 @@ def _register(mcp, ssh, config):
             service: Optional service filter (e.g. 'pulse-assistant').
                      Empty searches all pulse-* services.
         """
+        if err := validate_device(device, config):
+            return err
+
+        service = normalize_service(service) if service else ""
         unit = f"{service}.service" if service else "pulse-*"
         cmd = (
             f"journalctl -u {shlex.quote(unit)} --no-pager -n 200"

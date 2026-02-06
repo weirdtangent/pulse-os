@@ -7,6 +7,8 @@ import logging
 
 from config import mask_secrets
 
+from tools import validate_device
+
 logger = logging.getLogger("pulse-mcp.config_tools")
 
 # Variables expected to differ per device — excluded from compare_configs diffs
@@ -56,6 +58,9 @@ def _register(mcp, ssh, config):
             section: Optional filter prefix (e.g. 'MQTT', 'PULSE_ASSISTANT',
                      'HOME_ASSISTANT'). Empty returns all non-empty values.
         """
+        if err := validate_device(device, config):
+            return err
+
         try:
             raw = await ssh.read_file(device, f"{config.ssh.remote_path}/pulse.conf")
         except Exception as exc:

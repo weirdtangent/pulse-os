@@ -5,15 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-logger = logging.getLogger("pulse-mcp.status")
+from tools import PULSE_SERVICES, normalize_service, validate_device
 
-PULSE_SERVICES = [
-    "pulse-kiosk-mqtt",
-    "pulse-assistant",
-    "pulse-assistant-display",
-    "pulse-backlight-sun",
-    "pulse-snapclient",
-]
+logger = logging.getLogger("pulse-mcp.status")
 
 
 def _register(mcp, ssh, config):
@@ -50,13 +44,16 @@ def _register(mcp, ssh, config):
         Args:
             device: Hostname of the Pulse device (e.g. 'pulse-kitchen')
         """
+        if err := validate_device(device, config):
+            return err
+
         commands = {
             "services": f"systemctl is-active {' '.join(PULSE_SERVICES)} 2>/dev/null || true",
             "uptime": "uptime -p 2>/dev/null || uptime",
             "disk": "df -h / | tail -1",
             "os": "cat /etc/os-release 2>/dev/null | head -4",
             "kernel": "uname -r",
-            "cpu_temp": ("cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo ''"),
+            "cpu_temp": "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo ''",
             "memory": "free -h | grep Mem",
             "pulse_version": (
                 f"grep -m1 '__version__' {config.ssh.remote_path}/pulse/__init__.py 2>/dev/null"
@@ -84,7 +81,7 @@ def _register(mcp, ssh, config):
         temp_raw = results.get("cpu_temp", "")
         try:
             temp_val = int(temp_raw) / 1000 if temp_raw and int(temp_raw) > 1000 else temp_raw
-            temp_str = f"{temp_val:.1f}C" if isinstance(temp_val, float) else temp_raw
+            temp_str = f"{temp_val:.1f}C" if isinstance(temp_val, float) else (temp_raw or "n/a")
         except (ValueError, TypeError):
             temp_str = temp_raw or "n/a"
 
@@ -122,6 +119,9 @@ def _register(mcp, ssh, config):
                      pulse-kiosk-mqtt, pulse-assistant, pulse-assistant-display,
                      pulse-backlight-sun, pulse-snapclient
         """
+        if err := validate_device(device, config):
+            return err
+        service = normalize_service(service)
         if service not in PULSE_SERVICES:
             return f"Unknown service '{service}'. Known services: {', '.join(PULSE_SERVICES)}"
 

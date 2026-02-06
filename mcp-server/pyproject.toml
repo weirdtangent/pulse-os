@@ -16,4 +16,4 @@ build-backend = "setuptools.build_meta"
 py-modules = ["server", "config", "ssh"]
 
 [tool.setuptools.packages.find]
-include = ["tools"]
+include = ["tools", "tools.*"]

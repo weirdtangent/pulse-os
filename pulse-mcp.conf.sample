@@ -11,7 +11,7 @@
     "key_path": "~/.ssh/id_ed25519",
     "remote_path": "/opt/pulse-os",
     "timeout": 10,
-    "disable_host_key_check": true
+    "disable_host_key_check": false
   },
   "devices_file": "pulse-devices.conf",
   "auto_discover": true
