@@ -63,9 +63,7 @@ def _register(mcp, ssh, config):
         try:
             await ssh.run(device, f"sudo systemctl restart {service}.service", timeout=15)
             # Check the new status
-            status = await ssh.run(
-                device, f"systemctl is-active {service}.service 2>/dev/null || true"
-            )
+            status = await ssh.run(device, f"systemctl is-active {service}.service 2>/dev/null || true")
             state = status.strip()
             if state == "active":
                 return f"Successfully restarted {service} on {device}. Service is now active."

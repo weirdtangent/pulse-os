@@ -43,7 +43,7 @@ def _register(mcp, ssh, config):
             f"-n {lines}",
         ]
         if since:
-            cmd_parts.append(f'--since {shlex.quote(since)}')
+            cmd_parts.append(f"--since {shlex.quote(since)}")
         if priority:
             cmd_parts.append(f"-p {shlex.quote(priority)}")
         if grep:
@@ -72,10 +72,7 @@ def _register(mcp, ssh, config):
             since: Time window (default '1 hour ago'). Use '24 hours ago' for
                    a full day, 'today' for since midnight, etc.
         """
-        cmd = (
-            f"journalctl -u 'pulse-*' --no-pager -p err"
-            f" --since {shlex.quote(since)} -n 200 2>&1 || true"
-        )
+        cmd = f"journalctl -u 'pulse-*' --no-pager -p err" f" --since {shlex.quote(since)} -n 200 2>&1 || true"
         try:
             output = await ssh.run(device, cmd, timeout=15)
             result = output.strip()

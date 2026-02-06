@@ -56,9 +56,7 @@ def _register(mcp, ssh, config):
             "disk": "df -h / | tail -1",
             "os": "cat /etc/os-release 2>/dev/null | head -4",
             "kernel": "uname -r",
-            "cpu_temp": (
-                "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo ''"
-            ),
+            "cpu_temp": ("cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo ''"),
             "memory": "free -h | grep Mem",
             "pulse_version": (
                 f"grep -m1 '__version__' {config.ssh.remote_path}/pulse/__init__.py 2>/dev/null"
