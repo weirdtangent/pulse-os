@@ -20,6 +20,7 @@ venv/
 .vscode/
 .cursor/
 .claude/
+.mcp.json
 
 # Apple
 .DS_Store
@@ -34,6 +35,7 @@ config/system/syslog-ng/remote-log.conf
 # personal work files/dirs
 pulse.conf
 pulse.conf.backup
+pulse-mcp.conf
 certs/
 pulse-devices.conf
 

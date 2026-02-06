@@ -1,0 +1,19 @@
+[project]
+name = "pulse-os-mcp"
+version = "0.1.0"
+description = "MCP server for Pulse OS device diagnostics"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "asyncssh>=2.17.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["server", "config", "ssh"]
+
+[tool.setuptools.packages.find]
+include = ["tools", "tools.*"]
