@@ -10,6 +10,7 @@ Tests for preference handling logic including:
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -385,6 +386,147 @@ class TestLogLlmHandler:
             preference_manager._handle_log_llm_command("off")
 
         mock_publisher._publish_preference_state.assert_not_called()
+
+
+# HA Preference Handler Tests
+
+
+class TestHaResponseModeHandler:
+    """Test HA response mode command handler."""
+
+    def test_ha_response_mode_valid(self, preference_manager, mock_publisher):
+        """Test setting valid HA response modes."""
+        for mode in ["none", "tone", "minimal", "full"]:
+            # Reset to different mode first
+            preference_manager.preferences = replace(preference_manager.preferences, ha_response_mode="other")
+            with patch("pulse.assistant.preference_manager.persist_preference"):
+                preference_manager._handle_ha_response_mode_command(mode)
+
+            assert preference_manager.preferences.ha_response_mode == mode
+            mock_publisher._publish_preference_state.assert_called_with("ha_response_mode", mode)
+
+    def test_ha_response_mode_invalid_ignored(self, preference_manager, mock_publisher):
+        """Test that invalid HA response mode is ignored."""
+        original = preference_manager.preferences.ha_response_mode
+        preference_manager._handle_ha_response_mode_command("invalid_mode")
+
+        assert preference_manager.preferences.ha_response_mode == original
+        mock_publisher._publish_preference_state.assert_not_called()
+
+    def test_ha_response_mode_no_change_when_same(self, preference_manager, mock_publisher):
+        """Test that same mode doesn't trigger update."""
+        # Fixture already has ha_response_mode="full"
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            preference_manager._handle_ha_response_mode_command("full")
+
+        mock_publisher._publish_preference_state.assert_not_called()
+
+
+class TestHaToneSoundHandler:
+    """Test HA tone sound command handler."""
+
+    def test_ha_tone_sound_valid(self, preference_manager, mock_publisher):
+        """Test setting HA tone sound."""
+        # Set different current value first
+        preference_manager.preferences = replace(preference_manager.preferences, ha_tone_sound="other-sound")
+
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            preference_manager._handle_ha_tone_sound_command("Soft Chime")
+
+        mock_publisher._publish_preference_state.assert_called()
+
+    def test_ha_tone_sound_empty_ignored(self, preference_manager, mock_publisher):
+        """Test that empty payload is ignored."""
+        preference_manager._handle_ha_tone_sound_command("")
+
+        mock_publisher._publish_preference_state.assert_not_called()
+
+    def test_ha_tone_sound_no_change_when_same(self, preference_manager, mock_publisher):
+        """Test that same sound doesn't trigger update."""
+        # Set current to the sound ID we'll send
+        preference_manager.preferences = replace(preference_manager.preferences, ha_tone_sound="notify-soft-chime")
+
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            preference_manager._handle_ha_tone_sound_command("Soft Chime")
+
+        mock_publisher._publish_preference_state.assert_not_called()
+
+
+class TestHaPipelineHandler:
+    """Test HA pipeline command handler."""
+
+    def test_ha_pipeline_set(self, preference_manager, mock_publisher):
+        """Test setting HA pipeline."""
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            preference_manager._handle_ha_pipeline_command("custom-pipeline")
+
+        assert preference_manager._ha_pipeline_override == "custom-pipeline"
+        mock_publisher._publish_preference_state.assert_called()
+
+    def test_ha_pipeline_clear(self, preference_manager, mock_publisher):
+        """Test clearing HA pipeline override with empty payload."""
+        preference_manager._ha_pipeline_override = "some-pipeline"
+
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            preference_manager._handle_ha_pipeline_command("")
+
+        assert preference_manager._ha_pipeline_override is None
+
+
+# LLM Provider Handler Tests
+
+
+class TestLlmProviderHandler:
+    """Test LLM provider command handler branches."""
+
+    def test_llm_provider_valid(self, preference_manager, mock_publisher):
+        """Test setting valid LLM provider."""
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            with patch("pulse.assistant.llm.get_supported_providers", return_value={"openai": {}, "anthropic": {}}):
+                preference_manager._handle_llm_provider_command("anthropic")
+
+        assert preference_manager._llm_provider_override == "anthropic"
+        mock_publisher._publish_preference_state.assert_called()
+
+    def test_llm_provider_empty_clears_override(self, preference_manager, mock_publisher):
+        """Test that empty payload clears the override."""
+        preference_manager._llm_provider_override = "anthropic"
+
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            with patch("pulse.assistant.llm.get_supported_providers", return_value={"openai": {}, "anthropic": {}}):
+                preference_manager._handle_llm_provider_command("")
+
+        assert preference_manager._llm_provider_override is None
+
+    def test_llm_provider_invalid_ignored(self, preference_manager, mock_publisher):
+        """Test that invalid provider is ignored and logged."""
+        original = preference_manager._llm_provider_override
+
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            with patch("pulse.assistant.llm.get_supported_providers", return_value={"openai": {}, "anthropic": {}}):
+                preference_manager._handle_llm_provider_command("invalid_provider")
+
+        assert preference_manager._llm_provider_override == original
+        mock_publisher._publish_preference_state.assert_not_called()
+
+    def test_llm_provider_triggers_callback(self, preference_manager, mock_publisher):
+        """Test that provider change triggers callback."""
+        callback = Mock()
+        preference_manager.set_llm_provider_callback(callback)
+
+        with patch("pulse.assistant.preference_manager.persist_preference"):
+            with patch("pulse.assistant.llm.get_supported_providers", return_value={"openai": {}, "anthropic": {}}):
+                preference_manager._handle_llm_provider_command("anthropic")
+
+        callback.assert_called_once()
+
+    def test_llm_provider_persists(self, preference_manager, mock_publisher):
+        """Test that provider change is persisted."""
+        with patch("pulse.assistant.preference_manager.persist_preference") as mock_persist:
+            with patch("pulse.assistant.llm.get_supported_providers", return_value={"openai": {}, "anthropic": {}}):
+                preference_manager._handle_llm_provider_command("anthropic")
+
+        mock_persist.assert_called_with("llm_provider", "anthropic", logger=preference_manager.logger)
 
 
 # Sound Preference Handler Tests

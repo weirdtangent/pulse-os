@@ -110,7 +110,7 @@ class PreferenceManager:
         self._on_wake_sensitivity_changed = callback
 
     def set_llm_provider_callback(self, callback: Callable[[], Any]) -> None:
-        """Set callback to invoke when LLM provider changes. Returns new provider."""
+        """Set callback to invoke when the LLM provider changes."""
         self._on_llm_provider_changed = callback
 
     def set_sound_settings_callback(self, callback: Callable[[SoundSettings], None]) -> None:
