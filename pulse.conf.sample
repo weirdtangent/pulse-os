@@ -55,10 +55,14 @@ PULSE_OVERLAY_ENABLED="true"
 # PULSE_OVERLAY_PORT — TCP port the overlay HTTP server listens on (default 8800).
 PULSE_OVERLAY_PORT="8800"
 
-# PULSE_OVERLAY_BIND — bind address for the overlay server (0.0.0.0 for all interfaces).
-PULSE_OVERLAY_BIND="0.0.0.0"
+# PULSE_OVERLAY_BIND — bind address for the overlay server.
+# SECURITY: Use 127.0.0.1 (localhost only) unless you need network access.
+# Using 0.0.0.0 exposes the overlay server to your entire network.
+PULSE_OVERLAY_BIND="127.0.0.1"
 
-# PULSE_OVERLAY_ALLOWED_ORIGINS — comma-separated list of allowed CORS origins (“*” allows all).
+# PULSE_OVERLAY_ALLOWED_ORIGINS — comma-separated list of allowed CORS origins.
+# SECURITY: Replace "*" with specific origins (e.g., "http://localhost:8123,https://homeassistant.local")
+# Using "*" allows any website to access your overlay server, which may expose sensitive information.
 PULSE_OVERLAY_ALLOWED_ORIGINS="*"
 
 # PULSE_OVERLAY_FONT_FAMILY — preferred overlay font (CSS font-family syntax).

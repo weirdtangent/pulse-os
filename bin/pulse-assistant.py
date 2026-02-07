@@ -8,7 +8,6 @@ import asyncio
 import base64
 import calendar
 import contextlib
-import copy
 import json
 import logging
 import os
@@ -23,7 +22,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from pulse import __version__
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
@@ -38,6 +36,7 @@ from pulse.assistant.info_service import InfoService
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider, get_supported_providers
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
+from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
@@ -136,7 +135,21 @@ class PulseAssistant:
         # Sound library for dynamic sound options
         self._sound_library = SoundLibrary(custom_dir=self.config.sounds.custom_dir)
         self._sound_options: dict[str, list[tuple[str, str]]] = {}
+
+        # Initialize MQTT publisher (POC - proof of concept)
+        # Note: Publisher calls _refresh_sound_options() in its constructor
+        self.publisher = AssistantMqttPublisher(
+            mqtt=self.mqtt,
+            config=self.config,
+            home_assistant=self.home_assistant,
+            schedule_service=self.schedule_service,
+            sound_library=self._sound_library,
+            logger=LOGGER,
+        )
+
+        # Keep local copy in sync with publisher (POC - will be removed in full implementation)
         self._refresh_sound_options()
+
         self._calendar_events: list[dict[str, Any]] = []
         self._calendar_updated_at: float | None = None
         self._latest_schedule_snapshot: dict[str, Any] | None = None
@@ -255,23 +268,29 @@ class PulseAssistant:
                 self._calendar_events = []
                 self._calendar_updated_at = None
                 # Publish empty schedule state to clear overlay cache
-                self._publish_schedule_state({})
+                self.publisher._publish_schedule_state({}, self._calendar_events, self._calendar_updated_at)
             else:
                 LOGGER.warning("[assistant] calendar_sync is None, cannot start calendar sync service")
 
             # Publish preferences and retained-state after services are running
-            self._publish_preferences()
+            self.publisher._publish_preferences(
+                self.preferences,
+                self._log_llm_messages,
+                self._active_ha_pipeline(),
+                self._active_llm_provider(),
+                self.config.sounds,
+            )
             # Wait a moment for retained MQTT messages to arrive before publishing state
             await asyncio.sleep(0.5)
             if not self._earmuffs_state_restored:
                 # No retained message received, publish current state
                 try:
-                    self._publish_earmuffs_state()
+                    self.publisher._publish_earmuffs_state(self._get_earmuffs_enabled())
                 except Exception as exc:
                     LOGGER.exception("[assistant] Failed to publish earmuffs state: %s", exc)
 
-            self._publish_assistant_discovery()
-            self._publish_routine_overlay()
+            self.publisher._publish_assistant_discovery(self.config.hostname, self.config.device_name)
+            self.publisher._publish_routine_overlay()
             await self.mic.start()
             self._set_assist_stage("pulse", "idle")
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
@@ -303,7 +322,7 @@ class PulseAssistant:
         kiosk_grace_seconds = 90
         kiosk_restart_min_interval = 120
         while not self._shutdown.is_set():
-            self._publish_message(self._heartbeat_topic, str(int(time.time())))
+            self.publisher._publish_message(self._heartbeat_topic, str(int(time.time())))
             sd_watchdog()
             # Check kiosk health and restart if needed
             now = time.monotonic()
@@ -410,159 +429,6 @@ class PulseAssistant:
             logger=LOGGER,
         )
 
-    def _publish_state(self, state: str, extra: dict | None = None) -> None:
-        payload = {"state": state}
-        if extra:
-            payload.update(extra)
-        payload["device"] = self.config.hostname
-        self._publish_message(self.config.state_topic, json.dumps(payload))
-
-    def _publish_message(self, topic: str, payload: str, *, retain: bool = False) -> None:
-        self.mqtt.publish(topic, payload=payload, retain=retain)
-
-    def _publish_info_overlay(
-        self, text: str | None = None, category: str | None = None, extra: dict | None = None
-    ) -> None:
-        if not self._info_topic:
-            return
-        payload = dict(extra or {})
-        if text and text.strip():
-            payload.setdefault("state", "show")
-            payload.setdefault("category", category or "")
-            payload["text"] = text.strip()
-            payload.setdefault("ts", time.time())
-        elif payload:
-            payload.setdefault("state", "show")
-            payload.setdefault("ts", time.time())
-            if category:
-                payload.setdefault("category", category)
-        else:
-            payload = {"state": "clear"}
-        if payload.get("state") != "clear":
-            self._cancel_info_overlay_clear()
-        self._publish_message(self._info_topic, json.dumps(payload))
-
-    def _cancel_info_overlay_clear(self) -> None:
-        task = self._info_overlay_clear_task
-        if task:
-            task.cancel()
-            self._info_overlay_clear_task = None
-
-    def _schedule_info_overlay_clear(self, delay: float) -> None:
-        self._cancel_info_overlay_clear()
-        if delay <= 0:
-            self._publish_info_overlay()
-            return
-
-        async def _clear_after() -> None:
-            try:
-                await asyncio.sleep(delay)
-                self._publish_info_overlay()
-            except asyncio.CancelledError:
-                return
-
-        self._info_overlay_clear_task = asyncio.create_task(_clear_after())
-
-    @staticmethod
-    def _clone_schedule_snapshot(snapshot: dict[str, Any]) -> dict[str, Any] | None:
-        try:
-            return json.loads(json.dumps(snapshot))
-        except TypeError:
-            LOGGER.warning("[assistant] Unable to serialize schedule snapshot: %s", snapshot)
-            return None
-
-    def _publish_schedule_state(self, snapshot: dict[str, Any]) -> None:
-        # Always filter past events before publishing
-        self._filter_past_calendar_events()
-        payload = copy.deepcopy(snapshot)
-        payload["calendar_events"] = [dict(event) for event in self._calendar_events]
-        if self._calendar_updated_at:
-            payload["calendar_updated_at"] = datetime.fromtimestamp(
-                self._calendar_updated_at, tz=datetime.now().astimezone().tzinfo
-            ).isoformat()
-        else:
-            payload.setdefault("calendar_updated_at", None)
-        try:
-            message = json.dumps(payload)
-        except TypeError:
-            LOGGER.warning("[assistant] Unable to serialize schedule snapshot: %s", payload)
-            return
-        self._publish_message(self._schedules_state_topic, message, retain=True)
-
-    async def _publish_light_overlay(self) -> None:
-        ha_client = self.home_assistant
-        if not ha_client:
-            return
-        try:
-            lights = await ha_client.list_entities("light")
-        except HomeAssistantError as exc:
-            LOGGER.info("[assistant] Failed to fetch Home Assistant lights for overlay: %s", exc)
-            return
-        payload = self._format_lights_card(lights)
-        if not payload:
-            return
-        self._publish_info_overlay(
-            text=payload.get("subtitle") or "Lighting updated.",
-            category="lights",
-            extra=payload,
-        )
-
-    def _publish_routine_overlay(self) -> None:
-        return  # Suppress routines overlay (no longer shown)
-
-    def _publish_health_overlay(self) -> None:
-        return  # Suppress health overlay (no longer shown)
-
-    @staticmethod
-    def _format_lights_card(lights: list[dict[str, Any]]) -> dict[str, Any] | None:
-        if not lights:
-            return None
-        entries: list[dict[str, Any]] = []
-        on_count = 0
-        for light in lights:
-            if not isinstance(light, dict):
-                continue
-            entity_id = light.get("entity_id")
-            attrs = light.get("attributes") or {}
-            name = attrs.get("friendly_name") or entity_id or "Light"
-            state = str(light.get("state") or "unknown").lower()
-            if state == "on":
-                on_count += 1
-            brightness = attrs.get("brightness")
-            brightness_pct = None
-            if isinstance(brightness, (int, float)):
-                brightness_pct = int(round(max(0.0, min(1.0, float(brightness) / 255.0)) * 100))
-            color_temp_attr = attrs.get("color_temp")
-            color_temp_label = None
-            if isinstance(color_temp_attr, (int, float)) and color_temp_attr > 0:
-                try:
-                    kelvin = int(round(1_000_000 / float(color_temp_attr)))
-                    color_temp_label = f"{kelvin}K"
-                except (TypeError, ValueError):
-                    color_temp_label = None
-            area = attrs.get("area_id")
-            entries.append(
-                {
-                    "entity_id": entity_id,
-                    "name": name,
-                    "state": state,
-                    "brightness_pct": brightness_pct,
-                    "color_temp": color_temp_label,
-                    "area": area,
-                }
-            )
-        total = len(entries)
-        if total == 0:
-            return None
-        entries.sort(key=lambda item: (item.get("state") != "on", (item.get("name") or "").lower()))
-        subtitle_parts = [f"{on_count} on" if on_count else "All off", f"{total} total"]
-        return {
-            "type": "lights",
-            "title": "Lights",
-            "subtitle": " • ".join(subtitle_parts),
-            "lights": entries[:12],
-        }
-
     async def _maybe_publish_light_overlay(self, executed_actions: list[str]) -> None:
         # Suppress light overlay for HA actions (no info card needed)
         return
@@ -628,7 +494,7 @@ class PulseAssistant:
                 LOGGER.info("[assistant] Transcript [%s]: %s", wake_word, transcript)
             if self._log_llm_messages:
                 transcript_payload = {"text": transcript, "wake_word": wake_word}
-                self._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
+                self.publisher._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
             if await self._maybe_handle_stop_phrase(transcript, wake_word, tracker):
                 self._finalize_assist_run(status="cancelled")
                 return
@@ -674,7 +540,7 @@ class PulseAssistant:
                 follow_up_attempts = 0
                 if self._log_llm_messages:
                     payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
-                    self._publish_message(self.config.transcript_topic, json.dumps(payload))
+                    self.publisher._publish_message(self.config.transcript_topic, json.dumps(payload))
                 is_useful_follow_up, normalized_follow_up = self.conversation_manager.evaluate_follow_up(
                     follow_up_transcript,
                     last_follow_up_normalized,
@@ -772,7 +638,7 @@ class PulseAssistant:
                 if self._log_transcripts:
                     LOGGER.info("[assistant] Transcript [%s/HA]: %s", wake_word, transcript)
                 if self._log_llm_messages:
-                    self._publish_message(
+                    self.publisher._publish_message(
                         self.config.transcript_topic,
                         json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
                     )
@@ -781,7 +647,7 @@ class PulseAssistant:
                 LOGGER.info("[assistant] Response [%s/HA]: %s", wake_word, speech_text)
             tracker.begin_stage("speaking")
             self._set_assist_stage("home_assistant", "speaking", {"wake_word": wake_word})
-            self._publish_message(
+            self.publisher._publish_message(
                 self.config.response_topic,
                 json.dumps(
                     {
@@ -839,13 +705,13 @@ class PulseAssistant:
         if executed_actions:
             LOGGER.debug("[assistant] Executed actions [%s]: %s", wake_word, executed_actions)
         if executed_actions:
-            self._publish_message(
+            self.publisher._publish_message(
                 self.config.action_topic,
                 json.dumps({"executed": executed_actions, "wake_word": wake_word}),
             )
             await self._maybe_publish_light_overlay(executed_actions)
             if routine_actions:
-                self._publish_routine_overlay()
+                self.publisher._publish_routine_overlay()
         response_text, play_tone = select_ha_response(
             self.preferences.ha_response_mode, executed_actions, llm_result.response
         )
@@ -863,7 +729,7 @@ class PulseAssistant:
             }
             if follow_up:
                 response_payload["follow_up"] = True
-            self._publish_message(self.config.response_topic, json.dumps(response_payload))
+            self.publisher._publish_message(self.config.response_topic, json.dumps(response_payload))
             tag = "follow_up" if follow_up else wake_word
             self._log_assistant_response(tag, response_text, pipeline="pulse")
             await self._speak(response_text)
@@ -966,7 +832,7 @@ class PulseAssistant:
     async def _handle_scheduler_notification(self, message: str) -> None:
         pass
         payload = json.dumps({"text": message, "source": "scheduler", "device": self.config.hostname})
-        self._publish_message(self.config.response_topic, payload)
+        self.publisher._publish_message(self.config.response_topic, payload)
         try:
             await self._speak(message)
         except Exception as exc:
@@ -1111,7 +977,7 @@ class PulseAssistant:
         enabled = value in {"on", "true", "1", "yes"}
         self.preferences = replace(self.preferences, wake_sound=enabled)
         state = "on" if enabled else "off"
-        self._publish_preference_state("wake_sound", state)
+        self.publisher._publish_preference_state("wake_sound", state)
         persist_preference("wake_sound", state, logger=LOGGER)
 
     def _handle_log_llm_command(self, payload: str) -> None:
@@ -1121,7 +987,7 @@ class PulseAssistant:
             return
         self._log_llm_messages = enabled
         state = "on" if enabled else "off"
-        self._publish_preference_state("log_llm", state)
+        self.publisher._publish_preference_state("log_llm", state)
         persist_preference("log_llm", state, logger=LOGGER)
 
     def _handle_ha_response_mode_command(self, payload: str) -> None:
@@ -1132,19 +998,19 @@ class PulseAssistant:
         if value == self.preferences.ha_response_mode:
             return
         self.preferences = replace(self.preferences, ha_response_mode=value)  # type: ignore[arg-type]
-        self._publish_preference_state("ha_response_mode", value)
+        self.publisher._publish_preference_state("ha_response_mode", value)
         persist_preference("ha_response_mode", value, logger=LOGGER)
 
     def _handle_ha_tone_sound_command(self, payload: str) -> None:
         label = payload.strip()
         if not label:
             return
-        sound_id = self._get_sound_id_by_label("notification", label) or label
+        sound_id = self.publisher._get_sound_id_by_label("notification", label) or label
         if sound_id == self.preferences.ha_tone_sound:
             return
         self.preferences = replace(self.preferences, ha_tone_sound=sound_id)
-        label_or_id = self._get_sound_label_by_id("notification", sound_id) or label
-        self._publish_preference_state("ha_tone_sound", label_or_id)
+        label_or_id = self.publisher._get_sound_label_by_id("notification", sound_id) or label
+        self.publisher._publish_preference_state("ha_tone_sound", label_or_id)
         persist_preference("ha_tone_sound", sound_id, logger=LOGGER)
 
     def _refresh_sound_options(self) -> None:
@@ -1185,16 +1051,16 @@ class PulseAssistant:
         label = payload.strip()
         if not label:
             return
-        sound_id = self._get_sound_id_by_label(kind, label)
+        sound_id = self.publisher._get_sound_id_by_label(kind, label)
         if sound_id is None:
             LOGGER.debug("[assistant] Ignoring unknown %s sound: '%s'", kind, label)
             return
-        current_id = self._get_current_sound_id(kind)
+        current_id = self.publisher._get_current_sound_id(kind)
         if sound_id == current_id:
             return
         # Update sound settings
         self._update_sound_setting(kind, sound_id)
-        self._publish_preference_state(f"sound_{kind}", label)
+        self.publisher._publish_preference_state(f"sound_{kind}", label)
         persist_preference(f"sound_{kind}", sound_id, logger=LOGGER)
         LOGGER.info("[assistant] Set %s sound to '%s' (%s)", kind, label, sound_id)
 
@@ -1250,7 +1116,7 @@ class PulseAssistant:
             LOGGER.debug("[assistant] Ignoring invalid speaking style: %s", payload)
             return
         self.preferences = replace(self.preferences, speaking_style=value)  # type: ignore[arg-type]
-        self._publish_preference_state("speaking_style", value)
+        self.publisher._publish_preference_state("speaking_style", value)
         persist_preference("speaking_style", value, logger=LOGGER)
 
     def _handle_wake_sensitivity_command(self, payload: str) -> None:
@@ -1261,7 +1127,7 @@ class PulseAssistant:
         if value == self.preferences.wake_sensitivity:
             return
         self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
-        self._publish_preference_state("wake_sensitivity", value)
+        self.publisher._publish_preference_state("wake_sensitivity", value)
         persist_preference("wake_sensitivity", value, logger=LOGGER)
         self.wake_detector.mark_wake_context_dirty()
 
@@ -1308,7 +1174,7 @@ class PulseAssistant:
         clean = message.strip()
         if not clean:
             return
-        self._publish_info_overlay(text=f"Alert: {clean}", category="alerts")
+        self.publisher._publish_info_overlay(text=f"Alert: {clean}", category="alerts")
         self._schedule_info_overlay_clear(8.0)
         if self._loop is None:
             LOGGER.error("[assistant] Cannot handle alert: event loop not initialized")
@@ -1319,7 +1185,7 @@ class PulseAssistant:
         message = payload.strip()
         if not message:
             return
-        self._publish_info_overlay(text=f"Intercom: {message}", category="intercom")
+        self.publisher._publish_info_overlay(text=f"Intercom: {message}", category="intercom")
         self._schedule_info_overlay_clear(6.0)
         if self._loop is None:
             LOGGER.error("[assistant] Cannot handle intercom: event loop not initialized")
@@ -1335,7 +1201,7 @@ class PulseAssistant:
                     self._earmuffs_manual_override = enabled
                 changed = True
         if changed:
-            self._publish_earmuffs_state()
+            self.publisher._publish_earmuffs_state(self._get_earmuffs_enabled())
             if enabled:
                 self.wake_detector.mark_wake_context_dirty()
 
@@ -1347,41 +1213,12 @@ class PulseAssistant:
         with self._earmuffs_lock:
             return self._earmuffs_manual_override
 
-    def _publish_earmuffs_state(self) -> None:
-        enabled = self._get_earmuffs_enabled()
-        state = "on" if enabled else "off"
-        # publishing state; no status log
-        self._publish_message(self._earmuffs_state_topic, state, retain=True)
-
-    def _publish_preferences(self) -> None:
-        self._publish_preference_state("wake_sound", "on" if self.preferences.wake_sound else "off")
-        self._publish_preference_state("speaking_style", self.preferences.speaking_style)
-        self._publish_preference_state("wake_sensitivity", self.preferences.wake_sensitivity)
-        self._publish_preference_state("ha_response_mode", self.preferences.ha_response_mode)
-        tone_label = (
-            self._get_sound_label_by_id("notification", self.preferences.ha_tone_sound)
-            or self.preferences.ha_tone_sound
-        )
-        self._publish_preference_state("ha_tone_sound", tone_label)
-        self._publish_preference_state("ha_pipeline", self._active_ha_pipeline() or "")
-        self._publish_preference_state("llm_provider", self._active_llm_provider())
-        self._publish_preference_state("log_llm", "on" if self._log_llm_messages else "off")
-        # Sound preferences (publish labels, not sound IDs)
-        for kind in ("alarm", "timer", "reminder", "notification"):
-            sound_id = self._get_current_sound_id(kind)  # type: ignore[arg-type]
-            label = self._get_sound_label_by_id(kind, sound_id) or sound_id
-            self._publish_preference_state(f"sound_{kind}", label)
-
-    def _publish_preference_state(self, key: str, value: str) -> None:
-        topic = f"{self._preferences_topic}/{key}/state"
-        self._publish_message(topic, value, retain=True)
-
     def _handle_schedule_state_changed(self, snapshot: dict[str, Any]) -> None:
-        cloned = self._clone_schedule_snapshot(snapshot)
+        cloned = self.publisher._clone_schedule_snapshot(snapshot)
         if cloned is None:
             return
         self._latest_schedule_snapshot = cloned
-        self._publish_schedule_state(cloned)
+        self.publisher._publish_schedule_state(cloned, self._calendar_events, self._calendar_updated_at)
 
     def _handle_active_schedule_event(self, event_type: str, payload: dict[str, Any] | None) -> None:
         if event_type == "alarm":
@@ -1391,7 +1228,7 @@ class PulseAssistant:
         else:
             topic = self._reminders_active_topic
         message = payload or {"state": "idle"}
-        self._publish_message(topic, json.dumps(message))
+        self.publisher._publish_message(topic, json.dumps(message))
         if payload and payload.get("state") == "ringing":
             event_payload = payload.get("event") or {}
             if self._loop is None:
@@ -1520,7 +1357,7 @@ class PulseAssistant:
         self._calendar_updated_at = time.time()
         # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
         snapshot = self._latest_schedule_snapshot or {}
-        self._publish_schedule_state(snapshot)
+        self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
 
     def _filter_past_calendar_events(self) -> None:
         """Filter out past events from _calendar_events list."""
@@ -1557,7 +1394,7 @@ class PulseAssistant:
         if len(filtered) != len(self._calendar_events):
             self._calendar_events = filtered
             snapshot = self._latest_schedule_snapshot or {}
-            self._publish_schedule_state(snapshot)
+            self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
 
     def _deduplicate_calendar_reminders(self, reminders: Sequence[CalendarReminder]) -> list[CalendarReminder]:
         """Collapse duplicate events that arise from multiple VALARMs."""
@@ -1611,22 +1448,22 @@ class PulseAssistant:
         self._assist_stage = stage
         self._assist_pipeline = pipeline
         in_progress = stage not in {"idle", "error"}
-        self._publish_message(self._assist_in_progress_topic, "ON" if in_progress else "OFF", retain=True)
+        self.publisher._publish_message(self._assist_in_progress_topic, "ON" if in_progress else "OFF", retain=True)
         payload_extra = {"pipeline": pipeline, "stage": stage}
         if extra:
             payload_extra.update(extra)
-        self._publish_state(stage, payload_extra)
-        self._publish_message(self._assist_stage_topic, stage, retain=True)
-        self._publish_message(self._assist_pipeline_topic, pipeline, retain=True)
+        self.publisher._publish_state(stage, payload_extra)
+        self.publisher._publish_message(self._assist_stage_topic, stage, retain=True)
+        self.publisher._publish_message(self._assist_pipeline_topic, pipeline, retain=True)
         if extra and "wake_word" in extra:
-            self._publish_message(self._assist_wake_topic, str(extra["wake_word"]), retain=True)
+            self.publisher._publish_message(self._assist_wake_topic, str(extra["wake_word"]), retain=True)
 
     def _finalize_assist_run(self, status: str) -> None:
         tracker = self._current_tracker
         if tracker is None:
             return
         metrics = tracker.finalize(status)
-        self._publish_message(self._assist_metrics_topic, json.dumps(metrics))
+        self.publisher._publish_message(self._assist_metrics_topic, json.dumps(metrics))
         self._set_assist_stage(tracker.pipeline, "idle", {"wake_word": tracker.wake_word, "status": status})
         self._current_tracker = None
 
@@ -1735,7 +1572,7 @@ class PulseAssistant:
             elif action == "next_alarm":
                 info = self.schedule_service.get_next_alarm()
                 response = {"next_alarm": info}
-                self._publish_message(f"{self._schedules_state_topic}/next_alarm", json.dumps(response))
+                self.publisher._publish_message(f"{self._schedules_state_topic}/next_alarm", json.dumps(response))
             elif action in {"create_reminder", "add_reminder"}:
                 message = payload.get("message") or payload.get("text")
                 when_text = payload.get("when") or payload.get("time")
@@ -1962,7 +1799,7 @@ class PulseAssistant:
             spoken = "You do not have any alarms scheduled."
             await self._speak(spoken)
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            self._publish_info_overlay()
+            self.publisher._publish_info_overlay()
             return
         alarm_payload = []
         for alarm in alarms:
@@ -1981,7 +1818,7 @@ class PulseAssistant:
                     "next_fire": alarm.get("next_fire"),
                 }
             )
-        self._publish_info_overlay(
+        self.publisher._publish_info_overlay(
             text="Use ⏸️ to pause, ▶️ to resume, or 🗑️ to delete an alarm.",
             category="alarms",
             extra={"type": "alarms", "title": "Alarms", "alarms": alarm_payload},
@@ -2002,7 +1839,7 @@ class PulseAssistant:
             spoken = "You do not have any reminders scheduled."
             await self._speak(spoken)
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            self._publish_info_overlay()
+            self.publisher._publish_info_overlay()
             return
         reminder_payload = []
         for reminder in reminders:
@@ -2017,7 +1854,7 @@ class PulseAssistant:
                     "status": reminder.get("status"),
                 }
             )
-        self._publish_info_overlay(
+        self.publisher._publish_info_overlay(
             text="Tap Complete when you're done or choose a delay.",
             category="reminders",
             extra={"type": "reminders", "title": "Reminders", "reminders": reminder_payload},
@@ -2039,10 +1876,10 @@ class PulseAssistant:
             spoken = f"You don't have any calendar events in the next {lookahead} hours."
             await self._speak(spoken)
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            self._publish_info_overlay()
+            self.publisher._publish_info_overlay()
             return
         subtitle = f"Upcoming events in the next {lookahead} hours."
-        self._publish_info_overlay(
+        self.publisher._publish_info_overlay(
             text=subtitle,
             category="calendar",
             extra={
@@ -2119,7 +1956,7 @@ class PulseAssistant:
         }
         if follow_up:
             payload["follow_up"] = True
-        self._publish_message(self.config.response_topic, json.dumps(payload))
+        self.publisher._publish_message(self.config.response_topic, json.dumps(payload))
         tag = f"info:{response.category}"
         self._log_assistant_response(tag, response.text, pipeline="pulse")
         overlay_active = False
@@ -2128,7 +1965,9 @@ class PulseAssistant:
         estimated_clear_delay = self._estimate_speech_duration(response.text) + self._info_overlay_buffer_seconds
         try:
             if overlay_text or overlay_payload:
-                self._publish_info_overlay(text=overlay_text, category=response.category, extra=overlay_payload)
+                self.publisher._publish_info_overlay(
+                    text=overlay_text, category=response.category, extra=overlay_payload
+                )
                 overlay_active = True
             await self._speak(response.text)
         finally:
@@ -2158,7 +1997,7 @@ class PulseAssistant:
         payload: dict[str, str | bool] = {"text": response_text, "wake_word": wake_word}
         if follow_up:
             payload["follow_up"] = True
-        self._publish_message(self.config.response_topic, json.dumps(payload))
+        self.publisher._publish_message(self.config.response_topic, json.dumps(payload))
         self._log_assistant_response("stop", response_text, pipeline="pulse")
         await self._speak(response_text)
         self._trigger_media_resume_after_response()
@@ -2837,7 +2676,7 @@ class PulseAssistant:
         value = payload.strip()
         self._ha_pipeline_override = value or None
         pipeline_value = self._active_ha_pipeline() or ""
-        self._publish_preference_state("ha_pipeline", pipeline_value)
+        self.publisher._publish_preference_state("ha_pipeline", pipeline_value)
         persist_preference("ha_pipeline", pipeline_value, logger=LOGGER)
 
     def _active_ha_pipeline(self) -> str | None:
@@ -2855,7 +2694,7 @@ class PulseAssistant:
             return
         self.llm = self._build_llm_provider()
         provider = self._active_llm_provider()
-        self._publish_preference_state("llm_provider", provider)
+        self.publisher._publish_preference_state("llm_provider", provider)
         persist_preference("llm_provider", provider, logger=LOGGER)
 
     def _handle_model_command(self, provider: str, payload: str) -> None:
@@ -2878,7 +2717,7 @@ class PulseAssistant:
 
         # Publish state and persist preference
         default_model = getattr(self.config.llm, config_attr)
-        self._publish_preference_state(config_attr, value or default_model)
+        self.publisher._publish_preference_state(config_attr, value or default_model)
         persist_preference(config_attr, value, logger=LOGGER)
 
     def _handle_openai_model_command(self, payload: str) -> None:
@@ -2922,239 +2761,6 @@ class PulseAssistant:
         LOGGER.info(f"Using LLM provider: {provider} (model: {model})")
 
         return build_llm_provider(llm_config, LOGGER)
-
-    def _publish_assistant_discovery(self) -> None:
-        device = {
-            "identifiers": [f"pulse:{self.config.hostname}"],
-            "manufacturer": "Pulse",
-            "model": "Pulse Kiosk",
-            "name": self.config.device_name,
-            "sw_version": os.environ.get("PULSE_VERSION") or __version__,
-        }
-        prefix = "homeassistant"
-        hostname_safe = self.config.hostname.replace(" ", "_").replace("/", "_")
-        # Assist in progress binary sensor
-        self._publish_message(
-            f"{prefix}/binary_sensor/{hostname_safe}_assist_in_progress/config",
-            json.dumps(
-                {
-                    "name": "Assist In Progress",
-                    "unique_id": f"{self.config.hostname}-assist-in-progress",
-                    "state_topic": self._assist_in_progress_topic,
-                    "payload_on": "ON",
-                    "payload_off": "OFF",
-                    "device": device,
-                    "entity_category": "diagnostic",
-                }
-            ),
-            retain=True,
-        )
-        # Assist stage sensor
-        self._publish_message(
-            f"{prefix}/sensor/{hostname_safe}_assist_stage/config",
-            json.dumps(
-                {
-                    "name": "Assist Stage",
-                    "unique_id": f"{self.config.hostname}-assist-stage",
-                    "state_topic": self._assist_stage_topic,
-                    "device": device,
-                    "entity_category": "diagnostic",
-                    "icon": "mdi:progress-clock",
-                }
-            ),
-            retain=True,
-        )
-        # Last wake word sensor
-        self._publish_message(
-            f"{prefix}/sensor/{hostname_safe}_last_wake_word/config",
-            json.dumps(
-                {
-                    "name": "Last Wake Word",
-                    "unique_id": f"{self.config.hostname}-last-wake-word",
-                    "state_topic": self._assist_wake_topic,
-                    "device": device,
-                    "entity_category": "diagnostic",
-                    "icon": "mdi:account-voice",
-                }
-            ),
-            retain=True,
-        )
-        # Speaking style select
-        self._publish_message(
-            f"{prefix}/select/{hostname_safe}_speaking_style/config",
-            json.dumps(
-                {
-                    "name": "Speaking Style",
-                    "unique_id": f"{self.config.hostname}-speaking-style",
-                    "state_topic": f"{self._preferences_topic}/speaking_style/state",
-                    "command_topic": f"{self._preferences_topic}/speaking_style/set",
-                    "options": ["relaxed", "normal", "aggressive"],
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        # Wake sensitivity select
-        self._publish_message(
-            f"{prefix}/select/{hostname_safe}_wake_sensitivity/config",
-            json.dumps(
-                {
-                    "name": "Wake Sensitivity",
-                    "unique_id": f"{self.config.hostname}-wake-sensitivity",
-                    "state_topic": f"{self._preferences_topic}/wake_sensitivity/state",
-                    "command_topic": f"{self._preferences_topic}/wake_sensitivity/set",
-                    "options": ["low", "normal", "high"],
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        # Wake sound switch
-        self._publish_message(
-            f"{prefix}/switch/{hostname_safe}_wake_sound/config",
-            json.dumps(
-                {
-                    "name": "Wake Sound",
-                    "unique_id": f"{self.config.hostname}-wake-sound",
-                    "state_topic": f"{self._preferences_topic}/wake_sound/state",
-                    "command_topic": f"{self._preferences_topic}/wake_sound/set",
-                    "payload_on": "on",
-                    "payload_off": "off",
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        # Log LLM switch
-        self._publish_message(
-            f"{prefix}/switch/{hostname_safe}_log_llm/config",
-            json.dumps(
-                {
-                    "name": "Log LLM Responses",
-                    "unique_id": f"{self.config.hostname}-log-llm",
-                    "state_topic": f"{self._preferences_topic}/log_llm/state",
-                    "command_topic": f"{self._preferences_topic}/log_llm/set",
-                    "payload_on": "on",
-                    "payload_off": "off",
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        # Earmuffs switch (disable LLM listening)
-        self._publish_message(
-            f"{prefix}/switch/{hostname_safe}_earmuffs/config",
-            json.dumps(
-                {
-                    "name": "Earmuffs",
-                    "unique_id": f"{self.config.hostname}-earmuffs",
-                    "state_topic": self._earmuffs_state_topic,
-                    "command_topic": self._earmuffs_set_topic,
-                    "payload_on": "on",
-                    "payload_off": "off",
-                    "device": device,
-                    "entity_category": "config",
-                    "icon": "mdi:ear-hearing-off",
-                }
-            ),
-            retain=True,
-        )
-        # HA pipeline text entity
-        self._publish_message(
-            f"{prefix}/text/{hostname_safe}_ha_pipeline/config",
-            json.dumps(
-                {
-                    "name": "HA Assist Pipeline",
-                    "unique_id": f"{self.config.hostname}-ha-assist-pipeline",
-                    "state_topic": f"{self._preferences_topic}/ha_pipeline/state",
-                    "command_topic": f"{self._preferences_topic}/ha_pipeline/set",
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        # LLM provider select
-        self._publish_message(
-            f"{prefix}/select/{hostname_safe}_llm_provider/config",
-            json.dumps(
-                {
-                    "name": "LLM Provider",
-                    "unique_id": f"{self.config.hostname}-llm-provider",
-                    "state_topic": f"{self._preferences_topic}/llm_provider/state",
-                    "command_topic": f"{self._preferences_topic}/llm_provider/set",
-                    "options": ["openai", "gemini"],
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        # HA response mode select
-        self._publish_message(
-            f"{prefix}/select/{hostname_safe}_ha_response_mode/config",
-            json.dumps(
-                {
-                    "name": "HA Response Mode",
-                    "unique_id": f"{self.config.hostname}-ha-response-mode",
-                    "state_topic": f"{self._preferences_topic}/ha_response_mode/state",
-                    "command_topic": f"{self._preferences_topic}/ha_response_mode/set",
-                    "options": ["none", "tone", "minimal", "full"],
-                    "device": device,
-                    "entity_category": "config",
-                }
-            ),
-            retain=True,
-        )
-        tone_options = self._get_sound_options_for_kind("notification")
-        if tone_options:
-            self._publish_message(
-                f"{prefix}/select/{hostname_safe}_ha_tone_sound/config",
-                json.dumps(
-                    {
-                        "name": "HA Tone Sound",
-                        "unique_id": f"{self.config.hostname}-ha-tone-sound",
-                        "state_topic": f"{self._preferences_topic}/ha_tone_sound/state",
-                        "command_topic": f"{self._preferences_topic}/ha_tone_sound/set",
-                        "options": tone_options,
-                        "device": device,
-                        "entity_category": "config",
-                        "icon": "mdi:volume-medium",
-                    }
-                ),
-                retain=True,
-            )
-        # Sound preference selects
-        sound_configs = [
-            ("alarm", "Alarm Sound", "mdi:alarm"),
-            ("timer", "Timer Sound", "mdi:timer-outline"),
-            ("reminder", "Reminder Sound", "mdi:bell-ring-outline"),
-            ("notification", "Notification Sound", "mdi:bell-outline"),
-        ]
-        for kind, name, icon in sound_configs:
-            options = self._get_sound_options_for_kind(kind)
-            if not options:
-                continue
-            self._publish_message(
-                f"{prefix}/select/{hostname_safe}_sound_{kind}/config",
-                json.dumps(
-                    {
-                        "name": name,
-                        "unique_id": f"{self.config.hostname}-sound-{kind}",
-                        "state_topic": f"{self._preferences_topic}/sound_{kind}/state",
-                        "command_topic": f"{self._preferences_topic}/sound_{kind}/set",
-                        "options": options,
-                        "device": device,
-                        "entity_category": "config",
-                        "icon": icon,
-                    }
-                ),
-                retain=True,
-            )
 
 
 async def main() -> None:

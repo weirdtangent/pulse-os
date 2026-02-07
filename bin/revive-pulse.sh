@@ -5,13 +5,19 @@ CONFIG_FILE="/opt/pulse-os/pulse.conf"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 
 export DISPLAY=:0
-export XAUTHORITY=/home/$PULSE_USER/.Xauthority
+export XAUTHORITY="/home/$PULSE_USER/.Xauthority"
 
 SAFE_REBOOT="/opt/pulse-os/bin/safe-reboot.sh"
-LOG="/home/$PULSE_USER/revive.log"
+LOG="/home/${PULSE_USER}/revive.log"
 
 # Capture all stdout/stderr so cron never tries to email it.
 exec >>"$LOG" 2>&1
+
+# Validate URL format to prevent command injection
+if [[ ! "$PULSE_URL" =~ ^https?://[a-zA-Z0-9._-]+(:[0-9]+)?(/.*)?$ ]]; then
+  echo "$(date): Invalid PULSE_URL format" >> "$LOG"
+  exit 1
+fi
 
 # quick ping to see if HA itself is reachable
 if ! curl -sf --max-time 10 "$PULSE_URL" >/dev/null; then
@@ -47,7 +53,7 @@ PID=$(pgrep -f 'chromium.*--kiosk' || true)
 
 if [ -n "$PID" ]; then
   # look for 'Aw, Snap' in the window title or X window name
-  TITLE=$(XAUTHORITY=/home/$PULSE_USER/.Xauthority xdotool getwindowname "$(xdotool search --pid "$PID" | head -1)" 2>/dev/null || echo "")
+  TITLE=$(XAUTHORITY="/home/$PULSE_USER/.Xauthority" xdotool getwindowname "$(xdotool search --pid "$PID" | head -1)" 2>/dev/null || echo "")
   if echo "$TITLE" | grep -q "Aw, Snap"; then
     echo "$(date): Chrome is showing 'Aw, Snap' — restarting" >> "$LOG"
     pkill -f 'chromium.*--kiosk'
