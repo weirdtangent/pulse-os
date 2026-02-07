@@ -308,6 +308,13 @@ PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
     # LLM settings (llm_ prefix clarifies the MQTT key refers to LLM provider choice)
     "llm_provider": ("PULSE_ASSISTANT_PROVIDER", str),
     "log_llm": ("PULSE_ASSISTANT_LOG_LLM", lambda v: "true" if v == "on" else "false"),
+    # LLM model overrides for each provider
+    "openai_model": ("OPENAI_MODEL", str),
+    "gemini_model": ("GEMINI_MODEL", str),
+    "anthropic_model": ("ANTHROPIC_MODEL", str),
+    "groq_model": ("GROQ_MODEL", str),
+    "mistral_model": ("MISTRAL_MODEL", str),
+    "openrouter_model": ("OPENROUTER_MODEL", str),
     # Overlay settings (font -> FONT_FAMILY matches CSS terminology)
     "overlay_font": ("PULSE_OVERLAY_FONT_FAMILY", str),
     # Sound preferences (sound_<kind> -> PULSE_SOUND_<KIND>)

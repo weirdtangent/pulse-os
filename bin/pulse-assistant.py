@@ -235,9 +235,14 @@ class PulseAssistant:
         self.preference_manager.set_wake_sensitivity_callback(self.wake_detector.mark_wake_context_dirty)
         self.preference_manager.set_llm_provider_callback(self._rebuild_llm_provider)
         self.preference_manager.set_sound_settings_callback(self.schedule_service.update_sound_settings)
+        self.preference_manager.set_config_updated_callback(self._handle_config_updated)
 
         # Build LLM provider (uses preference_manager for overrides)
         self.llm: LLMProvider = self._build_llm_provider()
+
+    def _handle_config_updated(self, new_config: AssistantConfig) -> None:
+        """Handle config updates from preference manager to keep in sync."""
+        self.config = new_config
 
     @property
     def preferences(self) -> AssistantPreferences:

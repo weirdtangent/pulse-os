@@ -96,6 +96,7 @@ class PreferenceManager:
         self._on_wake_sensitivity_changed: Callable[[], None] | None = None
         self._on_llm_provider_changed: Callable[[], Any] | None = None
         self._on_sound_settings_changed: Callable[[SoundSettings], None] | None = None
+        self._on_config_updated: Callable[[AssistantConfig], None] | None = None
 
         # Build sound options cache
         self._refresh_sound_options()
@@ -115,6 +116,14 @@ class PreferenceManager:
     def set_sound_settings_callback(self, callback: Callable[[SoundSettings], None]) -> None:
         """Set callback to invoke when sound settings change."""
         self._on_sound_settings_changed = callback
+
+    def set_config_updated_callback(self, callback: Callable[[AssistantConfig], None]) -> None:
+        """Set callback to invoke when the assistant config changes.
+
+        This keeps external holders of AssistantConfig (e.g., PulseAssistant)
+        in sync when runtime preferences such as sound settings are updated.
+        """
+        self._on_config_updated = callback
 
     # ========================================================================
     # Sound Management
@@ -214,6 +223,10 @@ class PreferenceManager:
         # Notify external components
         if self._on_sound_settings_changed:
             self._on_sound_settings_changed(new_sounds)
+
+        # Notify config holder to stay in sync
+        if self._on_config_updated:
+            self._on_config_updated(self.config)
 
     # ========================================================================
     # Pipeline and Provider Accessors
@@ -339,11 +352,11 @@ class PreferenceManager:
         label = payload.strip()
         if not label:
             return
-        sound_id = self.publisher._get_sound_id_by_label("notification", label) or label
+        sound_id = self.get_sound_id_by_label("notification", label) or label
         if sound_id == self.preferences.ha_tone_sound:
             return
         self.preferences = replace(self.preferences, ha_tone_sound=sound_id)
-        label_or_id = self.publisher._get_sound_label_by_id("notification", sound_id) or label
+        label_or_id = self.get_sound_label_by_id("notification", sound_id) or label
         self.publisher._publish_preference_state("ha_tone_sound", label_or_id)
         persist_preference("ha_tone_sound", sound_id, logger=self.logger)
 
@@ -434,7 +447,7 @@ class PreferenceManager:
         label = payload.strip()
         if not label:
             return
-        sound_id = self.publisher._get_sound_id_by_label(kind, label)
+        sound_id = self.get_sound_id_by_label(kind, label)
         if sound_id is None:
             self.logger.debug("[preference_manager] Ignoring unknown %s sound: '%s'", kind, label)
             return
