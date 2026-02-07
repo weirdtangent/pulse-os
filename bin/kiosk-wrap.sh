@@ -126,6 +126,12 @@ HTML
 # --- Watchdog: restart browser if HA is unresponsive for too long ---
 WATCHDOG_FAILS=0
 
+# Validate watchdog URL format to prevent command injection
+if [[ ! "$PULSE_WATCHDOG_URL" =~ ^https?://[a-zA-Z0-9._-]+(:[0-9]+)?(/.*)?$ ]]; then
+  echo "$(date): Invalid PULSE_WATCHDOG_URL format - watchdog disabled"
+  PULSE_WATCHDOG_LIMIT=999999  # Effectively disable watchdog
+fi
+
 watchdog_loop() {
   while true; do
     if curl -sf --max-time 10 "$PULSE_WATCHDOG_URL" >/dev/null; then
