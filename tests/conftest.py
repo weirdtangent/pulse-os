@@ -181,7 +181,15 @@ def mock_mqtt_client():
     client.disconnect = Mock()
     client.subscribe = Mock()
     client.unsubscribe = Mock()
-    client.publish = Mock(return_value=(mqtt.MQTT_ERR_SUCCESS, 1))
+
+    # Mock MQTTMessageInfo return value to match paho-mqtt's Client.publish() API
+    message_info = Mock(spec=mqtt.MQTTMessageInfo)
+    message_info.rc = mqtt.MQTT_ERR_SUCCESS
+    message_info.mid = 1
+    message_info.wait_for_publish = Mock(return_value=True)
+    message_info.is_published = Mock(return_value=True)
+    client.publish = Mock(return_value=message_info)
+
     client.loop_start = Mock()
     client.loop_stop = Mock()
     client.is_connected = Mock(return_value=True)
