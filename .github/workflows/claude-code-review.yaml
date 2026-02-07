@@ -9,10 +9,11 @@ on:
     types: [created]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: write
   id-token: write
+  actions: read
 
 jobs:
   claude:
@@ -24,11 +25,18 @@ jobs:
     outputs:
       recommendation: ${{ steps.claude-review.outputs.recommendation }}
     steps:
+      - name: Checkout repository
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ github.event_name == 'pull_request' && 'Review this pull request for code quality, security issues, potential bugs, and best practices. If the code looks good with no blocking issues, recommend approval.' || '' }}
 
   auto-approve:
     needs: claude
