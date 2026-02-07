@@ -35,3 +35,34 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ github.event_name == 'pull_request' && 'Review this pull request for code quality, security issues, potential bugs, and best practices. If everything looks good, approve the PR. If you find any issues, leave review comments.' || '' }}
+
+      - name: Check Claude review results and approve if clean
+        if: github.event_name == 'pull_request' && steps.claude-review.conclusion == 'success'
+        run: |
+          # The Claude Code Review step has completed successfully
+          # Wait a bit for any async review posting to complete
+          sleep 30
+
+          # Check if Claude posted any review comments (indicating issues found)
+          claude_comments=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | select(.user.login | test("claude"; "i"))] | length')
+
+          # Check if Claude already approved
+          claude_approved=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+            --jq '[.[] | select(.user.login | test("claude"; "i") and .state == "APPROVED")] | length > 0')
+
+          echo "Claude comments found: $claude_comments"
+          echo "Claude already approved: $claude_approved"
+
+          # If Claude review succeeded, no comments were posted, and no approval exists, approve the PR
+          if [ "$claude_comments" = "0" ] && [ "$claude_approved" != "true" ]; then
+            echo "Claude review completed with no issues - approving PR"
+            gh pr review "${{ github.event.pull_request.number }}" \
+              --approve \
+              --body "✅ Automated Claude Code Review found no issues"
+          else
+            echo "Claude either posted comments or already approved - no action needed"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
