@@ -11,6 +11,7 @@ from pulse.assistant.conversation_manager import (
     evaluate_follow_up_transcript,
     is_conversation_stop_command,
 )
+from pulse.assistant.schedule_intents import ScheduleIntentParser
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -32,14 +33,12 @@ def _assistant() -> PulseAssistant:
 
 
 def test_extract_time_of_day_handles_four_digit_am_pm() -> None:
-    assistant = _assistant()
-    result = assistant._extract_time_of_day_from_text("at 1225 pm tomorrow")
+    result = ScheduleIntentParser._extract_time_of_day_from_text("at 1225 pm tomorrow")
     assert result == "12:25"
 
 
 def test_extract_time_of_day_handles_three_digit_am_pm() -> None:
-    assistant = _assistant()
-    result = assistant._extract_time_of_day_from_text("remind me at 725am")
+    result = ScheduleIntentParser._extract_time_of_day_from_text("remind me at 725am")
     assert result == "07:25"
 
 

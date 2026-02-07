@@ -43,6 +43,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
+          model: claude-opus-4-5-20251101
           claude_args: |
             --allowedTools "Bash(gh:*)"
           prompt: |
