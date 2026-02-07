@@ -19,8 +19,9 @@ Preferences managed:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from pulse.assistant.config import AssistantConfig, AssistantPreferences
 from pulse.assistant.mqtt import AssistantMqtt
@@ -29,7 +30,6 @@ from pulse.sound_library import SoundKind, SoundLibrary, SoundSettings
 
 if TYPE_CHECKING:
     from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
-    from pulse.assistant.wake_detector import WakeDetector
 
 LOGGER = logging.getLogger(__name__)
 
@@ -367,9 +367,7 @@ class PreferenceManager:
             self._llm_provider_override = value
         else:
             supported = ", ".join(get_supported_providers().keys())
-            self.logger.warning(
-                "[preference_manager] Invalid LLM provider '%s'. Supported: %s", payload, supported
-            )
+            self.logger.warning("[preference_manager] Invalid LLM provider '%s'. Supported: %s", payload, supported)
             return
 
         # Notify that LLM provider changed (caller should rebuild provider)

@@ -46,7 +46,7 @@ from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_sound, play_volume_feedback
 from pulse.datetime_utils import parse_datetime, parse_duration_seconds
-from pulse.sound_library import SoundLibrary, SoundSettings
+from pulse.sound_library import SoundLibrary
 
 LOGGER = logging.getLogger("pulse-assistant")
 
@@ -159,7 +159,7 @@ class PulseAssistant:
                 )
             else:
                 LOGGER.warning(
-                    "[assistant] Calendar sync enabled but no feeds configured " "(PULSE_CALENDAR_ICS_URLS is empty)"
+                    "[assistant] Calendar sync enabled but no feeds configured (PULSE_CALENDAR_ICS_URLS is empty)"
                 )
         else:
             pass
