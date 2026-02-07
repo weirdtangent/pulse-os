@@ -25,7 +25,7 @@ from typing import Any
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
 from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
-from pulse.assistant.config import AssistantConfig, WyomingEndpoint
+from pulse.assistant.config import AssistantConfig, AssistantPreferences, WyomingEndpoint
 from pulse.assistant.conversation_manager import (
     ConversationManager,
     build_conversation_stop_prefixes,
@@ -33,10 +33,11 @@ from pulse.assistant.conversation_manager import (
 )
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
 from pulse.assistant.info_service import InfoService
-from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider, get_supported_providers
+from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
+from pulse.assistant.preference_manager import PreferenceManager
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
@@ -44,9 +45,8 @@ from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_sound, play_volume_feedback
-from pulse.config_persist import persist_preference
 from pulse.datetime_utils import parse_datetime, parse_duration_seconds
-from pulse.sound_library import SoundKind, SoundLibrary, SoundSettings
+from pulse.sound_library import SoundLibrary, SoundSettings
 
 LOGGER = logging.getLogger("pulse-assistant")
 
@@ -102,16 +102,7 @@ class PulseAssistant:
         action_defs = load_action_definitions(config.action_file, config.inline_actions)
         self.actions = ActionEngine(action_defs)
         self.routines = RoutineEngine(default_routines())
-        self._llm_provider_override: str | None = None
-        self._openai_model_override: str | None = None
-        self._gemini_model_override: str | None = None
-        self._anthropic_model_override: str | None = None
-        self._groq_model_override: str | None = None
-        self._mistral_model_override: str | None = None
-        self._openrouter_model_override: str | None = None
-        self.llm: LLMProvider = self._build_llm_provider()
         self.home_assistant: HomeAssistantClient | None = None
-        self.preferences = config.preferences
         if config.home_assistant.base_url and config.home_assistant.token:
             try:
                 self.home_assistant = HomeAssistantClient(config.home_assistant)
@@ -134,10 +125,8 @@ class PulseAssistant:
         )
         # Sound library for dynamic sound options
         self._sound_library = SoundLibrary(custom_dir=self.config.sounds.custom_dir)
-        self._sound_options: dict[str, list[tuple[str, str]]] = {}
 
-        # Initialize MQTT publisher (POC - proof of concept)
-        # Note: Publisher calls _refresh_sound_options() in its constructor
+        # Initialize MQTT publisher
         self.publisher = AssistantMqttPublisher(
             mqtt=self.mqtt,
             config=self.config,
@@ -147,8 +136,14 @@ class PulseAssistant:
             logger=LOGGER,
         )
 
-        # Keep local copy in sync with publisher (POC - will be removed in full implementation)
-        self._refresh_sound_options()
+        # Initialize preference manager (Phase 2 extraction)
+        self.preference_manager = PreferenceManager(
+            mqtt=self.mqtt,
+            config=self.config,
+            sound_library=self._sound_library,
+            publisher=self.publisher,
+            logger=LOGGER,
+        )
 
         self._calendar_events: list[dict[str, Any]] = []
         self._calendar_updated_at: float | None = None
@@ -176,7 +171,6 @@ class PulseAssistant:
         self._assist_stage_topic = f"{base_topic}/assistant/stage"
         self._assist_pipeline_topic = f"{base_topic}/assistant/active_pipeline"
         self._assist_wake_topic = f"{base_topic}/assistant/last_wake_word"
-        self._preferences_topic = f"{base_topic}/preferences"
         self._schedules_state_topic = f"{base_topic}/schedules/state"
         self._schedule_command_topic = f"{base_topic}/schedules/command"
         self._alarms_active_topic = f"{base_topic}/alarms/active"
@@ -191,7 +185,6 @@ class PulseAssistant:
         self._assist_stage = "idle"
         self._assist_pipeline: str | None = None
         self._current_tracker: AssistRunTracker | None = None
-        self._ha_pipeline_override: str | None = None
         self._self_audio_trigger_level = max(2, self.config.self_audio_trigger_level)
         self._media_player_entity = self.config.media_player_entity
         self._media_player_entities = self.config.media_player_entities
@@ -225,8 +218,9 @@ class PulseAssistant:
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
         self._media_resume_delay = 2.0
-        self._log_llm_messages = config.log_llm_messages
         self._log_transcripts = config.log_transcripts
+        # Initialize LLM logging state from config, sync with preference manager
+        self.preference_manager.log_llm_messages = config.log_llm_messages
         self._conversation_stop_prefixes = build_conversation_stop_prefixes(config)
         self._earmuffs_lock = threading.Lock()
         self._earmuffs_enabled = False
@@ -237,12 +231,35 @@ class PulseAssistant:
         self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
         self._last_health_signature: tuple[tuple[str, str], ...] | None = None
 
+        # Set up preference manager callbacks
+        self.preference_manager.set_wake_sensitivity_callback(self.wake_detector.mark_wake_context_dirty)
+        self.preference_manager.set_llm_provider_callback(self._rebuild_llm_provider)
+        self.preference_manager.set_sound_settings_callback(self.schedule_service.update_sound_settings)
+
+        # Build LLM provider (uses preference_manager for overrides)
+        self.llm: LLMProvider = self._build_llm_provider()
+
+    @property
+    def preferences(self) -> AssistantPreferences:
+        """Access current preferences via the preference manager."""
+        return self.preference_manager.preferences
+
+    @preferences.setter
+    def preferences(self, value: AssistantPreferences) -> None:
+        """Update preferences in the preference manager."""
+        self.preference_manager.preferences = value
+
+    def _rebuild_llm_provider(self) -> LLMProvider:
+        """Rebuild and return the LLM provider with current settings."""
+        self.llm = self._build_llm_provider()
+        return self.llm
+
     async def run(self) -> None:
         try:
             self._loop = asyncio.get_running_loop()
             self.media_controller._loop = self._loop
             self.mqtt.connect()
-            self._subscribe_preference_topics()
+            self.preference_manager.subscribe_preference_topics()
             self._subscribe_schedule_topics()
             self._subscribe_playback_topic()
             self._subscribe_earmuffs_topic()
@@ -275,9 +292,9 @@ class PulseAssistant:
             # Publish preferences and retained-state after services are running
             self.publisher._publish_preferences(
                 self.preferences,
-                self._log_llm_messages,
-                self._active_ha_pipeline(),
-                self._active_llm_provider(),
+                self.preference_manager.log_llm_messages,
+                self.preference_manager.get_active_ha_pipeline(),
+                self.preference_manager.get_active_llm_provider(),
                 self.config.sounds,
             )
             # Wait a moment for retained MQTT messages to arrive before publishing state
@@ -492,7 +509,7 @@ class PulseAssistant:
                 return
             if self._log_transcripts:
                 LOGGER.info("[assistant] Transcript [%s]: %s", wake_word, transcript)
-            if self._log_llm_messages:
+            if self.preference_manager.log_llm_messages:
                 transcript_payload = {"text": transcript, "wake_word": wake_word}
                 self.publisher._publish_message(self.config.transcript_topic, json.dumps(transcript_payload))
             if await self._maybe_handle_stop_phrase(transcript, wake_word, tracker):
@@ -538,7 +555,7 @@ class PulseAssistant:
                         break
                     continue
                 follow_up_attempts = 0
-                if self._log_llm_messages:
+                if self.preference_manager.log_llm_messages:
                     payload = {"text": follow_up_transcript, "wake_word": wake_word, "follow_up": True}
                     self.publisher._publish_message(self.config.transcript_topic, json.dumps(payload))
                 is_useful_follow_up, normalized_follow_up = self.conversation_manager.evaluate_follow_up(
@@ -637,7 +654,7 @@ class PulseAssistant:
             if transcript:
                 if self._log_transcripts:
                     LOGGER.info("[assistant] Transcript [%s/HA]: %s", wake_word, transcript)
-                if self._log_llm_messages:
+                if self.preference_manager.log_llm_messages:
                     self.publisher._publish_message(
                         self.config.transcript_topic,
                         json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
@@ -893,32 +910,6 @@ class PulseAssistant:
             finally:
                 await self.player.stop()
 
-    def _subscribe_preference_topics(self) -> None:
-        base = self._preferences_topic
-        try:
-            self.mqtt.subscribe(f"{base}/wake_sound/set", self._handle_wake_sound_command)
-            self.mqtt.subscribe(f"{base}/speaking_style/set", self._handle_speaking_style_command)
-            self.mqtt.subscribe(f"{base}/wake_sensitivity/set", self._handle_wake_sensitivity_command)
-            self.mqtt.subscribe(f"{base}/ha_response_mode/set", self._handle_ha_response_mode_command)
-            self.mqtt.subscribe(f"{base}/ha_tone_sound/set", self._handle_ha_tone_sound_command)
-            self.mqtt.subscribe(f"{base}/ha_pipeline/set", self._handle_ha_pipeline_command)
-            self.mqtt.subscribe(f"{base}/llm_provider/set", self._handle_llm_provider_command)
-            self.mqtt.subscribe(f"{base}/log_llm/set", self._handle_log_llm_command)
-            # Model selection for each provider
-            self.mqtt.subscribe(f"{base}/openai_model/set", self._handle_openai_model_command)
-            self.mqtt.subscribe(f"{base}/gemini_model/set", self._handle_gemini_model_command)
-            self.mqtt.subscribe(f"{base}/anthropic_model/set", self._handle_anthropic_model_command)
-            self.mqtt.subscribe(f"{base}/groq_model/set", self._handle_groq_model_command)
-            self.mqtt.subscribe(f"{base}/mistral_model/set", self._handle_mistral_model_command)
-            self.mqtt.subscribe(f"{base}/openrouter_model/set", self._handle_openrouter_model_command)
-            # Sound preferences
-            self.mqtt.subscribe(f"{base}/sound_alarm/set", self._handle_sound_alarm_command)
-            self.mqtt.subscribe(f"{base}/sound_timer/set", self._handle_sound_timer_command)
-            self.mqtt.subscribe(f"{base}/sound_reminder/set", self._handle_sound_reminder_command)
-            self.mqtt.subscribe(f"{base}/sound_notification/set", self._handle_sound_notification_command)
-        except RuntimeError:
-            LOGGER.debug("[assistant] MQTT client not ready for preference subscriptions")
-
     def _subscribe_schedule_topics(self) -> None:
         try:
             self.mqtt.subscribe(self._schedule_command_topic, self._handle_schedule_command_message)
@@ -972,134 +963,6 @@ class PulseAssistant:
         if self._kiosk_available:
             self._last_kiosk_online = time.monotonic()
 
-    def _handle_wake_sound_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        enabled = value in {"on", "true", "1", "yes"}
-        self.preferences = replace(self.preferences, wake_sound=enabled)
-        state = "on" if enabled else "off"
-        self.publisher._publish_preference_state("wake_sound", state)
-        persist_preference("wake_sound", state, logger=LOGGER)
-
-    def _handle_log_llm_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        enabled = value in {"on", "true", "1", "yes"}
-        if self._log_llm_messages == enabled:
-            return
-        self._log_llm_messages = enabled
-        state = "on" if enabled else "off"
-        self.publisher._publish_preference_state("log_llm", state)
-        persist_preference("log_llm", state, logger=LOGGER)
-
-    def _handle_ha_response_mode_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        if value not in {"none", "tone", "minimal", "full"}:
-            LOGGER.debug("Ignoring invalid HA response mode: %s", payload)
-            return
-        if value == self.preferences.ha_response_mode:
-            return
-        self.preferences = replace(self.preferences, ha_response_mode=value)  # type: ignore[arg-type]
-        self.publisher._publish_preference_state("ha_response_mode", value)
-        persist_preference("ha_response_mode", value, logger=LOGGER)
-
-    def _handle_ha_tone_sound_command(self, payload: str) -> None:
-        label = payload.strip()
-        if not label:
-            return
-        sound_id = self.publisher._get_sound_id_by_label("notification", label) or label
-        if sound_id == self.preferences.ha_tone_sound:
-            return
-        self.preferences = replace(self.preferences, ha_tone_sound=sound_id)
-        label_or_id = self.publisher._get_sound_label_by_id("notification", sound_id) or label
-        self.publisher._publish_preference_state("ha_tone_sound", label_or_id)
-        persist_preference("ha_tone_sound", sound_id, logger=LOGGER)
-
-    def _refresh_sound_options(self) -> None:
-        """Build sound option lists for each kind from the sound library."""
-        built_in = self._sound_library.built_in_sounds()
-        custom = self._sound_library.custom_sounds()
-        all_sounds = built_in + custom
-
-        for kind in ("alarm", "timer", "reminder", "notification"):
-            options: list[tuple[str, str]] = []
-            for info in all_sounds:
-                if kind in info.kinds:
-                    options.append((info.sound_id, info.label))
-            # Sort by label for display
-            options.sort(key=lambda x: x[1].lower())
-            self._sound_options[kind] = options
-
-    def _get_sound_options_for_kind(self, kind: str) -> list[str]:
-        """Get list of sound labels for a given kind."""
-        return [label for _, label in self._sound_options.get(kind, [])]
-
-    def _get_sound_id_by_label(self, kind: str, label: str) -> str | None:
-        """Look up sound_id from its label."""
-        for sound_id, sound_label in self._sound_options.get(kind, []):
-            if sound_label == label:
-                return sound_id
-        return None
-
-    def _get_sound_label_by_id(self, kind: str, sound_id: str) -> str | None:
-        """Look up label from sound_id."""
-        for sid, label in self._sound_options.get(kind, []):
-            if sid == sound_id:
-                return label
-        return None
-
-    def _handle_sound_command(self, kind: SoundKind, payload: str) -> None:
-        """Handle a sound preference command for a given kind."""
-        label = payload.strip()
-        if not label:
-            return
-        sound_id = self.publisher._get_sound_id_by_label(kind, label)
-        if sound_id is None:
-            LOGGER.debug("[assistant] Ignoring unknown %s sound: '%s'", kind, label)
-            return
-        current_id = self.publisher._get_current_sound_id(kind)
-        if sound_id == current_id:
-            return
-        # Update sound settings
-        self._update_sound_setting(kind, sound_id)
-        self.publisher._publish_preference_state(f"sound_{kind}", label)
-        persist_preference(f"sound_{kind}", sound_id, logger=LOGGER)
-        LOGGER.info("[assistant] Set %s sound to '%s' (%s)", kind, label, sound_id)
-
-    def _get_current_sound_id(self, kind: SoundKind) -> str:
-        """Get the current sound_id for a given kind."""
-        sounds = self.config.sounds
-        return {
-            "alarm": sounds.default_alarm,
-            "timer": sounds.default_timer,
-            "reminder": sounds.default_reminder,
-            "notification": sounds.default_notification,
-        }.get(kind, "")
-
-    def _update_sound_setting(self, kind: SoundKind, sound_id: str) -> None:
-        """Update the sound setting for a given kind."""
-        sounds = self.config.sounds
-        new_sounds = SoundSettings(
-            default_alarm=sound_id if kind == "alarm" else sounds.default_alarm,
-            default_timer=sound_id if kind == "timer" else sounds.default_timer,
-            default_reminder=sound_id if kind == "reminder" else sounds.default_reminder,
-            default_notification=sound_id if kind == "notification" else sounds.default_notification,
-            custom_dir=sounds.custom_dir,
-        )
-        # Update config sounds and schedule_service
-        self.config = replace(self.config, sounds=new_sounds)
-        self.schedule_service.update_sound_settings(new_sounds)
-
-    def _handle_sound_alarm_command(self, payload: str) -> None:
-        self._handle_sound_command("alarm", payload)
-
-    def _handle_sound_timer_command(self, payload: str) -> None:
-        self._handle_sound_command("timer", payload)
-
-    def _handle_sound_reminder_command(self, payload: str) -> None:
-        self._handle_sound_command("reminder", payload)
-
-    def _handle_sound_notification_command(self, payload: str) -> None:
-        self._handle_sound_command("notification", payload)
-
     def _handle_now_playing_message(self, payload: str) -> None:
         normalized = payload.strip()
         active = bool(normalized)
@@ -1109,27 +972,6 @@ class PulseAssistant:
             LOGGER.debug(
                 "[assistant] Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail
             )
-
-    def _handle_speaking_style_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        if value not in {"relaxed", "normal", "aggressive"}:
-            LOGGER.debug("[assistant] Ignoring invalid speaking style: %s", payload)
-            return
-        self.preferences = replace(self.preferences, speaking_style=value)  # type: ignore[arg-type]
-        self.publisher._publish_preference_state("speaking_style", value)
-        persist_preference("speaking_style", value, logger=LOGGER)
-
-    def _handle_wake_sensitivity_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        if value not in {"low", "normal", "high"}:
-            LOGGER.debug("[assistant] Ignoring invalid wake sensitivity: %s", payload)
-            return
-        if value == self.preferences.wake_sensitivity:
-            return
-        self.preferences = replace(self.preferences, wake_sensitivity=value)  # type: ignore[arg-type]
-        self.publisher._publish_preference_state("wake_sensitivity", value)
-        persist_preference("wake_sensitivity", value, logger=LOGGER)
-        self.wake_detector.mark_wake_context_dirty()
 
     def _handle_earmuffs_state_restore(self, payload: str) -> None:
         """Restore earmuffs state from retained MQTT message on startup."""
@@ -2140,7 +1982,7 @@ class PulseAssistant:
         return None
 
     def _log_assistant_response(self, wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
-        if not self._log_llm_messages or not text:
+        if not self.preference_manager.log_llm_messages or not text:
             return
         _ = text if len(text) <= 240 else f"{text[:237]}..."
 
@@ -2672,88 +2514,20 @@ class PulseAssistant:
         """Backward compatibility wrapper."""
         return await self.media_controller.fetch_media_player_state()
 
-    def _handle_ha_pipeline_command(self, payload: str) -> None:
-        value = payload.strip()
-        self._ha_pipeline_override = value or None
-        pipeline_value = self._active_ha_pipeline() or ""
-        self.publisher._publish_preference_state("ha_pipeline", pipeline_value)
-        persist_preference("ha_pipeline", pipeline_value, logger=LOGGER)
-
-    def _active_ha_pipeline(self) -> str | None:
-        return self._ha_pipeline_override or self.config.home_assistant.assist_pipeline
-
-    def _handle_llm_provider_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        if not value:
-            self._llm_provider_override = None
-        elif value in get_supported_providers():
-            self._llm_provider_override = value
-        else:
-            supported = ", ".join(get_supported_providers().keys())
-            LOGGER.warning("[assistant] Invalid LLM provider '%s'. Supported: %s", payload, supported)
-            return
-        self.llm = self._build_llm_provider()
-        provider = self._active_llm_provider()
-        self.publisher._publish_preference_state("llm_provider", provider)
-        persist_preference("llm_provider", provider, logger=LOGGER)
-
-    def _handle_model_command(self, provider: str, payload: str) -> None:
-        """Generic handler for model selection commands across all providers.
-
-        Args:
-            provider: Provider name (e.g., "openai", "anthropic")
-            payload: Model name from MQTT command
-        """
-        value = payload.strip()
-        override_attr = f"_{provider}_model_override"
-        config_attr = f"{provider}_model"
-
-        # Update the model override for this provider
-        setattr(self, override_attr, value if value else None)
-
-        # Rebuild LLM provider if this provider is currently active
-        if self._active_llm_provider() == provider:
-            self.llm = self._build_llm_provider()
-
-        # Publish state and persist preference
-        default_model = getattr(self.config.llm, config_attr)
-        self.publisher._publish_preference_state(config_attr, value or default_model)
-        persist_preference(config_attr, value, logger=LOGGER)
-
-    def _handle_openai_model_command(self, payload: str) -> None:
-        self._handle_model_command("openai", payload)
-
-    def _handle_gemini_model_command(self, payload: str) -> None:
-        self._handle_model_command("gemini", payload)
-
-    def _handle_anthropic_model_command(self, payload: str) -> None:
-        self._handle_model_command("anthropic", payload)
-
-    def _handle_groq_model_command(self, payload: str) -> None:
-        self._handle_model_command("groq", payload)
-
-    def _handle_mistral_model_command(self, payload: str) -> None:
-        self._handle_model_command("mistral", payload)
-
-    def _handle_openrouter_model_command(self, payload: str) -> None:
-        self._handle_model_command("openrouter", payload)
-
-    def _active_llm_provider(self) -> str:
-        provider = self._llm_provider_override or self.config.llm.provider or "openai"
-        return provider.strip().lower() or "openai"
-
     def _build_llm_provider(self) -> LLMProvider:
-        provider = self._active_llm_provider()
+        """Build LLM provider using current preference overrides."""
+        pm = self.preference_manager
+        provider = pm.get_active_llm_provider()
         # Apply model overrides for all providers
         llm_config = replace(
             self.config.llm,
             provider=provider,
-            openai_model=self._openai_model_override or self.config.llm.openai_model,
-            gemini_model=self._gemini_model_override or self.config.llm.gemini_model,
-            anthropic_model=self._anthropic_model_override or self.config.llm.anthropic_model,
-            groq_model=self._groq_model_override or self.config.llm.groq_model,
-            mistral_model=self._mistral_model_override or self.config.llm.mistral_model,
-            openrouter_model=self._openrouter_model_override or self.config.llm.openrouter_model,
+            openai_model=pm.get_model_override("openai") or self.config.llm.openai_model,
+            gemini_model=pm.get_model_override("gemini") or self.config.llm.gemini_model,
+            anthropic_model=pm.get_model_override("anthropic") or self.config.llm.anthropic_model,
+            groq_model=pm.get_model_override("groq") or self.config.llm.groq_model,
+            mistral_model=pm.get_model_override("mistral") or self.config.llm.mistral_model,
+            openrouter_model=pm.get_model_override("openrouter") or self.config.llm.openrouter_model,
         )
 
         # Log which provider and model we're using (helpful for debugging)
