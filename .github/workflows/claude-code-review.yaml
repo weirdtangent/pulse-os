@@ -17,6 +17,9 @@ permissions:
 
 jobs:
   claude:
+    # TODO: Remove continue-on-error once upstream SDK bugs are fixed
+    # See: https://github.com/anthropics/claude-code-action/issues/892
+    continue-on-error: true
     if: >
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
