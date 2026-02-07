@@ -21,7 +21,27 @@ jobs:
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
+    outputs:
+      recommendation: ${{ steps.claude-review.outputs.recommendation }}
     steps:
-      - uses: anthropics/claude-code-action@v1
+      - name: Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  auto-approve:
+    needs: claude
+    if: github.event_name == 'pull_request' && needs.claude.outputs.recommendation == 'merge'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Approve PR
+        run: |
+          gh pr review "${{ github.event.pull_request.number }}" \
+            --approve \
+            --body "✅ Automatically approved by Claude Code Review - recommendation: merge"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

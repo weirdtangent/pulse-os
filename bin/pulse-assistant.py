@@ -1310,8 +1310,10 @@ class PulseAssistant:
             return
         self._publish_info_overlay(text=f"Alert: {clean}", category="alerts")
         self._schedule_info_overlay_clear(8.0)
-        target_loop = self._loop or asyncio.get_event_loop()
-        target_loop.create_task(self._speak(clean))
+        if self._loop is None:
+            LOGGER.error("[assistant] Cannot handle alert: event loop not initialized")
+            return
+        self._loop.create_task(self._speak(clean))
 
     def _handle_intercom_message(self, payload: str) -> None:
         message = payload.strip()
@@ -1319,8 +1321,10 @@ class PulseAssistant:
             return
         self._publish_info_overlay(text=f"Intercom: {message}", category="intercom")
         self._schedule_info_overlay_clear(6.0)
-        target_loop = self._loop or asyncio.get_event_loop()
-        target_loop.create_task(self._speak(message))
+        if self._loop is None:
+            LOGGER.error("[assistant] Cannot handle intercom: event loop not initialized")
+            return
+        self._loop.create_task(self._speak(message))
 
     def _set_earmuffs_enabled(self, enabled: bool, *, manual: bool = False) -> None:
         changed = False
@@ -1390,8 +1394,10 @@ class PulseAssistant:
         self._publish_message(topic, json.dumps(message))
         if payload and payload.get("state") == "ringing":
             event_payload = payload.get("event") or {}
-            target_loop = self._loop or asyncio.get_event_loop()
-            target_loop.create_task(self._log_activity_event(event_type, event_payload))
+            if self._loop is None:
+                LOGGER.error("[assistant] Cannot log activity event: event loop not initialized")
+                return
+            self._loop.create_task(self._log_activity_event(event_type, event_payload))
 
     async def _log_activity_event(self, event_type: str, event: dict[str, Any]) -> None:
         if self.home_assistant is None:
