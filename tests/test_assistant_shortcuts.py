@@ -73,7 +73,10 @@ def _setup_calendar_test_assistant() -> PulseAssistant:
     assistant._calendar_events = []
     assistant._calendar_updated_at = None
     assistant._latest_schedule_snapshot = None
-    assistant._publish_schedule_state = lambda snapshot: None  # type: ignore[assignment]
+    # Mock publisher with _publish_schedule_state method
+    assistant.publisher = SimpleNamespace(
+        _publish_schedule_state=lambda snapshot, events, updated_at: None,
+    )
     # Mock config.calendar
     assistant.config = SimpleNamespace(
         calendar=SimpleNamespace(enabled=True, feeds=[]),
