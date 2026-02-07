@@ -72,6 +72,13 @@ class TestExtractTimerStartIntent:
         duration, _ = result
         assert duration == 1800  # 30 minutes
 
+    def test_timer_composite_word_numbers(self):
+        """Parse 'set timer for twenty five minutes' - composite word numbers."""
+        result = ScheduleIntentParser.extract_timer_start_intent("set timer for twenty five minutes")
+        assert result is not None
+        duration, _ = result
+        assert duration == 1500  # 25 minutes
+
 
 class TestParseNumericToken:
     """Tests for parse_numeric_token()."""
@@ -297,10 +304,10 @@ class TestExtractTimeOfDayFromText:
         assert result == "12:00"
 
     def test_keyword_midnight(self):
-        # 'midnight' also contains 'night' which maps to 20:00 - 'night' is checked first
+        # 'midnight' also contains 'night', but the parser should prioritize the specific
+        # 'midnight' keyword so that it maps to 00:00 rather than the more general 'night'.
         result = ScheduleIntentParser._extract_time_of_day_from_text("at midnight")
-        # The keyword_map iterates in arbitrary order, 'night' may match before 'midnight'
-        assert result in ("00:00", "20:00")
+        assert result == "00:00"
 
     def test_default_time(self):
         result = ScheduleIntentParser._extract_time_of_day_from_text("some random text")

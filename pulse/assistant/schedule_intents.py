@@ -61,7 +61,7 @@ class ScheduleIntentParser:
         if not any(word in lowered for word in ("start", "set", "create")):
             return None
         duration_match = re.search(
-            r"((?:\d+(?:\.\d+)?|[a-z]+))\s*(seconds?|second|secs?|minutes?|minute|mins?|hours?|hour|hrs?)",
+            r"(?:for\s+)?((?:\d+(?:\.\d+)?|[a-z]+(?:\s+[a-z]+)?))\s*(seconds?|second|secs?|minutes?|minute|mins?|hours?|hour|hrs?)",
             lowered,
         )
         if not duration_match:
@@ -419,14 +419,18 @@ class ScheduleIntentParser:
         Returns:
             Day of month (1-31) or None
         """
-        match = re.search(r"\bon\s+the\s+(\d{1,2})", text)
+        match = re.search(r"\bon\s+the\s+(\d{1,2})(?:st|nd|rd|th)?\b", text)
         if match:
-            return int(match.group(1))
+            day = int(match.group(1))
+            if 1 <= day <= 31:
+                return day
         return None
 
     @staticmethod
     def _extract_duration_seconds_from_text(text: str) -> float:
         """Extract duration from text like 'in 5 minutes'.
+
+        Supports both compact formats (5m, 10s) and natural language (5 minutes, ten seconds).
 
         Args:
             text: Text to search
@@ -434,6 +438,27 @@ class ScheduleIntentParser:
         Returns:
             Duration in seconds (0 if not found)
         """
+        # First try to match natural language duration pattern: "in X minutes/hours/seconds"
+        duration_match = re.search(
+            r"\bin\s+((?:\d+(?:\.\d+)?|[a-z]+(?:\s+[a-z]+)?))\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)",
+            text,
+        )
+        if duration_match:
+            raw_amount = duration_match.group(1)
+            amount = ScheduleIntentParser.parse_numeric_token(raw_amount)
+            if amount is not None:
+                unit = duration_match.group(2).rstrip("s")
+                multipliers = {
+                    "second": 1,
+                    "sec": 1,
+                    "minute": 60,
+                    "min": 60,
+                    "hour": 3600,
+                    "hr": 3600,
+                }
+                return amount * multipliers.get(unit, 60)
+
+        # Fall back to compact format via parse_duration_seconds
         match = re.search(r"\bin\s+([0-9][a-z0-9 :]*)", text)
         if not match:
             return 0.0
@@ -473,17 +498,20 @@ class ScheduleIntentParser:
             parsed = ScheduleIntentParser.parse_time_token(match.group(1), None)
             if parsed:
                 return parsed
-        keyword_map = {
-            "morning": "08:00",
-            "afternoon": "13:00",
-            "evening": "17:00",
-            "night": "20:00",
-            "tonight": "20:00",
-            "noon": "12:00",
-            "midnight": "00:00",
-        }
-        for keyword, value in keyword_map.items():
-            if keyword in lower:
+        # Check keyword-based times with whole-word matching.
+        # Order matters: more specific/longer keywords first to avoid substring clashes
+        # (e.g., "midnight" should not be matched as "night").
+        keyword_list = [
+            ("midnight", "00:00"),
+            ("noon", "12:00"),
+            ("tonight", "20:00"),
+            ("night", "20:00"),
+            ("evening", "17:00"),
+            ("afternoon", "13:00"),
+            ("morning", "08:00"),
+        ]
+        for keyword, value in keyword_list:
+            if re.search(rf"\b{re.escape(keyword)}\b", lower):
                 return value
         return "08:00"
 
