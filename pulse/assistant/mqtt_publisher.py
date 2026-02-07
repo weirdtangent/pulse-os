@@ -351,10 +351,10 @@ class AssistantMqttPublisher:
             payload.setdefault("state", "show")
             payload.setdefault("category", category or "")
             payload["text"] = text.strip()
-            payload.setdefault("ts", asyncio.get_event_loop().time() if asyncio._get_running_loop() else 0)
+            payload.setdefault("ts", datetime.now().timestamp())
         elif payload:
             payload.setdefault("state", "show")
-            payload.setdefault("ts", asyncio.get_event_loop().time() if asyncio._get_running_loop() else 0)
+            payload.setdefault("ts", datetime.now().timestamp())
             if category:
                 payload.setdefault("category", category)
         else:
@@ -478,7 +478,7 @@ class AssistantMqttPublisher:
 
         # Sound preferences (publish labels, not sound IDs)
         for kind in ("alarm", "timer", "reminder", "notification"):
-            sound_id = getattr(config_sounds, f"{kind}_sound", "")
+            sound_id = getattr(config_sounds, f"default_{kind}", "")
             if not sound_id:
                 continue
             sound_id_validated = self._get_current_sound_id(kind, sound_id)
