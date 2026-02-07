@@ -37,10 +37,10 @@ from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
 from pulse.assistant.preference_manager import PreferenceManager
-from pulse.assistant.schedule_intents import ReminderIntent, ScheduleIntentParser
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
-from pulse.assistant.schedule_service import PlaybackConfig, ScheduledEvent, ScheduleService, parse_day_tokens
+from pulse.assistant.schedule_intents import ScheduleIntentParser
+from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
@@ -1518,9 +1518,7 @@ class PulseAssistant:
             self._log_assistant_response("shortcut", spoken, pipeline="pulse")
             await self._speak(spoken)
             return True
-        reminder_intent = self.schedule_intents.extract_reminder_intent(
-            normalized, transcript, self.schedule_service
-        )
+        reminder_intent = self.schedule_intents.extract_reminder_intent(normalized, transcript, self.schedule_service)
         if reminder_intent:
             event = await self.schedule_service.create_reminder(
                 fire_time=reminder_intent.fire_time,

@@ -10,13 +10,10 @@ Tests for schedule intent parsing logic including:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import Mock
 
-import pytest
-
 from pulse.assistant.schedule_intents import ReminderIntent, ScheduleIntentParser
-
 
 # =============================================================================
 # Timer Intent Tests
