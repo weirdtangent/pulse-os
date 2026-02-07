@@ -589,6 +589,86 @@ class TestSoundPreferenceHandler:
         mock_publisher._publish_preference_state.assert_not_called()
 
 
+# Sound Setting Update Tests
+
+
+class TestUpdateSoundSetting:
+    """Test _update_sound_setting side effects."""
+
+    def test_update_sound_setting_creates_new_sound_settings(self, preference_manager):
+        """Test that _update_sound_setting creates correct new SoundSettings."""
+        # Set up sounds
+        preference_manager.config.sounds = SoundSettings(
+            default_alarm="old-alarm",
+            default_timer="timer-woodblock",
+            default_reminder="reminder-marimba",
+            default_notification="notify-soft-chime",
+        )
+
+        # Mock config to capture the new config
+        new_config = Mock()
+        with patch("pulse.assistant.preference_manager.replace", return_value=new_config) as mock_replace:
+            preference_manager._update_sound_setting("alarm", "new-alarm")
+
+        # Verify replace was called with correct new_sounds
+        mock_replace.assert_called_once()
+        call_kwargs = mock_replace.call_args[1]
+        new_sounds = call_kwargs["sounds"]
+        assert new_sounds.default_alarm == "new-alarm"
+        assert new_sounds.default_timer == "timer-woodblock"
+        assert new_sounds.default_reminder == "reminder-marimba"
+        assert new_sounds.default_notification == "notify-soft-chime"
+
+    def test_update_sound_setting_invokes_sound_callback(self, preference_manager):
+        """Test that _update_sound_setting invokes the sound settings callback."""
+        preference_manager.config.sounds = SoundSettings(
+            default_alarm="old-alarm",
+            default_timer="timer-woodblock",
+            default_reminder="reminder-marimba",
+            default_notification="notify-soft-chime",
+        )
+
+        sound_callback = Mock()
+        preference_manager.set_sound_settings_callback(sound_callback)
+
+        new_config = Mock()
+        with patch("pulse.assistant.preference_manager.replace", return_value=new_config):
+            preference_manager._update_sound_setting("timer", "new-timer")
+
+        # Verify callback was invoked with the new SoundSettings
+        sound_callback.assert_called_once()
+        new_sounds = sound_callback.call_args[0][0]
+        assert new_sounds.default_timer == "new-timer"
+        assert new_sounds.default_alarm == "old-alarm"  # unchanged
+
+    def test_update_sound_setting_invokes_config_callback(self, preference_manager):
+        """Test that _update_sound_setting invokes the config updated callback."""
+        preference_manager.config.sounds = SoundSettings(
+            default_alarm="old-alarm",
+            default_timer="timer-woodblock",
+            default_reminder="reminder-marimba",
+            default_notification="notify-soft-chime",
+        )
+
+        config_callback = Mock()
+        preference_manager.set_config_updated_callback(config_callback)
+
+        new_config = Mock()
+        new_config.sounds = SoundSettings(
+            default_alarm="old-alarm",
+            default_timer="timer-woodblock",
+            default_reminder="new-reminder",
+            default_notification="notify-soft-chime",
+        )
+        with patch("pulse.assistant.preference_manager.replace", return_value=new_config):
+            preference_manager._update_sound_setting("reminder", "new-reminder")
+
+        # Verify config callback was invoked
+        config_callback.assert_called_once()
+        updated_config = config_callback.call_args[0][0]
+        assert updated_config.sounds.default_reminder == "new-reminder"
+
+
 # Sound Lookup Tests
 
 
