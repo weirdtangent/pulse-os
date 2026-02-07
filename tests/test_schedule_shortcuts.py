@@ -149,7 +149,7 @@ class TestExtractTimerLabel:
 
     def test_label_timer(self):
         """Extract label from 'cancel the eggs timer'."""
-        assert ScheduleShortcutHandler.extract_timer_label("cancel the for eggs timer") == "eggs"
+        assert ScheduleShortcutHandler.extract_timer_label("cancel the eggs timer") == "eggs"
 
     def test_no_label(self):
         """No label when none specified."""
@@ -475,6 +475,14 @@ class TestShowCalendarEvents:
         mock_config.calendar.enabled = False
         await handler.show_calendar_events()
         handler._on_speak.assert_called()
+
+    @pytest.mark.anyio
+    async def test_calendar_no_feeds(self, handler, mock_config):
+        """Show message when calendar enabled but no feeds configured."""
+        mock_config.calendar.enabled = True
+        mock_config.calendar.feeds = []
+        await handler.show_calendar_events()
+        handler._on_speak.assert_called_with("Calendar syncing is not enabled on this device.")
 
     @pytest.mark.anyio
     async def test_no_events(self, handler, mock_publisher):

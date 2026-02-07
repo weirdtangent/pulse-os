@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 SoundKind = Literal["alarm", "timer", "reminder", "notification"]
 
@@ -91,15 +91,15 @@ class SoundLibrary:
             sound_id = str(entry.get("id") or "")
             filename = entry.get("filename")
             label = str(entry.get("label") or sound_id)
-            kinds_raw = entry.get("kinds") or []
+            kinds_raw = entry.get("kinds")
             if not sound_id or not isinstance(filename, str):
                 continue
             path = (self.built_in_dir / "pack" / filename).resolve()
             if not path.exists():
                 continue
-            kinds: tuple[SoundKind, ...] = tuple(
-                kind for kind in kinds_raw if kind in {"alarm", "timer", "reminder", "notification"}
-            )  # type: ignore[assignment]
+            kinds_list: list[str] = kinds_raw if isinstance(kinds_raw, list) else []
+            valid_kinds = {"alarm", "timer", "reminder", "notification"}
+            kinds: tuple[SoundKind, ...] = tuple(cast(SoundKind, kind) for kind in kinds_list if kind in valid_kinds)
             sounds.append(
                 SoundInfo(
                     sound_id=sound_id,

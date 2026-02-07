@@ -25,10 +25,10 @@ from __future__ import annotations
 import os
 import shlex
 import socket
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pulse.location_resolver import resolve_location_defaults
 from pulse.sound_library import SoundSettings
@@ -51,12 +51,13 @@ def _strip_or_none(value: str | None) -> str | None:
 DEFAULT_WAKE_MODEL = "hey_jarvis"
 DEFAULT_HA_WAKE_MODEL = "ok_nabu"
 WAKE_PIPELINES = {"pulse", "home_assistant"}
+WakeRoute = Literal["pulse", "home_assistant"]
 
 
-def _parse_wake_route_string(value: str | None) -> dict[str, str]:
+def _parse_wake_route_string(value: str | None) -> dict[str, WakeRoute]:
     if not value:
         return {}
-    routes: dict[str, str] = {}
+    routes: dict[str, WakeRoute] = {}
     for raw in value.split(","):
         stripped = raw.strip()
         if not stripped:
@@ -71,12 +72,12 @@ def _parse_wake_route_string(value: str | None) -> dict[str, str]:
         pipeline = pipeline.strip().lower()
         if not name or pipeline not in WAKE_PIPELINES:
             continue
-        routes[name] = pipeline
+        routes[name] = cast(WakeRoute, pipeline)
     return routes
 
 
-def _parse_wake_profiles(source: dict[str, str]) -> tuple[list[str], dict[str, str]]:
-    routes: dict[str, str] = {}
+def _parse_wake_profiles(source: Mapping[str, str]) -> tuple[list[str], dict[str, WakeRoute]]:
+    routes: dict[str, WakeRoute] = {}
 
     pulse_words = split_csv(source.get("PULSE_ASSISTANT_WAKE_WORDS_PULSE")) or [DEFAULT_WAKE_MODEL]
 
@@ -273,7 +274,7 @@ class AssistantConfig:
     device_name: str
     language: str | None
     wake_models: list[str]
-    wake_routes: dict[str, Literal["pulse", "home_assistant"]]
+    wake_routes: dict[str, WakeRoute]
     mic: MicConfig
     phrase: PhraseConfig
     wake_endpoint: WyomingEndpoint
@@ -455,20 +456,29 @@ class AssistantConfig:
 
         preferences = AssistantPreferences(
             wake_sound=parse_bool(source.get("PULSE_ASSISTANT_WAKE_SOUND"), True),
-            speaking_style=_normalize_choice(
-                source.get("PULSE_ASSISTANT_SPEAKING_STYLE"),
-                {"relaxed", "normal", "aggressive"},
-                "normal",
+            speaking_style=cast(
+                Literal["relaxed", "normal", "aggressive"],
+                _normalize_choice(
+                    source.get("PULSE_ASSISTANT_SPEAKING_STYLE"),
+                    {"relaxed", "normal", "aggressive"},
+                    "normal",
+                ),
             ),
-            wake_sensitivity=_normalize_choice(
-                source.get("PULSE_ASSISTANT_WAKE_SENSITIVITY"),
-                {"low", "normal", "high"},
-                "normal",
+            wake_sensitivity=cast(
+                Literal["low", "normal", "high"],
+                _normalize_choice(
+                    source.get("PULSE_ASSISTANT_WAKE_SENSITIVITY"),
+                    {"low", "normal", "high"},
+                    "normal",
+                ),
             ),
-            ha_response_mode=_normalize_choice(
-                source.get("PULSE_ASSISTANT_HA_RESPONSE_MODE"),
-                {"none", "tone", "minimal", "full"},
-                "full",
+            ha_response_mode=cast(
+                Literal["none", "tone", "minimal", "full"],
+                _normalize_choice(
+                    source.get("PULSE_ASSISTANT_HA_RESPONSE_MODE"),
+                    {"none", "tone", "minimal", "full"},
+                    "full",
+                ),
             ),
             ha_tone_sound=(source.get("PULSE_ASSISTANT_HA_TONE_SOUND") or "notify-soft-chime").strip()
             or "notify-soft-chime",
@@ -533,10 +543,13 @@ class AssistantConfig:
         weather_language = (source.get("PULSE_WEATHER_LANGUAGE") or "").strip().lower() or default_language
         weather_config = WeatherConfig(
             location=weather_location or None,
-            units=_normalize_choice(
-                source.get("PULSE_WEATHER_UNITS"),
-                {"auto", "imperial", "metric"},
-                "auto",
+            units=cast(
+                Literal["auto", "imperial", "metric"],
+                _normalize_choice(
+                    source.get("PULSE_WEATHER_UNITS"),
+                    {"auto", "imperial", "metric"},
+                    "auto",
+                ),
             ),
             language=weather_language,
             forecast_days=max(1, min(5, parse_int(source.get("PULSE_WEATHER_FORECAST_DAYS"), 3))),
@@ -725,7 +738,7 @@ def render_actions_for_prompt(actions: Iterable[dict[str, Any]]) -> str:
 
 
 def _optional_wyoming_endpoint(
-    source: dict[str, str],
+    source: Mapping[str, str],
     *,
     host_key: str,
     port_key: str,

@@ -129,7 +129,7 @@ class ScheduleShortcutHandler:
         match = re.search(r"timer (?:for|named)\s+([a-z0-9 ]+)", lowered)
         if match:
             return match.group(1).strip()
-        match = re.search(r"for ([a-z0-9 ]+) timer", lowered)
+        match = re.search(r"(?:for|the) ([a-z0-9 ]+) timer", lowered)
         if match:
             return match.group(1).strip()
         return None
@@ -141,7 +141,7 @@ class ScheduleShortcutHandler:
     @staticmethod
     def format_timer_label(duration_seconds: Any) -> str:
         """Format timer duration for display (e.g., '5m 30s')."""
-        if not isinstance(duration_seconds, (int, float)):
+        if not isinstance(duration_seconds, int | float):
             return "Timer"
         seconds = max(0, int(duration_seconds))
         if seconds < 60:
@@ -161,6 +161,8 @@ class ScheduleShortcutHandler:
         """Format reminder metadata for display."""
         next_fire = reminder.get("next_fire")
         try:
+            if not isinstance(next_fire, str):
+                raise ValueError("next_fire must be a string")
             dt = datetime.fromisoformat(next_fire).astimezone()
             time_phrase = dt.strftime("%-I:%M %p")
             date_phrase = dt.strftime("%b %-d")
@@ -354,10 +356,10 @@ class ScheduleShortcutHandler:
             category="alarms",
             extra={"type": "alarms", "title": "Alarms", "alarms": alarm_payload},
         )
-        count = len(alarms)
+        count = len(alarm_payload)
         spoken = f"You have {count} alarm{'s' if count != 1 else ''}."
         if self._on_speak:
-            await self._on_speak("Here are your alarms.")
+            await self._on_speak(spoken)
         if self._on_log_response:
             self._on_log_response("shortcut", spoken, "pulse")
 
@@ -397,16 +399,16 @@ class ScheduleShortcutHandler:
             category="reminders",
             extra={"type": "reminders", "title": "Reminders", "reminders": reminder_payload},
         )
-        count = len(reminders)
+        count = len(reminder_payload)
         spoken = f"You have {count} reminder{'s' if count != 1 else ''}."
         if self._on_speak:
-            await self._on_speak("Here are your reminders.")
+            await self._on_speak(spoken)
         if self._on_log_response:
             self._on_log_response("shortcut", spoken, "pulse")
 
     async def show_calendar_events(self) -> None:
         """Show calendar overlay and speak summary."""
-        if not self.config.calendar.enabled:
+        if not self.config.calendar.enabled or not self.config.calendar.feeds:
             spoken = "Calendar syncing is not enabled on this device."
             if self._on_speak:
                 await self._on_speak(spoken)

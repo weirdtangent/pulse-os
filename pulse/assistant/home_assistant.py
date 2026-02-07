@@ -219,6 +219,8 @@ class HomeAssistantClient:
             )
 
         pipeline_name_or_id = pipeline_id or self.config.assist_pipeline
+        if not self.config.base_url:
+            raise HomeAssistantError("Home Assistant base_url is not configured")
         base_url = self.config.base_url.rstrip("/")
         # Convert http/https to ws/wss
         ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
