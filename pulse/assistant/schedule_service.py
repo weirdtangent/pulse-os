@@ -248,25 +248,25 @@ def _normalize_repeat_rule(rule: dict[str, Any] | None, fallback: datetime) -> d
     if repeat_type == "weekly":
         raw_days = rule.get("days")
         if isinstance(raw_days, list):
-            days = sorted({int(day) % 7 for day in raw_days if isinstance(day, (int, float))})
+            days = sorted({int(day) % 7 for day in raw_days if isinstance(day, int | float)})
         else:
             days = [fallback.weekday()]
         normalized["days"] = days
         normalized["time"] = rule.get("time") or fallback.strftime("%H:%M")
     elif repeat_type == "monthly":
         day = rule.get("day")
-        if isinstance(day, (int, float)):
+        if isinstance(day, int | float):
             normalized["day"] = max(1, min(31, int(day)))
         else:
             normalized["day"] = fallback.day
         normalized["time"] = rule.get("time") or fallback.strftime("%H:%M")
     elif repeat_type == "interval":
         months = rule.get("interval_months")
-        days = rule.get("interval_days")
-        if isinstance(months, (int, float)) and int(months) > 0:
+        interval_days = rule.get("interval_days")
+        if isinstance(months, int | float) and int(months) > 0:
             normalized["interval_months"] = int(months)
         else:
-            normalized["interval_days"] = max(1, int(days or 1))
+            normalized["interval_days"] = max(1, int(interval_days) if isinstance(interval_days, int | float) else 1)
         normalized["time"] = rule.get("time") or fallback.strftime("%H:%M")
     return normalized
 
@@ -568,7 +568,7 @@ class PlaybackHandle:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task | None = None
-        self._sink = None
+        self._sink: str | None = None
         self._orig_volume: int | None = None
         self._pause_flag = False
         self._pause_condition = asyncio.Event()
@@ -624,9 +624,9 @@ class PlaybackHandle:
             or os.environ.get("PULSE_MEDIA_PLAYER_ENTITY")
             or _default_media_player_entity(self.hostname)
         )
-        if not entity:
+        if not entity or not self.ha_client:
             LOGGER.warning(
-                "[schedule] Music alarm requested but no media_player entity available; falling back to beep"
+                "[schedule] Music alarm requested but no media_player entity or HA client; falling back to beep"
             )
             self.playback = PlaybackConfig()
             self._task = asyncio.create_task(self._beep_loop())
@@ -649,7 +649,7 @@ class PlaybackHandle:
             or os.environ.get("PULSE_MEDIA_PLAYER_ENTITY")
             or _default_media_player_entity(self.hostname)
         )
-        if not entity:
+        if not entity or not self.ha_client:
             return
         try:
             await self.ha_client.call_service("media_player", "media_stop", {"entity_id": entity})
@@ -663,7 +663,7 @@ class PlaybackHandle:
             or os.environ.get("PULSE_MEDIA_PLAYER_ENTITY")
             or _default_media_player_entity(self.hostname)
         )
-        if not entity or self._music_paused:
+        if not entity or not self.ha_client or self._music_paused:
             return
         try:
             await self.ha_client.call_service("media_player", "media_pause", {"entity_id": entity})
@@ -677,7 +677,7 @@ class PlaybackHandle:
             or os.environ.get("PULSE_MEDIA_PLAYER_ENTITY")
             or _default_media_player_entity(self.hostname)
         )
-        if not entity or not self._music_paused:
+        if not entity or not self.ha_client or not self._music_paused:
             return
         try:
             await self.ha_client.call_service("media_player", "media_play", {"entity_id": entity})
@@ -1427,18 +1427,9 @@ class ScheduleService:
     async def _publish_state(self) -> None:
         if not self._state_cb:
             return
-        snapshot = {
-            "alarms": [],
-            "timers": [],
-            "reminders": [],
-            "paused_dates": sorted(self._ui_pause_dates),
-            "enabled_dates": {
-                date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
-            },  # dict[str, list[str]] of date -> alarm_ids
-            "effective_skip_dates": sorted(self._effective_skip_dates()),
-            "skip_weekdays": sorted(self._skip_weekdays),
-            "updated_at": _serialize_dt(_now()),
-        }
+        alarms: list[dict[str, Any]] = []
+        timers: list[dict[str, Any]] = []
+        reminders: list[dict[str, Any]] = []
         for event in self._events.values():
             if event.paused:
                 status = "paused"
@@ -1447,12 +1438,23 @@ class ScheduleService:
             else:
                 status = "scheduled"
             if event.event_type == "alarm":
-                snapshot_key = "alarms"
+                alarms.append(event.to_public_dict(status=status))
             elif event.event_type == "timer":
-                snapshot_key = "timers"
+                timers.append(event.to_public_dict(status=status))
             else:
-                snapshot_key = "reminders"
-            snapshot[snapshot_key].append(event.to_public_dict(status=status))
+                reminders.append(event.to_public_dict(status=status))
+        snapshot: dict[str, Any] = {
+            "alarms": alarms,
+            "timers": timers,
+            "reminders": reminders,
+            "paused_dates": sorted(self._ui_pause_dates),
+            "enabled_dates": {
+                date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
+            },  # dict[str, list[str]] of date -> alarm_ids
+            "effective_skip_dates": sorted(self._effective_skip_dates()),
+            "skip_weekdays": sorted(self._skip_weekdays),
+            "updated_at": _serialize_dt(_now()),
+        }
         self._state_cb(snapshot)
 
     def _notify_active(self, event_type: EventType, payload: dict[str, Any] | None) -> None:
