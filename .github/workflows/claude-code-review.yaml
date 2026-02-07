@@ -40,6 +40,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
+          allowed_tools: "Bash(gh pr view:*),Bash(gh api:*),Read,Glob,Grep"
           prompt: |
             Review this pull request for code quality, security issues,
             potential bugs, and best practices. If everything looks good,
