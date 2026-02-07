@@ -45,11 +45,38 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - name: Check for unresolved review threads
+        id: check-threads
+        run: |
+          # Check if there are any unresolved review threads (from Copilot or other reviewers)
+          unresolved=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      isResolved
+                    }
+                  }
+                }
+              }
+            }' -f owner='${{ github.repository_owner }}' -f repo='${{ github.event.repository.name }}' -F number=${{ github.event.pull_request.number }} --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+
+          echo "unresolved_count=$unresolved" >> $GITHUB_OUTPUT
+
+          if [ "$unresolved" -gt 0 ]; then
+            echo "Found $unresolved unresolved review threads. Skipping auto-approve."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Approve PR
+        if: steps.check-threads.outcome == 'success'
         run: |
           gh pr review "${{ github.event.pull_request.number }}" \
             --approve \
-            --body "✅ Automatically approved by Claude Code Review - recommendation: merge"
+            --body "✅ Automatically approved by Claude Code Review - recommendation: merge, no unresolved review threads"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
