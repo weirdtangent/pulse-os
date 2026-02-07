@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-
 from pulse.assistant.schedule_shortcuts import ScheduleShortcutHandler
 
 
