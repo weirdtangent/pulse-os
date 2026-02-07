@@ -17,6 +17,9 @@ permissions:
 
 jobs:
   claude:
+    # TODO: Remove continue-on-error once upstream SDK bugs are fixed
+    # See: https://github.com/anthropics/claude-code-action/issues/892
+    continue-on-error: true
     if: >
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
@@ -40,6 +43,8 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
+          claude_args: |
+            --allowedTools "Bash(gh:*)"
           prompt: |
             Review this pull request for code quality, security issues,
             potential bugs, and best practices. If everything looks good,
