@@ -411,9 +411,12 @@ class PreferenceManager:
                 self._on_llm_provider_changed()
 
         # Publish state and persist preference
+        # When clearing an override, persist the default model (not empty string)
+        # to avoid config disagreement on restart
         default_model = getattr(self.config.llm, config_attr)
-        self.publisher._publish_preference_state(config_attr, value or default_model)
-        persist_preference(config_attr, value, logger=self.logger)
+        effective_model = value or default_model
+        self.publisher._publish_preference_state(config_attr, effective_model)
+        persist_preference(config_attr, effective_model, logger=self.logger)
 
     def _handle_openai_model_command(self, payload: str) -> None:
         self._handle_model_command("openai", payload)
