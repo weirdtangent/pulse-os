@@ -30,45 +30,7 @@ jobs:
           fetch-depth: 1
 
       - name: Claude Code Review
-        id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ github.event_name == 'pull_request' && 'Review this pull request for code quality, security issues, potential bugs, and best practices. If everything looks good, approve the PR. If you find any issues, leave review comments.' || '' }}
-          show_full_output: true
-
-      - name: Post Claude review summary
-        if: github.event_name == 'pull_request'
-        run: |
-          # Extract Claude's review from the action logs
-          echo "Fetching Claude Code Review analysis..."
-
-          # Get the job logs for this run
-          JOB_ID=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
-            --jq '.jobs[] | select(.name == "claude") | .id')
-
-          # Download the logs
-          gh api repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs > /tmp/claude-logs.txt 2>&1 || true
-
-          # Extract Claude's analysis
-          if [ -f /tmp/claude-logs.txt ]; then
-            # Try to extract meaningful review content
-            REVIEW_SUMMARY=$(grep -A 100 "Claude Code Report" /tmp/claude-logs.txt 2>/dev/null | head -200 || echo "Review logs not available")
-
-            # Post the review summary as a comment
-            gh pr comment "${{ github.event.pull_request.number }}" --body "## 🤖 Claude Code Review Report
-
-          <details>
-          <summary>Click to view full analysis</summary>
-
-          \`\`\`
-          ${REVIEW_SUMMARY}
-          \`\`\`
-
-          </details>
-
-          _View complete logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}_"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
