@@ -10,7 +10,6 @@ import contextlib
 import json
 import logging
 import os
-import re
 import signal
 import subprocess
 import threading
@@ -41,6 +40,7 @@ from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
 from pulse.assistant.schedule_intents import ScheduleIntentParser
 from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
+from pulse.assistant.schedule_shortcuts import ScheduleShortcutHandler
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
@@ -140,6 +140,17 @@ class PulseAssistant:
 
         # Initialize schedule intent parser (Phase 3 extraction)
         self.schedule_intents = ScheduleIntentParser()
+
+        # Initialize schedule shortcut handler (Phase 4 extraction)
+        self.schedule_shortcuts = ScheduleShortcutHandler(
+            schedule_service=self.schedule_service,
+            schedule_intents=self.schedule_intents,
+            publisher=self.publisher,
+            config=self.config,
+            logger=LOGGER,
+        )
+        self.schedule_shortcuts.set_speak_callback(self._speak)
+        self.schedule_shortcuts.set_log_response_callback(self._log_assistant_response)
 
         self._calendar_events: list[dict[str, Any]] = []
         self._calendar_updated_at: float | None = None
@@ -519,7 +530,7 @@ class PulseAssistant:
             if await self._maybe_handle_music_command(transcript):
                 self._finalize_assist_run(status="success")
                 return
-            if await self._maybe_handle_schedule_shortcut(transcript):
+            if await self.schedule_shortcuts.maybe_handle_schedule_shortcut(transcript):
                 self._finalize_assist_run(status="success")
                 return
             if await self._maybe_handle_information_query(transcript, wake_word):
@@ -586,7 +597,7 @@ class PulseAssistant:
                 if await self._maybe_handle_music_command(follow_up_transcript):
                     follow_up_needed = False
                     continue
-                if await self._maybe_handle_schedule_shortcut(follow_up_transcript):
+                if await self.schedule_shortcuts.maybe_handle_schedule_shortcut(follow_up_transcript):
                     follow_up_needed = False
                     continue
                 if await self._maybe_handle_information_query(
@@ -1101,7 +1112,7 @@ class PulseAssistant:
             return f"Alarm ringing: {title}"
         if event_type == "timer":
             duration = event.get("duration_seconds")
-            timer_label = label or self._format_timer_label(duration)
+            timer_label = label or ScheduleShortcutHandler.format_timer_label(duration)
             return f"Timer finished: {timer_label}"
         if event_type == "reminder":
             reminder_meta = event.get("metadata", {}).get("reminder", {})
@@ -1116,22 +1127,6 @@ class PulseAssistant:
                     return f"Calendar reminder: {base_label} ({calendar_name})"
             return f"Reminder: {base_label}"
         return None
-
-    def _format_timer_label(self, duration_seconds: Any) -> str:
-        if not isinstance(duration_seconds, (int, float)):
-            return "Timer"
-        seconds = max(0, int(duration_seconds))
-        if seconds < 60:
-            return f"{seconds}s"
-        minutes, seconds = divmod(seconds, 60)
-        if minutes < 60:
-            if seconds == 0:
-                return f"{minutes}m"
-            return f"{minutes}m {seconds}s"
-        hours, minutes = divmod(minutes, 60)
-        if minutes == 0:
-            return f"{hours}h"
-        return f"{hours}h {minutes}m"
 
     async def _trigger_calendar_reminder(self, reminder: CalendarReminder) -> None:
         label = reminder.summary or "Calendar event"
@@ -1198,6 +1193,8 @@ class PulseAssistant:
             )
         self._calendar_events = events
         self._calendar_updated_at = time.time()
+        # Update schedule shortcuts handler with new calendar events
+        self.schedule_shortcuts.set_calendar_events(events)
         # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
         snapshot = self._latest_schedule_snapshot or {}
         self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
@@ -1236,6 +1233,7 @@ class PulseAssistant:
                 filtered.append(event)
         if len(filtered) != len(self._calendar_events):
             self._calendar_events = filtered
+            self.schedule_shortcuts.set_calendar_events(filtered)
             snapshot = self._latest_schedule_snapshot or {}
             self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
 
@@ -1487,292 +1485,6 @@ class PulseAssistant:
             return parse_day_tokens(tokens)
         return parse_day_tokens(str(value))
 
-    async def _maybe_handle_schedule_shortcut(self, transcript: str) -> bool:
-        if not transcript or not transcript.strip():
-            return False
-        if not self.schedule_service:
-            return False
-        lowered = transcript.strip().lower()
-        normalized = re.sub(r"[^\w\s:]", " ", lowered)
-        normalized = re.sub(r"\b([ap])\s+m\b", r"\1m", normalized)
-        normalized = re.sub(r"^(?:hey|ok|okay)\s+(?:jarvis|pulse)\s+", "", normalized)
-        normalized = re.sub(r"^(?:jarvis|pulse)\s+", "", normalized)
-        normalized = re.sub(r"\s+", " ", normalized).strip()
-        alarm_intent = self.schedule_intents.extract_alarm_start_intent(normalized)
-        if self._mentions_alarm_cancel(normalized):
-            handled = await self._stop_active_schedule(normalized)
-            if handled:
-                return True
-            if await self._cancel_alarm_shortcut(alarm_intent):
-                spoken = "Alarm cancelled."
-                self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-                await self._speak(spoken)
-                return True
-            return False
-        timer_start = self.schedule_intents.extract_timer_start_intent(normalized)
-        if timer_start:
-            duration, label = timer_start
-            await self.schedule_service.create_timer(duration_seconds=duration, label=label)
-            phrase = self.schedule_intents.describe_duration(duration)
-            spoken = f"Starting a timer for {phrase}."
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            await self._speak(spoken)
-            return True
-        reminder_intent = self.schedule_intents.extract_reminder_intent(normalized, transcript, self.schedule_service)
-        if reminder_intent:
-            event = await self.schedule_service.create_reminder(
-                fire_time=reminder_intent.fire_time,
-                message=reminder_intent.message,
-                repeat=reminder_intent.repeat_rule,
-            )
-            spoken = self.schedule_intents.format_reminder_confirmation(event)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            await self._speak(spoken)
-            return True
-        if alarm_intent:
-            time_of_day, days, label = alarm_intent
-            await self.schedule_service.create_alarm(time_of_day=time_of_day, days=days, label=label)
-            spoken = self.schedule_intents.format_alarm_confirmation(time_of_day, days, label)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            await self._speak(spoken)
-            return True
-        if "next alarm" in normalized or normalized.startswith("when is my alarm"):
-            info = self.schedule_service.get_next_alarm()
-            if info:
-                message = self._format_alarm_summary(info)
-            else:
-                message = "You do not have any alarms scheduled."
-            self._log_assistant_response("shortcut", message, pipeline="pulse")
-            await self._speak(message)
-            return True
-        if any(
-            phrase in normalized
-            for phrase in (
-                "show me my alarms",
-                "show my alarms",
-                "show alarms",
-                "list my alarms",
-                "list alarms",
-                "what alarms do i have",
-                "what are my alarms",
-            )
-        ):
-            await self._show_alarm_list()
-            return True
-        if any(
-            phrase in normalized
-            for phrase in (
-                "show me my reminders",
-                "show my reminders",
-                "show reminders",
-                "list my reminders",
-                "list reminders",
-                "what reminders do i have",
-                "what are my reminders",
-            )
-        ):
-            await self._show_reminder_list()
-            return True
-        if any(
-            phrase in normalized
-            for phrase in (
-                "show me my calendar",
-                "show my calendar",
-                "show calendar events",
-                "show my calendar events",
-                "show upcoming events",
-                "show my upcoming events",
-                "list my calendar",
-                "list calendar events",
-                "what are my calendar events",
-                "what are my calendar",
-                "what calendar events",
-                "what are my upcoming events",
-                "what upcoming events",
-                "tell me about my calendar",
-                "tell me my calendar events",
-                "what is on my calendar",
-                "what events are coming up",
-                "what is coming up on my calendar",
-            )
-        ):
-            await self._show_calendar_events()
-            return True
-        if "cancel all timers" in normalized:
-            count = await self.schedule_service.cancel_all_timers()
-            if count > 0:
-                spoken = f"Cancelled {count} timer{'s' if count != 1 else ''}."
-            else:
-                spoken = "You do not have any timers running."
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            await self._speak(spoken)
-            return True
-        if self._is_stop_phrase(normalized):
-            handled = await self._stop_active_schedule(normalized)
-            if handled:
-                return True
-        add_match = re.search(r"(add|plus)\s+(\d+)\s*(minute|min|minutes|mins)", normalized)
-        if add_match:
-            minutes = int(add_match.group(2))
-            seconds = minutes * 60
-            label = self._extract_timer_label(normalized)
-            if await self._extend_timer_shortcut(seconds, label):
-                label_text = f" to the {label} timer" if label else ""
-                spoken = f"Added {minutes} minutes{label_text}."
-                self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-                await self._speak(spoken)
-                return True
-        if "cancel my timer" in normalized or "cancel the timer" in normalized:
-            label = self._extract_timer_label(normalized)
-            if await self._cancel_timer_shortcut(label):
-                spoken = "Timer cancelled."
-                self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-                await self._speak(spoken)
-                return True
-        return False
-
-    async def _show_alarm_list(self) -> None:
-        if not self.schedule_service:
-            spoken = "I can't access your alarms right now."
-            await self._speak(spoken)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            return
-        alarms = self.schedule_service.list_events("alarm")
-        if not alarms:
-            spoken = "You do not have any alarms scheduled."
-            await self._speak(spoken)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            self.publisher._publish_info_overlay()
-            return
-        alarm_payload = []
-        for alarm in alarms:
-            alarm_id = alarm.get("id")
-            if not alarm_id:
-                continue
-            alarm_payload.append(
-                {
-                    "id": alarm_id,
-                    "label": alarm.get("label") or "Alarm",
-                    "time": alarm.get("time") or alarm.get("time_of_day"),
-                    "time_of_day": alarm.get("time_of_day"),
-                    "repeat_days": alarm.get("repeat_days"),
-                    "days": alarm.get("days"),
-                    "status": alarm.get("status"),
-                    "next_fire": alarm.get("next_fire"),
-                }
-            )
-        self.publisher._publish_info_overlay(
-            text="Use ⏸️ to pause, ▶️ to resume, or 🗑️ to delete an alarm.",
-            category="alarms",
-            extra={"type": "alarms", "title": "Alarms", "alarms": alarm_payload},
-        )
-        count = len(alarms)
-        spoken = f"You have {count} alarm{'s' if count != 1 else ''}."
-        await self._speak("Here are your alarms.")
-        self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-
-    async def _show_reminder_list(self) -> None:
-        if not self.schedule_service:
-            spoken = "I can't access your reminders right now."
-            await self._speak(spoken)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            return
-        reminders = self.schedule_service.list_events("reminder")
-        if not reminders:
-            spoken = "You do not have any reminders scheduled."
-            await self._speak(spoken)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            self.publisher._publish_info_overlay()
-            return
-        reminder_payload = []
-        for reminder in reminders:
-            reminder_id = reminder.get("id")
-            if not reminder_id:
-                continue
-            reminder_payload.append(
-                {
-                    "id": reminder_id,
-                    "label": reminder.get("label") or "Reminder",
-                    "meta": self._format_reminder_meta(reminder),
-                    "status": reminder.get("status"),
-                }
-            )
-        self.publisher._publish_info_overlay(
-            text="Tap Complete when you're done or choose a delay.",
-            category="reminders",
-            extra={"type": "reminders", "title": "Reminders", "reminders": reminder_payload},
-        )
-        count = len(reminders)
-        spoken = f"You have {count} reminder{'s' if count != 1 else ''}."
-        await self._speak("Here are your reminders.")
-        self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-
-    async def _show_calendar_events(self) -> None:
-        if not (self.calendar_sync and self.config.calendar.enabled):
-            spoken = "Calendar syncing is not enabled on this device."
-            await self._speak(spoken)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            return
-        events = self._calendar_events[:CALENDAR_EVENT_INFO_LIMIT]
-        lookahead = self.config.calendar.lookahead_hours
-        if not events:
-            spoken = f"You don't have any calendar events in the next {lookahead} hours."
-            await self._speak(spoken)
-            self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-            self.publisher._publish_info_overlay()
-            return
-        subtitle = f"Upcoming events in the next {lookahead} hours."
-        self.publisher._publish_info_overlay(
-            text=subtitle,
-            category="calendar",
-            extra={
-                "type": "calendar",
-                "title": "Calendar",
-                "events": events,
-                "lookahead_hours": lookahead,
-            },
-        )
-        count = len(self._calendar_events)
-        spoken = f"You have {count} calendar event{'s' if count != 1 else ''} coming up."
-        await self._speak("Here are your upcoming events.")
-        self._log_assistant_response("shortcut", spoken, pipeline="pulse")
-
-    @staticmethod
-    def _format_reminder_meta(reminder: dict[str, Any]) -> str:
-        next_fire = reminder.get("next_fire")
-        try:
-            dt = datetime.fromisoformat(next_fire).astimezone()
-            time_phrase = dt.strftime("%-I:%M %p")
-            date_phrase = dt.strftime("%b %-d")
-            base = f"{date_phrase} · {time_phrase}"
-        except (TypeError, ValueError):
-            base = "—"
-        repeat = ((reminder.get("metadata") or {}).get("reminder") or {}).get("repeat")
-        if repeat:
-            repeat_type = repeat.get("type")
-            if repeat_type == "weekly":
-                days = repeat.get("days") or []
-                if sorted(days) == list(range(7)):
-                    base = f"{base} · Daily"
-                else:
-                    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-                    labels = ", ".join(names[day % 7] for day in days)
-                    base = f"{base} · {labels}"
-            elif repeat_type == "monthly":
-                day = repeat.get("day")
-                if isinstance(day, int):
-                    base = f"{base} · {PulseAssistant._ordinal(day)} monthly"
-                else:
-                    base = f"{base} · Monthly"
-            elif repeat_type == "interval":
-                months = repeat.get("interval_months")
-                days = repeat.get("interval_days")
-                if months:
-                    base = f"{base} · Every {months} mo"
-                elif days:
-                    base = f"{base} · Every {days} d"
-        return base
-
     async def _maybe_handle_information_query(
         self,
         transcript: str,
@@ -1849,138 +1561,6 @@ class PulseAssistant:
     def _is_conversation_stop_command(self, transcript: str | None) -> bool:
         """Check if transcript is a conversation stop command."""
         return self.conversation_manager.is_conversation_stop(transcript)
-
-    @staticmethod
-    def _is_stop_phrase(lowered: str) -> bool:
-        stop_phrases = {
-            "stop",
-            "stop it",
-            "stop alarm",
-            "stop the alarm",
-            "turn off the alarm",
-            "cancel the alarm",
-            "stop the timer",
-        }
-        if lowered in stop_phrases:
-            return True
-        alarm_stop_pattern = r"\b(cancel|stop|turn off)\b.*\balarm\b"
-        timer_stop_pattern = r"\b(cancel|stop|turn off)\b.*\btimer\b"
-        if re.search(alarm_stop_pattern, lowered):
-            return True
-        if re.search(timer_stop_pattern, lowered):
-            return True
-        return False
-
-    @staticmethod
-    def _mentions_alarm_cancel(text: str) -> bool:
-        if "alarm" not in text:
-            return False
-        cancel_words = ("cancel", "delete", "remove", "clear", "turn off")
-        return any(word in text for word in cancel_words)
-
-    async def _cancel_alarm_shortcut(self, alarm_intent: tuple[str, list[int] | None, str | None] | None) -> bool:
-        if not self.schedule_service or not alarm_intent:
-            return False
-        time_of_day, _, label = alarm_intent
-        target = self._find_alarm_candidate(time_of_day, label)
-        if not target:
-            return False
-        await self.schedule_service.delete_event(target["id"])
-        return True
-
-    def _find_alarm_candidate(self, time_of_day: str | None, label: str | None) -> dict[str, Any] | None:
-        alarms = self.schedule_service.list_events("alarm")
-        if not alarms:
-            return None
-        label_lower = label.lower() if label else None
-        matches: list[dict[str, Any]] = []
-        for alarm in alarms:
-            event_time = alarm.get("time")
-            if time_of_day and event_time != time_of_day:
-                continue
-            event_label = (alarm.get("label") or "").lower()
-            if label_lower and (not event_label or label_lower not in event_label):
-                continue
-            matches.append(alarm)
-        if not matches:
-            return None
-        return matches[0]
-
-    async def _stop_active_schedule(self, lowered: str) -> bool:
-        alarm = self.schedule_service.active_event("alarm")
-        if alarm:
-            await self.schedule_service.stop_event(alarm["id"], reason="voice")
-            return True
-        timer = self.schedule_service.active_event("timer")
-        if timer and ("timer" in lowered or lowered in {"stop", "stop it"}):
-            await self.schedule_service.stop_event(timer["id"], reason="voice")
-            return True
-        return False
-
-    def _format_alarm_summary(self, alarm: dict[str, Any]) -> str:
-        next_fire = alarm.get("next_fire")
-        label = alarm.get("label")
-        try:
-            dt = datetime.fromisoformat(next_fire) if next_fire else None
-        except (TypeError, ValueError):
-            dt = None
-        if dt:
-            dt = dt.astimezone()
-            time_str = dt.strftime("%-I:%M %p")
-            if dt.minute == 0:
-                # Drop ":00" for cleaner TTS output on o'clock times.
-                time_str = dt.strftime("%-I %p")
-            day = dt.strftime("%A")
-            base = f"Your next alarm is set for {time_str} on {day}"
-        else:
-            base = "You have an upcoming alarm"
-        if label:
-            base = f"{base} ({label})"
-        return f"{base}."
-
-    def _extract_timer_label(self, lowered: str) -> str | None:
-        match = re.search(r"timer (?:for|named)\s+([a-z0-9 ]+)", lowered)
-        if match:
-            return match.group(1).strip()
-        match = re.search(r"for ([a-z0-9 ]+) timer", lowered)
-        if match:
-            return match.group(1).strip()
-        return None
-
-    async def _extend_timer_shortcut(self, seconds: int, label: str | None) -> bool:
-        timer = self._find_timer_candidate(label)
-        if not timer:
-            return False
-        await self.schedule_service.extend_timer(timer["id"], seconds)
-        return True
-
-    async def _cancel_timer_shortcut(self, label: str | None) -> bool:
-        timer = self._find_timer_candidate(label)
-        if not timer:
-            return False
-        await self.schedule_service.stop_event(timer["id"], reason="voice_cancel")
-        return True
-
-    def _find_timer_candidate(self, label: str | None) -> dict[str, Any] | None:
-        timers = self.schedule_service.list_events("timer")
-        if not timers:
-            return None
-        if label:
-            wanted = label.lower()
-            for timer in timers:
-                current_label = (timer.get("label") or "").lower()
-                if current_label and wanted in current_label:
-                    return timer
-        active = self.schedule_service.active_event("timer")
-        if active:
-            if not label:
-                return active
-            current_label = (active.get("label") or "").lower()
-            if current_label and label.lower() in current_label:
-                return active
-        if len(timers) == 1 and not label:
-            return timers[0]
-        return None
 
     def _log_assistant_response(self, wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
         if not self.preference_manager.log_llm_messages or not text:
