@@ -706,8 +706,7 @@ def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
             event_id_escaped = html_escape(str(event_id), quote=True)
             # Material Design close/X icon path
             x_path = (
-                "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 "
-                "5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+                "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
             )
             cancel_button = (
                 f'<button class="overlay-timer__cancel" data-stop-timer '
@@ -820,7 +819,7 @@ def _build_alarm_ringing_card(active_alarm: dict[str, Any]) -> str:
             f'data-snooze-minutes="5">Snooze 5 min</button>'
         )
         button_html = (
-            '<div class="overlay-card__actions overlay-card__actions--split">' f"{stop_button}{snooze_button}" "</div>"
+            f'<div class="overlay-card__actions overlay-card__actions--split">{stop_button}{snooze_button}</div>'
         )
     return f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
@@ -1643,7 +1642,7 @@ def _build_lights_info_overlay(card: dict[str, Any]) -> str:
             color_temp = light.get("color_temp")
             area = str(light.get("area") or "").strip()
             meta_parts = [state]
-            if isinstance(brightness, (int, float)):
+            if isinstance(brightness, int | float):
                 meta_parts.append(f"{int(brightness)}%")
             if color_temp:
                 meta_parts.append(str(color_temp))
@@ -1992,7 +1991,7 @@ def _coerce_day_index_list(value: Any) -> list[int]:
     if isinstance(value, str):
         parsed = parse_day_tokens(value)
         return parsed or []
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return [int(value) % 7]
     return []
 
@@ -2176,7 +2175,7 @@ def _filter_upcoming_reminders(reminders: Iterable[dict[str, Any]] | None) -> li
 def _parse_timestamp(value: Any) -> float | None:
     if value is None:
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
     text = str(value).strip()
     if not text:

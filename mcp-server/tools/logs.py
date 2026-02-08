@@ -81,7 +81,7 @@ def _register(mcp, ssh, config):
         if err := validate_device(device, config):
             return err
 
-        cmd = f"journalctl -u 'pulse-*' --no-pager -p err" f" --since {shlex.quote(since)} -n 200 2>&1 || true"
+        cmd = f"journalctl -u 'pulse-*' --no-pager -p err --since {shlex.quote(since)} -n 200 2>&1 || true"
         try:
             output = await ssh.run(device, cmd, timeout=15)
             result = output.strip()

@@ -19,12 +19,13 @@ This document outlines a comprehensive plan to refactor `bin/pulse-assistant.py`
 
 ## Refactoring Phases
 
-### Phase 1: Extract MQTT Publisher
+### Phase 1: Extract MQTT Publisher ✅
 **File:** `pulse/assistant/mqtt_publisher.py` (~500 lines)
+**Status:** Completed
 
 Centralize all MQTT publishing logic and state management.
 
-**Extract:**
+**Extracted:**
 - `AssistantMqttPublisher` class
 - All `_publish_*()` methods
 - Home Assistant discovery methods
@@ -35,12 +36,13 @@ Centralize all MQTT publishing logic and state management.
 - Easier to test MQTT interactions
 - Reduces coupling in main class
 
-### Phase 2: Extract Preference Manager
+### Phase 2: Extract Preference Manager ✅
 **File:** `pulse/assistant/preference_manager.py` (~300 lines)
+**Status:** Completed
 
 Manage user preferences and sound settings.
 
-**Extract:**
+**Extracted:**
 - `PreferenceManager` class
 - Sound option management
 - Preference MQTT command handlers
@@ -51,12 +53,13 @@ Manage user preferences and sound settings.
 - Makes sound management reusable
 - Clear API for preference updates
 
-### Phase 3: Extract Schedule Intent Parser
+### Phase 3: Extract Schedule Intent Parser ✅
 **File:** `pulse/assistant/schedule_intents.py` (~700 lines)
+**Status:** Completed
 
 Parse natural language into schedule intents.
 
-**Extract:**
+**Extracted:**
 - `ScheduleIntentParser` class
 - Timer intent extraction
 - Alarm intent extraction
@@ -69,12 +72,13 @@ Parse natural language into schedule intents.
 - Reusable for other voice assistants
 - Clear separation from execution logic
 
-### Phase 4: Extract Schedule Shortcuts Handler
+### Phase 4: Extract Schedule Shortcuts Handler ✅
 **File:** `pulse/assistant/schedule_shortcuts.py` (~400 lines)
+**Status:** Completed
 
 Handle voice shortcuts for schedules.
 
-**Extract:**
+**Extracted:**
 - `ScheduleShortcutHandler` class
 - Stop/cancel operations
 - Timer extend operations
@@ -85,12 +89,13 @@ Handle voice shortcuts for schedules.
 - Testable in isolation
 - Clear command handling patterns
 
-### Phase 5: Extract Schedule Command Processor
-**File:** `pulse/assistant/schedule_commands.py` (~300 lines)
+### Phase 5: Extract Schedule Command Processor ✅
+**File:** `pulse/assistant/schedule_commands.py` (~510 lines)
+**Status:** Completed
 
 Process MQTT schedule commands.
 
-**Extract:**
+**Extracted:**
 - `ScheduleCommandProcessor` class
 - MQTT command message handling
 - Payload parsing and validation

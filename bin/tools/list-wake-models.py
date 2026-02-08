@@ -154,7 +154,7 @@ def main() -> int:
 
     if getattr(verify_helpers, "AsyncTcpClient", None) is None or getattr(verify_helpers, "Describe", None) is None:
         print(
-            "Wyoming protocol helpers are unavailable. " "Install the project's voice dependencies first.",
+            "Wyoming protocol helpers are unavailable. Install the project's voice dependencies first.",
             file=sys.stderr,
         )
         return 1

@@ -350,9 +350,7 @@ def _persist_backlight_value(
     for persister in persisters:
         try:
             persister.update(key, str(value))
-            logger(
-                f"backlight-config: queued {key}={value} for persistence in {persister._config_path}"
-            )  # noqa: SLF001
+            logger(f"backlight-config: queued {key}={value} for persistence in {persister._config_path}")  # noqa: SLF001
         except Exception as exc:
             logger(f"backlight-config: failed to queue {key} update: {exc}")
 
@@ -858,9 +856,7 @@ class KioskMqttListener:
             self._last_reboot_attempt = now
             try:
                 self.log(f"watchdog: MQTT offline for {int(offline_seconds)}s; requesting safe reboot")
-                subprocess.run(
-                    self._safe_reboot_command("mqtt-watchdog"), check=True
-                )  # nosec B603 - hardcoded command array
+                subprocess.run(self._safe_reboot_command("mqtt-watchdog"), check=True)  # nosec B603 - hardcoded command array
             except Exception as exc:  # noqa: BLE001
                 self.log(f"watchdog: reboot attempt failed: {exc}")
             finally:
@@ -1316,7 +1312,7 @@ class KioskMqttListener:
 
     @staticmethod
     def _format_metric_value(value: int | float | str, precision: int | None) -> str:
-        if isinstance(value, (int, float)) and precision is not None:
+        if isinstance(value, int | float) and precision is not None:
             format_str = f"{{:.{precision}f}}"
             return format_str.format(value)
         return str(value)
@@ -1488,9 +1484,7 @@ class KioskMqttListener:
             return self.update_available
 
     def fetch_page_targets(self) -> list[dict[str, Any]]:
-        with urllib.request.urlopen(
-            self.config.devtools.discovery_url, timeout=self.config.devtools.timeout
-        ) as resp:  # nosec B310 - timeout in kwargs
+        with urllib.request.urlopen(self.config.devtools.discovery_url, timeout=self.config.devtools.timeout) as resp:  # nosec B310 - timeout in kwargs
             payload = json.load(resp)
         return [item for item in payload if item.get("type") == "page"]
 
@@ -2071,9 +2065,7 @@ class KioskMqttListener:
     def _perform_reboot(self) -> None:
         try:
             self.log("reboot: requesting safe reboot")
-            subprocess.run(
-                self._safe_reboot_command("mqtt: manual reboot"), check=True
-            )  # nosec B603 - hardcoded command array
+            subprocess.run(self._safe_reboot_command("mqtt: manual reboot"), check=True)  # nosec B603 - hardcoded command array
         except FileNotFoundError as exc:
             self.log(f"reboot: command not found: {exc}")
         except subprocess.CalledProcessError as exc:

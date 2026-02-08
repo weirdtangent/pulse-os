@@ -151,9 +151,7 @@ class OpenAICompatibleProvider(LLMProvider):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(
-                request, timeout=self._get_timeout()
-            ) as response:  # nosec B310 - timeout in kwargs
+            with urllib.request.urlopen(request, timeout=self._get_timeout()) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"{self._get_provider_name()} HTTP error: {exc.code}") from exc
@@ -296,9 +294,7 @@ class AnthropicProvider(LLMProvider):
         )
 
         try:
-            with urllib.request.urlopen(
-                request, timeout=self.config.anthropic_timeout
-            ) as response:  # nosec B310 - timeout in kwargs
+            with urllib.request.urlopen(request, timeout=self.config.anthropic_timeout) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Anthropic HTTP error: {exc.code}") from exc
@@ -380,9 +376,7 @@ class GeminiProvider(LLMProvider):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(
-                request, timeout=self.config.gemini_timeout
-            ) as response:  # nosec B310 - timeout in kwargs
+            with urllib.request.urlopen(request, timeout=self.config.gemini_timeout) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Gemini HTTP error: {exc.code}") from exc
@@ -434,7 +428,7 @@ def build_llm_provider(config: LLMConfig, logger: logging.Logger | None = None) 
     # Validate provider and log helpful message if unknown
     if provider and provider not in SUPPORTED_PROVIDERS:
         supported = ", ".join(SUPPORTED_PROVIDERS.keys())
-        log.warning(f"Unknown LLM provider '{provider}', falling back to OpenAI. " f"Supported providers: {supported}")
+        log.warning(f"Unknown LLM provider '{provider}', falling back to OpenAI. Supported providers: {supported}")
         provider = "openai"
 
     # Default to OpenAI if no provider specified

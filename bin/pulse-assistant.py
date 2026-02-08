@@ -38,14 +38,14 @@ from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
 from pulse.assistant.preference_manager import PreferenceManager
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
+from pulse.assistant.schedule_commands import ScheduleCommandProcessor
 from pulse.assistant.schedule_intents import ScheduleIntentParser
-from pulse.assistant.schedule_service import PlaybackConfig, ScheduleService, parse_day_tokens
+from pulse.assistant.schedule_service import ScheduleService
 from pulse.assistant.schedule_shortcuts import ScheduleShortcutHandler
 from pulse.assistant.scheduler import AssistantScheduler
 from pulse.assistant.wake_detector import WakeDetector, compute_rms
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_sound, play_volume_feedback
-from pulse.datetime_utils import parse_datetime, parse_duration_seconds
 from pulse.sound_library import SoundLibrary
 
 LOGGER = logging.getLogger("pulse-assistant")
@@ -152,6 +152,15 @@ class PulseAssistant:
         self.schedule_shortcuts.set_speak_callback(self._speak)
         self.schedule_shortcuts.set_log_response_callback(self._log_assistant_response)
 
+        # Initialize schedule command processor (Phase 5 extraction)
+        self.schedule_commands = ScheduleCommandProcessor(
+            schedule_service=self.schedule_service,
+            publisher=self.publisher,
+            base_topic=self.config.mqtt.topic_base,
+            logger=LOGGER,
+        )
+        self.schedule_commands.set_log_activity_callback(self._log_activity_event)
+
         self._calendar_events: list[dict[str, Any]] = []
         self._calendar_updated_at: float | None = None
         self._latest_schedule_snapshot: dict[str, Any] | None = None
@@ -178,11 +187,6 @@ class PulseAssistant:
         self._assist_stage_topic = f"{base_topic}/assistant/stage"
         self._assist_pipeline_topic = f"{base_topic}/assistant/active_pipeline"
         self._assist_wake_topic = f"{base_topic}/assistant/last_wake_word"
-        self._schedules_state_topic = f"{base_topic}/schedules/state"
-        self._schedule_command_topic = f"{base_topic}/schedules/command"
-        self._alarms_active_topic = f"{base_topic}/alarms/active"
-        self._timers_active_topic = f"{base_topic}/timers/active"
-        self._reminders_active_topic = f"{base_topic}/reminders/active"
         self._info_card_topic = f"{base_topic}/info_card"
         self._heartbeat_topic = f"{base_topic}/assistant/heartbeat"
         self._kiosk_availability_topic = f"homeassistant/device/{self.config.hostname}/availability"
@@ -270,6 +274,7 @@ class PulseAssistant:
         try:
             self._loop = asyncio.get_running_loop()
             self.media_controller._loop = self._loop
+            self.schedule_commands.set_event_loop(self._loop)
             self.mqtt.connect()
             self.preference_manager.subscribe_preference_topics()
             self._subscribe_schedule_topics()
@@ -924,7 +929,10 @@ class PulseAssistant:
 
     def _subscribe_schedule_topics(self) -> None:
         try:
-            self.mqtt.subscribe(self._schedule_command_topic, self._handle_schedule_command_message)
+            self.mqtt.subscribe(
+                self.schedule_commands.command_topic,
+                self.schedule_commands.handle_command_message,
+            )
         except RuntimeError:
             LOGGER.debug("[assistant] MQTT client not ready for schedule command subscription")
 
@@ -1068,27 +1076,14 @@ class PulseAssistant:
             return self._earmuffs_manual_override
 
     def _handle_schedule_state_changed(self, snapshot: dict[str, Any]) -> None:
-        cloned = self.publisher._clone_schedule_snapshot(snapshot)
-        if cloned is None:
-            return
-        self._latest_schedule_snapshot = cloned
-        self.publisher._publish_schedule_state(cloned, self._calendar_events, self._calendar_updated_at)
+        """Delegate to schedule command processor."""
+        self.schedule_commands.handle_state_changed(snapshot)
+        # Keep local snapshot reference for other components
+        self._latest_schedule_snapshot = self.schedule_commands._latest_schedule_snapshot
 
     def _handle_active_schedule_event(self, event_type: str, payload: dict[str, Any] | None) -> None:
-        if event_type == "alarm":
-            topic = self._alarms_active_topic
-        elif event_type == "timer":
-            topic = self._timers_active_topic
-        else:
-            topic = self._reminders_active_topic
-        message = payload or {"state": "idle"}
-        self.publisher._publish_message(topic, json.dumps(message))
-        if payload and payload.get("state") == "ringing":
-            event_payload = payload.get("event") or {}
-            if self._loop is None:
-                LOGGER.error("[assistant] Cannot log activity event: event loop not initialized")
-                return
-            self._loop.create_task(self._log_activity_event(event_type, event_payload))
+        """Delegate to schedule command processor."""
+        self.schedule_commands.handle_active_event(event_type, payload)
 
     async def _log_activity_event(self, event_type: str, event: dict[str, Any]) -> None:
         if self.home_assistant is None:
@@ -1195,6 +1190,8 @@ class PulseAssistant:
         self._calendar_updated_at = time.time()
         # Update schedule shortcuts handler with new calendar events
         self.schedule_shortcuts.set_calendar_events(events)
+        # Update schedule command processor with calendar state
+        self.schedule_commands.update_calendar_state(events, self._calendar_updated_at)
         # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
         snapshot = self._latest_schedule_snapshot or {}
         self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
@@ -1234,6 +1231,7 @@ class PulseAssistant:
         if len(filtered) != len(self._calendar_events):
             self._calendar_events = filtered
             self.schedule_shortcuts.set_calendar_events(filtered)
+            self.schedule_commands.update_calendar_state(filtered, self._calendar_updated_at)
             snapshot = self._latest_schedule_snapshot or {}
             self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
 
@@ -1275,16 +1273,6 @@ class PulseAssistant:
             payload["end"] = reminder.end.astimezone().isoformat()
         return payload
 
-    def _handle_schedule_command_message(self, payload: str) -> None:
-        if not self._loop:
-            return
-        try:
-            data = json.loads(payload)
-        except json.JSONDecodeError:
-            LOGGER.debug("[assistant] Ignoring malformed schedule command: %s", payload)
-            return
-        asyncio.run_coroutine_threadsafe(self._process_schedule_command(data), self._loop)
-
     def _set_assist_stage(self, pipeline: str, stage: str, extra: dict | None = None) -> None:
         self._assist_stage = stage
         self._assist_pipeline = pipeline
@@ -1314,176 +1302,6 @@ class PulseAssistant:
         if override:
             return Path(override).expanduser()
         return Path.home() / ".local" / "share" / "pulse" / "schedules.json"
-
-    async def _process_schedule_command(self, payload: dict[str, Any]) -> None:
-        if not isinstance(payload, dict):
-            return
-        action = str(payload.get("action") or "").lower()
-        if not action:
-            return
-        try:
-            if action in {"create_alarm", "add_alarm"}:
-                time_text = payload.get("time") or payload.get("time_of_day")
-                if not time_text:
-                    raise ValueError("alarm time is required")
-                days = self._coerce_day_list(payload.get("days"))
-                playback = self._playback_from_payload(payload.get("playback"))
-                single_flag = payload.get("single_shot")
-                single_shot = bool(single_flag) if single_flag is not None else None
-                await self.schedule_service.create_alarm(
-                    time_of_day=str(time_text),
-                    label=payload.get("label"),
-                    days=days,
-                    playback=playback,
-                    single_shot=single_shot,
-                )
-            elif action == "update_alarm":
-                event_id = payload.get("event_id")
-                if not event_id:
-                    raise ValueError("event_id is required to update an alarm")
-                days = self._coerce_day_list(payload.get("days")) if "days" in payload else None
-                playback = self._playback_from_payload(payload.get("playback")) if "playback" in payload else None
-                await self.schedule_service.update_alarm(
-                    str(event_id),
-                    time_of_day=payload.get("time") or payload.get("time_of_day"),
-                    days=days,
-                    label=payload.get("label"),
-                    playback=playback,
-                )
-            elif action in {"delete_alarm", "delete_timer", "delete"}:
-                event_id = payload.get("event_id")
-                if event_id:
-                    await self.schedule_service.delete_event(str(event_id))
-            elif action == "pause_alarm":
-                event_id = payload.get("event_id")
-                if event_id:
-                    await self.schedule_service.pause_alarm(str(event_id))
-            elif action in {"resume_alarm", "play_alarm"}:
-                event_id = payload.get("event_id")
-                if event_id:
-                    await self.schedule_service.resume_alarm(str(event_id))
-            elif action == "pause_day":
-                date_str = str(payload.get("date") or "").strip()
-                if not date_str:
-                    raise ValueError("date is required for pause_day")
-                await self.schedule_service.set_ui_pause_date(date_str, True)
-            elif action in {"resume_day", "unpause_day"}:
-                date_str = str(payload.get("date") or "").strip()
-                if not date_str:
-                    raise ValueError("date is required for resume_day")
-                await self.schedule_service.set_ui_pause_date(date_str, False)
-            elif action == "enable_day":
-                date_str = str(payload.get("date") or "").strip()
-                alarm_id = str(payload.get("alarm_id") or "").strip()
-                if not date_str or not alarm_id:
-                    raise ValueError("date and alarm_id are required for enable_day")
-                await self.schedule_service.set_ui_enable_date(date_str, alarm_id, True)
-            elif action == "disable_day":
-                date_str = str(payload.get("date") or "").strip()
-                alarm_id = str(payload.get("alarm_id") or "").strip()
-                if not date_str or not alarm_id:
-                    raise ValueError("date and alarm_id are required for disable_day")
-                await self.schedule_service.set_ui_enable_date(date_str, alarm_id, False)
-            elif action in {"start_timer", "create_timer"}:
-                seconds = self._coerce_duration_seconds(payload.get("duration") or payload.get("seconds"))
-                playback = self._playback_from_payload(payload.get("playback"))
-                await self.schedule_service.create_timer(
-                    duration_seconds=seconds,
-                    label=payload.get("label"),
-                    playback=playback,
-                )
-            elif action in {"add_time", "extend_timer"}:
-                event_id = payload.get("event_id")
-                seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration"))
-                if event_id:
-                    await self.schedule_service.extend_timer(str(event_id), int(seconds))
-            elif action in {"stop", "cancel"}:
-                event_id = payload.get("event_id")
-                if event_id:
-                    await self.schedule_service.stop_event(str(event_id), reason="mqtt_stop")
-            elif action == "snooze":
-                event_id = payload.get("event_id")
-                minutes = int(payload.get("minutes", 5))
-                if event_id:
-                    await self.schedule_service.snooze_alarm(str(event_id), minutes=max(1, minutes))
-            elif action == "cancel_all":
-                event_type = (payload.get("event_type") or "timer").lower()
-                if event_type == "timer":
-                    await self.schedule_service.cancel_all_timers()
-            elif action == "next_alarm":
-                info = self.schedule_service.get_next_alarm()
-                response = {"next_alarm": info}
-                self.publisher._publish_message(f"{self._schedules_state_topic}/next_alarm", json.dumps(response))
-            elif action in {"create_reminder", "add_reminder"}:
-                message = payload.get("message") or payload.get("text")
-                when_text = payload.get("when") or payload.get("time")
-                if not message or not when_text:
-                    raise ValueError("reminder message and time are required")
-                fire_time = parse_datetime(str(when_text))
-                if fire_time is None:
-                    raise ValueError("reminder time is invalid")
-                repeat_rule = payload.get("repeat") if isinstance(payload.get("repeat"), dict) else None
-                await self.schedule_service.create_reminder(
-                    fire_time=fire_time,
-                    message=str(message),
-                    repeat=repeat_rule,
-                )
-            elif action == "delete_reminder":
-                event_id = payload.get("event_id")
-                if event_id:
-                    await self.schedule_service.delete_event(str(event_id))
-            elif action in {"complete_reminder", "finish_reminder"}:
-                event_id = payload.get("event_id")
-                if event_id:
-                    await self.schedule_service.stop_event(str(event_id), reason="complete")
-            elif action == "delay_reminder":
-                event_id = payload.get("event_id")
-                seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration") or "0")
-                if event_id and seconds > 0:
-                    await self.schedule_service.delay_reminder(str(event_id), int(seconds))
-        except Exception as exc:
-            LOGGER.debug("[assistant] Schedule command %s failed: %s", action, exc)
-
-    @staticmethod
-    def _playback_from_payload(payload: dict[str, Any] | None) -> PlaybackConfig:
-        if not isinstance(payload, dict):
-            if str(payload or "").lower() == "music":
-                return PlaybackConfig(mode="music")
-            return PlaybackConfig()
-        mode = (payload.get("mode") or payload.get("type") or "beep").lower()
-        sound_id = payload.get("sound") or payload.get("sound_id")
-        if mode != "music":
-            return PlaybackConfig(sound_id=sound_id)
-        return PlaybackConfig(
-            mode="music",
-            music_entity=payload.get("entity") or payload.get("music_entity"),
-            music_source=payload.get("source") or payload.get("media_content_id"),
-            media_content_type=payload.get("media_content_type") or payload.get("content_type"),
-            provider=payload.get("provider"),
-            description=payload.get("description") or payload.get("name"),
-            sound_id=sound_id,
-        )
-
-    @staticmethod
-    def _coerce_duration_seconds(raw_value: Any) -> float:
-        if raw_value is None:
-            raise ValueError("duration is required")
-        if isinstance(raw_value, (int, float)):
-            seconds = float(raw_value)
-        else:
-            seconds = parse_duration_seconds(str(raw_value))
-        if seconds <= 0:
-            raise ValueError("duration must be positive")
-        return seconds
-
-    @staticmethod
-    def _coerce_day_list(value: Any) -> list[int] | None:
-        if value is None:
-            return None
-        if isinstance(value, list):
-            tokens = ",".join(str(item) for item in value)
-            return parse_day_tokens(tokens)
-        return parse_day_tokens(str(value))
 
     async def _maybe_handle_information_query(
         self,

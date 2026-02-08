@@ -84,6 +84,10 @@ def _setup_calendar_test_assistant() -> PulseAssistant:
     assistant.schedule_shortcuts = SimpleNamespace(
         set_calendar_events=lambda events: None,
     )
+    # Mock schedule_commands processor (Phase 5 extraction)
+    assistant.schedule_commands = SimpleNamespace(
+        update_calendar_state=lambda events, updated_at: None,
+    )
     return assistant
 
 
