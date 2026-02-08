@@ -750,8 +750,9 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
         calendar_hint = None
         if isinstance(event_data, dict):
             metadata = event_data.get("metadata") or {}
-            reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else {}
-            message = str(reminder_meta.get("message") or event_data.get("label") or "Reminder")
+            reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else None
+            reminder_msg = reminder_meta.get("message") if isinstance(reminder_meta, dict) else None
+            message = str(reminder_msg or event_data.get("label") or "Reminder")
             if isinstance(metadata, dict):
                 calendar_hint = metadata.get("calendar")
         if isinstance(calendar_hint, dict):
@@ -1195,7 +1196,7 @@ def _calendar_lookahead_hours(card: dict[str, Any]) -> int:
 
     value = card.get("lookahead_hours")
     try:
-        hours = int(value)
+        hours = int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         hours = DEFAULT_CALENDAR_LOOKAHEAD_HOURS
     if hours <= 0:
