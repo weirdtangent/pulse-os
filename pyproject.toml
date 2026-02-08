@@ -62,9 +62,11 @@ docstring-code-format = true
 [dependency-groups]
 dev = [
     "black>=24.8.0",
+    "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "pytest>=9.0.1",
     "ruff>=0.6.5",
+    "types-requests>=2.32.4.20260107",
 ]
 
 [tool.pytest.ini_options]

@@ -103,6 +103,7 @@ class InfoServiceTests(unittest.TestCase):
     def test_weather_intent_triggers_forecast(self) -> None:
         response = asyncio.run(self.service.maybe_answer("What's the weather today?"))
         self.assertIsInstance(response, InfoResponse)
+        assert response is not None
         self.assertEqual(response.category, "weather")
         self.assertIn("Today", response.text)
         self.assertIsNotNone(response.display)

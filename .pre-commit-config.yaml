@@ -15,22 +15,31 @@ repos:
       - id: mixed-line-ending
         args: ['--fix=lf']
 
-  # Python linting and formatting with Ruff (replaces black, isort, flake8, etc.)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.6
+  # Python linting and formatting with Ruff - runs on ALL Python files
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff
+        entry: uv run ruff check --fix .
+        language: system
+        pass_filenames: false
+        types: [python]
       - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format .
+        language: system
+        pass_filenames: false
+        types: [python]
 
-  # Type checking with mypy
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+  # Type checking with mypy - runs on ALL Python files
+  - repo: local
     hooks:
       - id: mypy
-        args: [--ignore-missing-imports, --no-error-summary]
-        additional_dependencies:
-          - types-requests
+        name: mypy
+        entry: uv run mypy --ignore-missing-imports --no-error-summary .
+        language: system
+        pass_filenames: false
+        types: [python]
 
   # Run tests with pytest (local hook)
   - repo: local

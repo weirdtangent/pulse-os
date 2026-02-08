@@ -772,10 +772,10 @@ class PulseAssistant:
             self.media_controller.trigger_media_resume_after_response()
         elif play_tone:
             tracker.begin_stage("speaking")
-            stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
+            tone_stage_extra: dict[str, str | bool] = {"wake_word": wake_word}
             if follow_up:
-                stage_extra["follow_up"] = True
-            self._set_assist_stage("pulse", "speaking", stage_extra)
+                tone_stage_extra["follow_up"] = True
+            self._set_assist_stage("pulse", "speaking", tone_stage_extra)
             await self._play_ack_tone(self.preferences.ha_tone_sound)
             speech_finished_at = time.monotonic()
             self.conversation_manager.update_last_response_end(speech_finished_at)
@@ -955,7 +955,7 @@ class PulseAssistant:
     def _subscribe_alert_topics(self) -> None:
         for topic in self._alert_topics:
             try:
-                self.mqtt.subscribe(topic, lambda payload, t=topic: self._handle_alert_message(t, payload))
+                self.mqtt.subscribe(topic, lambda payload, t=topic: self._handle_alert_message(t, payload))  # type: ignore[misc]
             except Exception as exc:
                 LOGGER.warning("[assistant] Failed to subscribe to alert topic %s: %s", topic, exc)
 
@@ -1037,7 +1037,7 @@ class PulseAssistant:
         if not clean:
             return
         self.publisher._publish_info_overlay(text=f"Alert: {clean}", category="alerts")
-        self._schedule_info_overlay_clear(8.0)
+        self.publisher._schedule_info_overlay_clear(8.0)
         if self._loop is None:
             LOGGER.error("[assistant] Cannot handle alert: event loop not initialized")
             return
@@ -1048,7 +1048,7 @@ class PulseAssistant:
         if not message:
             return
         self.publisher._publish_info_overlay(text=f"Intercom: {message}", category="intercom")
-        self._schedule_info_overlay_clear(6.0)
+        self.publisher._schedule_info_overlay_clear(6.0)
         if self._loop is None:
             LOGGER.error("[assistant] Cannot handle intercom: event loop not initialized")
             return
@@ -1073,7 +1073,7 @@ class PulseAssistant:
 
     def _is_earmuffs_manual_override(self) -> bool:
         with self._earmuffs_lock:
-            return self._earmuffs_manual_override
+            return self._earmuffs_manual_override or False
 
     def _handle_schedule_state_changed(self, snapshot: dict[str, Any]) -> None:
         """Delegate to schedule command processor."""
@@ -1346,7 +1346,7 @@ class PulseAssistant:
         finally:
             if overlay_active:
                 hold = max(self._info_overlay_min_seconds, estimated_clear_delay)
-                self._schedule_info_overlay_clear(hold)
+                self.publisher._schedule_info_overlay_clear(hold)
         self._trigger_media_resume_after_response()
         return True
 

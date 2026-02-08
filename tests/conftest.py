@@ -343,6 +343,6 @@ def make_llm_config():
             "openrouter_timeout": 45,
         }
         defaults.update(overrides)
-        return LLMConfig(**defaults)
+        return LLMConfig(**defaults)  # type: ignore[arg-type]
 
     return _create_config

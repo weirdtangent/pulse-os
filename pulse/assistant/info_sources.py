@@ -433,7 +433,7 @@ class SportsClient:
         sport, league_slug = path
         url = f"{self.config.base_url}/site/v2/sports/{sport}/{league_slug}/teams"
         payload = await _get_json(url, params={"limit": 400})
-        teams = []
+        teams: list[dict[str, str]] = []
         if payload:
             sports_block = payload.get("sports") or []
             for sport_entry in sports_block:

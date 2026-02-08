@@ -46,9 +46,9 @@ try:
     from wyoming.client import AsyncTcpClient
     from wyoming.info import Describe, Info
 except ModuleNotFoundError:
-    AsyncTcpClient = None  # type: ignore[assignment]
-    Describe = None  # type: ignore[assignment]
-    Info = None  # type: ignore[assignment]
+    AsyncTcpClient = None  # type: ignore[misc,assignment]
+    Describe = None  # type: ignore[misc,assignment]
+    Info = None  # type: ignore[misc,assignment]
 
 try:
     from pulse.assistant import wyoming as wyoming_helpers
@@ -238,7 +238,7 @@ def check_mqtt(config: AssistantConfig, timeout: float) -> CheckResult:
         clean_session=True,
         protocol=mqtt.MQTTv311,
         transport="tcp",
-        **callback_kwargs,
+        **callback_kwargs,  # type: ignore[arg-type]
     )
     if config.mqtt.username:
         client.username_pw_set(config.mqtt.username, config.mqtt.password or "")
@@ -250,7 +250,7 @@ def check_mqtt(config: AssistantConfig, timeout: float) -> CheckResult:
             tls_kwargs["certfile"] = config.mqtt.cert
         if config.mqtt.key:
             tls_kwargs["keyfile"] = config.mqtt.key
-        client.tls_set(**tls_kwargs)
+        client.tls_set(**tls_kwargs)  # type: ignore[arg-type]
 
     connect_event = threading.Event()
     result_code: dict[str, int | None] = {"rc": None}
@@ -639,14 +639,17 @@ def check_wyoming_endpoints(config: AssistantConfig, env: dict[str, str], timeou
                 continue
 
         if name in {OPENWAKEWORD_LABEL, HA_OPENWAKEWORD_LABEL}:
-            probe_result = _exercise_openwakeword(
-                name,
-                host,
-                port,
-                config,
-                timeout,
-                models=expected or None,
-            )
+            if host is not None and port is not None:
+                probe_result = _exercise_openwakeword(
+                    name,
+                    host,
+                    port,
+                    config,
+                    timeout,
+                    models=expected or None,
+                )
+            else:
+                probe_result = None
         else:
             probe_result = _exercise_wyoming_service(name, host, port, timeout, config)
 
@@ -749,8 +752,8 @@ def _describe_wyoming_endpoint(
             port,
         )
 
-    model_names = [
-        getattr(model, "name", None)
+    model_names: list[str] = [
+        str(getattr(model, "name", ""))
         for model in getattr(info, "models", [])  # type: ignore[arg-type]
         if getattr(model, "name", None)
     ]

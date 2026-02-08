@@ -592,7 +592,7 @@ class CalendarSyncService:
             state.active_keys.add(key)
         stale_keys = state.active_keys - valid_keys
         for key in stale_keys:
-            task = self._scheduled.pop(key, None)
+            task = self._scheduled.pop(key, None)  # type: ignore[arg-type]
             if task:
                 task.cancel()
             self._scheduled_reminders.pop(key, None)
@@ -671,8 +671,7 @@ class CalendarSyncService:
             if scheduled_reminder.trigger_time not in new_trigger_times:
                 keys_to_cancel.append(key)
         for key in keys_to_cancel:
-            scheduled_reminder = self._scheduled_reminders.get(key)
-            task = self._scheduled.pop(key, None)
+            task = self._scheduled.pop(key, None)  # type: ignore[arg-type]
             if task:
                 task.cancel()
             self._scheduled_reminders.pop(key, None)

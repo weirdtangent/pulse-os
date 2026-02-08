@@ -6,6 +6,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from pulse.assistant.conversation_manager import (
     evaluate_follow_up_transcript,
@@ -24,11 +25,11 @@ assert _MODULE_SPEC and _MODULE_SPEC.loader
 _MODULE = importlib.util.module_from_spec(_MODULE_SPEC)
 sys.modules[_MODULE_SPEC.name] = _MODULE
 _MODULE_SPEC.loader.exec_module(_MODULE)  # type: ignore[attr-defined]
-PulseAssistant = _MODULE.PulseAssistant  # type: ignore[attr-defined]
-CalendarReminder = _MODULE.CalendarReminder  # type: ignore[attr-defined]
+PulseAssistant: Any = _MODULE.PulseAssistant  # type: ignore[attr-defined]
+CalendarReminder: Any = _MODULE.CalendarReminder  # type: ignore[attr-defined]
 
 
-def _assistant() -> PulseAssistant:
+def _assistant() -> Any:
     return object.__new__(PulseAssistant)  # type: ignore[misc]
 
 
@@ -67,7 +68,7 @@ def test_follow_up_noise_filtering() -> None:
     assert not ok
 
 
-def _setup_calendar_test_assistant() -> PulseAssistant:
+def _setup_calendar_test_assistant() -> Any:
     assistant = _assistant()
     assistant._calendar_events = []
     assistant._calendar_updated_at = None

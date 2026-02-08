@@ -44,6 +44,7 @@ class AssistantScheduler:
                 "entity_id": self.ha_config.timer_entity,
                 "duration": _format_duration(duration_seconds),
             }
+            assert self.ha_client is not None
             await self.ha_client.call_service("timer", "start", payload)
             return
         message = label or "Timer complete"
@@ -58,6 +59,7 @@ class AssistantScheduler:
             if not service:
                 raise ValueError("HOME_ASSISTANT_REMINDER_SERVICE must be in 'domain.service' format")
             payload = {"message": message, "when": when.isoformat()}
+            assert self.ha_client is not None
             await self.ha_client.call_service(domain, service, payload)
             return
         delay = max(0.0, (when - datetime.now(UTC)).total_seconds())

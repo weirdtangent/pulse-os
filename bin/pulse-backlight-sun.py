@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover - fallback for Python < 3.9
-    ZoneInfo = None  # type: ignore[assignment]
+    ZoneInfo = None  # type: ignore[misc,assignment]
 
 from astral import LocationInfo
 from astral.sun import dawn, dusk, sun
@@ -100,16 +100,19 @@ def detect_tz() -> timezone | ZoneInfo:
         except OSError:
             continue
 
-    if tzname and ZoneInfo:
+    if tzname and ZoneInfo is not None:  # type: ignore[truthy-function]
         try:
             return ZoneInfo(tzname)
         except (LookupError, ValueError):
             pass
 
     try:
-        return datetime.now().astimezone().tzinfo or datetime.UTC
+        local_tz = datetime.now().astimezone().tzinfo
+        if local_tz is not None:
+            return local_tz  # type: ignore[return-value]
+        return UTC
     except OSError:
-        return datetime.UTC
+        return UTC
 
 
 def set_backlight(device_dir: str, percent: int) -> None:

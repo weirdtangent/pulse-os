@@ -32,7 +32,7 @@ class AssistantMqtt:
             client = mqtt.Client(
                 client_id=f"pulse-assistant-{self.config.topic_base}",
                 clean_session=True,
-                **callback_kwargs,
+                **callback_kwargs,  # type: ignore[arg-type]
             )
             if self.config.username:
                 client.username_pw_set(self.config.username, self.config.password or "")
@@ -45,7 +45,7 @@ class AssistantMqtt:
                 if self.config.key:
                     tls_kwargs["keyfile"] = self.config.key
                 tls_kwargs["tls_version"] = getattr(ssl, "PROTOCOL_TLS_CLIENT", ssl.PROTOCOL_TLS)
-                client.tls_set(**tls_kwargs)
+                client.tls_set(**tls_kwargs)  # type: ignore[arg-type]
             # Set Last Will so broker publishes "offline" if we disconnect unexpectedly
             available_topic = f"{self.config.topic_base}/assistant/available"
             client.will_set(available_topic, payload="offline", qos=1, retain=True)
