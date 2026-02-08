@@ -15,7 +15,7 @@ repos:
       - id: mixed-line-ending
         args: ['--fix=lf']
 
-  # Python linting and formatting with Ruff - runs on ALL Python files
+  # Python linting with Ruff - runs on ALL Python files
   - repo: local
     hooks:
       - id: ruff
@@ -24,9 +24,9 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
-      - id: ruff-format
-        name: ruff-format
-        entry: uv run ruff format .
+      - id: black
+        name: black
+        entry: uv run black .
         language: system
         pass_filenames: false
         types: [python]
