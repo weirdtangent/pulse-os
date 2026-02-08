@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 from pulse.audio import play_sound, play_volume_feedback
@@ -100,9 +100,7 @@ class OverlayHttpServer:
         self._on_set_brightness = on_set_brightness
         self._get_device_levels = get_device_levels
         self._sound_settings = SoundSettings.with_defaults(
-            custom_dir=(
-                Path(os.environ.get("PULSE_SOUNDS_DIR")).expanduser() if os.environ.get("PULSE_SOUNDS_DIR") else None
-            ),
+            custom_dir=(Path(sounds_dir).expanduser() if (sounds_dir := os.environ.get("PULSE_SOUNDS_DIR")) else None),
             default_alarm=(os.environ.get("PULSE_SOUND_ALARM") or "alarm-digital-rise").strip(),
             default_timer=(
                 os.environ.get("PULSE_SOUND_TIMER") or os.environ.get("PULSE_SOUND_ALARM") or "timer-woodblock"
@@ -137,7 +135,11 @@ class OverlayHttpServer:
         return sounds
 
     def _preview_sound(self, sound_id: str, *, kind: str, mode: str) -> None:
-        sound_kind = kind if kind in {"alarm", "timer", "reminder", "notification"} else "alarm"
+        sound_kind: Literal["alarm", "timer", "reminder", "notification"] = (
+            cast(Literal["alarm", "timer", "reminder", "notification"], kind)
+            if kind in {"alarm", "timer", "reminder", "notification"}
+            else "alarm"
+        )
         target_path = self._sound_library.resolve_with_default(sound_id, kind=sound_kind, settings=self._sound_settings)
         if mode == "repeat":
             thread = threading.Thread(
@@ -173,9 +175,9 @@ class OverlayHttpServer:
         payload["volume_supported"] = volume_supported
         brightness_value = device_levels.get("brightness")
         volume_value = device_levels.get("volume")
-        if brightness_supported and isinstance(brightness_value, (int, float)):
+        if brightness_supported and isinstance(brightness_value, int | float):
             payload["brightness"] = max(0, min(100, int(brightness_value)))
-        if volume_supported and isinstance(volume_value, (int, float)):
+        if volume_supported and isinstance(volume_value, int | float):
             payload["volume"] = max(0, min(100, int(volume_value)))
         return payload
 
@@ -458,7 +460,7 @@ html, body {{
                         return
                     minutes = data.get("minutes")
                     try:
-                        snooze_minutes = max(1, int(minutes))
+                        snooze_minutes = max(1, int(minutes))  # type: ignore[arg-type]
                     except (TypeError, ValueError):
                         snooze_minutes = 5
                     outer._on_snooze_request(str(event_id), snooze_minutes)
@@ -523,7 +525,7 @@ html, body {{
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing event_id")
                         return
                     try:
-                        delay_seconds = max(1, int(seconds))
+                        delay_seconds = max(1, int(seconds))  # type: ignore[arg-type]
                     except (TypeError, ValueError):
                         delay_seconds = 3600
                     outer._on_delay_reminder(str(event_id), delay_seconds)
@@ -580,7 +582,7 @@ html, body {{
                 elif action in {"set_volume", "set_brightness"}:
                     raw_value = data.get("value")
                     try:
-                        target_value = max(0, min(100, int(float(raw_value))))
+                        target_value = max(0, min(100, int(float(raw_value))))  # type: ignore[arg-type]
                     except (TypeError, ValueError):
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing or invalid value")
                         return

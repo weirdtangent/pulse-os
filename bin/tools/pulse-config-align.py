@@ -267,8 +267,9 @@ def _confirm_edit(host: str) -> bool:
 def _apply_overrides(config_path: Path, overrides: dict[str, str | None]) -> None:
     if not overrides:
         return
+    _REMOVED_MARKER = "\x00__REMOVE__"  # sentinel for lines to remove
     lines = config_path.read_text(encoding="utf-8").splitlines()
-    updated = set()
+    updated: set[str] = set()
     for idx, line in enumerate(lines):
         stripped = line.lstrip()
         if not stripped or stripped.startswith("#"):
@@ -280,7 +281,7 @@ def _apply_overrides(config_path: Path, overrides: dict[str, str | None]) -> Non
             value = overrides[key_part]
             updated.add(key_part)
             if value is None:
-                lines[idx] = None  # mark for removal
+                lines[idx] = _REMOVED_MARKER  # mark for removal
             else:
                 lines[idx] = f'{key_part}="{value}"'
     # Append missing overrides (only for non-removals)
@@ -291,7 +292,7 @@ def _apply_overrides(config_path: Path, overrides: dict[str, str | None]) -> Non
             continue
         lines.append(f'{key}="{value}"')
     # Drop removed lines
-    lines = [ln for ln in lines if ln is not None]
+    lines = [ln for ln in lines if ln != _REMOVED_MARKER]
     config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     applied_desc = []
     for key, value in overrides.items():
@@ -521,8 +522,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         stop = False
         for idx, host in enumerate(hosts_list):
-            tmp = temp_paths.get(host)
-            if not tmp or not tmp.exists():
+            host_tmp = temp_paths.get(host)
+            if not host_tmp or not host_tmp.exists():
                 continue
             try:
                 do_edit = True
@@ -533,16 +534,16 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 override_needed = _overrides_needed(pre_vars_by_host.get(host, {}), overrides) if overrides else False
                 if overrides and override_needed:
-                    _apply_overrides(tmp, overrides)
+                    _apply_overrides(host_tmp, overrides)
                 elif overrides:
                     _log(f"{host}: overrides already match; not applying override changes")
                 if args.edit:
-                    _open_editor(tmp)
+                    _open_editor(host_tmp)
                 do_push = args.push and (args.edit or override_needed)
                 if do_push:
-                    _push_remote_config(host, tmp, remote_path)
+                    _push_remote_config(host, host_tmp, remote_path)
                     _run_remote_setup(host, remote_path)
-                post_vars_by_host[host] = _extract_vars(parse_config(tmp))
+                post_vars_by_host[host] = _extract_vars(parse_config(host_tmp))
             except Exception as exc:
                 exit_code = 1
                 print(f"{host}: error during edit/push - {exc}", file=sys.stderr)

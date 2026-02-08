@@ -369,7 +369,7 @@ def _decode_brightness_payload(
         value = int(float(value_str))
         return max(0, min(100, value))
     except (ValueError, TypeError):
-        logger(f"{label}: invalid payload '{payload}', expected 0-100")
+        logger(f"{label}: invalid payload '{payload!r}', expected 0-100")
         return None
 
 
@@ -469,7 +469,7 @@ def load_config() -> EnvConfig:
 
     volume_feedback_enabled = parse_bool(os.environ.get("PULSE_VOLUME_TEST_SOUND"), default=True)
 
-    media_player_entity = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
+    media_player_entity: str | None = (os.environ.get("PULSE_MEDIA_PLAYER_ENTITY") or "").strip()
     if not media_player_entity:
         sanitized = sanitize_hostname_for_entity_id(hostname)
         media_player_entity = f"media_player.{sanitized}"
@@ -524,7 +524,7 @@ def load_config() -> EnvConfig:
 
 
 def _is_valid_ip(ip: str | None) -> bool:
-    return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0"  # nosec B104 - local service
+    return bool(ip) and not ip.startswith("127.") and ip != "0.0.0.0" if ip else False  # nosec B104 - local service
 
 
 def detect_ip_address(hostname: str) -> str | None:
@@ -1304,7 +1304,7 @@ class KioskMqttListener:
                 continue
         return None
 
-    def _publish_telemetry(self, metrics: dict[str, int | float]) -> None:
+    def _publish_telemetry(self, metrics: dict[str, int | float | str]) -> None:
         base_topic = self.config.topics.telemetry
         for descriptor in TELEMETRY_SENSORS:
             value = metrics.get(descriptor.key)
@@ -1316,7 +1316,7 @@ class KioskMqttListener:
 
     @staticmethod
     def _format_metric_value(value: int | float | str, precision: int | None) -> str:
-        if isinstance(value, (int, float)) and precision is not None:
+        if isinstance(value, int | float) and precision is not None:
             format_str = f"{{:.{precision}f}}"
             return format_str.format(value)
         return str(value)
@@ -1892,7 +1892,7 @@ class KioskMqttListener:
             volume_str = payload.decode("utf-8", errors="ignore").strip()
             volume = int(float(volume_str))
         except (ValueError, TypeError):
-            self.log(f"volume: invalid payload '{payload}', expected 0-100")
+            self.log(f"volume: invalid payload '{payload!r}', expected 0-100")
             return
 
         if audio.set_volume(volume, play_feedback=self.config.volume_feedback_enabled):
@@ -1918,7 +1918,7 @@ class KioskMqttListener:
             brightness_str = payload.decode("utf-8", errors="ignore").strip()
             brightness = int(float(brightness_str))
         except (ValueError, TypeError):
-            self.log(f"brightness: invalid payload '{payload}', expected 0-100")
+            self.log(f"brightness: invalid payload '{payload!r}', expected 0-100")
             return
 
         if display.set_brightness(brightness):

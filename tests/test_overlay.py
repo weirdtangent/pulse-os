@@ -47,7 +47,7 @@ class OverlayRenderTests(unittest.TestCase):
             "update_available": False,
         }
         data.update(overrides)
-        return OverlaySnapshot(**data)
+        return OverlaySnapshot(**data)  # type: ignore[arg-type]
 
     def test_single_clock_bottom_left_cell(self) -> None:
         html = render_overlay_html(self._snapshot(), self.theme)

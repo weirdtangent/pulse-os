@@ -261,7 +261,7 @@ def _parse_rgb_color(args: dict[str, str]) -> tuple[int, int, int] | None:
             cleaned = rgb_str.strip().strip("[]")
             parts = [int(x.strip()) for x in cleaned.split(",")]
             if len(parts) == 3:
-                return tuple(max(0, min(255, p)) for p in parts)
+                return (max(0, min(255, parts[0])), max(0, min(255, parts[1])), max(0, min(255, parts[2])))
         except (ValueError, TypeError):
             pass
 
@@ -542,21 +542,21 @@ async def _maybe_execute_home_assistant_action(
         entity_id = args.get("entity_id")
         if not entity_id:
             # Try to resolve entity by name, trying multiple common domains
-            targets: list[str] = []
+            off_targets: list[str] = []
             for domain in _preferred_domains(args):
-                targets = await _resolve_entities(args, ha_client, domain)
-                if targets:
+                off_targets = await _resolve_entities(args, ha_client, domain)
+                if off_targets:
                     break
-            if not targets:
+            if not off_targets:
                 return False
-            _log_resolution(slug, targets, _preferred_domains(args))
+            _log_resolution(slug, off_targets, _preferred_domains(args))
             # Check if resolved entities are lights (for transition support)
-            if all(_entity_domain(t) == "light" for t in targets):
+            if all(_entity_domain(t) == "light" for t in off_targets):
                 transition = _parse_transition_seconds(args)
-                await ha_client.set_light_state(targets, on=False, transition=transition)
+                await ha_client.set_light_state(off_targets, on=False, transition=transition)
             else:
                 # For non-light entities, use generic turn_off
-                for target in targets:
+                for target in off_targets:
                     domain = _entity_domain(target)
                     if domain == "fan":
                         percentage = _parse_percentage(args)
@@ -712,13 +712,13 @@ async def _maybe_execute_scheduler_action(
                 if ("days" in args or "repeat" in args)
                 else None
             )
-            playback = _playback_from_args(args) if "type" in args or "mode" in args or "source" in args else None
+            alarm_playback = _playback_from_args(args) if "type" in args or "mode" in args or "source" in args else None
             await schedule_service.update_alarm(
                 event_id,
                 time_of_day=args.get("time") or args.get("at"),
                 days=days,
                 label=args.get("label") or args.get("name"),
-                playback=playback,
+                playback=alarm_playback,
             )
             return True
         if slug == "alarm.delete":
@@ -817,7 +817,7 @@ def _resolve_schedule_event_id(schedule_service: ScheduleService, event_type: st
     if not label:
         return None
     lowered = label.strip().lower()
-    for event in schedule_service.list_events(event_type):
+    for event in schedule_service.list_events(event_type):  # type: ignore[arg-type]
         event_label = (event.get("label") or "").lower()
         if event_label and lowered in event_label:
             return event["id"]
@@ -854,11 +854,11 @@ def _reminder_repeat_from_args(args: dict[str, str], default: datetime) -> dict[
             return {"type": "interval", "interval_months": months}
     if interval_days:
         try:
-            days = int(interval_days)
+            interval_days_num = int(interval_days)
         except ValueError:
-            days = 0
-        if days > 0:
-            return {"type": "interval", "interval_days": days}
+            interval_days_num = 0
+        if interval_days_num > 0:
+            return {"type": "interval", "interval_days": interval_days_num}
     numeric_match = re.search(r"(\d+)\s+(months?|month)", repeat_value)
     if numeric_match:
         months = int(numeric_match.group(1))
@@ -869,6 +869,6 @@ def _reminder_repeat_from_args(args: dict[str, str], default: datetime) -> dict[
         return {"type": "interval", "interval_days": weeks * 7}
     numeric_match = re.search(r"(\d+)\s+(days?|day)", repeat_value)
     if numeric_match:
-        days = int(numeric_match.group(1))
-        return {"type": "interval", "interval_days": days}
+        day_interval = int(numeric_match.group(1))
+        return {"type": "interval", "interval_days": day_interval}
     return None

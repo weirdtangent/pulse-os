@@ -9,6 +9,7 @@ from contextlib import AbstractAsyncContextManager
 from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.client import AsyncTcpClient
+from wyoming.event import Event
 from wyoming.tts import Synthesize, SynthesizeVoice
 from wyoming.wake import Detect, Detection, NotDetected
 
@@ -211,7 +212,7 @@ async def _tts_event_stream(
     endpoint: WyomingEndpoint,
     voice_name: str | None = None,
     timeout: float | None = None,
-) -> AsyncIterator[object]:
+) -> AsyncIterator[Event]:
     client = AsyncTcpClient(endpoint.host, endpoint.port)
     await await_with_timeout(client.connect(), timeout)
     voice = SynthesizeVoice(name=voice_name) if voice_name else None

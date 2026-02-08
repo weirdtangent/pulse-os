@@ -56,7 +56,7 @@ class AssistantDisplay:
         callback_kwargs: dict[str, object] = {}
         if hasattr(mqtt, "CallbackAPIVersion"):
             callback_kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
-        self._client = mqtt.Client(client_id=client_id or "pulse-assistant-display", **callback_kwargs)
+        self._client = mqtt.Client(client_id=client_id or "pulse-assistant-display", **callback_kwargs)  # type: ignore[arg-type]
         raw_username = os.environ.get("MQTT_USER") or os.environ.get("MQTT_USERNAME")
         raw_password = os.environ.get("MQTT_PASS") or os.environ.get("MQTT_PASSWORD")
         username = raw_username.strip() if raw_username else ""
@@ -75,7 +75,7 @@ class AssistantDisplay:
                 tls_kwargs["certfile"] = certfile
             if keyfile:
                 tls_kwargs["keyfile"] = keyfile
-            self._client.tls_set(**tls_kwargs)
+            self._client.tls_set(**tls_kwargs)  # type: ignore[arg-type]
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.connect_async(mqtt_host, mqtt_port, keepalive=30)

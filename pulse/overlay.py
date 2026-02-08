@@ -706,8 +706,7 @@ def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
             event_id_escaped = html_escape(str(event_id), quote=True)
             # Material Design close/X icon path
             x_path = (
-                "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 "
-                "5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+                "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
             )
             cancel_button = (
                 f'<button class="overlay-timer__cancel" data-stop-timer '
@@ -751,8 +750,9 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
         calendar_hint = None
         if isinstance(event_data, dict):
             metadata = event_data.get("metadata") or {}
-            reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else {}
-            message = str(reminder_meta.get("message") or event_data.get("label") or "Reminder")
+            reminder_meta = metadata.get("reminder") if isinstance(metadata, dict) else None
+            reminder_msg = reminder_meta.get("message") if isinstance(reminder_meta, dict) else None
+            message = str(reminder_msg or event_data.get("label") or "Reminder")
             if isinstance(metadata, dict):
                 calendar_hint = metadata.get("calendar")
         if isinstance(calendar_hint, dict):
@@ -820,7 +820,7 @@ def _build_alarm_ringing_card(active_alarm: dict[str, Any]) -> str:
             f'data-snooze-minutes="5">Snooze 5 min</button>'
         )
         button_html = (
-            '<div class="overlay-card__actions overlay-card__actions--split">' f"{stop_button}{snooze_button}" "</div>"
+            f'<div class="overlay-card__actions overlay-card__actions--split">{stop_button}{snooze_button}</div>'
         )
     return f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
@@ -1101,8 +1101,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
                         "</div>"
                     )
 
-            body_rows.append(
-                f"""
+            body_rows.append(f"""
   <div class="overlay-info-card__alarm">
     <div class="overlay-info-card__alarm-body">
       <div class="overlay-info-card__alarm-label">{label}</div>
@@ -1119,8 +1118,7 @@ def _build_alarm_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) -
     </div>
   </div>
   {fire_buttons_html}
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--reminders">
@@ -1157,8 +1155,7 @@ def _build_reminder_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
             label = html_escape(entry["label"])
             meta = html_escape(entry["meta"])
             reminder_id = html_escape(entry["id"], quote=True)
-            body_rows.append(
-                f"""
+            body_rows.append(f"""
   <div class="overlay-info-card__reminder">
     <div class="overlay-info-card__reminder-body">
       <div class="overlay-info-card__reminder-label">{label}</div>
@@ -1172,8 +1169,7 @@ def _build_reminder_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
         aria-label="Delete {label}">🗑️</button>
     </div>
   </div>
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--alarms">
@@ -1196,7 +1192,7 @@ def _calendar_lookahead_hours(card: dict[str, Any]) -> int:
 
     value = card.get("lookahead_hours")
     try:
-        hours = int(value)
+        hours = int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         hours = DEFAULT_CALENDAR_LOOKAHEAD_HOURS
     if hours <= 0:
@@ -1425,8 +1421,7 @@ def _build_sounds_info_overlay(card: dict[str, Any]) -> str:
         meta = " · ".join(meta_parts)
         primary_kind = kinds[0]
         safe_id = html_escape(sound_id, quote=True)
-        entries.append(
-            f"""
+        entries.append(f"""
   <div class="overlay-sound-row">
     <div class="overlay-sound-row__body">
       <div class="overlay-sound-row__label">{html_escape(label)}</div>
@@ -1447,8 +1442,7 @@ def _build_sounds_info_overlay(card: dict[str, Any]) -> str:
       >Alarm loop</button>
     </div>
   </div>
-            """.strip()
-        )
+            """.strip())
     if not entries:
         body = '<div class="overlay-info-card__empty">No sounds found.</div>'
     else:
@@ -1511,8 +1505,7 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
       <div class="overlay-info-card__calendar-icon-day">{day_num}</div>
     </div>
             """.strip()
-            body_rows.append(
-                f"""
+            body_rows.append(f"""
   <div class="{row_class}">
     {icon_html}
     <div class="overlay-info-card__reminder-body">
@@ -1521,8 +1514,7 @@ def _build_calendar_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]
       {subtext_html}
     </div>
   </div>
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-info-card__alarm-list">' + "".join(body_rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--alarms">
@@ -1596,8 +1588,7 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
             if precip is not None:
                 meta_parts.append(f"Precip {int(precip)}%")
             meta_text = " · ".join(meta_parts)
-            rows.append(
-                f"""
+            rows.append(f"""
   <div class="overlay-weather-row">
     <div class="overlay-weather-row__icon">{icon_html}</div>
     <div class="overlay-weather-row__details">
@@ -1605,8 +1596,7 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
       <div class="overlay-weather-row__meta">{meta_text}</div>
     </div>
   </div>
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-weather">' + current_html + "".join(rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--weather">
@@ -1643,23 +1633,21 @@ def _build_lights_info_overlay(card: dict[str, Any]) -> str:
             color_temp = light.get("color_temp")
             area = str(light.get("area") or "").strip()
             meta_parts = [state]
-            if isinstance(brightness, (int, float)):
+            if isinstance(brightness, int | float):
                 meta_parts.append(f"{int(brightness)}%")
             if color_temp:
                 meta_parts.append(str(color_temp))
             if area:
                 meta_parts.append(area)
             meta = " · ".join(meta_parts)
-            rows.append(
-                f"""
+            rows.append(f"""
   <div class="overlay-info-card__reminder">
     <div class="overlay-info-card__reminder-body">
       <div class="overlay-info-card__reminder-label">{name}</div>
       <div class="overlay-info-card__reminder-meta">{html_escape(meta)}</div>
     </div>
   </div>
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-info-card__alarm-list">' + "".join(rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--lights">
@@ -1692,16 +1680,14 @@ def _build_routines_info_overlay(card: dict[str, Any]) -> str:
                 continue
             label = html_escape(str(routine.get("label") or routine.get("slug") or "Routine"))
             desc = html_escape(str(routine.get("description") or ""))
-            rows.append(
-                f"""
+            rows.append(f"""
   <div class="overlay-info-card__reminder">
     <div class="overlay-info-card__reminder-body">
       <div class="overlay-info-card__reminder-label">{label}</div>
       <div class="overlay-info-card__reminder-meta">{desc}</div>
     </div>
   </div>
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-info-card__alarm-list">' + "".join(rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--routines">
@@ -1734,16 +1720,14 @@ def _build_health_info_overlay(card: dict[str, Any]) -> str:
                 continue
             label = html_escape(str(item.get("label") or "Status"))
             value = html_escape(str(item.get("value") or ""))
-            rows.append(
-                f"""
+            rows.append(f"""
   <div class="overlay-info-card__reminder">
     <div class="overlay-info-card__reminder-body">
       <div class="overlay-info-card__reminder-label">{label}</div>
       <div class="overlay-info-card__reminder-meta">{value}</div>
     </div>
   </div>
-                """.strip()
-            )
+                """.strip())
         body = '<div class="overlay-info-card__alarm-list">' + "".join(rows) + "</div>"
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--health">
@@ -1992,7 +1976,7 @@ def _coerce_day_index_list(value: Any) -> list[int]:
     if isinstance(value, str):
         parsed = parse_day_tokens(value)
         return parsed or []
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return [int(value) % 7]
     return []
 
@@ -2176,7 +2160,7 @@ def _filter_upcoming_reminders(reminders: Iterable[dict[str, Any]] | None) -> li
 def _parse_timestamp(value: Any) -> float | None:
     if value is None:
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
     text = str(value).strip()
     if not text:

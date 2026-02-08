@@ -136,9 +136,9 @@ class InfoService:
 
         if self._is_news(simple):
             topic = self._extract_news_topic(simple)
-            result = await self._handle_news(topic)
-            if result:
-                spoken, display = result
+            news_result = await self._handle_news(topic)
+            if news_result:
+                spoken, display = news_result
                 return InfoResponse("news", spoken, display)
 
         sport_intent = await self._handle_sports(simple)
@@ -209,14 +209,14 @@ class InfoService:
             label = _describe_day(day.date, idx)
             high = _format_temp(day.temp_high)
             low = _format_temp(day.temp_low)
-            rain = day.precipitation_chance
+            precip_chance = day.precipitation_chance
             line_parts = []
             if high is not None:
                 line_parts.append(f"High {high}{display_label}")
             if low is not None:
                 line_parts.append(f"Low {low}{display_label}")
-            if rain is not None:
-                line_parts.append(f"Precip {int(rain)}%")
+            if precip_chance is not None:
+                line_parts.append(f"Precip {int(precip_chance)}%")
             display_line = f"{label}: " + ", ".join(line_parts)
             display_parts.append(display_line)
         display = "\n\n".join(display_parts)

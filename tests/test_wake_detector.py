@@ -24,7 +24,7 @@ def _build_detector(
         mic=mic,
         home_assistant=home_assistant,
     )
-    return WakeDetector(config, preferences, mic, self_audio_trigger_level=5)
+    return WakeDetector(config, preferences, mic, self_audio_trigger_level=5)  # type: ignore[arg-type]
 
 
 def test_wake_endpoint_streams_routes_models_to_home_assistant():

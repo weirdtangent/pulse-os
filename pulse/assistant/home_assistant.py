@@ -32,7 +32,7 @@ import httpx
 
 try:
     import websockets
-    from websockets.client import WebSocketClientProtocol
+    from websockets.client import WebSocketClientProtocol  # type: ignore[attr-defined]
     from websockets.exceptions import WebSocketException
 except ImportError:
     websockets = None  # type: ignore[assignment]

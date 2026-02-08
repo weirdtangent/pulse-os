@@ -245,7 +245,7 @@ SOUNDS: tuple[SoundSpec, ...] = (
 )
 
 
-def _render_segment(segment: Segment, frames: list[int]) -> None:
+def _render_segment(segment: Segment, frames: list[float]) -> None:
     total_samples = max(1, int(segment.duration * SAMPLE_RATE))
     attack_samples = max(1, int(total_samples * segment.envelope[0]))
     decay_samples = max(1, int(total_samples * segment.envelope[1]))
@@ -278,7 +278,7 @@ def _normalize(frames: Iterable[float]) -> list[int]:
 
 
 def render_sound(spec: SoundSpec, output_dir: Path) -> Path:
-    frames: list[int] = []
+    frames: list[float] = []
     for segment in spec.segments:
         _render_segment(segment, frames)
     normalized = _normalize(frames)

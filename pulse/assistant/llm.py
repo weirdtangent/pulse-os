@@ -434,7 +434,7 @@ def build_llm_provider(config: LLMConfig, logger: logging.Logger | None = None) 
     # Validate provider and log helpful message if unknown
     if provider and provider not in SUPPORTED_PROVIDERS:
         supported = ", ".join(SUPPORTED_PROVIDERS.keys())
-        log.warning(f"Unknown LLM provider '{provider}', falling back to OpenAI. " f"Supported providers: {supported}")
+        log.warning(f"Unknown LLM provider '{provider}', falling back to OpenAI. Supported providers: {supported}")
         provider = "openai"
 
     # Default to OpenAI if no provider specified
