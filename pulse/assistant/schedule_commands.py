@@ -314,7 +314,10 @@ class ScheduleCommandProcessor:
     async def _snooze_alarm(self, payload: dict[str, Any]) -> None:
         """Snooze an active alarm."""
         event_id = payload.get("event_id")
-        minutes = int(payload.get("minutes", 5))
+        try:
+            minutes = int(payload.get("minutes", 5))
+        except (ValueError, TypeError):
+            minutes = 5
         if event_id:
             await self.schedule_service.snooze_alarm(str(event_id), minutes=max(1, minutes))
 
@@ -433,7 +436,14 @@ class ScheduleCommandProcessor:
     async def _delay_reminder(self, payload: dict[str, Any]) -> None:
         """Delay a reminder."""
         event_id = payload.get("event_id")
-        seconds = self._coerce_duration_seconds(payload.get("seconds") or payload.get("duration") or "0")
+        raw_seconds = payload.get("seconds") or payload.get("duration")
+        if raw_seconds in (None, "", 0, "0"):
+            return
+        try:
+            seconds = self._coerce_duration_seconds(raw_seconds)
+        except ValueError:
+            LOGGER.warning("Invalid delay_reminder duration %r; ignoring", raw_seconds)
+            return
         if event_id and seconds > 0:
             await self.schedule_service.delay_reminder(str(event_id), int(seconds))
 
@@ -442,7 +452,7 @@ class ScheduleCommandProcessor:
     # ========================================================================
 
     @staticmethod
-    def _playback_from_payload(payload: dict[str, Any] | None) -> PlaybackConfig:
+    def _playback_from_payload(payload: Any) -> PlaybackConfig:
         """Parse playback configuration from command payload.
 
         Args:
