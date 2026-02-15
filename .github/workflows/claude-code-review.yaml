@@ -48,8 +48,8 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          PR=${{ github.event.pull_request.number }}
-          REPO=${{ github.repository }}
+          PR="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
 
           # Dismiss and minimize all bot reviews (Claude, Copilot, etc.)
           echo "Cleaning up prior bot reviews"
