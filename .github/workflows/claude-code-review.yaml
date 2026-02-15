@@ -51,13 +51,12 @@ jobs:
           PR=${{ github.event.pull_request.number }}
           REPO=${{ github.repository }}
 
-          # Bot login derived from the GitHub App slug
-          BOT_LOGIN="${{ steps.app-token.outputs.app-slug }}[bot]"
-          echo "Cleaning up prior reviews from ${BOT_LOGIN}"
+          # Dismiss and minimize all bot reviews (Claude, Copilot, etc.)
+          echo "Cleaning up prior bot reviews"
 
           # Dismiss APPROVED and CHANGES_REQUESTED reviews, then minimize all review bodies
           gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate \
-            --jq ".[] | select(.user.login == \"${BOT_LOGIN}\") | {id, node_id, state}" | \
+            --jq '.[] | select(.user.type == "Bot") | {id, node_id, state}' | \
           jq -r '[.id, .node_id, .state] | @tsv' | \
           while IFS=$'\t' read -r REVIEW_ID NODE_ID STATE; do
             if [ "$STATE" = "APPROVED" ] || [ "$STATE" = "CHANGES_REQUESTED" ]; then
@@ -76,7 +75,7 @@ jobs:
 
           # Minimize bot review comments (inline code comments) as OUTDATED
           gh api "repos/${REPO}/pulls/${PR}/comments" --paginate \
-            --jq ".[] | select(.user.login == \"${BOT_LOGIN}\") | .node_id" | \
+            --jq '.[] | select(.user.type == "Bot") | .node_id' | \
           while read -r NODE_ID; do
             gh api graphql -f query='
               mutation($id: ID!) {
@@ -89,7 +88,7 @@ jobs:
 
           # Minimize bot issue comments (top-level PR discussion comments) as OUTDATED
           gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
-            --jq ".[] | select(.user.login == \"${BOT_LOGIN}\") | .node_id" | \
+            --jq '.[] | select(.user.type == "Bot") | .node_id' | \
           while read -r NODE_ID; do
             gh api graphql -f query='
               mutation($id: ID!) {
