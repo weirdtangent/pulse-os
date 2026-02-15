@@ -51,9 +51,8 @@ jobs:
           PR=${{ github.event.pull_request.number }}
           REPO=${{ github.repository }}
 
-          # Resolve the bot login for the GitHub App that generated our token
-          APP_SLUG=$(gh api /app --jq '.slug')
-          BOT_LOGIN="${APP_SLUG}[bot]"
+          # Bot login derived from the GitHub App slug
+          BOT_LOGIN="${{ steps.app-token.outputs.app-slug }}[bot]"
           echo "Cleaning up prior reviews from ${BOT_LOGIN}"
 
           # Dismiss APPROVED and CHANGES_REQUESTED reviews from our bot
