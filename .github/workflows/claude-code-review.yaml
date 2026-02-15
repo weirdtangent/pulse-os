@@ -27,6 +27,9 @@ jobs:
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
       )
     runs-on: ubuntu-latest
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -39,6 +42,46 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Dismiss and minimize prior Claude reviews
+        if: github.event_name == 'pull_request' && github.event.action != 'opened'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          PR=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          # Dismiss APPROVED and CHANGES_REQUESTED bot reviews
+          gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate --jq \
+            '.[] | select(.user.type == "Bot" and (.state == "APPROVED" or .state == "CHANGES_REQUESTED")) | .id' | \
+          while read -r REVIEW_ID; do
+            gh api --method PUT "repos/${REPO}/pulls/${PR}/reviews/${REVIEW_ID}/dismissals" \
+              -f message="Superseded by new code changes" || true
+          done
+
+          # Minimize bot review comments (inline code comments) as OUTDATED
+          gh api "repos/${REPO}/pulls/${PR}/comments" --paginate --jq \
+            '.[] | select(.user.type == "Bot") | .node_id' | \
+          while read -r NODE_ID; do
+            gh api graphql -f query='
+              mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                  minimizedComment { isMinimized }
+                }
+              }' -f id="$NODE_ID" || true
+          done
+
+          # Minimize bot issue comments (top-level PR discussion comments) as OUTDATED
+          gh api "repos/${REPO}/issues/${PR}/comments" --paginate --jq \
+            '.[] | select(.user.type == "Bot") | .node_id' | \
+          while read -r NODE_ID; do
+            gh api graphql -f query='
+              mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                  minimizedComment { isMinimized }
+                }
+              }' -f id="$NODE_ID" || true
+          done
 
       - name: Claude Code Review
         uses: anthropics/claude-code-action@v1
