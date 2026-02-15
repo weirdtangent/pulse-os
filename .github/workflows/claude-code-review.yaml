@@ -56,8 +56,7 @@ jobs:
 
           # Dismiss APPROVED and CHANGES_REQUESTED reviews, then minimize all review bodies
           gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate \
-            --jq '.[] | select(.user.type == "Bot") | {id, node_id, state}' | \
-          jq -r '[.id, .node_id, .state] | @tsv' | \
+            --jq '.[] | select(.user.type == "Bot") | [.id, .node_id, .state] | @tsv' | \
           while IFS=$'\t' read -r REVIEW_ID NODE_ID STATE; do
             if [ "$STATE" = "APPROVED" ] || [ "$STATE" = "CHANGES_REQUESTED" ]; then
               gh api --method PUT "repos/${REPO}/pulls/${PR}/reviews/${REVIEW_ID}/dismissals" \
