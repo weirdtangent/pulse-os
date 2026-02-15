@@ -108,8 +108,8 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
-          model: claude-opus-4-5-20251101
           claude_args: |
+            --model claude-opus-4-5-20251101
             --allowedTools "Bash(gh:*)"
           prompt: |
             Review this pull request for code quality, security issues,
