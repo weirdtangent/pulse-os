@@ -27,6 +27,9 @@ jobs:
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
       )
     runs-on: ubuntu-latest
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -39,6 +42,66 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Dismiss and minimize prior Claude reviews
+        if: github.event_name == 'pull_request' && github.event.action != 'opened'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+
+          # Validate inputs
+          if ! [[ "$PR" =~ ^[0-9]+$ ]]; then echo "Error: Invalid PR number"; exit 1; fi
+          if ! [[ "$REPO" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*/[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then echo "Error: Invalid repo format"; exit 1; fi
+
+          # Intentionally dismiss ALL bot reviews (Claude, Copilot, etc.) — not just our own.
+          # Any automated review is invalidated by new code changes and will be re-run.
+          echo "Cleaning up prior bot reviews"
+
+          # Dismiss APPROVED and CHANGES_REQUESTED reviews, then minimize all review bodies
+          gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate \
+            --jq '.[] | select(.user.type == "Bot") | [.id, .node_id, .state] | @tsv' | \
+          while IFS=$'\t' read -r REVIEW_ID NODE_ID STATE; do
+            if [ "$STATE" = "APPROVED" ] || [ "$STATE" = "CHANGES_REQUESTED" ]; then
+              gh api --method PUT "repos/${REPO}/pulls/${PR}/reviews/${REVIEW_ID}/dismissals" \
+                -f message="Superseded by new code changes" \
+                || echo "Warning: Failed to dismiss review ${REVIEW_ID}"
+            fi
+            gh api graphql -f query='
+              mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                  minimizedComment { isMinimized }
+                }
+              }' -f id="$NODE_ID" \
+              || echo "Warning: Failed to minimize review ${REVIEW_ID}"
+          done
+
+          # Minimize bot review comments (inline code comments) as OUTDATED
+          gh api "repos/${REPO}/pulls/${PR}/comments" --paginate \
+            --jq '.[] | select(.user.type == "Bot") | .node_id' | \
+          while read -r NODE_ID; do
+            gh api graphql -f query='
+              mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                  minimizedComment { isMinimized }
+                }
+              }' -f id="$NODE_ID" \
+              || echo "Warning: Failed to minimize review comment ${NODE_ID}"
+          done
+
+          # Minimize bot issue comments (top-level PR discussion comments) as OUTDATED
+          gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+            --jq '.[] | select(.user.type == "Bot") | .node_id' | \
+          while read -r NODE_ID; do
+            gh api graphql -f query='
+              mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                  minimizedComment { isMinimized }
+                }
+              }' -f id="$NODE_ID" \
+              || echo "Warning: Failed to minimize issue comment ${NODE_ID}"
+          done
 
       - name: Claude Code Review
         uses: anthropics/claude-code-action@v1
