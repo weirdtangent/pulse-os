@@ -56,9 +56,8 @@ jobs:
           echo "Cleaning up prior reviews from ${BOT_LOGIN}"
 
           # Dismiss APPROVED and CHANGES_REQUESTED reviews from our bot
-          gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate --jq \
-            --arg login "$BOT_LOGIN" \
-            '.[] | select(.user.login == $login and (.state == "APPROVED" or .state == "CHANGES_REQUESTED")) | .id' | \
+          gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate \
+            --jq ".[] | select(.user.login == \"${BOT_LOGIN}\" and (.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\")) | .id" | \
           while read -r REVIEW_ID; do
             gh api --method PUT "repos/${REPO}/pulls/${PR}/reviews/${REVIEW_ID}/dismissals" \
               -f message="Superseded by new code changes" \
@@ -66,9 +65,8 @@ jobs:
           done
 
           # Minimize bot review comments (inline code comments) as OUTDATED
-          gh api "repos/${REPO}/pulls/${PR}/comments" --paginate --jq \
-            --arg login "$BOT_LOGIN" \
-            '.[] | select(.user.login == $login) | .node_id' | \
+          gh api "repos/${REPO}/pulls/${PR}/comments" --paginate \
+            --jq ".[] | select(.user.login == \"${BOT_LOGIN}\") | .node_id" | \
           while read -r NODE_ID; do
             gh api graphql -f query='
               mutation($id: ID!) {
@@ -80,9 +78,8 @@ jobs:
           done
 
           # Minimize bot issue comments (top-level PR discussion comments) as OUTDATED
-          gh api "repos/${REPO}/issues/${PR}/comments" --paginate --jq \
-            --arg login "$BOT_LOGIN" \
-            '.[] | select(.user.login == $login) | .node_id' | \
+          gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+            --jq ".[] | select(.user.login == \"${BOT_LOGIN}\") | .node_id" | \
           while read -r NODE_ID; do
             gh api graphql -f query='
               mutation($id: ID!) {
