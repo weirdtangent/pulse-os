@@ -13,6 +13,7 @@ from pulse.assistant.llm import (
     _format_system_prompt,
     _parse_llm_response,
     build_llm_provider,
+    build_llm_provider_with_overrides,
 )
 
 # Mark async tests in this module to use anyio
@@ -289,6 +290,35 @@ class TestBuildLLMProvider:
         provider = build_llm_provider(config)
         # Check that it returns some provider (implementation may vary)
         assert provider is not None
+
+
+class TestBuildLLMProviderWithOverrides:
+    """Test LLM provider factory with preference overrides."""
+
+    def test_applies_provider_override(self):
+        config = make_llm_config(provider="openai", gemini_api_key="test_key")
+        provider = build_llm_provider_with_overrides(config, "gemini", {})
+        from pulse.assistant.llm import GeminiProvider
+
+        assert isinstance(provider, GeminiProvider)
+
+    def test_applies_model_override(self):
+        config = make_llm_config(provider="openai")
+        provider = build_llm_provider_with_overrides(config, "openai", {"openai": "gpt-4o-mini"})
+        assert isinstance(provider, OpenAIProvider)
+        assert provider.config.openai_model == "gpt-4o-mini"
+
+    def test_falls_back_to_base_model_when_override_is_none(self):
+        config = make_llm_config(provider="openai", openai_model="gpt-4")
+        provider = build_llm_provider_with_overrides(config, "openai", {"openai": None})
+        assert provider.config.openai_model == "gpt-4"
+
+    def test_multiple_model_overrides(self):
+        config = make_llm_config(provider="groq", groq_api_key="test_key")
+        overrides = {"groq": "llama-custom", "openai": "gpt-custom"}
+        provider = build_llm_provider_with_overrides(config, "groq", overrides)
+        assert provider.config.groq_model == "llama-custom"
+        assert provider.config.openai_model == "gpt-custom"
 
 
 class TestLLMResult:

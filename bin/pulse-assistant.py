@@ -11,7 +11,6 @@ import logging
 import os
 import signal
 import time
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +25,7 @@ from pulse.assistant.event_handlers import EventHandlerManager
 from pulse.assistant.home_assistant import HomeAssistantClient
 from pulse.assistant.info_query_handler import InfoQueryHandler
 from pulse.assistant.info_service import InfoService
-from pulse.assistant.llm import LLMProvider, build_llm_provider
+from pulse.assistant.llm import SUPPORTED_PROVIDERS, LLMProvider, build_llm_provider_with_overrides
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
@@ -443,20 +442,8 @@ class PulseAssistant:
 
     def _build_llm_provider(self) -> LLMProvider:
         pm = self.preference_manager
-        provider = pm.get_active_llm_provider()
-        llm_config = replace(
-            self.config.llm,
-            provider=provider,
-            openai_model=pm.get_model_override("openai") or self.config.llm.openai_model,
-            gemini_model=pm.get_model_override("gemini") or self.config.llm.gemini_model,
-            anthropic_model=pm.get_model_override("anthropic") or self.config.llm.anthropic_model,
-            groq_model=pm.get_model_override("groq") or self.config.llm.groq_model,
-            mistral_model=pm.get_model_override("mistral") or self.config.llm.mistral_model,
-            openrouter_model=pm.get_model_override("openrouter") or self.config.llm.openrouter_model,
-        )
-        model = getattr(llm_config, f"{provider}_model", "unknown")
-        LOGGER.info(f"Using LLM provider: {provider} (model: {model})")
-        return build_llm_provider(llm_config, LOGGER)
+        overrides = {p: pm.get_model_override(p) for p in SUPPORTED_PROVIDERS}
+        return build_llm_provider_with_overrides(self.config.llm, pm.get_active_llm_provider(), overrides, LOGGER)
 
 
 async def main() -> None:

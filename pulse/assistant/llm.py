@@ -415,6 +415,43 @@ def get_supported_providers() -> dict[str, str]:
     return SUPPORTED_PROVIDERS.copy()
 
 
+def _resolve_model(base_config: LLMConfig, prov_name: str, overrides: dict[str, str | None]) -> str:
+    return overrides.get(prov_name) or getattr(base_config, f"{prov_name}_model", "") or ""
+
+
+def build_llm_provider_with_overrides(
+    base_config: LLMConfig,
+    provider: str,
+    model_overrides: dict[str, str | None],
+    logger: logging.Logger | None = None,
+) -> LLMProvider:
+    """Build an LLM provider using preference-based overrides.
+
+    Applies the active provider and any per-provider model overrides on top of
+    the base configuration, then delegates to ``build_llm_provider``.
+    """
+    from dataclasses import replace
+
+    log = logger or logging.getLogger(__name__)
+    provider = (provider or "").strip().lower() or "openai"
+    if provider not in SUPPORTED_PROVIDERS:
+        log.warning("Unknown LLM provider '%s', falling back to OpenAI", provider)
+        provider = "openai"
+    llm_config = replace(
+        base_config,
+        provider=provider,
+        openai_model=_resolve_model(base_config, "openai", model_overrides),
+        gemini_model=_resolve_model(base_config, "gemini", model_overrides),
+        anthropic_model=_resolve_model(base_config, "anthropic", model_overrides),
+        groq_model=_resolve_model(base_config, "groq", model_overrides),
+        mistral_model=_resolve_model(base_config, "mistral", model_overrides),
+        openrouter_model=_resolve_model(base_config, "openrouter", model_overrides),
+    )
+    model = getattr(llm_config, f"{provider}_model", "unknown")
+    log.info("Using LLM provider: %s (model: %s)", provider, model)
+    return build_llm_provider(llm_config, log)
+
+
 def build_llm_provider(config: LLMConfig, logger: logging.Logger | None = None) -> LLMProvider:
     """Build an LLM provider based on configuration.
 

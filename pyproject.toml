@@ -65,6 +65,7 @@ dev = [
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
     "ruff>=0.6.5",
     "types-requests>=2.32.4.20260107",
 ]
@@ -73,7 +74,7 @@ dev = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --cov=pulse --cov-report=term-missing:skip-covered"
 filterwarnings = [
     "ignore::DeprecationWarning:websockets.*:",
 ]
