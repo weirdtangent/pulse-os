@@ -494,8 +494,8 @@ class TestProbeWakeDetection:
         assert client.write_event.call_count == 4
         chunk_write = client.write_event.call_args_list[2]
         chunk_event = chunk_write[0][0]
-        # The audio data in the chunk should be silence (zeros)
-        assert b"\x00" in chunk_event.payload
+        # The audio data in the chunk should be silence (all zeros)
+        assert chunk_event.payload == b"\x00" * len(chunk_event.payload)
 
     async def test_custom_audio_passed_through(self, endpoint, mic, patch_tcp_client):
         _, client = patch_tcp_client
@@ -514,7 +514,7 @@ class TestProbeWakeDetection:
         # The AudioChunk write should contain our custom audio
         chunk_write = client.write_event.call_args_list[2]
         chunk_event = chunk_write[0][0]
-        assert custom_audio in chunk_event.payload
+        assert chunk_event.payload == custom_audio
 
     async def test_disconnect_called_on_success(self, endpoint, mic, patch_tcp_client):
         _, client = patch_tcp_client

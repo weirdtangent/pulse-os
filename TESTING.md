@@ -3,7 +3,7 @@
 ## Summary
 
 **Status:** All tests passing
-**Total tests:** 1021 across 35 test files
+**Total tests:** 1020 across 35 test files
 **Coverage:** 58%
 **Target:** 75% for v1.0
 
@@ -40,7 +40,7 @@
 | test_schedule_service_pauses.py | 4 | Schedule service pause/resume |
 | test_wake_detector.py | 3 | Wake word detection |
 | test_schedule_service.py | 3 | Schedule service orchestration |
-| test_info_service.py | 103 | Info query orchestration |
+| test_info_service.py | 102 | Info query orchestration |
 | test_config.py | 86 | Dataclass config, env parsing |
 | test_wyoming.py | 35 | Wyoming protocol STT/TTS/wake |
 | test_sound_library.py | 2 | Sound file loading |
@@ -70,7 +70,7 @@ open htmlcov/index.html
 | Initial test suite | 86 | ~15% | Dec 2025 |
 | Post-refactoring (Phase 10) | 700 | ~50% | Feb 2026 |
 | Current (Phase 14) | 800 | 56% | Feb 2026 |
-| Current (Phase 15) | 1021 | 58% | Feb 2026 |
+| Current (Phase 15) | 1020 | 58% | Feb 2026 |
 | v1.0 target | — | 75% | TBD |
 
 ## Remaining Coverage Gaps

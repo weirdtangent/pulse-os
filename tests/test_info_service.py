@@ -340,7 +340,6 @@ class TestExtractLeague:
             ("baseball schedule", "mlb"),
             ("formula 1 results", "f1"),
             ("march madness bracket", "ncaam"),
-            ("march madness bracket", "ncaam"),
             ("no league here", None),
         ],
     )
@@ -397,8 +396,9 @@ class TestFriendlyDate:
 
     def test_valid_iso(self):
         result = _friendly_date("2025-06-15T18:00:00Z")
-        assert result is not None
-        assert "Sunday" in result
+        assert isinstance(result, str)
+        assert result != "2025-06-15T18:00:00Z"
+        assert " at " in result
 
     def test_invalid_format(self):
         assert _friendly_date("not-a-date") == "not-a-date"
