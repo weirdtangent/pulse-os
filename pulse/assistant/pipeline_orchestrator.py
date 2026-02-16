@@ -561,7 +561,6 @@ class PipelineOrchestrator:
     def _log_assistant_response(self, wake_word: str, text: str | None, pipeline: str = "pulse") -> None:
         if not self.preference_manager.log_llm_messages or not text:
             return
-        _ = text if len(text) <= 240 else f"{text[:237]}..."
 
     async def _transcribe(self, audio_bytes: bytes, endpoint: WyomingEndpoint | None = None) -> str | None:
         target = endpoint or self.config.stt_endpoint
