@@ -7,7 +7,7 @@ import logging
 import sys
 
 from config import load_config
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
 from ssh import PulseSSH
 
 # All logging to stderr (stdout is reserved for JSON-RPC in STDIO transport)

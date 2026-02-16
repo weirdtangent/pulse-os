@@ -1,6 +1,6 @@
 import sys
 
-import atheris
+import atheris  # type: ignore[import-not-found]
 from pulse.overlay_server import OverlayHttpServer
 
 

@@ -550,6 +550,7 @@ TIMER_POSITION_MAP = {
 }
 
 ICON_MAP = {
+    "help": "&#10067;",  # ❓
     "config": "&#9881;",  # ⚙️
     "alarm": "&#128276;",  # 🔔
     "alarm_ringing": "&#128276;",
@@ -925,6 +926,7 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
 
 def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
     badges: list[str] = []
+    badges.append(_render_badge("help", "Help"))
     badges.append(_render_badge("config", "Config"))
     upcoming = _filter_upcoming_alarms(snapshot.alarms)
     if snapshot.active_alarm:
@@ -966,6 +968,8 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
 def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
     card = snapshot.info_card or {}
     card_type = str(card.get("type") or "").lower()
+    if card_type == "help":
+        return _build_help_info_overlay()
     if card_type == "alarms":
         return _build_alarm_info_overlay(snapshot, card)
     if card_type == "reminders":
@@ -1237,6 +1241,128 @@ def _get_library_versions() -> str:
         line2 = " &bull; ".join(versions[3:])
         return f"{line1}<br/>{line2}"
     return " &bull; ".join(versions)
+
+
+def _build_help_info_overlay() -> str:
+    sections = [
+        (
+            "Ask Me Anything",
+            "Ask any question after the wake word and the LLM will answer.",
+            [
+                "What year was the Eiffel Tower built?",
+                "Give me a recipe for banana bread",
+                "Tell me a joke",
+            ],
+        ),
+        (
+            "Alarms",
+            "Set, update, or remove alarms by voice.",
+            [
+                "Set an alarm for 7:30 AM",
+                "Set an alarm for 8 AM every weekday",
+                "Cancel my alarm / Delete the 8 AM alarm",
+                "When is my next alarm?",
+                "Show me my alarms",
+            ],
+        ),
+        (
+            "Timers",
+            "Start, extend, or cancel countdown timers.",
+            [
+                "Set a 5 minute timer",
+                "Set a 9 minute timer for pasta",
+                "Add 3 minutes to the timer",
+                "Cancel my timer / Cancel all timers",
+                "Stop the timer",
+            ],
+        ),
+        (
+            "Reminders",
+            "Create one-time or repeating reminders.",
+            [
+                "Remind me Monday at 8 AM to take out the trash",
+                "Remind me every Monday morning to water the plants",
+                "Remind me every 6 months to replace the HVAC filters",
+                "Show me my reminders",
+            ],
+        ),
+        (
+            "Calendar",
+            "View upcoming events from your synced calendars.",
+            [
+                "Show me my calendar",
+                "What's my schedule?",
+            ],
+        ),
+        (
+            "Weather, News & Sports",
+            "Get real-time info when configured.",
+            [
+                "What's the weather tomorrow?",
+                "Will it rain today?",
+                "What's the news?",
+                "What are the NFL standings?",
+                "When do the Penguins play next?",
+            ],
+        ),
+        (
+            "Music Controls",
+            "Control your media player via Home Assistant.",
+            [
+                "Pause the music / Stop the music",
+                "Next song / Skip song",
+                "What song is this? / Who is this?",
+            ],
+        ),
+        (
+            "Smart Home",
+            "Control lights, switches, fans, and scenes via Home Assistant.",
+            [
+                "Turn on the living room lights",
+                "Dim the bedroom to 50 percent",
+                "Set the kitchen lights to warm white",
+                "Turn off the hallway fan",
+                "Activate the movie scene",
+            ],
+        ),
+        (
+            "On-Screen Controls",
+            "Tap the notification pills at the top of the display.",
+            [
+                "Config &mdash; sound picker, volume, brightness",
+                "Alarm / Timer / Reminder &mdash; view, pause, delete",
+                "Calendar &mdash; view upcoming events",
+                "Earmuffs &mdash; mute / unmute the wake word",
+            ],
+        ),
+    ]
+    rows: list[str] = []
+    for title, desc, examples in sections:
+        safe_title = html_escape(title)
+        safe_desc = html_escape(desc)
+        example_items = "".join(f"<li>{ex}</li>" for ex in examples)  # examples contain safe HTML entities like &mdash;
+        rows.append(
+            f'<div class="overlay-help-section">'
+            f'<div class="overlay-help-section__title">{safe_title}</div>'
+            f'<div class="overlay-help-section__desc">{safe_desc}</div>'
+            f'<ul class="overlay-help-section__examples">{example_items}</ul>'
+            f"</div>"
+        )
+    body = "".join(rows)
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--help">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">What Can I Do?</div>
+      <div class="overlay-info-card__subtitle">Say the wake word, then try any of these</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close help">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
 
 
 def _build_config_info_overlay() -> str:
@@ -1999,6 +2125,7 @@ def _render_badge(icon_key: str, label: str) -> str:
     icon = ICON_MAP.get(icon_key, "&#9679;")
     safe_label = html_escape(label)
     interactive = icon_key in {
+        "help",
         "config",
         "alarm",
         "alarm_ringing",
@@ -2008,7 +2135,9 @@ def _render_badge(icon_key: str, label: str) -> str:
         "update",
     }
     action = None
-    if icon_key == "config":
+    if icon_key == "help":
+        action = "show_help"
+    elif icon_key == "config":
         action = "show_config"
     elif icon_key.startswith("alarm"):
         action = "show_alarms"

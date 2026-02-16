@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from PIL import Image
+    from PIL import Image  # type: ignore[import-not-found]
 except ImportError as exc:  # pragma: no cover - manual utility
     raise SystemExit("Pillow is required: pip install Pillow") from exc
 

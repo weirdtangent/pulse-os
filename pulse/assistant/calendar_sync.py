@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import unquote, urlparse
 
 import httpx
-from icalendar import Calendar
+from icalendar import Calendar  # type: ignore[import-untyped]
 
 from .config import CalendarConfig
 

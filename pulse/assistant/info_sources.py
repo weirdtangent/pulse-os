@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 try:
-    from openlocationcode import openlocationcode as olc
+    from openlocationcode import openlocationcode as olc  # type: ignore[import-untyped]
 except ImportError:  # pragma: no cover - optional dependency
     olc = None
 

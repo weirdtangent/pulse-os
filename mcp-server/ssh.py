@@ -7,7 +7,7 @@ import logging
 import shlex
 from pathlib import Path
 
-import asyncssh
+import asyncssh  # type: ignore[import-not-found]
 from config import SshConfig
 
 logger = logging.getLogger("pulse-mcp.ssh")

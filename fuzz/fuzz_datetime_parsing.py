@@ -1,6 +1,6 @@
 import sys
 
-import atheris
+import atheris  # type: ignore[import-not-found]
 
 with atheris.instrument_imports():
     from pulse.datetime_utils import (
