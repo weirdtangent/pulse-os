@@ -160,7 +160,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         precision=1,
     ),
     TelemetryDescriptor(
-        key="cpu_temperature_c",
+        key="cpu_temperature",
         name="CPU Temperature",
         unit="°C",
         device_class="temperature",
@@ -883,7 +883,7 @@ class KioskMqttListener:
 
         cpu_temp = self._read_cpu_temperature()
         if cpu_temp is not None:
-            metrics["cpu_temperature_c"] = round(cpu_temp, 1)
+            metrics["cpu_temperature"] = round(cpu_temp, 1)
 
         load1, load5, load15 = os.getloadavg()
         metrics["load_avg_1m"] = round(load1, 2)
