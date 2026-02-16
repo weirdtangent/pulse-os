@@ -14,15 +14,14 @@ import signal
 import subprocess
 import threading
 import time
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from pulse.assistant.actions import ActionEngine, load_action_definitions
 from pulse.assistant.audio import AplaySink, ArecordStream
-from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
+from pulse.assistant.calendar_manager import CalendarEventManager
+from pulse.assistant.calendar_sync import CalendarSyncService
 from pulse.assistant.config import AssistantConfig, AssistantPreferences, WyomingEndpoint
 from pulse.assistant.conversation_manager import (
     ConversationManager,
@@ -78,9 +77,6 @@ class AssistRunTracker:
             "total_ms": int((now - self.start) * 1000),
             "stages": self.stage_durations,
         }
-
-
-CALENDAR_EVENT_INFO_LIMIT = 25
 
 
 class PulseAssistant:
@@ -161,16 +157,25 @@ class PulseAssistant:
         )
         self.schedule_commands.set_log_activity_callback(self._log_activity_event)
 
-        self._calendar_events: list[dict[str, Any]] = []
-        self._calendar_updated_at: float | None = None
         self._latest_schedule_snapshot: dict[str, Any] | None = None
+
+        # Initialize calendar manager (Phase 6 extraction)
+        self.calendar_manager = CalendarEventManager(
+            schedule_service=self.schedule_service,
+            ooo_summary_marker=getattr(self.config.calendar, "ooo_summary_marker", "OOO"),
+            calendar_enabled=self.config.calendar.enabled,
+            calendar_has_feeds=bool(self.config.calendar.feeds),
+            logger=LOGGER,
+        )
+        self.calendar_manager.set_events_changed_callback(self._on_calendar_events_changed)
+
         self.calendar_sync: CalendarSyncService | None = None
         if self.config.calendar.enabled:
             if self.config.calendar.feeds:
                 self.calendar_sync = CalendarSyncService(
                     config=self.config.calendar,
-                    trigger_callback=self._trigger_calendar_reminder,
-                    snapshot_callback=self._handle_calendar_snapshot,
+                    trigger_callback=self.calendar_manager.trigger_calendar_reminder,
+                    snapshot_callback=self.calendar_manager.handle_calendar_snapshot,
                     logger=logging.getLogger("pulse.calendar_sync"),
                 )
             else:
@@ -298,11 +303,12 @@ class PulseAssistant:
                     await self.calendar_sync.start()
                 except Exception as exc:
                     LOGGER.exception("[assistant] Failed to start calendar sync service: %s", exc)
-                # Clear any stale calendar events on startup
-                self._calendar_events = []
-                self._calendar_updated_at = None
-                # Publish empty schedule state to clear overlay cache
-                self.publisher._publish_schedule_state({}, self._calendar_events, self._calendar_updated_at)
+                # Clear any stale calendar events on startup — the snapshot callback will repopulate
+                self.publisher._publish_schedule_state(
+                    {},
+                    self.calendar_manager.calendar_events,
+                    self.calendar_manager.calendar_updated_at,
+                )
             else:
                 LOGGER.warning("[assistant] calendar_sync is None, cannot start calendar sync service")
 
@@ -398,36 +404,6 @@ class PulseAssistant:
         if self.home_assistant:
             await self.home_assistant.close()
 
-    def _cancel_media_resume_task(self) -> None:
-        """Backward compatibility wrapper."""
-        self.media_controller.cancel_media_resume_task()
-
-    async def _maybe_pause_media_playback(self) -> None:
-        """Backward compatibility wrapper."""
-        await self.media_controller.maybe_pause_media_playback()
-
-    def _trigger_media_resume_after_response(self) -> None:
-        """Backward compatibility wrapper."""
-        self.media_controller.trigger_media_resume_after_response()
-
-    def _ensure_media_resume(self) -> None:
-        """Backward compatibility wrapper."""
-        self.media_controller.ensure_media_resume()
-
-    async def _record_phrase(
-        self,
-        *,
-        min_seconds: float | None = None,
-        max_seconds: float | None = None,
-        silence_ms: int | None = None,
-    ) -> bytes | None:
-        """Record a phrase using the conversation manager."""
-        return await self.conversation_manager.record_phrase(
-            min_seconds=min_seconds,
-            max_seconds=max_seconds,
-            silence_ms=silence_ms,
-        )
-
     async def _transcribe(self, audio_bytes: bytes, endpoint: WyomingEndpoint | None = None) -> str | None:
         target = endpoint or self.config.stt_endpoint
         if not target:
@@ -462,10 +438,6 @@ class PulseAssistant:
             audio_guard=self.wake_detector.local_audio_block(),
             logger=LOGGER,
         )
-
-    async def _maybe_publish_light_overlay(self, executed_actions: list[str]) -> None:
-        # Suppress light overlay for HA actions (no info card needed)
-        return
 
     def _pipeline_for_wake_word(self, wake_word: str) -> str:
         return self.config.wake_routes.get(wake_word, "pulse")
@@ -513,7 +485,7 @@ class PulseAssistant:
         await self.media_controller.maybe_pause_media_playback()
         await self.schedule_service.pause_active_audio()
         try:
-            audio_bytes = await self._record_phrase()
+            audio_bytes = await self.conversation_manager.record_phrase()
             if not audio_bytes:
                 LOGGER.info("[assistant] No speech captured for wake word %s", wake_word)
                 self._finalize_assist_run(status="no_audio")
@@ -549,9 +521,9 @@ class PulseAssistant:
             while follow_up_needed:
                 tracker.begin_stage("listening")
                 self._set_assist_stage("pulse", "listening", {"wake_word": wake_word, "follow_up": True})
-                await self._wait_for_speech_tail()
+                await self.conversation_manager.wait_for_speech_tail()
                 await self._maybe_play_wake_sound()
-                follow_up_audio = await self._record_follow_up_phrase()
+                follow_up_audio = await self.conversation_manager.record_follow_up_phrase()
                 if not follow_up_audio:
                     follow_up_attempts += 1
                     if follow_up_attempts >= max_follow_up_attempts:
@@ -642,7 +614,7 @@ class PulseAssistant:
             return
         await self.schedule_service.pause_active_audio()
         try:
-            audio_bytes = await self._record_phrase()
+            audio_bytes = await self.conversation_manager.record_phrase()
             if not audio_bytes:
                 LOGGER.info("[assistant] No speech captured for Home Assistant wake word %s", wake_word)
                 self._finalize_assist_run(status="no_audio")
@@ -743,7 +715,6 @@ class PulseAssistant:
                 self.config.action_topic,
                 json.dumps({"executed": executed_actions, "wake_word": wake_word}),
             )
-            await self._maybe_publish_light_overlay(executed_actions)
             if routine_actions:
                 self.publisher._publish_routine_overlay()
         response_text, play_tone = select_ha_response(
@@ -781,14 +752,6 @@ class PulseAssistant:
             self.conversation_manager.update_last_response_end(speech_finished_at)
             self.media_controller.trigger_media_resume_after_response()
         return llm_result
-
-    async def _record_follow_up_phrase(self) -> bytes | None:
-        """Record a follow-up phrase using the conversation manager."""
-        return await self.conversation_manager.record_follow_up_phrase()
-
-    async def _wait_for_speech_tail(self) -> None:
-        """Wait for speech tail using the conversation manager."""
-        await self.conversation_manager.wait_for_speech_tail()
 
     def _home_assistant_prompt_actions(self) -> list[dict[str, str]]:
         if not self.home_assistant:
@@ -1123,155 +1086,12 @@ class PulseAssistant:
             return f"Reminder: {base_label}"
         return None
 
-    async def _trigger_calendar_reminder(self, reminder: CalendarReminder) -> None:
-        label = reminder.summary or "Calendar event"
-        local_start = reminder.start.astimezone()
-        metadata = {
-            "reminder": {"message": label},
-            "calendar": {
-                "allow_delay": False,
-                "calendar_name": reminder.calendar_name,
-                "source": reminder.source_url,
-                "start": reminder.start.isoformat(),
-                "start_local": local_start.isoformat(),
-                "end": reminder.end.isoformat() if reminder.end else None,
-                "all_day": reminder.all_day,
-                "description": reminder.description,
-                "location": reminder.location,
-                "trigger": reminder.trigger_time.isoformat(),
-                "url": reminder.url,
-                "uid": reminder.uid,
-            },
-        }
-        try:
-            await self.schedule_service.trigger_ephemeral_reminder(
-                label=label,
-                message=label,
-                metadata=metadata,
-                auto_clear_seconds=900,
-            )
-        except Exception as exc:
-            LOGGER.exception("[assistant] Calendar reminder dispatch failed for %s: %s", label, exc)
-
-    async def _handle_calendar_snapshot(self, reminders: list[CalendarReminder]) -> None:
-        unique_reminders = self._deduplicate_calendar_reminders(reminders)
-        # Filter out events that have already ended (or started if no end time)
-        now = datetime.now().astimezone()
-        future_reminders = [reminder for reminder in unique_reminders if (reminder.end or reminder.start) > now]
-        ooo_marker = str(getattr(self.config.calendar, "ooo_summary_marker", "OOO") or "OOO").lower()
-        ooo_dates: set[str] = set()
-        for reminder in future_reminders:
-            if reminder.all_day and ooo_marker and ooo_marker in (reminder.summary or "").lower():
-                start_date = reminder.start.date()
-                if reminder.end:
-                    try:
-                        # All-day ICS end is typically exclusive; subtract one day.
-                        last = reminder.end.date() - timedelta(days=1)
-                    except Exception:
-                        last = start_date
-                else:
-                    last = start_date
-                if last < start_date:
-                    last = start_date
-                current = start_date
-                while current <= last:
-                    ooo_dates.add(current.isoformat())
-                    current += timedelta(days=1)
-        service = getattr(self, "schedule_service", None)
-        if service:
-            await service.set_ooo_skip_dates(ooo_dates)
-        events = [self._serialize_calendar_event(reminder) for reminder in future_reminders[:CALENDAR_EVENT_INFO_LIMIT]]
-        if self.config.calendar.enabled and self.config.calendar.feeds and not events:
-            LOGGER.warning(
-                "[assistant] Calendar snapshot contained no upcoming events within the lookahead window (now=%s)",
-                now.isoformat(),
-            )
-        self._calendar_events = events
-        self._calendar_updated_at = time.time()
-        # Update schedule shortcuts handler with new calendar events
+    def _on_calendar_events_changed(self, events: list[dict[str, Any]], updated_at: float | None) -> None:
+        """Callback from CalendarEventManager when events change."""
         self.schedule_shortcuts.set_calendar_events(events)
-        # Update schedule command processor with calendar state
-        self.schedule_commands.update_calendar_state(events, self._calendar_updated_at)
-        # Always publish schedule state to trigger overlay refresh, even if no schedule snapshot exists yet
+        self.schedule_commands.update_calendar_state(events, updated_at)
         snapshot = self._latest_schedule_snapshot or {}
-        self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
-
-    def _filter_past_calendar_events(self) -> None:
-        """Filter out past events from _calendar_events list."""
-        now = datetime.now().astimezone()
-        filtered = []
-        for event in self._calendar_events:
-            # Event dict has 'start' and optionally 'end' as ISO strings
-            start_str = event.get("start")
-            end_str = event.get("end")
-            if not start_str:
-                continue
-            try:
-                start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                if start_dt.tzinfo is None:
-                    start_dt = start_dt.replace(tzinfo=now.tzinfo)
-                else:
-                    start_dt = start_dt.astimezone(now.tzinfo)
-                event_end = start_dt
-                if end_str:
-                    try:
-                        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                        if end_dt.tzinfo is None:
-                            end_dt = end_dt.replace(tzinfo=now.tzinfo)
-                        else:
-                            end_dt = end_dt.astimezone(now.tzinfo)
-                        event_end = end_dt
-                    except (ValueError, AttributeError):
-                        pass
-                if event_end > now:
-                    filtered.append(event)
-            except (ValueError, AttributeError):
-                # Keep event if we can't parse the date (better to show than hide)
-                filtered.append(event)
-        if len(filtered) != len(self._calendar_events):
-            self._calendar_events = filtered
-            self.schedule_shortcuts.set_calendar_events(filtered)
-            self.schedule_commands.update_calendar_state(filtered, self._calendar_updated_at)
-            snapshot = self._latest_schedule_snapshot or {}
-            self.publisher._publish_schedule_state(snapshot, self._calendar_events, self._calendar_updated_at)
-
-    def _deduplicate_calendar_reminders(self, reminders: Sequence[CalendarReminder]) -> list[CalendarReminder]:
-        """Collapse duplicate events that arise from multiple VALARMs."""
-
-        unique: list[CalendarReminder] = []
-        seen: set[tuple[str, str, str]] = set()
-        for reminder in reminders:
-            key = (
-                reminder.source_url or "",
-                reminder.uid,
-                reminder.start.isoformat(),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            unique.append(reminder)
-        return unique
-
-    def _serialize_calendar_event(self, reminder: CalendarReminder) -> dict[str, Any]:
-        local_start = reminder.start.astimezone()
-        start_utc = reminder.start.astimezone(UTC)
-        payload: dict[str, Any] = {
-            "uid": reminder.uid,
-            "summary": reminder.summary,
-            "description": reminder.description,
-            "location": reminder.location,
-            "calendar_name": reminder.calendar_name,
-            "all_day": reminder.all_day,
-            "start": start_utc.isoformat(),
-            "start_local": local_start.isoformat(),
-            "trigger": reminder.trigger_time.astimezone().isoformat(),
-            "source": reminder.source_url,
-            "url": reminder.url,
-            "declined": reminder.declined,
-        }
-        if reminder.end:
-            payload["end"] = reminder.end.astimezone().isoformat()
-        return payload
+        self.publisher._publish_schedule_state(snapshot, events, updated_at)
 
     def _set_assist_stage(self, pipeline: str, stage: str, extra: dict | None = None) -> None:
         self._assist_stage = stage
@@ -1347,7 +1167,7 @@ class PulseAssistant:
             if overlay_active:
                 hold = max(self._info_overlay_min_seconds, estimated_clear_delay)
                 self.publisher._schedule_info_overlay_clear(hold)
-        self._trigger_media_resume_after_response()
+        self.media_controller.trigger_media_resume_after_response()
         return True
 
     async def _maybe_handle_stop_phrase(
@@ -1373,7 +1193,7 @@ class PulseAssistant:
         self.publisher._publish_message(self.config.response_topic, json.dumps(payload))
         self._log_assistant_response("stop", response_text, pipeline="pulse")
         await self._speak(response_text)
-        self._trigger_media_resume_after_response()
+        self.media_controller.trigger_media_resume_after_response()
         return True
 
     def _is_conversation_stop_command(self, transcript: str | None) -> bool:
@@ -1442,7 +1262,7 @@ class PulseAssistant:
         return True
 
     async def _describe_current_track(self, emphasize_artist: bool) -> bool:
-        state = await self._fetch_media_player_state()
+        state = await self.media_controller.fetch_media_player_state()
         if state is None:
             spoken = "I couldn't reach the player for that info."
             await self._speak(spoken)
@@ -1472,10 +1292,6 @@ class PulseAssistant:
         await self._speak(message)
         self._log_assistant_response("music", message, pipeline="pulse")
         return True
-
-    async def _fetch_media_player_state(self) -> dict[str, Any] | None:
-        """Backward compatibility wrapper."""
-        return await self.media_controller.fetch_media_player_state()
 
     def _build_llm_provider(self) -> LLMProvider:
         """Build LLM provider using current preference overrides."""

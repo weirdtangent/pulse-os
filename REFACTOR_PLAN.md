@@ -2,13 +2,13 @@
 
 ## Overview
 
-This document outlines a comprehensive plan to refactor `bin/pulse-assistant.py` (2,893 lines) into modular, maintainable components. The goal is to reduce the main entry point to ~250 lines while extracting reusable business logic into dedicated modules.
+This document outlines a comprehensive plan to refactor `bin/pulse-assistant.py` into modular, maintainable components. The goal is to reduce the main entry point to ~250 lines while extracting reusable business logic into dedicated modules.
 
 ## Current State
 
-- **Main file:** `bin/pulse-assistant.py` - 2,893 lines
-- **Main class:** `PulseAssistant` - 141 methods
-- **Test coverage:** 10% overall (1,116 test lines / 10,995 source lines)
+- **Main file:** `bin/pulse-assistant.py` - 1,540 lines (down from 2,893)
+- **Test suite:** 529 tests across 22 test files
+- **Phases 1–5:** Completed
 
 ## Target State
 
@@ -106,8 +106,24 @@ Process MQTT schedule commands.
 - Clear MQTT → ScheduleService bridge
 - Easier to add new schedule commands
 
+### Cleanup: Remove Dead Code
+**Status:** In progress
+
+Remove backward-compatibility wrappers and no-ops left over from earlier extractions.
+
+**Remove:**
+- `_maybe_publish_light_overlay` (no-op method) and its call site
+- 4 MediaController wrappers → replace with `self.media_controller.*`
+- 3 ConversationManager wrappers → replace with `self.conversation_manager.*`
+- `_fetch_media_player_state` wrapper → replace with `self.media_controller.*`
+
+**Benefits:**
+- Reduces main file line count
+- Eliminates dead indirection
+- Makes remaining code easier to read
+
 ### Phase 6: Extract Calendar Manager
-**File:** `pulse/assistant/calendar_manager.py` (~150 lines)
+**File:** `pulse/assistant/calendar_manager.py` (~145 lines)
 
 Manage calendar event state and reminders.
 
@@ -116,45 +132,30 @@ Manage calendar event state and reminders.
 - Calendar reminder triggering
 - Calendar snapshot handling
 - Event deduplication and filtering
+- Event serialization
+- `CALENDAR_EVENT_INFO_LIMIT` constant
 
 **Benefits:**
 - Small, focused module
 - Clear calendar integration point
 - Easier to test calendar logic
 
-### Phase 7: Extract Music Handler
+### Phase 7: Extract Music & Info Query Handlers
 **File:** `pulse/assistant/music_handler.py` (~150 lines)
-
-Handle music-related voice commands.
-
-**Extract:**
-- `MusicCommandHandler` class
-- Music command detection
-- Media service calls
-- Track description formatting
-
-**Benefits:**
-- Self-contained feature
-- Easy to extend with new music commands
-- Clear Home Assistant integration
-
-### Phase 8: Extract Information Query Handler
 **File:** `pulse/assistant/info_query_handler.py` (~100 lines)
 
-Wrapper for info service integration.
+Handle music voice commands and information query integration.
 
 **Extract:**
-- `InfoQueryHandler` class
-- Info query detection
-- Speech duration estimation
-- Info overlay coordination
+- `MusicCommandHandler` class — music command detection, media service calls, track description formatting
+- `InfoQueryHandler` class — info query detection, speech duration estimation, info overlay coordination
 
 **Benefits:**
-- Completes command handler extraction
-- Integrates existing InfoService
-- Clear information flow
+- Self-contained features
+- Easy to extend with new commands
+- Clear Home Assistant/InfoService integration
 
-### Phase 9: Extract Earmuffs Manager
+### Phase 8: Extract Earmuffs Manager
 **File:** `pulse/assistant/earmuffs.py` (~100 lines)
 
 Manage wake word suppression.
@@ -169,6 +170,23 @@ Manage wake word suppression.
 - Focused feature module
 - Clear wake word integration
 - Easier to add automation rules
+
+### Phase 9: Extract Event Handlers
+**File:** `pulse/assistant/event_handlers.py` (~100 lines)
+
+Handle alert, intercom, and now-playing messages.
+
+**Extract:**
+- `EventHandlerManager` class
+- Alert message handling
+- Intercom message handling
+- Now playing message handling
+- Kiosk availability tracking
+
+**Benefits:**
+- Small, focused feature
+- Clear MQTT integration
+- Easy to extend event types
 
 ### Phase 10: Extract Pipeline Orchestrator
 **File:** `pulse/assistant/pipeline_orchestrator.py` (~400 lines)
@@ -189,23 +207,7 @@ Orchestrate Pulse and Home Assistant pipelines.
 - Clear pipeline flows
 - Highly testable with mocks
 
-### Phase 11: Extract Alert/Intercom Handler
-**File:** `pulse/assistant/alerts.py` (~100 lines)
-
-Handle alert and intercom messages.
-
-**Extract:**
-- `AlertHandler` class
-- Alert message handling
-- Intercom message handling
-- Now playing message handling
-
-**Benefits:**
-- Small, focused feature
-- Clear MQTT integration
-- Easy to extend alert types
-
-### Phase 12: Refactor Main Entry Point
+### Phase 11: Refactor Main Entry Point
 **File:** `bin/pulse-assistant.py` (~250 lines)
 
 Reduce to minimal orchestration.
@@ -240,7 +242,7 @@ bin/pulse-assistant.py (entry point)
 ├── ScheduleCommandProcessor
 ├── CalendarEventManager
 ├── EarmuffsManager
-├── AlertHandler
+├── EventHandlerManager
 ├── ScheduleService (existing)
 ├── CalendarSyncService (existing)
 ├── WakeDetector (existing)
@@ -295,11 +297,11 @@ If circular dependencies arise:
 | `schedule_intents.py` | ~700 | NLP → schedule intents |
 | `schedule_shortcuts.py` | ~400 | Voice schedule shortcuts |
 | `schedule_commands.py` | ~300 | MQTT schedule commands |
-| `calendar_manager.py` | ~150 | Calendar integration |
+| `calendar_manager.py` | ~145 | Calendar integration |
 | `music_handler.py` | ~150 | Music commands |
 | `info_query_handler.py` | ~100 | Information queries |
 | `earmuffs.py` | ~100 | Wake word suppression |
-| `alerts.py` | ~100 | Alerts and intercom |
+| `event_handlers.py` | ~100 | Alerts, intercom, now-playing |
 | `pipeline_orchestrator.py` | ~400 | Pipeline flows |
 
 ## Testing Plan
@@ -402,11 +404,12 @@ For each extracted module:
 
 ## Timeline Estimate
 
-- **Phase 1-2:** 1-2 days (MQTT + Preferences)
-- **Phase 3-5:** 2-3 days (Schedule extraction)
-- **Phase 6-9:** 1-2 days (Smaller features)
-- **Phase 10-11:** 2-3 days (Orchestrator + cleanup)
-- **Phase 12:** 1 day (Main file refactor)
-- **Total:** 7-11 days of development + testing
+- **Phase 1-2:** Complete (MQTT + Preferences)
+- **Phase 3-5:** Complete (Schedule extraction)
+- **Cleanup + Phase 6:** In progress (Dead code removal + Calendar manager)
+- **Phase 7-8:** Pending (Music/Info + Earmuffs)
+- **Phase 9:** Pending (Event handlers)
+- **Phase 10:** Pending (Pipeline orchestrator)
+- **Phase 11:** Pending (Main file refactor)
 
 This is a living document and should be updated as implementation progresses.

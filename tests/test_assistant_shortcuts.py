@@ -5,9 +5,9 @@ import importlib.util
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
+from pulse.assistant.calendar_sync import CalendarReminder
 from pulse.assistant.conversation_manager import (
     evaluate_follow_up_transcript,
     is_conversation_stop_command,
@@ -26,7 +26,6 @@ _MODULE = importlib.util.module_from_spec(_MODULE_SPEC)
 sys.modules[_MODULE_SPEC.name] = _MODULE
 _MODULE_SPEC.loader.exec_module(_MODULE)  # type: ignore[attr-defined]
 PulseAssistant: Any = _MODULE.PulseAssistant  # type: ignore[attr-defined]
-CalendarReminder: Any = _MODULE.CalendarReminder  # type: ignore[attr-defined]
 
 
 def _assistant() -> Any:
@@ -68,32 +67,23 @@ def test_follow_up_noise_filtering() -> None:
     assert not ok
 
 
-def _setup_calendar_test_assistant() -> Any:
-    assistant = _assistant()
-    assistant._calendar_events = []
-    assistant._calendar_updated_at = None
-    assistant._latest_schedule_snapshot = None
-    # Mock publisher with _publish_schedule_state method
-    assistant.publisher = SimpleNamespace(
-        _publish_schedule_state=lambda snapshot, events, updated_at: None,
+def _make_calendar_manager() -> Any:
+    from unittest.mock import AsyncMock, Mock
+
+    from pulse.assistant.calendar_manager import CalendarEventManager
+
+    service = Mock()
+    service.set_ooo_skip_dates = AsyncMock()
+    return CalendarEventManager(
+        schedule_service=service,
+        ooo_summary_marker="OOO",
+        calendar_enabled=True,
+        calendar_has_feeds=True,
     )
-    # Mock config.calendar
-    assistant.config = SimpleNamespace(
-        calendar=SimpleNamespace(enabled=True, feeds=[]),
-    )
-    # Mock schedule_shortcuts handler (Phase 4 extraction)
-    assistant.schedule_shortcuts = SimpleNamespace(
-        set_calendar_events=lambda events: None,
-    )
-    # Mock schedule_commands processor (Phase 5 extraction)
-    assistant.schedule_commands = SimpleNamespace(
-        update_calendar_state=lambda events, updated_at: None,
-    )
-    return assistant
 
 
 def test_calendar_snapshot_deduplicates_multiple_valarms() -> None:
-    assistant = _setup_calendar_test_assistant()
+    mgr = _make_calendar_manager()
     # Use a date far in the future to avoid filtering
     start = datetime.now(UTC) + timedelta(days=30)
     reminders = [
@@ -124,13 +114,13 @@ def test_calendar_snapshot_deduplicates_multiple_valarms() -> None:
             url=None,
         ),
     ]
-    asyncio.run(assistant._handle_calendar_snapshot(reminders))
-    assert len(assistant._calendar_events) == 1
-    assert assistant._calendar_events[0]["summary"] == "Team sync"
+    asyncio.run(mgr.handle_calendar_snapshot(reminders))
+    assert len(mgr.calendar_events) == 1
+    assert mgr.calendar_events[0]["summary"] == "Team sync"
 
 
 def test_calendar_snapshot_retains_distinct_sources() -> None:
-    assistant = _setup_calendar_test_assistant()
+    mgr = _make_calendar_manager()
     # Use a date far in the future to avoid filtering
     start = datetime.now(UTC) + timedelta(days=30)
     reminders = [
@@ -161,5 +151,5 @@ def test_calendar_snapshot_retains_distinct_sources() -> None:
             url=None,
         ),
     ]
-    asyncio.run(assistant._handle_calendar_snapshot(reminders))
-    assert len(assistant._calendar_events) == 2
+    asyncio.run(mgr.handle_calendar_snapshot(reminders))
+    assert len(mgr.calendar_events) == 2
