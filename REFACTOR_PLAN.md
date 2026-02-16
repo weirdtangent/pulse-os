@@ -7,8 +7,8 @@ This document outlines a comprehensive plan to refactor `bin/pulse-assistant.py`
 ## Current State
 
 - **Main file:** `bin/pulse-assistant.py` - 496 lines (down from 2,893)
-- **Test suite:** 800 tests across 33 test files (56% coverage)
-- **Phases 1–14:** Completed
+- **Test suite:** 1021 tests across 35 test files (58% coverage)
+- **Phases 1–15:** Completed
 - **Cleanup:** Completed
 
 ## Target State
@@ -243,11 +243,15 @@ Added 96 tests across 4 new test files:
 
 Total suite: 800 tests, 56% overall coverage (up from 54%).
 
-### Phase 15: Test Medium Modules
-Add tests for larger modules with external dependencies:
-- `config.py` (771 lines) — dataclass validation, env parsing
-- `info_service.py` (476 lines) — info query orchestration
-- `wyoming.py` (229 lines) — Wyoming protocol client
+### Phase 15: Test Medium Modules ✅
+**Status:** Completed
+
+Added 221 tests across 3 test files:
+- `test_config.py` — 86 tests (98% coverage on config.py)
+- `test_info_service.py` — 103 tests (99% coverage on info_service.py)
+- `test_wyoming.py` — 35 tests (99% coverage on wyoming.py)
+
+Total suite: 1021 tests, 58% overall coverage (up from 56%).
 
 ### Dropped: Extract Schedule Callbacks
 The 5 schedule callback methods in `bin/pulse-assistant.py` are thin delegation

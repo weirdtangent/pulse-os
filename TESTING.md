@@ -3,8 +3,8 @@
 ## Summary
 
 **Status:** All tests passing
-**Total tests:** 800 across 32 test files
-**Coverage:** 56%
+**Total tests:** 1021 across 35 test files
+**Coverage:** 58%
 **Target:** 75% for v1.0
 
 ## Test Suites
@@ -40,7 +40,9 @@
 | test_schedule_service_pauses.py | 4 | Schedule service pause/resume |
 | test_wake_detector.py | 3 | Wake word detection |
 | test_schedule_service.py | 3 | Schedule service orchestration |
-| test_info_service.py | 3 | Info query orchestration |
+| test_info_service.py | 103 | Info query orchestration |
+| test_config.py | 86 | Dataclass config, env parsing |
+| test_wyoming.py | 35 | Wyoming protocol STT/TTS/wake |
 | test_sound_library.py | 2 | Sound file loading |
 | test_info_sources.py | 2 | Weather/news/sports APIs |
 
@@ -68,14 +70,12 @@ open htmlcov/index.html
 | Initial test suite | 86 | ~15% | Dec 2025 |
 | Post-refactoring (Phase 10) | 700 | ~50% | Feb 2026 |
 | Current (Phase 14) | 800 | 56% | Feb 2026 |
+| Current (Phase 15) | 1021 | 58% | Feb 2026 |
 | v1.0 target | — | 75% | TBD |
 
 ## Remaining Coverage Gaps
 
 Modules that would benefit from more tests:
-- `pulse/assistant/config.py` (771 lines) — dataclass validation, env parsing
-- `pulse/assistant/info_service.py` (476 lines) — info query orchestration
-- `pulse/assistant/wyoming.py` (229 lines) — Wyoming protocol client
 - `bin/kiosk-mqtt-listener.py` — kiosk overlay and MQTT listener
 
-See [REFACTOR_PLAN.md](REFACTOR_PLAN.md) (Phase 15) for the full roadmap.
+See [REFACTOR_PLAN.md](REFACTOR_PLAN.md) for the full roadmap.
