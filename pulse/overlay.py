@@ -1329,10 +1329,10 @@ def _build_help_info_overlay() -> str:
             "On-Screen Controls",
             "Tap the notification pills at the top of the display.",
             [
-                "Config &mdash; sound picker, volume, brightness",
-                "Alarm / Timer / Reminder &mdash; view, pause, delete",
-                "Calendar &mdash; view upcoming events",
-                "Earmuffs &mdash; mute / unmute the wake word",
+                "Config \u2014 sound picker, volume, brightness",
+                "Alarm / Timer / Reminder \u2014 view, pause, delete",
+                "Calendar \u2014 view upcoming events",
+                "Earmuffs \u2014 mute / unmute the wake word",
             ],
         ),
     ]
@@ -1340,7 +1340,7 @@ def _build_help_info_overlay() -> str:
     for title, desc, examples in sections:
         safe_title = html_escape(title)
         safe_desc = html_escape(desc)
-        example_items = "".join(f"<li>{ex}</li>" for ex in examples)  # examples contain safe HTML entities like &mdash;
+        example_items = "".join(f"<li>{html_escape(ex)}</li>" for ex in examples)
         rows.append(
             f'<div class="overlay-help-section">'
             f'<div class="overlay-help-section__title">{safe_title}</div>'
