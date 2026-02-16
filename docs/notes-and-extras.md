@@ -171,17 +171,13 @@ Update either asset and rerun `./setup.sh <location>` to refresh the splash on a
 ### Running tests locally
 
 ```bash
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install the package in development mode
-pip install -e ".[dev]"
+# Install dependencies (requires uv: https://docs.astral.sh/uv/)
+uv sync --all-extras --dev
 
 # Run linting and tests
-ruff check .
-black --check .
-pytest
+uv run ruff check .
+uv run black --check .
+uv run pytest
 ```
 
 ### GitHub Actions workflow
