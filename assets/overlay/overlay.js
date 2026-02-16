@@ -436,61 +436,19 @@ window.PulseOverlay.initialize = function() {
       e.preventDefault();
       e.stopPropagation();
       const action = badgeButton.dataset.badgeAction;
-      const badge = badgeButton;
-      badge.style.opacity = '0.7';
-      const resetOpacity = () => {
-        badge.style.opacity = '';
-      };
-      if (action === 'show_alarms') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'show_alarms' })
-        }).then(resetOpacity).catch(resetOpacity);
-        return;
-      } else if (action === 'show_reminders') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'show_reminders' })
-        }).then(resetOpacity).catch(resetOpacity);
-        return;
-      } else if (action === 'show_calendar') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'show_calendar' })
-        }).then(resetOpacity).catch(resetOpacity);
-        return;
-      } else if (action === 'show_config') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'show_config' })
-        }).then(resetOpacity).catch(resetOpacity);
-        return;
-      } else if (action === 'show_sounds') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'show_sounds' })
-        }).then(resetOpacity).catch(resetOpacity);
-        return;
-      } else if (action === 'toggle_earmuffs') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'toggle_earmuffs' })
-        }).then(resetOpacity).catch(resetOpacity);
-        return;
-      } else if (action === 'trigger_update') {
-        fetch(infoEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'trigger_update' })
-        }).then(resetOpacity).catch(resetOpacity);
+      if (!action) {
         return;
       }
+      badgeButton.style.opacity = '0.7';
+      const resetOpacity = () => {
+        badgeButton.style.opacity = '';
+      };
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      }).finally(resetOpacity);
+      return;
     }
 
     const configButton = e.target.closest('[data-config-action]');
@@ -812,4 +770,3 @@ window.PulseOverlay.initialize = function() {
 
 // Initialize on first load
 window.PulseOverlay.initialize();
-
