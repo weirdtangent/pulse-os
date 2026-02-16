@@ -447,7 +447,7 @@ window.PulseOverlay.initialize = function() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })
-      }).then(resetOpacity).catch(resetOpacity);
+      }).finally(resetOpacity);
       return;
     }
 
