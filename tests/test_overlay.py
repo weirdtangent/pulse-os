@@ -9,6 +9,7 @@ from pulse.overlay import (
     OverlayStateManager,
     OverlayTheme,
     _build_config_info_overlay,
+    _build_help_info_overlay,
     _get_library_versions,
     parse_clock_config,
     render_overlay_html,
@@ -493,6 +494,119 @@ class ConfigInfoCardTests(unittest.TestCase):
         self.assertIn("overlay-info-card--config", html)
         self.assertIn("overlay-config-logo", html)
         self.assertIn("overlay-config-about", html)
+
+
+class HelpInfoCardTests(unittest.TestCase):
+    """Tests for help info card."""
+
+    def test_build_help_info_overlay_structure(self) -> None:
+        """Test that the overlay has correct HTML structure."""
+        html = _build_help_info_overlay()
+        self.assertIn("overlay-card", html)
+        self.assertIn("overlay-info-card--help", html)
+        self.assertIn("overlay-info-card__header", html)
+        self.assertIn("overlay-info-card__body", html)
+
+    def test_build_help_info_overlay_has_close_button(self) -> None:
+        """Test that the help overlay has an accessible close button."""
+        html = _build_help_info_overlay()
+        self.assertIn("data-info-card-close", html)
+        self.assertIn('aria-label="Close help"', html)
+
+    def test_build_help_info_overlay_contains_all_sections(self) -> None:
+        """Test that all 9 help sections are rendered."""
+        html = _build_help_info_overlay()
+        expected_sections = [
+            "Ask Me Anything",
+            "Alarms",
+            "Timers",
+            "Reminders",
+            "Calendar",
+            "Weather, News &amp; Sports",
+            "Music Controls",
+            "Smart Home",
+            "On-Screen Controls",
+        ]
+        for section in expected_sections:
+            self.assertIn(section, html)
+
+    def test_build_help_info_overlay_contains_example_phrases(self) -> None:
+        """Test that example voice commands appear in the output."""
+        html = _build_help_info_overlay()
+        self.assertIn("Set an alarm for 7:30 AM", html)
+        self.assertIn("Set a 5 minute timer", html)
+        self.assertIn("Pause the music", html)
+        self.assertIn("Turn on the living room lights", html)
+
+    def test_build_help_info_overlay_has_section_structure(self) -> None:
+        """Test that sections use the expected CSS classes."""
+        html = _build_help_info_overlay()
+        self.assertIn("overlay-help-section", html)
+        self.assertIn("overlay-help-section__title", html)
+        self.assertIn("overlay-help-section__desc", html)
+        self.assertIn("overlay-help-section__examples", html)
+
+    def test_build_help_info_overlay_escapes_content(self) -> None:
+        """Test that content is HTML-escaped (& in section titles)."""
+        html = _build_help_info_overlay()
+        # "Weather, News & Sports" should be escaped to &amp;
+        self.assertIn("Weather, News &amp; Sports", html)
+
+    def test_build_help_info_overlay_title(self) -> None:
+        """Test that the card title is present."""
+        html = _build_help_info_overlay()
+        self.assertIn("What Can I Do?", html)
+        self.assertIn("Say the wake word, then try any of these", html)
+
+    def _snapshot(self, **overrides: object) -> OverlaySnapshot:
+        data: dict[str, object] = {
+            "version": 1,
+            "clocks": (),
+            "now_playing": "",
+            "timers": (),
+            "alarms": (),
+            "reminders": (),
+            "calendar_events": (),
+            "active_alarm": None,
+            "active_timer": None,
+            "active_reminder": None,
+            "notifications": (),
+            "timer_positions": {},
+            "info_card": None,
+            "last_reason": "test",
+            "generated_at": 0.0,
+            "schedule_snapshot": None,
+            "earmuffs_enabled": False,
+            "update_available": False,
+        }
+        data.update(overrides)
+        return OverlaySnapshot(**data)  # type: ignore[arg-type]
+
+    def test_help_badge_in_notification_bar(self) -> None:
+        """Test that the Help badge appears in the rendered notification bar."""
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+        )
+        html = render_overlay_html(self._snapshot(), theme)
+        self.assertIn("Help", html)
+        self.assertIn('data-badge-action="show_help"', html)
+
+    def test_help_info_card_renders_via_state(self) -> None:
+        """Test that setting info_card type=help produces help content."""
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+        )
+        html = render_overlay_html(self._snapshot(info_card={"type": "help"}), theme)
+        self.assertIn("overlay-info-card--help", html)
+        self.assertIn("Ask Me Anything", html)
 
 
 if __name__ == "__main__":

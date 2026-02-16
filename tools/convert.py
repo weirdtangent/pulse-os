@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image  # type: ignore[import-not-found]
 
 SOURCE = Path("assets/splash/graystorm-pulse_splash.png")  # adjust filename
 TARGET = Path("assets/splash/boot-splash.rgb")  # or wherever you need it

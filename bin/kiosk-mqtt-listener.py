@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
-import psutil
-import websocket
+import psutil  # type: ignore[import-untyped]
+import websocket  # type: ignore[import-untyped]
 from packaging.version import InvalidVersion, Version
 from pulse import __version__, audio, display
 from pulse.config_persist import ConfigPersister, persist_preference

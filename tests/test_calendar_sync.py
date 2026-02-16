@@ -4,7 +4,7 @@ import asyncio
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from icalendar import Calendar
+from icalendar import Calendar  # type: ignore[import-untyped]
 from pulse.assistant.calendar_sync import CalendarReminder, CalendarSyncService
 from pulse.assistant.config import CalendarConfig
 
