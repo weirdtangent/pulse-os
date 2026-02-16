@@ -135,7 +135,10 @@ fi
 watchdog_loop() {
   while true; do
     if curl -sf --max-time 10 "$PULSE_WATCHDOG_URL" >/dev/null; then
-      [ "$WATCHDOG_FAILS" -gt 0 ] && echo "$(date): Watchdog recovered after $WATCHDOG_FAILS failures"
+      if (( WATCHDOG_FAILS >= 2 )); then
+        echo "$(date): Watchdog recovered after $WATCHDOG_FAILS failures; restarting browser"
+        pkill -f 'chromium.*--kiosk' || true
+      fi
       WATCHDOG_FAILS=0
     else
       WATCHDOG_FAILS=$((WATCHDOG_FAILS + 1))
@@ -198,4 +201,3 @@ while true; do
   echo "$(date) chromium exited; restarting in 2s"
   sleep 2
 done
-
