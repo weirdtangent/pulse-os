@@ -151,7 +151,7 @@ class CalendarEventManager:
                             end_dt = end_dt.astimezone(now.tzinfo)
                         event_end = end_dt
                     except (ValueError, AttributeError):
-                        pass
+                        pass  # Unparseable end date; fall back to start_dt as event_end
                 if event_end > now:
                     filtered.append(event)
             except (ValueError, AttributeError):
