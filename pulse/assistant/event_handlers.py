@@ -117,16 +117,13 @@ class EventHandlerManager:
             if isinstance(parsed, dict):
                 message = str(parsed.get("message") or parsed.get("text") or payload)
         except json.JSONDecodeError:
-            pass
+            pass  # Not JSON — use raw payload as the message text
         clean = message.strip()
         if not clean:
             return
         self.publisher._publish_info_overlay(text=f"Alert: {clean}", category="alerts")
         self.publisher._schedule_info_overlay_clear(8.0)
-        if self._loop is None or self._on_speak is None:
-            self.logger.error("[events] Cannot handle alert: event loop or speak callback not initialized")
-            return
-        self._loop.create_task(self._on_speak(clean))
+        self._schedule_speak(clean, context="alert")
 
     def handle_intercom_message(self, payload: str) -> None:
         message = payload.strip()
@@ -134,10 +131,14 @@ class EventHandlerManager:
             return
         self.publisher._publish_info_overlay(text=f"Intercom: {message}", category="intercom")
         self.publisher._schedule_info_overlay_clear(6.0)
+        self._schedule_speak(message, context="intercom")
+
+    def _schedule_speak(self, text: str, context: str) -> None:
+        """Thread-safe: schedule an async speak coroutine from the MQTT callback thread."""
         if self._loop is None or self._on_speak is None:
-            self.logger.error("[events] Cannot handle intercom: event loop or speak callback not initialized")
+            self.logger.error("[events] Cannot handle %s: event loop or speak callback not initialized", context)
             return
-        self._loop.create_task(self._on_speak(message))
+        asyncio.run_coroutine_threadsafe(self._on_speak(text), self._loop)
 
     def handle_kiosk_availability(self, payload: str) -> None:
         value = payload.strip().lower()

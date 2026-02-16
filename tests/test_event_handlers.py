@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, Mock
 
@@ -101,33 +100,27 @@ class TestNowPlaying:
 
 class TestAlertMessage:
     def test_plain_text_alert(self, handler, mock_publisher):
-        loop = asyncio.new_event_loop()
-        handler.set_event_loop(loop)
+        handler._loop = Mock()
         handler.set_speak_callback(AsyncMock())
         handler.handle_alert_message("alerts/fire", "Fire detected in kitchen")
         mock_publisher._publish_info_overlay.assert_called_once_with(
             text="Alert: Fire detected in kitchen", category="alerts"
         )
         mock_publisher._schedule_info_overlay_clear.assert_called_once_with(8.0)
-        loop.close()
 
     def test_json_alert_with_message_key(self, handler, mock_publisher):
-        loop = asyncio.new_event_loop()
-        handler.set_event_loop(loop)
+        handler._loop = Mock()
         handler.set_speak_callback(AsyncMock())
         payload = json.dumps({"message": "Motion detected"})
         handler.handle_alert_message("alerts/motion", payload)
         mock_publisher._publish_info_overlay.assert_called_once_with(text="Alert: Motion detected", category="alerts")
-        loop.close()
 
     def test_json_alert_with_text_key(self, handler, mock_publisher):
-        loop = asyncio.new_event_loop()
-        handler.set_event_loop(loop)
+        handler._loop = Mock()
         handler.set_speak_callback(AsyncMock())
         payload = json.dumps({"text": "Door opened"})
         handler.handle_alert_message("alerts/door", payload)
         mock_publisher._publish_info_overlay.assert_called_once_with(text="Alert: Door opened", category="alerts")
-        loop.close()
 
     def test_empty_alert_ignored(self, handler, mock_publisher):
         handler.handle_alert_message("alerts/test", "   ")
@@ -140,15 +133,13 @@ class TestAlertMessage:
 
 class TestIntercomMessage:
     def test_intercom_message(self, handler, mock_publisher):
-        loop = asyncio.new_event_loop()
-        handler.set_event_loop(loop)
+        handler._loop = Mock()
         handler.set_speak_callback(AsyncMock())
         handler.handle_intercom_message("Hello from the front door")
         mock_publisher._publish_info_overlay.assert_called_once_with(
             text="Intercom: Hello from the front door", category="intercom"
         )
         mock_publisher._schedule_info_overlay_clear.assert_called_once_with(6.0)
-        loop.close()
 
     def test_empty_intercom_ignored(self, handler, mock_publisher):
         handler.handle_intercom_message("")
@@ -203,7 +194,6 @@ class TestCallbacks:
         assert handler._on_speak is cb
 
     def test_set_event_loop(self, handler):
-        loop = asyncio.new_event_loop()
+        loop = Mock()
         handler.set_event_loop(loop)
         assert handler._loop is loop
-        loop.close()
