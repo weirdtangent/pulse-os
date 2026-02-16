@@ -12,7 +12,6 @@ import logging
 import os
 import signal
 import subprocess
-import threading
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -28,12 +27,15 @@ from pulse.assistant.conversation_manager import (
     build_conversation_stop_prefixes,
     should_listen_for_follow_up,
 )
+from pulse.assistant.earmuffs import EarmuffsManager
 from pulse.assistant.home_assistant import HomeAssistantClient, HomeAssistantError
+from pulse.assistant.info_query_handler import InfoQueryHandler
 from pulse.assistant.info_service import InfoService
 from pulse.assistant.llm import LLMProvider, LLMResult, build_llm_provider
 from pulse.assistant.media_controller import MediaController
 from pulse.assistant.mqtt import AssistantMqtt
 from pulse.assistant.mqtt_publisher import AssistantMqttPublisher
+from pulse.assistant.music_handler import MusicCommandHandler
 from pulse.assistant.preference_manager import PreferenceManager
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.routines import RoutineEngine, default_routines
@@ -228,30 +230,49 @@ class PulseAssistant:
         )
         self._playback_topic = f"pulse/{self.config.hostname}/telemetry/now_playing"
         self._info_topic = f"{self.config.mqtt.topic_base}/info_card"
-        self._info_overlay_clear_task: asyncio.Task | None = None
-        self._info_overlay_min_seconds = max(0.0, float(os.environ.get("PULSE_INFO_CARD_MIN_SECONDS", "1.5")))
-        self._info_overlay_buffer_seconds = max(0.0, float(os.environ.get("PULSE_INFO_CARD_BUFFER_SECONDS", "0.5")))
-        self._media_pause_pending = False
-        self._media_resume_task: asyncio.Task | None = None
-        self._media_resume_delay = 2.0
         self._log_transcripts = config.log_transcripts
         # Initialize LLM logging state from config, sync with preference manager
         self.preference_manager.log_llm_messages = config.log_llm_messages
         self._conversation_stop_prefixes = build_conversation_stop_prefixes(config)
-        self._earmuffs_lock = threading.Lock()
-        self._earmuffs_enabled = False
-        self._earmuffs_manual_override: bool | None = None
-        self._earmuffs_state_restored = False  # Track if we've restored state from MQTT
-        base_topic = self.config.mqtt.topic_base
-        self._earmuffs_state_topic = f"{base_topic}/earmuffs/state"
-        self._earmuffs_set_topic = f"{base_topic}/earmuffs/set"
         self._last_health_signature: tuple[tuple[str, str], ...] | None = None
+
+        # Initialize music handler (Phase 7a extraction)
+        self.music_handler = MusicCommandHandler(
+            home_assistant=self.home_assistant,
+            media_controller=self.media_controller,
+            media_player_entity=self.config.media_player_entity,
+            logger=LOGGER,
+        )
+        self.music_handler.set_speak_callback(self._speak)
+        self.music_handler.set_log_response_callback(self._log_assistant_response)
+
+        # Initialize info query handler (Phase 7b extraction)
+        self.info_query_handler = InfoQueryHandler(
+            info_service=self.info_service,
+            publisher=self.publisher,
+            media_controller=self.media_controller,
+            response_topic=self.config.response_topic,
+            logger=LOGGER,
+        )
+        self.info_query_handler.set_speak_callback(self._speak)
+        self.info_query_handler.set_log_response_callback(self._log_assistant_response)
+        self.info_query_handler.set_tracker_provider(lambda: self._current_tracker)
+        self.info_query_handler.set_stage_callback(self._set_assist_stage)
+
+        # Initialize earmuffs manager (Phase 8 extraction)
+        self.earmuffs = EarmuffsManager(
+            mqtt=self.mqtt,
+            publisher=self.publisher,
+            base_topic=self.config.mqtt.topic_base,
+            logger=LOGGER,
+        )
 
         # Set up preference manager callbacks
         self.preference_manager.set_wake_sensitivity_callback(self.wake_detector.mark_wake_context_dirty)
         self.preference_manager.set_llm_provider_callback(self._rebuild_llm_provider)
         self.preference_manager.set_sound_settings_callback(self.schedule_service.update_sound_settings)
         self.preference_manager.set_config_updated_callback(self._handle_config_updated)
+        self.earmuffs.set_wake_context_dirty_callback(self.wake_detector.mark_wake_context_dirty)
 
         # Build LLM provider (uses preference_manager for overrides)
         self.llm: LLMProvider = self._build_llm_provider()
@@ -284,7 +305,7 @@ class PulseAssistant:
             self.preference_manager.subscribe_preference_topics()
             self._subscribe_schedule_topics()
             self._subscribe_playback_topic()
-            self._subscribe_earmuffs_topic()
+            self.earmuffs.subscribe()
             self._subscribe_alert_topics()
             self._subscribe_intercom_topic()
             self._subscribe_kiosk_availability()
@@ -322,10 +343,10 @@ class PulseAssistant:
             )
             # Wait a moment for retained MQTT messages to arrive before publishing state
             await asyncio.sleep(0.5)
-            if not self._earmuffs_state_restored:
+            if not self.earmuffs.state_restored:
                 # No retained message received, publish current state
                 try:
-                    self.publisher._publish_earmuffs_state(self._get_earmuffs_enabled())
+                    self.publisher._publish_earmuffs_state(self.earmuffs.enabled)
                 except Exception as exc:
                     LOGGER.exception("[assistant] Failed to publish earmuffs state: %s", exc)
 
@@ -341,7 +362,7 @@ class PulseAssistant:
             LOGGER.exception("[assistant] Fatal error in assistant.run(): %s", exc)
             raise
         while not self._shutdown.is_set():
-            wake_word = await self.wake_detector.wait_for_wake_word(self._shutdown, self._get_earmuffs_enabled)
+            wake_word = await self.wake_detector.wait_for_wake_word(self._shutdown, self.earmuffs.get_enabled)
             if wake_word is None:
                 continue
             pipeline = self._pipeline_for_wake_word(wake_word)
@@ -504,13 +525,13 @@ class PulseAssistant:
             if await self._maybe_handle_stop_phrase(transcript, wake_word, tracker):
                 self._finalize_assist_run(status="cancelled")
                 return
-            if await self._maybe_handle_music_command(transcript):
+            if await self.music_handler.maybe_handle(transcript):
                 self._finalize_assist_run(status="success")
                 return
             if await self.schedule_shortcuts.maybe_handle_schedule_shortcut(transcript):
                 self._finalize_assist_run(status="success")
                 return
-            if await self._maybe_handle_information_query(transcript, wake_word):
+            if await self.info_query_handler.maybe_handle(transcript, wake_word):
                 self._finalize_assist_run(status="success")
                 return
             llm_result = await self._execute_llm_turn(transcript, wake_word, tracker)
@@ -571,13 +592,13 @@ class PulseAssistant:
                 ):
                     self._finalize_assist_run(status="cancelled")
                     return
-                if await self._maybe_handle_music_command(follow_up_transcript):
+                if await self.music_handler.maybe_handle(follow_up_transcript):
                     follow_up_needed = False
                     continue
                 if await self.schedule_shortcuts.maybe_handle_schedule_shortcut(follow_up_transcript):
                     follow_up_needed = False
                     continue
-                if await self._maybe_handle_information_query(
+                if await self.info_query_handler.maybe_handle(
                     follow_up_transcript,
                     wake_word,
                     follow_up=True,
@@ -905,16 +926,6 @@ class PulseAssistant:
         except RuntimeError:
             LOGGER.debug("[assistant] MQTT client not ready for playback telemetry subscription")
 
-    def _subscribe_earmuffs_topic(self) -> None:
-        try:
-            self.mqtt.subscribe(self._earmuffs_set_topic, self._handle_earmuffs_command)
-            # Also subscribe to state topic to restore retained state on startup
-            self.mqtt.subscribe(self._earmuffs_state_topic, self._handle_earmuffs_state_restore)
-        except RuntimeError as exc:
-            LOGGER.debug("[assistant] MQTT client not ready for earmuffs subscription: %s", exc)
-        except Exception as exc:
-            LOGGER.error("[assistant] Failed to subscribe to earmuffs topic: %s", exc, exc_info=True)
-
     def _subscribe_alert_topics(self) -> None:
         for topic in self._alert_topics:
             try:
@@ -956,38 +967,6 @@ class PulseAssistant:
                 "[assistant] Self audio playback %s via telemetry (%s)", "active" if active else "idle", detail
             )
 
-    def _handle_earmuffs_state_restore(self, payload: str) -> None:
-        """Restore earmuffs state from retained MQTT message on startup."""
-        if self._earmuffs_state_restored:
-            # Already restored, ignore subsequent messages (they're just state updates)
-            return
-        value = payload.strip().lower()
-        enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
-        # Restore state - if enabled, assume it was manually set (auto-enabled would have been cleared)
-        with self._earmuffs_lock:
-            if enabled != self._earmuffs_enabled:
-                self._earmuffs_enabled = enabled
-                # If enabled, assume manual override (auto-enabled would have been auto-disabled)
-                if enabled:
-                    self._earmuffs_manual_override = True
-                    self.wake_detector.mark_wake_context_dirty()
-                # If disabled, clear manual override to allow auto-enable
-                else:
-                    self._earmuffs_manual_override = None
-        self._earmuffs_state_restored = True
-        # Don't republish - the state is already in MQTT
-
-    def _handle_earmuffs_command(self, payload: str) -> None:
-        value = payload.strip().lower()
-        # command received; act without noisy logging
-        if value == "toggle":
-            current = self._get_earmuffs_enabled()
-            enabled = not current
-            # state change handled without status logging
-        else:
-            enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
-        self._set_earmuffs_enabled(enabled, manual=True)
-
     def _handle_alert_message(self, topic: str, payload: str) -> None:
         message = payload
         try:
@@ -1016,27 +995,6 @@ class PulseAssistant:
             LOGGER.error("[assistant] Cannot handle intercom: event loop not initialized")
             return
         self._loop.create_task(self._speak(message))
-
-    def _set_earmuffs_enabled(self, enabled: bool, *, manual: bool = False) -> None:
-        changed = False
-        with self._earmuffs_lock:
-            if enabled != self._earmuffs_enabled:
-                self._earmuffs_enabled = enabled
-                if manual:
-                    self._earmuffs_manual_override = enabled
-                changed = True
-        if changed:
-            self.publisher._publish_earmuffs_state(self._get_earmuffs_enabled())
-            if enabled:
-                self.wake_detector.mark_wake_context_dirty()
-
-    def _get_earmuffs_enabled(self) -> bool:
-        with self._earmuffs_lock:
-            return self._earmuffs_enabled
-
-    def _is_earmuffs_manual_override(self) -> bool:
-        with self._earmuffs_lock:
-            return self._earmuffs_manual_override or False
 
     def _handle_schedule_state_changed(self, snapshot: dict[str, Any]) -> None:
         """Delegate to schedule command processor."""
@@ -1123,53 +1081,6 @@ class PulseAssistant:
             return Path(override).expanduser()
         return Path.home() / ".local" / "share" / "pulse" / "schedules.json"
 
-    async def _maybe_handle_information_query(
-        self,
-        transcript: str,
-        wake_word: str,
-        *,
-        follow_up: bool = False,
-    ) -> bool:
-        if not self.info_service:
-            return False
-        response = await self.info_service.maybe_answer(transcript)
-        if not response:
-            return False
-        tracker = self._current_tracker
-        if tracker:
-            tracker.begin_stage("speaking")
-        stage_extra: dict[str, str | bool] = {"wake_word": wake_word, "info_category": response.category}
-        if follow_up:
-            stage_extra["follow_up"] = True
-        self._set_assist_stage("pulse", "speaking", stage_extra)
-        payload: dict[str, str | bool] = {
-            "text": response.text,
-            "wake_word": wake_word,
-            "info_category": response.category,
-        }
-        if follow_up:
-            payload["follow_up"] = True
-        self.publisher._publish_message(self.config.response_topic, json.dumps(payload))
-        tag = f"info:{response.category}"
-        self._log_assistant_response(tag, response.text, pipeline="pulse")
-        overlay_active = False
-        overlay_text = response.display or response.text
-        overlay_payload = response.card
-        estimated_clear_delay = self._estimate_speech_duration(response.text) + self._info_overlay_buffer_seconds
-        try:
-            if overlay_text or overlay_payload:
-                self.publisher._publish_info_overlay(
-                    text=overlay_text, category=response.category, extra=overlay_payload
-                )
-                overlay_active = True
-            await self._speak(response.text)
-        finally:
-            if overlay_active:
-                hold = max(self._info_overlay_min_seconds, estimated_clear_delay)
-                self.publisher._schedule_info_overlay_clear(hold)
-        self.media_controller.trigger_media_resume_after_response()
-        return True
-
     async def _maybe_handle_stop_phrase(
         self,
         transcript: str,
@@ -1204,94 +1115,6 @@ class PulseAssistant:
         if not self.preference_manager.log_llm_messages or not text:
             return
         _ = text if len(text) <= 240 else f"{text[:237]}..."
-
-    @staticmethod
-    def _estimate_speech_duration(text: str) -> float:
-        words = max(1, len(text.split()))
-        return words / 2.5
-
-    async def _maybe_handle_music_command(self, transcript: str) -> bool:
-        query = (transcript or "").strip().lower()
-        if not query or not self.home_assistant or not self.config.media_player_entity:
-            return False
-        controls = [
-            (("pause the music", "pause music", "pause the song", "pause song"), "media_pause", "Paused the music."),
-            (
-                ("stop the music", "stop music", "stop the song", "stop song"),
-                "media_stop",
-                "Stopped the music.",
-            ),
-            (
-                ("next song", "skip song", "skip this song", "next track"),
-                "media_next_track",
-                "Skipping to the next song.",
-            ),
-        ]
-        for phrases, service, success_text in controls:
-            if any(phrase in query for phrase in phrases):
-                return await self._call_music_service(service, success_text)
-        info_phrases = (
-            "what song is this",
-            "what song am i listening to",
-            "what is this song",
-            "what's this song",
-            "what's playing",
-            "what song",
-            "who is this",
-            "who's this",
-        )
-        if any(phrase in query for phrase in info_phrases):
-            return await self._describe_current_track("who" in query)
-        return False
-
-    async def _call_music_service(self, service: str, success_text: str) -> bool:
-        entity = self.config.media_player_entity
-        ha_client = self.home_assistant
-        if not entity or not ha_client:
-            return False
-        try:
-            await ha_client.call_service("media_player", service, {"entity_id": entity})
-        except HomeAssistantError as exc:
-            LOGGER.debug("[assistant] Music control %s failed for %s: %s", service, entity, exc)
-            spoken = "I couldn't control the music right now."
-            await self._speak(spoken)
-            self._log_assistant_response("music", spoken, pipeline="pulse")
-            return True
-        await self._speak(success_text)
-        self._log_assistant_response("music", success_text, pipeline="pulse")
-        return True
-
-    async def _describe_current_track(self, emphasize_artist: bool) -> bool:
-        state = await self.media_controller.fetch_media_player_state()
-        if state is None:
-            spoken = "I couldn't reach the player for that info."
-            await self._speak(spoken)
-            self._log_assistant_response("music", spoken, pipeline="pulse")
-            return True
-        status = str(state.get("state") or "")
-        attributes = state.get("attributes") or {}
-        title = attributes.get("media_title") or attributes.get("media_episode_title")
-        artist = (
-            attributes.get("media_artist")
-            or attributes.get("media_album_artist")
-            or attributes.get("media_series_title")
-        )
-        if status not in {"playing", "paused"} or not (title or artist):
-            spoken = "Nothing is playing right now."
-            await self._speak(spoken)
-            self._log_assistant_response("music", spoken, pipeline="pulse")
-            return True
-        if title and artist:
-            message = f"This is {artist} — {title}."
-        elif title:
-            message = f"This song is {title}."
-        else:
-            message = f"This is by {artist}."
-        if emphasize_artist and artist and not title:
-            message = f"This is {artist}."
-        await self._speak(message)
-        self._log_assistant_response("music", message, pipeline="pulse")
-        return True
 
     def _build_llm_provider(self) -> LLMProvider:
         """Build LLM provider using current preference overrides."""
