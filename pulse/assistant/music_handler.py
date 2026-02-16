@@ -92,8 +92,6 @@ class MusicCommandHandler:
         if not entity or not ha_client:
             return False
         try:
-            from pulse.assistant.home_assistant import HomeAssistantError
-
             await ha_client.call_service("media_player", service, {"entity_id": entity})
         except Exception as exc:
             from pulse.assistant.home_assistant import HomeAssistantError

@@ -69,7 +69,8 @@ class EarmuffsManager:
     @property
     def state_restored(self) -> bool:
         """Whether retained state has been restored from MQTT."""
-        return self._state_restored
+        with self._lock:
+            return self._state_restored
 
     @property
     def manual_override(self) -> bool:
@@ -98,20 +99,22 @@ class EarmuffsManager:
 
     def _handle_state_restore(self, payload: str) -> None:
         """Restore earmuffs state from retained MQTT message on startup."""
-        if self._state_restored:
-            return
         value = payload.strip().lower()
         enabled = value in {"on", "true", "1", "yes", "enable", "enabled"}
+        mark_dirty = False
         with self._lock:
+            if self._state_restored:
+                return
+            self._state_restored = True
             if enabled != self._enabled:
                 self._enabled = enabled
                 if enabled:
                     self._manual_override = True
-                    if self._on_wake_context_dirty:
-                        self._on_wake_context_dirty()
+                    mark_dirty = True
                 else:
                     self._manual_override = None
-        self._state_restored = True
+        if mark_dirty and self._on_wake_context_dirty:
+            self._on_wake_context_dirty()
 
     def _handle_command(self, payload: str) -> None:
         """Handle earmuffs set command from MQTT."""
