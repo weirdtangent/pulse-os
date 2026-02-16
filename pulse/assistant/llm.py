@@ -433,6 +433,10 @@ def build_llm_provider_with_overrides(
     from dataclasses import replace
 
     log = logger or logging.getLogger(__name__)
+    provider = (provider or "").strip().lower() or "openai"
+    if provider not in SUPPORTED_PROVIDERS:
+        log.warning("Unknown LLM provider '%s', falling back to OpenAI", provider)
+        provider = "openai"
     llm_config = replace(
         base_config,
         provider=provider,

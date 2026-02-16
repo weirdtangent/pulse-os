@@ -29,7 +29,7 @@ class TestNormalizeConversationStopText:
         assert normalize_conversation_stop_text("") == ""
 
     def test_none_input(self):
-        assert normalize_conversation_stop_text(None) == ""
+        assert normalize_conversation_stop_text(None) == ""  # type: ignore[arg-type]
 
     def test_lowercases(self):
         assert normalize_conversation_stop_text("NEVER MIND") == "never mind"
