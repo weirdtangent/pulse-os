@@ -198,7 +198,7 @@ bin/pulse-assistant.py (entry point, coordinator)
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `bin/pulse-assistant.py` | 496 | Entry point, coordinator |
+| `bin/pulse-assistant.py` | 483 | Entry point, coordinator |
 | `pipeline_orchestrator.py` | 686 | Pipeline flows, audio, stage tracking |
 | `mqtt_publisher.py` | ~500 | MQTT publishing, state management |
 | `preference_manager.py` | ~300 | User preferences, sounds |
@@ -213,18 +213,46 @@ bin/pulse-assistant.py (entry point, coordinator)
 
 ## Remaining Work
 
-The core extraction refactoring is complete. Possible follow-up improvements:
+The core extraction refactoring is complete. Remaining work focuses on a final
+small extraction and increasing test coverage.
 
-### Potential Phase 12: Extract Schedule Callbacks
-Move `_handle_schedule_state_changed`, `_handle_active_schedule_event`, `_log_activity_event`, `_build_activity_message`, and `_on_calendar_events_changed` out of the main file into a dedicated module. This would reduce the main file by ~50 more lines.
+### Phase 12: Move LLM Builder to `llm.py` ✅
+**Status:** Completed
 
-### Potential Phase 13: Extract LLM Builder
-Move `_build_llm_provider` and `_rebuild_llm_provider` into a dedicated module or into `PreferenceManager`. This is a small extraction (~20 lines).
+Move `_build_llm_provider` and `_rebuild_llm_provider` logic into
+`pulse/assistant/llm.py` as `build_llm_provider_with_overrides()`. The main
+file call site becomes a thin two-line delegation. Natural home since `llm.py`
+already contains all provider classes and `build_llm_provider()`.
 
-### Testing Improvements
-- Add integration tests for full pipeline flows
-- Add tests for schedule callback methods in main file
-- Increase coverage toward 60%+ target
+Main file reduced from 496 → 483 lines.
+
+### Phase 13: Configure pytest-cov ✅
+**Status:** Completed
+
+Added `--cov=pulse --cov-report=term-missing:skip-covered` to pytest addopts
+and `pytest-cov` to the dev dependency group in `pyproject.toml`.
+
+### Phase 14: Test Easy Untested Modules ✅
+**Status:** Completed
+
+Added 96 tests across 4 new test files:
+- `test_conversation_manager.py` — 39 tests (97% coverage)
+- `test_routines.py` — 20 tests (46% → covered)
+- `test_scheduler.py` — 16 tests (36% → covered)
+- `test_media_controller.py` — 21 tests (21% → 84% coverage)
+
+Total suite: 800 tests, 56% overall coverage (up from 54%).
+
+### Phase 15: Test Medium Modules
+Add tests for larger modules with external dependencies:
+- `config.py` (771 lines) — dataclass validation, env parsing
+- `info_service.py` (476 lines) — info query orchestration
+- `wyoming.py` (229 lines) — Wyoming protocol client
+
+### Dropped: Extract Schedule Callbacks
+The 5 schedule callback methods in `bin/pulse-assistant.py` are thin delegation
+wrappers (2-5 lines each) that wire components together — exactly the
+coordinator's responsibility. Not worth extracting into a separate module.
 
 ## References
 
