@@ -77,5 +77,3 @@ open htmlcov/index.html
 
 Modules that would benefit from more tests:
 - `bin/kiosk-mqtt-listener.py` — kiosk overlay and MQTT listener
-
-See [REFACTOR_PLAN.md](REFACTOR_PLAN.md) for the full roadmap.
