@@ -14,9 +14,9 @@ Thanks for helping improve Pulse OS! This guide covers how to propose changes, t
 3) Install dependencies: `uv sync --all-extras --dev`.
 
 ## Required checks (run locally before opening a PR)
-- `ruff check .` (lint)
-- `black --check .` (format, 120 cols)
-- `pytest` (tests; add/adjust tests for your changes)
+- `uv run ruff check .` (lint)
+- `uv run black --check .` (format, 120 cols)
+- `uv run pytest` (tests; add/adjust tests for your changes)
 - If you touch release or packaging logic, ensure `release.config.js`, `CHANGELOG.md`, and version metadata stay coherent (semantic versioning).
 
 CI reruns these checks (plus CodeQL and dependency auditing) on every PR and main-branch push.
