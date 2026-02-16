@@ -351,7 +351,7 @@ class PulseAssistant:
             try:
                 await heartbeat
             except asyncio.CancelledError:
-                pass
+                pass  # expected when cancelling the heartbeat task
         if self.calendar_sync:
             await self.calendar_sync.stop()
         await self.mic.stop()
