@@ -21,30 +21,41 @@ jobs:
     # See: https://github.com/anthropics/claude-code-action/issues/892
     continue-on-error: true
     if: >
-      github.actor != 'dependabot[bot]' && (
-        github.event_name == 'pull_request' ||
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
-      )
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
     runs-on: ubuntu-latest
     concurrency:
       group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: true
     steps:
+      - name: Check for fork PR
+        id: fork-check
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Claude review for fork PR (secrets not available)"
+          else
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
-        uses: actions/checkout@v6
+        if: steps.fork-check.outputs.is_fork != 'true'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Generate GitHub App token
+        if: steps.fork-check.outputs.is_fork != 'true'
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Dismiss and minimize prior Claude reviews
-        if: github.event_name == 'pull_request' && github.event.action != 'opened'
+        if: steps.fork-check.outputs.is_fork != 'true' && github.event_name == 'pull_request' && github.event.action != 'opened'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -104,6 +115,7 @@ jobs:
           done
 
       - name: Claude Code Review
+        if: steps.fork-check.outputs.is_fork != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
