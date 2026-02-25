@@ -19,7 +19,9 @@ node_modules/
 venv/
 .vscode/
 .cursor/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/CLAUDE.md
 .mcp.json
 
 # Apple
