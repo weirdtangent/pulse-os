@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/splash/graystorm-pulse_splash.png" alt="Pulse OS social preview" width="640" />
 </p>
 
-# Pulse Kiosk v1.0.0 — Complete Setup Guide
+# Pulse Kiosk v1 — Complete Setup Guide
 
 ## Raspberry Pi 5 + Pi 7" Touch Display 2
 
