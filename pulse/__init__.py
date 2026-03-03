@@ -34,7 +34,7 @@ def _get_version() -> str:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip().lstrip("v")
-    except Exception:
+    except Exception:  # git not installed, not a repo, timeout, etc.
         pass
     return "0.0.0"
 
