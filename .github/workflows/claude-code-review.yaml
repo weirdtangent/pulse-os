@@ -39,7 +39,7 @@ jobs:
                [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping Claude review for fork PR (secrets not available)"
-          elif [ -z "${{ secrets.APP_ID }}" ] || [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+          elif [ -z "${{ secrets.APP_ID }}" ] || [ -z "${{ secrets.APP_PRIVATE_KEY }}" ] || [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping Claude review (required secrets not configured)"
           else
