@@ -60,8 +60,37 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
+      - name: Check for docs/actions-only changes
+        if: steps.skip-check.outputs.skip != 'true' && github.event_name == 'pull_request'
+        id: docs-check
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          FILES=$(gh api "repos/${REPO}/pulls/${PR}/files" --paginate --jq '.[].filename')
+          DOCS_ONLY=true
+          while IFS= read -r file; do
+            case "$file" in
+              *.md|docs/*|.github/workflows/*|.github/actions/*) ;;
+              *) DOCS_ONLY=false; break ;;
+            esac
+          done <<< "$FILES"
+          echo "docs_only=$DOCS_ONLY" >> "$GITHUB_OUTPUT"
+          if [ "$DOCS_ONLY" = "true" ]; then
+            echo "::notice::PR only changes docs/actions files — skipping Claude review and auto-approving"
+          fi
+
+      - name: Auto-approve docs/actions-only PR
+        if: steps.docs-check.outputs.docs_only == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh pr review "${{ github.event.pull_request.number }}" --approve \
+            --body "Auto-approved: only documentation or GitHub Actions changes."
+
       - name: Dismiss and minimize prior Claude reviews
-        if: steps.skip-check.outputs.skip != 'true' && github.event_name == 'pull_request' && github.event.action != 'opened'
+        if: steps.skip-check.outputs.skip != 'true' && steps.docs-check.outputs.docs_only != 'true' && github.event_name == 'pull_request' && github.event.action != 'opened'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -121,7 +150,7 @@ jobs:
           done
 
       - name: Claude Code Review
-        if: steps.skip-check.outputs.skip != 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.docs-check.outputs.docs_only != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

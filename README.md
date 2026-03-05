@@ -173,6 +173,11 @@ All of the voice-assistant tips, MQTT knobs, Home Assistant snippets, printable 
 ## Troubleshooting checklist
 
 See the dedicated [troubleshooting guide](docs/troubleshooting.md) for the full Pi 5 + Touch Display checklist (black strip, touch calibration, autologin, etc.).
+
+## Contributors
+
+- [@weirdtangent](https://github.com/weirdtangent)
+
 <a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
 
 ### Releases, versioning, and release notes
