@@ -21,7 +21,7 @@ from pathlib import Path as _Path
 def _get_version() -> str:
     """Derive version from PULSE_VERSION env var or git tag, with fallback."""
     env_version = _os.environ.get("PULSE_VERSION")
-    if env_version:
+    if env_version and env_version != "0.0.0":
         return env_version
     try:
         repo_dir = _Path(__file__).resolve().parent.parent

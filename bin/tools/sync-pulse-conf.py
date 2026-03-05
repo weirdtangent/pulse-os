@@ -456,7 +456,12 @@ def _is_pulse_version_block(block: str | None) -> bool:
     if not block:
         return False
     stripped = block.lstrip()
-    return stripped.startswith("if [[ -z") and "PULSE_VERSION" in stripped
+    if not (stripped.startswith("if [[ -z") and "PULSE_VERSION" in stripped):
+        return False
+    # Reject outdated VERSION-file-based blocks — require git-based derivation
+    if "VERSION" in block and "git" not in block:
+        return False
+    return True
 
 
 def format_config_file(

@@ -56,8 +56,8 @@ def _register(mcp, ssh, config):
             "cpu_temp": "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo ''",
             "memory": "free -h | grep Mem",
             "pulse_version": (
-                f"grep -m1 '__version__' {config.ssh.remote_path}/pulse/__init__.py 2>/dev/null"
-                f" || grep -m1 'version' {config.ssh.remote_path}/pyproject.toml 2>/dev/null"
+                f"git -C {config.ssh.remote_path} describe --tags --abbrev=0 2>/dev/null"
+                " | sed 's/^v//'"
                 " || echo 'unknown'"
             ),
         }
