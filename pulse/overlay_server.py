@@ -46,6 +46,7 @@ class OverlayServerConfig:
     clock_24h: bool = False
     stop_endpoint: str = "/overlay/stop"
     info_endpoint: str = "/overlay/info-card"
+    auth_token: str | None = None
 
 
 class OverlayHttpServer:
@@ -429,6 +430,11 @@ html, body {{
                     self._serve_overlay(include_body=True)
 
             def do_POST(self) -> None:  # noqa: N802
+                if outer.config.auth_token:
+                    provided = self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+                    if not provided or provided != outer.config.auth_token:
+                        self.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
+                        return
                 path = self.path.split("?", 1)[0]
                 if path == "/overlay/stop":
                     self._handle_stop()

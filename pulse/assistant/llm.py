@@ -366,8 +366,7 @@ class GeminiProvider(LLMProvider):
             raise RuntimeError("GEMINI_MODEL is not set")
         base_url = self.config.gemini_base_url.rstrip("/")
         endpoint = f"{base_url}/models/{model}:generateContent"
-        query = urllib.parse.urlencode({"key": self.config.gemini_api_key})
-        url = f"{endpoint}?{query}"
+        url = endpoint
 
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(

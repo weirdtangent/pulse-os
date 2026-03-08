@@ -86,6 +86,11 @@ class PulseSSH:
         key_path = Path(self._config.key_path).expanduser()
         known_hosts: object = None  # default: use system known_hosts
         if self._config.disable_host_key_check:
+            logger.warning(
+                "[%s] SSH host key verification DISABLED — connections are vulnerable to MITM attacks. "
+                "Only use this for initial setup, then add host keys to known_hosts.",
+                hostname,
+            )
             known_hosts = ()  # accept any host key
         conn = await asyncssh.connect(
             hostname,
