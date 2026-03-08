@@ -267,6 +267,8 @@ class PulseAssistant:
             self.media_controller._loop = self._loop
             self.schedule_commands.set_event_loop(self._loop)
             self.event_handlers.set_event_loop(self._loop)
+            if not await self.llm.validate_api_key():
+                LOGGER.error("[assistant] LLM API key is invalid or missing — voice commands will fail")
             self.mqtt.connect()
             self.preference_manager.subscribe_preference_topics()
             self._subscribe_schedule_topics()

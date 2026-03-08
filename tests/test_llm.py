@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 from unittest.mock import Mock, patch
 
 import pytest
 from pulse.assistant.config import LLMConfig
 from pulse.assistant.llm import (
+    AnthropicProvider,
+    GeminiProvider,
     LLMResult,
     OpenAIProvider,
     _format_system_prompt,
@@ -335,3 +338,77 @@ class TestLLMResult:
         """Test LLMResult with follow_up."""
         result = LLMResult(response="Question?", actions=[], follow_up=True)
         assert result.follow_up is True
+
+
+class TestValidateApiKey:
+    """Test API key validation for all providers."""
+
+    async def test_openai_missing_key(self):
+        config = make_llm_config(openai_api_key=None)
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_openai_valid_key(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = b'{"data": []}'
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        config = make_llm_config(openai_api_key="valid-key")
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is True
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_openai_invalid_key_401(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=401, msg="Unauthorized", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        config = make_llm_config(openai_api_key="bad-key")
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_openai_rate_limit_429_is_inconclusive(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=429, msg="Too Many Requests", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        config = make_llm_config(openai_api_key="valid-key")
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is True
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_openai_network_error_is_inconclusive(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("Network unreachable")
+        config = make_llm_config(openai_api_key="valid-key")
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is True
+
+    async def test_anthropic_missing_key(self):
+        config = make_llm_config(anthropic_api_key=None)
+        provider = AnthropicProvider(config)
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_anthropic_invalid_key_403(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=403, msg="Forbidden", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        config = make_llm_config(anthropic_api_key="bad-key")
+        provider = AnthropicProvider(config)
+        assert await provider.validate_api_key() is False
+
+    async def test_gemini_missing_key(self):
+        config = make_llm_config(gemini_api_key=None)
+        provider = GeminiProvider(config)
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_gemini_server_error_is_inconclusive(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=500, msg="Internal Server Error", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        config = make_llm_config(gemini_api_key="valid-key")
+        provider = GeminiProvider(config)
+        assert await provider.validate_api_key() is True

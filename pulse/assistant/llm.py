@@ -35,6 +35,14 @@ class LLMProvider:
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         raise NotImplementedError
 
+    async def validate_api_key(self) -> bool:
+        """Validate the API key with a lightweight request. Returns True if valid.
+
+        Base implementation always returns True. Concrete providers should override
+        this to perform a provider-specific check (e.g. an authenticated GET /models).
+        """
+        return True
+
 
 def _parse_llm_response(response_text: str) -> LLMResult:
     try:
@@ -104,6 +112,40 @@ class OpenAICompatibleProvider(LLMProvider):
     def _get_provider_name(self) -> str:
         """Return the provider name for error messages."""
         raise NotImplementedError
+
+    async def validate_api_key(self) -> bool:
+        api_key = self._get_api_key()
+        name = self._get_provider_name()
+        if not api_key:
+            self._logger.error("[llm] %s API key is not set", name)
+            return False
+        request = urllib.request.Request(
+            url=f"{self._get_base_url().rstrip('/')}/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            method="GET",
+        )
+
+        def _do_request() -> None:
+            with urllib.request.urlopen(request, timeout=self._get_timeout()) as resp:  # nosec B310
+                resp.read()
+
+        try:
+            await asyncio.to_thread(_do_request)
+            return True
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                self._logger.error(
+                    "[llm] %s API key validation failed (HTTP %s) — check your %s_API_KEY",
+                    name,
+                    exc.code,
+                    name.upper(),
+                )
+                return False
+            self._logger.warning("[llm] %s API key validation inconclusive (HTTP %s): %s", name, exc.code, exc.reason)
+            return True
+        except Exception as exc:
+            self._logger.warning("[llm] %s API key validation inconclusive: %s", name, exc)
+            return True  # network issue — don't block startup
 
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         payload = self._build_payload(user_text, list(actions_for_prompt))
@@ -252,6 +294,38 @@ class AnthropicProvider(LLMProvider):
         self.config = config
         self._logger = logger or logging.getLogger(__name__)
 
+    async def validate_api_key(self) -> bool:
+        if not self.config.anthropic_api_key:
+            self._logger.error("[llm] Anthropic API key is not set")
+            return False
+        request = urllib.request.Request(
+            url=f"{self.config.anthropic_base_url.rstrip('/')}/models",
+            headers={
+                "x-api-key": self.config.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            method="GET",
+        )
+
+        def _do_request() -> None:
+            with urllib.request.urlopen(request, timeout=self.config.anthropic_timeout) as resp:  # nosec B310
+                resp.read()
+
+        try:
+            await asyncio.to_thread(_do_request)
+            return True
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                self._logger.error(
+                    "[llm] Anthropic API key validation failed (HTTP %s) — check your ANTHROPIC_API_KEY", exc.code
+                )
+                return False
+            self._logger.warning("[llm] Anthropic API key validation inconclusive (HTTP %s): %s", exc.code, exc.reason)
+            return True
+        except Exception as exc:
+            self._logger.warning("[llm] Anthropic API key validation inconclusive: %s", exc)
+            return True
+
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         payload = self._build_payload(user_text, list(actions_for_prompt))
         try:
@@ -323,6 +397,35 @@ class GeminiProvider(LLMProvider):
     def __init__(self, config: LLMConfig, logger: logging.Logger | None = None) -> None:
         self.config = config
         self._logger = logger or logging.getLogger(__name__)
+
+    async def validate_api_key(self) -> bool:
+        if not self.config.gemini_api_key:
+            self._logger.error("[llm] Gemini API key is not set")
+            return False
+        request = urllib.request.Request(
+            url=f"{self.config.gemini_base_url.rstrip('/')}/models",
+            headers={"x-goog-api-key": self.config.gemini_api_key},
+            method="GET",
+        )
+
+        def _do_request() -> None:
+            with urllib.request.urlopen(request, timeout=self.config.gemini_timeout) as resp:  # nosec B310
+                resp.read()
+
+        try:
+            await asyncio.to_thread(_do_request)
+            return True
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                self._logger.error(
+                    "[llm] Gemini API key validation failed (HTTP %s) — check your GEMINI_API_KEY", exc.code
+                )
+                return False
+            self._logger.warning("[llm] Gemini API key validation inconclusive (HTTP %s): %s", exc.code, exc.reason)
+            return True
+        except Exception as exc:
+            self._logger.warning("[llm] Gemini API key validation inconclusive: %s", exc)
+            return True
 
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         payload = self._build_payload(user_text, list(actions_for_prompt))
