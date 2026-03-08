@@ -40,6 +40,7 @@ We take security vulnerabilities seriously. If you discover a security issue in 
 3. **Network Security:**
    - Run Pulse OS on a trusted network
    - Use TLS/SSL for MQTT connections when possible
+   - Set `PULSE_OVERLAY_AUTH_TOKEN` to protect overlay POST endpoints on shared networks
    - Keep your Raspberry Pi OS updated
 
 ### Disclosure Policy

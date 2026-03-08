@@ -40,6 +40,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_ACCENT_COLOR` | `#88C0D0` | Accent color for highlights. |
 | `PULSE_OVERLAY_NOTIFICATION_BAR` | `true` | Toggles the badge row at the top of the overlay. |
 | `PULSE_OVERLAY_CLOCK_24H` | `false` | Forces 24-hour clock labels when `true`. |
+| `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
 
 ## Telemetry & MQTT
 
@@ -277,4 +278,3 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 ---
 
 Need a quick refresher on what each feature does? Check the [README](../README.md) for the high-level overview, then come back to this reference when you're wiring up a new kiosk or migrating settings. Any new variables will always appear in `pulse.conf.sample`, and this document mirrors that file so you can diff the two during upgrades.
-
