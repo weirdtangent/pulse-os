@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -48,7 +49,15 @@ def _parse_llm_response(response_text: str) -> LLMResult:
     try:
         parsed = json.loads(response_text)
     except json.JSONDecodeError:
-        return LLMResult(response=response_text.strip(), actions=[])
+        # Try to extract a JSON object embedded in natural-language wrapper text
+        match = re.search(r"\{.*\}", response_text, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                return LLMResult(response=response_text.strip(), actions=[])
+        else:
+            return LLMResult(response=response_text.strip(), actions=[])
 
     response = (parsed.get("response") or "").strip()
     raw_actions = parsed.get("actions") or []
@@ -348,7 +357,11 @@ class AnthropicProvider(LLMProvider):
                 {
                     "role": "user",
                     "content": user_text.strip(),
-                }
+                },
+                {
+                    "role": "assistant",
+                    "content": "{",
+                },
             ],
         }
         return payload
@@ -381,12 +394,13 @@ class AnthropicProvider(LLMProvider):
         parsed = json.loads(body)
         content = parsed.get("content") or []
 
-        # Anthropic returns content as array of blocks
+        # Anthropic returns content as array of blocks; prepend "{" to
+        # compensate for the assistant prefill used to force JSON output.
         for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
                 text = block.get("text")
                 if text:
-                    return str(text)
+                    return "{" + str(text)
 
         raise RuntimeError("LLM response missing content")
 
