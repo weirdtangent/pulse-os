@@ -36,7 +36,11 @@ class LLMProvider:
         raise NotImplementedError
 
     async def validate_api_key(self) -> bool:
-        """Validate the API key with a lightweight request. Returns True if valid."""
+        """Validate the API key with a lightweight request. Returns True if valid.
+
+        Base implementation always returns True. Concrete providers should override
+        this to perform a provider-specific check (e.g. an authenticated GET /models).
+        """
         return True
 
 
@@ -120,15 +124,25 @@ class OpenAICompatibleProvider(LLMProvider):
             headers={"Authorization": f"Bearer {api_key}"},
             method="GET",
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as resp:  # nosec B310
+
+        def _do_request() -> None:
+            with urllib.request.urlopen(request, timeout=self._get_timeout()) as resp:  # nosec B310
                 resp.read()
+
+        try:
+            await asyncio.to_thread(_do_request)
             return True
         except urllib.error.HTTPError as exc:
-            self._logger.error(
-                "[llm] %s API key validation failed (HTTP %s) — check your %s_API_KEY", name, exc.code, name.upper()
-            )
-            return False
+            if exc.code in (401, 403):
+                self._logger.error(
+                    "[llm] %s API key validation failed (HTTP %s) — check your %s_API_KEY",
+                    name,
+                    exc.code,
+                    name.upper(),
+                )
+                return False
+            self._logger.warning("[llm] %s API key validation inconclusive (HTTP %s): %s", name, exc.code, exc.reason)
+            return True
         except Exception as exc:
             self._logger.warning("[llm] %s API key validation inconclusive: %s", name, exc)
             return True  # network issue — don't block startup
@@ -292,15 +306,22 @@ class AnthropicProvider(LLMProvider):
             },
             method="GET",
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as resp:  # nosec B310
+
+        def _do_request() -> None:
+            with urllib.request.urlopen(request, timeout=self.config.anthropic_timeout) as resp:  # nosec B310
                 resp.read()
+
+        try:
+            await asyncio.to_thread(_do_request)
             return True
         except urllib.error.HTTPError as exc:
-            self._logger.error(
-                "[llm] Anthropic API key validation failed (HTTP %s) — check your ANTHROPIC_API_KEY", exc.code
-            )
-            return False
+            if exc.code in (401, 403):
+                self._logger.error(
+                    "[llm] Anthropic API key validation failed (HTTP %s) — check your ANTHROPIC_API_KEY", exc.code
+                )
+                return False
+            self._logger.warning("[llm] Anthropic API key validation inconclusive (HTTP %s): %s", exc.code, exc.reason)
+            return True
         except Exception as exc:
             self._logger.warning("[llm] Anthropic API key validation inconclusive: %s", exc)
             return True
@@ -386,13 +407,22 @@ class GeminiProvider(LLMProvider):
             headers={"x-goog-api-key": self.config.gemini_api_key},
             method="GET",
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as resp:  # nosec B310
+
+        def _do_request() -> None:
+            with urllib.request.urlopen(request, timeout=self.config.gemini_timeout) as resp:  # nosec B310
                 resp.read()
+
+        try:
+            await asyncio.to_thread(_do_request)
             return True
         except urllib.error.HTTPError as exc:
-            self._logger.error("[llm] Gemini API key validation failed (HTTP %s) — check your GEMINI_API_KEY", exc.code)
-            return False
+            if exc.code in (401, 403):
+                self._logger.error(
+                    "[llm] Gemini API key validation failed (HTTP %s) — check your GEMINI_API_KEY", exc.code
+                )
+                return False
+            self._logger.warning("[llm] Gemini API key validation inconclusive (HTTP %s): %s", exc.code, exc.reason)
+            return True
         except Exception as exc:
             self._logger.warning("[llm] Gemini API key validation inconclusive: %s", exc)
             return True
