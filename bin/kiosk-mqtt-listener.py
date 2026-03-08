@@ -89,6 +89,7 @@ class OverlayConfig:
     show_notification_bar: bool
     clock_24h: bool
     font_family: str
+    auth_token: str | None
 
 
 @dataclass(frozen=True)
@@ -449,6 +450,7 @@ def load_config() -> EnvConfig:
         show_notification_bar=parse_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
         clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
         font_family=overlay_font_stack,
+        auth_token=(os.environ.get("PULSE_OVERLAY_AUTH_TOKEN") or "").strip() or None,
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -730,6 +732,7 @@ class KioskMqttListener:
                 clock_24h=self.overlay_config.clock_24h,
                 stop_endpoint=self._overlay_stop_endpoint,
                 info_endpoint=self._overlay_info_endpoint,
+                auth_token=self.overlay_config.auth_token,
             )
             self._overlay_http = OverlayHttpServer(
                 state=self.overlay_state,

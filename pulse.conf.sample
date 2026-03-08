@@ -88,6 +88,12 @@ PULSE_OVERLAY_NOTIFICATION_BAR="true"
 # PULSE_OVERLAY_CLOCK_24H — set to "true" for 24-hour clock display (default 12-hour).
 PULSE_OVERLAY_CLOCK_24H="false"
 
+# PULSE_OVERLAY_AUTH_TOKEN — optional bearer token for overlay POST endpoints.
+# When set, all state-changing requests (stop/snooze, volume, brightness, updates)
+# require an "Authorization: Bearer <token>" header. Leave unset to allow
+# unauthenticated access (suitable for isolated home LANs).
+# PULSE_OVERLAY_AUTH_TOKEN=""
+
 # ============================================================================
 # Telemetry & MQTT
 # ============================================================================

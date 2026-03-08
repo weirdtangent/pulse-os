@@ -18,6 +18,7 @@ calendar events, weather cards, device controls, and sound picker in the info ov
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import threading
@@ -46,6 +47,7 @@ class OverlayServerConfig:
     clock_24h: bool = False
     stop_endpoint: str = "/overlay/stop"
     info_endpoint: str = "/overlay/info-card"
+    auth_token: str | None = None
 
 
 class OverlayHttpServer:
@@ -406,7 +408,10 @@ html, body {{
                     if allowed_origin != "*":
                         self.send_header("Vary", "Origin")
                 self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, POST")
-                self.send_header("Access-Control-Allow-Headers", "Accept, Content-Type")
+                allow_headers = "Accept, Content-Type"
+                if outer.config.auth_token:
+                    allow_headers += ", Authorization"
+                self.send_header("Access-Control-Allow-Headers", allow_headers)
                 self.send_header("Cache-Control", "no-store, max-age=0")
 
             def do_OPTIONS(self) -> None:  # noqa: N802
@@ -429,6 +434,11 @@ html, body {{
                     self._serve_overlay(include_body=True)
 
             def do_POST(self) -> None:  # noqa: N802
+                if outer.config.auth_token:
+                    provided = self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+                    if not provided or not hmac.compare_digest(provided, outer.config.auth_token):
+                        self.send_error(HTTPStatus.UNAUTHORIZED, "Unauthorized")
+                        return
                 path = self.path.split("?", 1)[0]
                 if path == "/overlay/stop":
                     self._handle_stop()
