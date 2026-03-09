@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -45,19 +44,35 @@ class LLMProvider:
         return True
 
 
+def _extract_first_json_object(text: str) -> dict[str, object] | None:
+    """Find and parse the first valid JSON object in *text*, skipping non-JSON preamble."""
+    decoder = json.JSONDecoder()
+    idx = 0
+    while idx < len(text):
+        pos = text.find("{", idx)
+        if pos == -1:
+            break
+        try:
+            obj, end = decoder.raw_decode(text, pos)
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            pass
+        idx = pos + 1
+    return None
+
+
 def _parse_llm_response(response_text: str) -> LLMResult:
     try:
         parsed = json.loads(response_text)
     except json.JSONDecodeError:
         # Try to extract a JSON object embedded in natural-language wrapper text
-        match = re.search(r"\{.*\}", response_text, re.DOTALL)
-        if match:
-            try:
-                parsed = json.loads(match.group())
-            except json.JSONDecodeError:
-                return LLMResult(response=response_text.strip(), actions=[])
-        else:
+        parsed = _extract_first_json_object(response_text)
+        if parsed is None:
             return LLMResult(response=response_text.strip(), actions=[])
+
+    if not isinstance(parsed, dict):
+        return LLMResult(response=response_text.strip(), actions=[])
 
     response = (parsed.get("response") or "").strip()
     raw_actions = parsed.get("actions") or []
@@ -388,7 +403,7 @@ class AnthropicProvider(LLMProvider):
             try:
                 error_body = exc.read().decode("utf-8", errors="replace")
             except Exception:
-                pass
+                pass  # Best-effort: error body is optional context for the RuntimeError
             raise RuntimeError(f"Anthropic HTTP {exc.code}: {error_body}") from exc
 
         # Parse Anthropic response format: {"content": [{"type": "text", "text": "..."}]}

@@ -13,6 +13,7 @@ from pulse.assistant.llm import (
     GeminiProvider,
     LLMResult,
     OpenAIProvider,
+    _extract_first_json_object,
     _format_system_prompt,
     _parse_llm_response,
     build_llm_provider,
@@ -136,6 +137,34 @@ class TestLLMResultParsing:
         assert result.response == '{"response": "Incomplete JSON'
         assert result.actions == []
 
+    def test_parse_embedded_json_in_prose(self):
+        """Test extraction of JSON embedded in natural-language wrapper text."""
+        inner = '{"response": "The lights are on", "actions": ["turn_on_lights"], "follow_up": true}'
+        response = f"Here is my json response: {inner}"
+        result = _parse_llm_response(response)
+        assert result.response == "The lights are on"
+        assert result.actions == ["turn_on_lights"]
+        assert result.follow_up is True
+
+    def test_parse_embedded_json_with_trailing_text(self):
+        """Test extraction of JSON with text before and after."""
+        response = 'Sure! {"response": "Done", "actions": []} Hope that helps!'
+        result = _parse_llm_response(response)
+        assert result.response == "Done"
+        assert result.actions == []
+
+    def test_parse_non_dict_json_fallback(self):
+        """Test fallback when JSON parses to a non-dict type."""
+        result = _parse_llm_response("[1, 2, 3]")
+        assert result.response == "[1, 2, 3]"
+        assert result.actions == []
+
+    def test_parse_json_string_fallback(self):
+        """Test fallback when JSON parses to a plain string."""
+        result = _parse_llm_response('"just a string"')
+        assert result.response == '"just a string"'
+        assert result.actions == []
+
     def test_parse_json_missing_response(self):
         """Test parsing JSON without response field."""
         response = json.dumps({"actions": ["turn_on_lights"]})
@@ -162,6 +191,32 @@ class TestLLMResultParsing:
         )
         result = _parse_llm_response(response)
         assert result.response == "Hello there"
+
+
+class TestExtractFirstJsonObject:
+    """Test _extract_first_json_object helper."""
+
+    def test_extracts_simple_object(self):
+        result = _extract_first_json_object('blah {"key": "val"} blah')
+        assert result == {"key": "val"}
+
+    def test_extracts_first_object_when_multiple(self):
+        result = _extract_first_json_object('{"a": 1} {"b": 2}')
+        assert result == {"a": 1}
+
+    def test_returns_none_for_no_json(self):
+        assert _extract_first_json_object("no json here") is None
+
+    def test_returns_none_for_empty_string(self):
+        assert _extract_first_json_object("") is None
+
+    def test_skips_invalid_brace_and_finds_valid(self):
+        result = _extract_first_json_object('{bad {"response": "ok"}')
+        assert result == {"response": "ok"}
+
+    def test_skips_json_array(self):
+        """Arrays are valid JSON but not dicts — should be skipped."""
+        assert _extract_first_json_object("[1, 2, 3]") is None
 
 
 class TestSystemPromptFormatting:
