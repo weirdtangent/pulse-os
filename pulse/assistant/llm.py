@@ -57,7 +57,7 @@ def _extract_first_json_object(text: str) -> dict[str, object] | None:
             if isinstance(obj, dict):
                 return obj
         except json.JSONDecodeError:
-            pass
+            pass  # Not valid JSON at this position; advance and try the next '{'
         idx = pos + 1
     return None
 
