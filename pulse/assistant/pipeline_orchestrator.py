@@ -15,6 +15,7 @@ from pulse.assistant.conversation_manager import should_listen_for_follow_up
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_sound, play_volume_feedback
+from pulse.utils import normalize_for_tts
 
 if TYPE_CHECKING:
     from pulse.assistant.actions import ActionEngine
@@ -576,7 +577,7 @@ class PipelineOrchestrator:
         )
 
     async def speak(self, text: str) -> None:
-        await self._speak_via_endpoint(text, self.config.tts_endpoint, self.config.tts_voice)
+        await self._speak_via_endpoint(normalize_for_tts(text), self.config.tts_endpoint, self.config.tts_voice)
 
     async def _speak_via_endpoint(
         self,
