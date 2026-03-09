@@ -388,7 +388,12 @@ class AnthropicProvider(LLMProvider):
             ) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Anthropic HTTP error: {exc.code}") from exc
+            error_body = ""
+            try:
+                error_body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                pass
+            raise RuntimeError(f"Anthropic HTTP {exc.code}: {error_body}") from exc
 
         # Parse Anthropic response format: {"content": [{"type": "text", "text": "..."}]}
         parsed = json.loads(body)
