@@ -358,10 +358,6 @@ class AnthropicProvider(LLMProvider):
                     "role": "user",
                     "content": user_text.strip(),
                 },
-                {
-                    "role": "assistant",
-                    "content": "{",
-                },
             ],
         }
         return payload
@@ -399,13 +395,12 @@ class AnthropicProvider(LLMProvider):
         parsed = json.loads(body)
         content = parsed.get("content") or []
 
-        # Anthropic returns content as array of blocks; prepend "{" to
-        # compensate for the assistant prefill used to force JSON output.
+        # Anthropic returns content as array of blocks
         for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
                 text = block.get("text")
                 if text:
-                    return "{" + str(text)
+                    return str(text)
 
         raise RuntimeError("LLM response missing content")
 
