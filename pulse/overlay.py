@@ -917,12 +917,13 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     paused_class = " overlay-now-playing--paused" if is_paused else ""
     play_pause_icon = "\u25b6" if is_paused else "\u23f8"
     play_pause_action = "media_play" if is_paused else "media_pause"
+    play_pause_label = "Play" if is_paused else "Pause"
     btn = "overlay-now-playing__control"
     controls = (
         f'<button class="{btn}" data-media-action="media_previous_track"'
         f' aria-label="Previous">\u23ee</button>'
         f'<button class="{btn}" data-media-action="{play_pause_action}"'
-        f' aria-label="Play/Pause">{play_pause_icon}</button>'
+        f' aria-label="{play_pause_label}">{play_pause_icon}</button>'
         f'<button class="{btn}" data-media-action="media_stop"'
         f' aria-label="Stop">\u23f9</button>'
         f'<button class="{btn}" data-media-action="media_next_track"'

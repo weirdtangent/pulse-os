@@ -644,7 +644,8 @@ html, body {{
                     if not outer._on_media_control:
                         self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Media control unavailable")
                         return
-                    outer._on_media_control(action)
+                    # Run in background thread — the HA HTTP calls can take seconds
+                    threading.Thread(target=outer._on_media_control, args=(action,), daemon=True).start()
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return
