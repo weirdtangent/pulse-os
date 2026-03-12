@@ -283,6 +283,21 @@ class TestPlayCommands:
         )
 
     @pytest.mark.anyio
+    async def test_play_on_mixed_case(self, handler, mock_llm_provider):
+        """Voice recognition may capitalize 'ON' — should still resolve the player."""
+        result = await handler.maybe_handle("play stairway ON bedroom")
+        assert result is True
+        handler.home_assistant.call_service.assert_awaited_once_with(
+            "media_player",
+            "play_media",
+            {
+                "entity_id": "media_player.pulse_bedroom",
+                "media_content_id": "stairway",
+                "media_content_type": "music",
+            },
+        )
+
+    @pytest.mark.anyio
     async def test_play_speaks_confirmation(self, handler, mock_llm_provider):
         await handler.maybe_handle("play Hey Jude")
         handler._on_speak.assert_awaited_once_with("Playing Hey Jude.")

@@ -152,14 +152,13 @@ class MusicCommandHandler:
         Falls back to the default ``self.media_player_entity``.
         """
         default_entity = self.media_player_entity or ""
-        if " on " in text_after_prefix.lower():
-            parts = text_after_prefix.lower().rsplit(" on ", 1)
-            candidate_name = parts[1].strip()
+        lowered = text_after_prefix.lower()
+        if " on " in lowered:
+            split_pos = lowered.rfind(" on ")
+            candidate_name = lowered[split_pos + 4 :].strip()
             entity = self._player_name_map.get(candidate_name)
             if entity:
-                # Split using the original casing
-                original_parts = text_after_prefix.rsplit(" on ", 1)
-                return original_parts[0].strip(), entity
+                return text_after_prefix[:split_pos].strip(), entity
         return text_after_prefix, default_entity
 
     async def _lookup_companion(self, media_query: str) -> str | None:
@@ -168,6 +167,8 @@ class MusicCommandHandler:
             return None
         try:
             provider = self._llm_provider_getter()
+            # Inner timeout (5s) caps the HTTP call; outer timeout (6s) guards
+            # against the coroutine itself hanging (e.g. DNS resolution stall).
             raw = await asyncio.wait_for(
                 provider.simple_chat(_COMPANION_SYSTEM_PROMPT, media_query, timeout=5),
                 timeout=6,
