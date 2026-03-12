@@ -35,6 +35,10 @@ class LLMProvider:
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         raise NotImplementedError
 
+    async def simple_chat(self, system_prompt: str, user_message: str, *, timeout: int = 5) -> str:
+        """Lightweight chat call with a custom system prompt. Returns raw text."""
+        raise NotImplementedError
+
     async def validate_api_key(self) -> bool:
         """Validate the API key with a lightweight request. Returns True if valid.
 
@@ -201,7 +205,7 @@ class OpenAICompatibleProvider(LLMProvider):
         }
         return payload
 
-    def _call_api(self, payload: dict) -> str:
+    def _call_api(self, payload: dict, *, timeout: int | None = None) -> str:
         api_key = self._get_api_key()
         if not api_key:
             raise RuntimeError(f"{self._get_provider_name().upper()}_API_KEY is not set")
@@ -218,7 +222,7 @@ class OpenAICompatibleProvider(LLMProvider):
         )
         try:
             with urllib.request.urlopen(
-                request, timeout=self._get_timeout()
+                request, timeout=timeout or self._get_timeout()
             ) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
@@ -233,6 +237,18 @@ class OpenAICompatibleProvider(LLMProvider):
         if not content:
             raise RuntimeError("LLM response missing content")
         return str(content)
+
+    async def simple_chat(self, system_prompt: str, user_message: str, *, timeout: int = 5) -> str:
+        payload = {
+            "model": self._get_model(),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 200,
+        }
+        return await asyncio.to_thread(self._call_api, payload, timeout=timeout)
 
 
 class OpenAIProvider(OpenAICompatibleProvider):
@@ -377,7 +393,7 @@ class AnthropicProvider(LLMProvider):
         }
         return payload
 
-    def _call_api(self, payload: dict) -> str:
+    def _call_api(self, payload: dict, *, timeout: int | None = None) -> str:
         if not self.config.anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set")
 
@@ -395,7 +411,7 @@ class AnthropicProvider(LLMProvider):
 
         try:
             with urllib.request.urlopen(
-                request, timeout=self.config.anthropic_timeout
+                request, timeout=timeout or self.config.anthropic_timeout
             ) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
@@ -418,6 +434,16 @@ class AnthropicProvider(LLMProvider):
                     return str(text)
 
         raise RuntimeError("LLM response missing content")
+
+    async def simple_chat(self, system_prompt: str, user_message: str, *, timeout: int = 5) -> str:
+        payload = {
+            "model": self.config.anthropic_model,
+            "max_tokens": 200,
+            "temperature": 0.3,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_message}],
+        }
+        return await asyncio.to_thread(self._call_api, payload, timeout=timeout)
 
 
 class GeminiProvider(LLMProvider):
@@ -490,7 +516,7 @@ class GeminiProvider(LLMProvider):
             }
         return payload
 
-    def _call_api(self, payload: dict) -> str:
+    def _call_api(self, payload: dict, *, timeout: int | None = None) -> str:
         if not self.config.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is not set")
         model = (self.config.gemini_model or "").strip()
@@ -512,7 +538,7 @@ class GeminiProvider(LLMProvider):
         )
         try:
             with urllib.request.urlopen(
-                request, timeout=self.config.gemini_timeout
+                request, timeout=timeout or self.config.gemini_timeout
             ) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
@@ -539,6 +565,15 @@ class GeminiProvider(LLMProvider):
             if block_reason:
                 raise RuntimeError(f"Gemini blocked prompt: {block_reason}")
         raise RuntimeError("LLM response missing content")
+
+    async def simple_chat(self, system_prompt: str, user_message: str, *, timeout: int = 5) -> str:
+        payload: dict[str, object] = {
+            "contents": [{"role": "user", "parts": [{"text": user_message}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 200},
+        }
+        if system_prompt:
+            payload["system_instruction"] = {"parts": [{"text": system_prompt}]}
+        return await asyncio.to_thread(self._call_api, payload, timeout=timeout)
 
 
 def get_supported_providers() -> dict[str, str]:
