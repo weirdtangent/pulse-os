@@ -171,6 +171,8 @@ class PulseAssistant:
             home_assistant=self.home_assistant,
             media_controller=self.media_controller,
             media_player_entity=self.config.media_player_entity,
+            media_player_entities=self.config.media_player_entities,
+            llm_provider_getter=lambda: self.llm,
             logger=LOGGER,
         )
 
