@@ -32,7 +32,9 @@ _COMPANION_SYSTEM_PROMPT = (
     "the user wants to play, if it has such a well-known companion that should immediately "
     'follow, respond with JSON: {"companion": "track name by artist"}. If not, respond '
     'with: {"companion": null}. Only return companions for truly iconic, universally '
-    "recognized pairings."
+    "recognized pairings. NOTE: The input comes from speech-to-text and may contain "
+    "misspellings or phonetic errors (e.g., 'jemisus' for 'Genesis', 'led zepplin' for "
+    "'Led Zeppelin'). Use your best judgment to identify the intended track."
 )
 
 
@@ -188,8 +190,11 @@ class MusicCommandHandler:
         if not target_entity:
             return False
 
+        self.logger.info("[music] Play request: query=%r entity=%s", media_query, target_entity)
+
         # Companion lookup BEFORE play so both can be queued upfront
         companion = await self._lookup_companion(media_query)
+        self.logger.info("[music] Companion lookup result: %r", companion)
 
         try:
             await self.home_assistant.call_service(  # type: ignore[union-attr]

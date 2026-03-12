@@ -13,6 +13,7 @@ from pulse.assistant.llm import (
     GeminiProvider,
     LLMResult,
     OpenAIProvider,
+    _error_response,
     _extract_first_json_object,
     _format_system_prompt,
     _parse_llm_response,
@@ -467,3 +468,25 @@ class TestValidateApiKey:
         config = make_llm_config(gemini_api_key="valid-key")
         provider = GeminiProvider(config)
         assert await provider.validate_api_key() is True
+
+
+class TestErrorResponse:
+    """Test _error_response capacity detection."""
+
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "Anthropic HTTP 529: overloaded",
+            "OpenAI HTTP error: 429",
+            "Gemini HTTP error: 503",
+        ],
+    )
+    def test_capacity_errors_return_overloaded_message(self, msg):
+        result = _error_response(RuntimeError(msg))
+        assert "at capacity" in result
+        assert "Try again" in result
+
+    def test_generic_error_returns_default_message(self):
+        result = _error_response(RuntimeError("something broke"))
+        assert "Sorry" in result
+        assert "at capacity" not in result
