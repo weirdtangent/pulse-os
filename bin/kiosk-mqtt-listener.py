@@ -757,6 +757,7 @@ class KioskMqttListener:
                 on_set_volume=self._handle_overlay_volume_request,
                 on_set_brightness=self._handle_overlay_brightness_request,
                 get_device_levels=self._collect_device_control_snapshot,
+                on_media_control=self._handle_overlay_media_control,
             )
 
     def log(self, message: str) -> None:
@@ -904,11 +905,11 @@ class KioskMqttListener:
             if brightness is not None:
                 metrics["brightness"] = brightness
 
-        now_playing = self._collect_now_playing_text()
+        now_playing, now_playing_state = self._collect_now_playing_text()
         metrics["now_playing"] = now_playing
 
         if self.overlay_state:
-            change = self.overlay_state.update_now_playing(now_playing)
+            change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
             self._handle_overlay_change(change)
 
         return metrics
@@ -931,13 +932,16 @@ class KioskMqttListener:
             "brightness_supported": self._brightness_supported,
         }
 
-    def _collect_now_playing_text(self) -> str:
+    def _collect_now_playing_text(self) -> tuple[str, str]:
+        """Return (display_text, ha_state) for the media player."""
         if not self.config.media_player_entity or not self.config.ha_base_url or not self.config.ha_token:
-            return ""
+            return "", ""
         payload = self._fetch_media_player_state()
         if payload is None:
-            return ""
-        return self._format_now_playing(payload)
+            return "", ""
+        text = self._format_now_playing(payload)
+        ha_state = str(payload.get("state") or "").lower()
+        return text, ha_state
 
     def _build_ha_ssl_context(self) -> ssl.SSLContext | None:
         base_url = self.config.ha_base_url.lower()
@@ -1067,8 +1071,8 @@ class KioskMqttListener:
             return
         change = self.overlay_state.update_schedule_snapshot(data)
         # Also update now playing to ensure it's current when overlay refreshes
-        now_playing = self._collect_now_playing_text()
-        now_playing_change = self.overlay_state.update_now_playing(now_playing)
+        now_playing, now_playing_state = self._collect_now_playing_text()
+        now_playing_change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
         # Handle schedule change (always triggers refresh if changed)
         if change.changed:
             self._handle_overlay_change(change)
@@ -1227,6 +1231,37 @@ class KioskMqttListener:
         change = self.overlay_state.update_earmuffs_enabled(enabled)
         if change.changed:
             self.log(f"earmuffs: overlay state updated to enabled={enabled}")
+            self._handle_overlay_change(change)
+
+    def _handle_overlay_media_control(self, service: str) -> None:
+        entity = self.config.media_player_entity
+        if not entity or not self.config.ha_base_url or not self.config.ha_token:
+            self.log("media control: no media player entity configured")
+            return
+        url = f"{self.config.ha_base_url.rstrip('/')}/api/services/media_player/{service}"
+        body = json.dumps({"entity_id": entity}).encode("utf-8")
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.config.ha_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        open_kwargs: dict[str, Any] = {"timeout": 6}
+        if self._ha_ssl_context is not None:
+            open_kwargs["context"] = self._ha_ssl_context
+        try:
+            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]  # nosec B310
+                response.read()
+            self.log(f"media control: sent {service} to {entity}")
+        except Exception as exc:
+            self.log(f"media control: failed to send {service} to {entity}: {exc}")
+        # Refresh now-playing state after the action
+        if self.overlay_state:
+            now_playing, now_playing_state = self._collect_now_playing_text()
+            change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
             self._handle_overlay_change(change)
 
     @staticmethod

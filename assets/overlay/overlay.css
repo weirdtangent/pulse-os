@@ -851,6 +851,38 @@ body {
   flex: 1 1 auto;
 }
 
+.overlay-now-playing__controls {
+  display: flex;
+  justify-content: center;
+  gap: 1.2rem;
+  margin-top: 0.5rem;
+}
+
+.overlay-now-playing__control {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.4rem;
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0.3rem;
+  transition: opacity 0.15s;
+}
+
+.overlay-now-playing__control:hover,
+.overlay-now-playing__control:active {
+  opacity: 1;
+}
+
+.overlay-now-playing__control:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.overlay-now-playing--paused .overlay-now-playing__bar {
+  animation-play-state: paused;
+}
+
 .overlay-button {
   margin-top: 1rem;
   padding: 0.75rem 1.5rem;

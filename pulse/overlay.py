@@ -65,6 +65,7 @@ class OverlaySnapshot:
     version: int
     clocks: tuple[ClockConfig, ...]
     now_playing: str
+    now_playing_state: str
     timers: tuple[dict[str, Any], ...]
     alarms: tuple[dict[str, Any], ...]
     reminders: tuple[dict[str, Any], ...]
@@ -161,6 +162,7 @@ class OverlayStateManager:
         self._notifications: tuple[dict[str, Any], ...] = ()
         self._schedule_snapshot: dict[str, Any] | None = None
         self._now_playing = ""
+        self._now_playing_state = ""
         self._info_card: dict[str, Any] | None = None
         self._timer_position_history: dict[str, str] = {}
         self._earmuffs_enabled = False
@@ -196,13 +198,16 @@ class OverlayStateManager:
             self._clocks = new_clocks
             return self._bump("clock")
 
-    def update_now_playing(self, text: str) -> OverlayChange:
+    def update_now_playing(self, text: str, state: str = "") -> OverlayChange:
         normalized = text.strip()
+        normalized_state = state.strip().lower()
         with self._lock:
-            if normalized == self._now_playing:
+            sig = f"{normalized}|{normalized_state}"
+            if sig == self._signatures["now_playing"]:
                 return OverlayChange(False, self._version, "now_playing")
             self._now_playing = normalized
-            self._signatures["now_playing"] = normalized
+            self._now_playing_state = normalized_state
+            self._signatures["now_playing"] = sig
             return self._bump("now_playing")
 
     def update_schedule_snapshot(self, snapshot: dict[str, Any]) -> OverlayChange:
@@ -440,6 +445,7 @@ class OverlayStateManager:
                 version=self._version,
                 clocks=self._clocks,
                 now_playing=self._now_playing,
+                now_playing_state=self._now_playing_state,
                 timers=tuple(copy.deepcopy(item) for item in self._timers),
                 alarms=tuple(copy.deepcopy(item) for item in self._alarms),
                 reminders=tuple(copy.deepcopy(item) for item in self._reminders),
@@ -906,8 +912,24 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     if not text:
         return None
     body = html_escape(text)
+    state = snapshot.now_playing_state
+    is_paused = state == "paused"
+    paused_class = " overlay-now-playing--paused" if is_paused else ""
+    play_pause_icon = "\u25b6" if is_paused else "\u23f8"
+    play_pause_action = "media_play" if is_paused else "media_pause"
+    btn = "overlay-now-playing__control"
+    controls = (
+        f'<button class="{btn}" data-media-action="media_previous_track"'
+        f' aria-label="Previous">\u23ee</button>'
+        f'<button class="{btn}" data-media-action="{play_pause_action}"'
+        f' aria-label="Play/Pause">{play_pause_icon}</button>'
+        f'<button class="{btn}" data-media-action="media_stop"'
+        f' aria-label="Stop">\u23f9</button>'
+        f'<button class="{btn}" data-media-action="media_next_track"'
+        f' aria-label="Next">\u23ed</button>'
+    )
     card = f"""
-<div class="overlay-card overlay-card--ambient overlay-card--now-playing">
+<div class="overlay-card overlay-card--ambient overlay-card--now-playing{paused_class}">
   <div class="overlay-card__title">Now Playing</div>
   <div class="overlay-now-playing__content">
     <div class="overlay-now-playing__indicator" aria-hidden="true">
@@ -919,6 +941,7 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     </div>
     <div class="overlay-now-playing__body">{body}</div>
   </div>
+  <div class="overlay-now-playing__controls">{controls}</div>
 </div>
 """.strip()
     return "bottom-right", card

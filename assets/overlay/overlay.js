@@ -695,6 +695,18 @@ window.PulseOverlay.initialize = function() {
       return;
     }
 
+    const mediaBtn = e.target.closest('[data-media-action]');
+    if (mediaBtn) {
+      const action = mediaBtn.dataset.mediaAction;
+      mediaBtn.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      }).finally(() => { mediaBtn.disabled = false; });
+      return;
+    }
+
     const button = e.target.closest('[data-stop-timer]');
     if (!button) {
       forwardBlankTapToParent();
