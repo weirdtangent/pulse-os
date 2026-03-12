@@ -31,6 +31,21 @@ class LLMResult:
     follow_up: bool = False
 
 
+_OVERLOADED_MSG = "The AI service is at capacity right now. Try again in a minute or two."
+_GENERIC_ERROR_MSG = "Sorry, I ran into an error while thinking about that."
+
+# HTTP status codes that indicate the provider is temporarily at capacity.
+_CAPACITY_CODES = {"429", "503", "529"}
+
+
+def _error_response(exc: Exception) -> str:
+    """Return a user-facing error message, distinguishing capacity errors."""
+    msg = str(exc)
+    if any(f"HTTP {code}" in msg or f"HTTP error: {code}" in msg for code in _CAPACITY_CODES):
+        return _OVERLOADED_MSG
+    return _GENERIC_ERROR_MSG
+
+
 class LLMProvider:
     async def generate(self, user_text: str, actions_for_prompt: Iterable[dict[str, str]]) -> LLMResult:
         raise NotImplementedError
@@ -181,7 +196,7 @@ class OpenAICompatibleProvider(LLMProvider):
             response_text = await asyncio.to_thread(self._call_api, payload)
         except Exception as exc:
             self._logger.exception("[llm] LLM call failed: %s", exc)
-            return LLMResult(response="Sorry, I ran into an error while thinking about that.", actions=[])
+            return LLMResult(response=_error_response(exc), actions=[])
 
         return _parse_llm_response(response_text)
 
@@ -372,7 +387,7 @@ class AnthropicProvider(LLMProvider):
             response_text = await asyncio.to_thread(self._call_api, payload)
         except Exception as exc:
             self._logger.exception("LLM call failed: %s", exc)
-            return LLMResult(response="Sorry, I ran into an error while thinking about that.", actions=[])
+            return LLMResult(response=_error_response(exc), actions=[])
         return _parse_llm_response(response_text)
 
     def _build_payload(self, user_text: str, actions_for_prompt: list[dict[str, str]]) -> dict:
@@ -488,7 +503,7 @@ class GeminiProvider(LLMProvider):
             response_text = await asyncio.to_thread(self._call_api, payload)
         except Exception as exc:
             self._logger.exception("[llm] LLM call failed: %s", exc)
-            return LLMResult(response="Sorry, I ran into an error while thinking about that.", actions=[])
+            return LLMResult(response=_error_response(exc), actions=[])
         return _parse_llm_response(response_text)
 
     def _build_payload(self, user_text: str, actions_for_prompt: list[dict[str, str]]) -> dict:
