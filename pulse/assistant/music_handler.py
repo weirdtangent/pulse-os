@@ -188,8 +188,11 @@ class MusicCommandHandler:
         if not target_entity:
             return False
 
+        self.logger.info("[music] Play request: query=%r entity=%s", media_query, target_entity)
+
         # Companion lookup BEFORE play so both can be queued upfront
         companion = await self._lookup_companion(media_query)
+        self.logger.info("[music] Companion lookup result: %r", companion)
 
         try:
             await self.home_assistant.call_service(  # type: ignore[union-attr]
