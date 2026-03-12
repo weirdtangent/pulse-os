@@ -78,6 +78,7 @@ class OverlayHttpServer:
         on_set_volume: Callable[[int], bool] | None = None,
         on_set_brightness: Callable[[int], bool] | None = None,
         get_device_levels: Callable[[], dict[str, Any]] | None = None,
+        on_media_control: Callable[[str], None] | None = None,
     ) -> None:
         self.state = state
         self.theme = theme
@@ -101,6 +102,7 @@ class OverlayHttpServer:
         self._on_set_volume = on_set_volume
         self._on_set_brightness = on_set_brightness
         self._get_device_levels = get_device_levels
+        self._on_media_control = on_media_control
         self._sound_settings = SoundSettings.with_defaults(
             custom_dir=(Path(sounds_dir).expanduser() if (sounds_dir := os.environ.get("PULSE_SOUNDS_DIR")) else None),
             default_alarm=(os.environ.get("PULSE_SOUND_ALARM") or "alarm-digital-rise").strip(),
@@ -632,6 +634,17 @@ html, body {{
                         return
                     outer._on_trigger_update()
                     self._log("overlay: update trigger handler called")
+                elif action in {
+                    "media_play",
+                    "media_pause",
+                    "media_stop",
+                    "media_next_track",
+                    "media_previous_track",
+                }:
+                    if not outer._on_media_control:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Media control unavailable")
+                        return
+                    outer._on_media_control(action)
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid action")
                     return
