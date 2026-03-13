@@ -668,6 +668,13 @@ class NowPlayingCardTests(unittest.TestCase):
         self.assertIn('aria-label="Play"', html)
         self.assertIn("overlay-now-playing--paused", html)
 
+    def test_idle_state_shows_play_button(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="Song", now_playing_state="idle"))
+        _, html = result  # type: ignore[misc]
+        self.assertIn('data-media-action="media_play"', html)
+        self.assertNotIn('data-media-action="media_pause"', html)
+        self.assertIn('aria-label="Play"', html)
+
     def test_body_text_is_escaped(self) -> None:
         result = _build_now_playing_card(self._snapshot(now_playing="<script>alert(1)</script>"))
         _, html = result  # type: ignore[misc]

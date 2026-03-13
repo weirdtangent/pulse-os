@@ -913,11 +913,11 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
         return None
     body = html_escape(text)
     state = snapshot.now_playing_state
-    is_paused = state == "paused"
-    paused_class = " overlay-now-playing--paused" if is_paused else ""
-    play_pause_icon = "\u25b7" if is_paused else "\u2016"
-    play_pause_action = "media_play" if is_paused else "media_pause"
-    play_pause_label = "Play" if is_paused else "Pause"
+    is_playing = state == "playing"
+    paused_class = " overlay-now-playing--paused" if state == "paused" else ""
+    play_pause_icon = "\u2016" if is_playing else "\u25b7"
+    play_pause_action = "media_pause" if is_playing else "media_play"
+    play_pause_label = "Pause" if is_playing else "Play"
     btn = "overlay-now-playing__control"
     pri = f"{btn} {btn}--primary"
     controls = (
