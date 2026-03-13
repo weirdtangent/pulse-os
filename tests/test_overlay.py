@@ -10,6 +10,7 @@ from pulse.overlay import (
     OverlayTheme,
     _build_config_info_overlay,
     _build_help_info_overlay,
+    _build_now_playing_card,
     _get_library_versions,
     parse_clock_config,
     render_overlay_html,
@@ -609,6 +610,117 @@ class HelpInfoCardTests(unittest.TestCase):
         html = render_overlay_html(self._snapshot(info_card={"type": "help"}), theme)
         self.assertIn("overlay-info-card--help", html)
         self.assertIn("Ask Me Anything", html)
+
+
+class NowPlayingCardTests(unittest.TestCase):
+    def _snapshot(self, **overrides) -> OverlaySnapshot:
+        data = {
+            "version": 1,
+            "clocks": (),
+            "now_playing": "",
+            "now_playing_state": "",
+            "timers": (),
+            "alarms": (),
+            "reminders": (),
+            "calendar_events": (),
+            "active_alarm": None,
+            "active_timer": None,
+            "active_reminder": None,
+            "notifications": (),
+            "timer_positions": {},
+            "info_card": None,
+            "last_reason": "test",
+            "generated_at": 0.0,
+            "schedule_snapshot": None,
+            "earmuffs_enabled": False,
+            "update_available": False,
+        }
+        data.update(overrides)
+        return OverlaySnapshot(**data)  # type: ignore[arg-type]
+
+    def test_returns_none_when_no_text(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing=""))
+        self.assertIsNone(result)
+
+    def test_returns_card_with_controls(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="Artist — Song"))
+        self.assertIsNotNone(result)
+        position, html = result  # type: ignore[misc]
+        self.assertEqual(position, "bottom-right")
+        self.assertIn("overlay-now-playing__controls", html)
+        self.assertIn('data-media-action="media_previous_track"', html)
+        self.assertIn('data-media-action="media_next_track"', html)
+        self.assertIn('data-media-action="media_stop"', html)
+
+    def test_playing_state_shows_pause_button(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="Song", now_playing_state="playing"))
+        _, html = result  # type: ignore[misc]
+        self.assertIn('data-media-action="media_pause"', html)
+        self.assertNotIn('data-media-action="media_play"', html)
+        self.assertIn('aria-label="Pause"', html)
+        self.assertNotIn("overlay-now-playing--paused", html)
+
+    def test_paused_state_shows_play_button_and_paused_class(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="Song", now_playing_state="paused"))
+        _, html = result  # type: ignore[misc]
+        self.assertIn('data-media-action="media_play"', html)
+        self.assertNotIn('data-media-action="media_pause"', html)
+        self.assertIn('aria-label="Play"', html)
+        self.assertIn("overlay-now-playing--paused", html)
+
+    def test_idle_state_shows_play_button(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="Song", now_playing_state="idle"))
+        _, html = result  # type: ignore[misc]
+        self.assertIn('data-media-action="media_play"', html)
+        self.assertNotIn('data-media-action="media_pause"', html)
+        self.assertIn('aria-label="Play"', html)
+
+    def test_body_text_is_escaped(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="<script>alert(1)</script>"))
+        _, html = result  # type: ignore[misc]
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_primary_class_on_play_pause(self) -> None:
+        result = _build_now_playing_card(self._snapshot(now_playing="Song", now_playing_state="playing"))
+        _, html = result  # type: ignore[misc]
+        self.assertIn("overlay-now-playing__control--primary", html)
+
+
+class UpdateNowPlayingTests(unittest.TestCase):
+    def test_first_update_is_changed(self) -> None:
+        mgr = OverlayStateManager()
+        change = mgr.update_now_playing("Artist — Song", state="playing")
+        self.assertTrue(change.changed)
+        self.assertEqual(change.reason, "now_playing")
+
+    def test_same_text_and_state_not_changed(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.update_now_playing("Song", state="playing")
+        change = mgr.update_now_playing("Song", state="playing")
+        self.assertFalse(change.changed)
+
+    def test_state_change_triggers_update(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.update_now_playing("Song", state="playing")
+        change = mgr.update_now_playing("Song", state="paused")
+        self.assertTrue(change.changed)
+
+    def test_state_appears_in_snapshot(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.update_now_playing("Song", state="paused")
+        snap = mgr.snapshot()
+        self.assertEqual(snap.now_playing, "Song")
+        self.assertEqual(snap.now_playing_state, "paused")
+
+    def test_empty_text_clears(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.update_now_playing("Song", state="playing")
+        change = mgr.update_now_playing("", state="")
+        self.assertTrue(change.changed)
+        snap = mgr.snapshot()
+        self.assertEqual(snap.now_playing, "")
+        self.assertEqual(snap.now_playing_state, "")
 
 
 if __name__ == "__main__":
