@@ -915,18 +915,20 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     state = snapshot.now_playing_state
     is_paused = state == "paused"
     paused_class = " overlay-now-playing--paused" if is_paused else ""
-    play_pause_icon = "\u25b6" if is_paused else "\u23f8"
+    play_pause_icon = "\u25b7" if is_paused else "\u2016"
     play_pause_action = "media_play" if is_paused else "media_pause"
+    play_pause_label = "Play" if is_paused else "Pause"
     btn = "overlay-now-playing__control"
+    pri = f"{btn} {btn}--primary"
     controls = (
         f'<button class="{btn}" data-media-action="media_previous_track"'
-        f' aria-label="Previous">\u23ee</button>'
-        f'<button class="{btn}" data-media-action="{play_pause_action}"'
-        f' aria-label="Play/Pause">{play_pause_icon}</button>'
+        f' aria-label="Previous">\u25c1\u25c1</button>'
+        f'<button class="{pri}" data-media-action="{play_pause_action}"'
+        f' aria-label="{play_pause_label}">{play_pause_icon}</button>'
         f'<button class="{btn}" data-media-action="media_stop"'
-        f' aria-label="Stop">\u23f9</button>'
+        f' aria-label="Stop">\u25a1</button>'
         f'<button class="{btn}" data-media-action="media_next_track"'
-        f' aria-label="Next">\u23ed</button>'
+        f' aria-label="Next">\u25b7\u25b7</button>'
     )
     card = f"""
 <div class="overlay-card overlay-card--ambient overlay-card--now-playing{paused_class}">
