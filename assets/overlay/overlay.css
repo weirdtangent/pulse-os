@@ -854,29 +854,51 @@ body {
 .overlay-now-playing__controls {
   display: flex;
   justify-content: center;
-  gap: 1.2rem;
-  margin-top: 0.5rem;
+  align-items: center;
+  gap: 1.6rem;
+  margin-top: 0.6rem;
+  padding: 0.4rem 1.2rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .overlay-now-playing__control {
   background: transparent;
   border: none;
-  color: #fff;
-  font-size: 1.4rem;
+  color: var(--overlay-accent-color, #88C0D0);
+  font-size: 1.6rem;
   cursor: pointer;
-  opacity: 0.7;
-  padding: 0.3rem;
-  transition: opacity 0.15s;
+  opacity: 0.55;
+  padding: 0.4rem;
+  transition: opacity 0.2s, transform 0.15s;
+  line-height: 1;
+  font-family: var(--overlay-font-family, system-ui, sans-serif);
+  font-variant-emoji: text;
+}
+
+.overlay-now-playing__control--primary {
+  font-size: 2rem;
+  opacity: 0.75;
 }
 
 .overlay-now-playing__control:hover,
-.overlay-now-playing__control:active {
+.overlay-now-playing__control:active,
+.overlay-now-playing__control:focus-visible {
   opacity: 1;
+  transform: scale(1.15);
+}
+
+.overlay-now-playing__control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--overlay-accent-color, #88C0D0);
+  border-radius: 50%;
 }
 
 .overlay-now-playing__control:disabled {
-  opacity: 0.35;
+  opacity: 0.2;
   cursor: not-allowed;
+  transform: none;
 }
 
 .overlay-now-playing--paused .overlay-now-playing__bar {
