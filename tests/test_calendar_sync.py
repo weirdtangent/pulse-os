@@ -148,6 +148,44 @@ END:VCALENDAR
         self.assertEqual(len(reminders), 1)
         self.assertFalse(reminders[0].declined)
 
+    def test_declined_event_excluded_from_window(self) -> None:
+        now = datetime(2025, 1, 1, 9, 0, tzinfo=UTC).astimezone()
+        declined_reminder = CalendarReminder(
+            uid="event-declined",
+            summary="Declined meeting",
+            description=None,
+            location=None,
+            start=now + timedelta(hours=1),
+            end=None,
+            all_day=False,
+            trigger_time=now + timedelta(minutes=50),
+            calendar_name="Work",
+            source_url=self.feed_state.url,
+            declined=True,
+        )
+        accepted_reminder = CalendarReminder(
+            uid="event-accepted",
+            summary="Accepted meeting",
+            description=None,
+            location=None,
+            start=now + timedelta(hours=2),
+            end=None,
+            all_day=False,
+            trigger_time=now + timedelta(hours=1, minutes=50),
+            calendar_name="Work",
+            source_url=self.feed_state.url,
+            declined=False,
+        )
+
+        async def _run_schedule() -> None:
+            await self.service._schedule_reminders(self.feed_state, [declined_reminder, accepted_reminder], now)
+            await asyncio.sleep(0)
+
+        asyncio.run(_run_schedule())
+        windowed = list(self.service._windowed_events.values())
+        self.assertEqual(len(windowed), 1)
+        self.assertEqual(windowed[0].uid, "event-accepted")
+
     def test_reminder_window_includes_far_event_with_near_trigger(self) -> None:
         now = datetime(2025, 1, 1, 9, 0, tzinfo=UTC).astimezone()
         reminder = CalendarReminder(

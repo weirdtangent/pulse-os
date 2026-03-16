@@ -549,7 +549,7 @@ class CalendarSyncService:
                 skipped_past_events += 1
                 continue
             include_in_window = reminder.start <= lookahead_end or reminder.trigger_time <= lookahead_end
-            if include_in_window:
+            if include_in_window and not reminder.declined:
                 window_key = self._window_key(reminder)
                 existing = self._windowed_events.get(window_key)
                 if not existing or reminder.trigger_time < existing.trigger_time:
