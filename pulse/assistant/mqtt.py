@@ -76,19 +76,22 @@ class AssistantMqtt:
         # Restore subscriptions and callbacks lost due to clean_session=True
         for topic, on_message in self._subscriptions:
 
-            def _make_callback(handler: Callable[[str], None]) -> Callable:  # type: ignore[type-arg]
+            def _make_callback(handler: Callable[[str], None], bound_topic: str) -> Callable:  # type: ignore[type-arg]
                 def _callback(_client, _userdata, message):  # type: ignore[no-untyped-def]
                     try:
                         payload = message.payload.decode("utf-8", errors="ignore")
                         handler(payload)
                     except Exception as exc:
                         self._logger.error(
-                            "[mqtt] MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True
+                            "[mqtt] MQTT subscriber callback failed for topic '%s': %s",
+                            bound_topic,
+                            exc,
+                            exc_info=True,
                         )
 
                 return _callback
 
-            client.message_callback_add(topic, _make_callback(on_message))
+            client.message_callback_add(topic, _make_callback(on_message, topic))
             result, _mid = client.subscribe(topic)
             if result != mqtt.MQTT_ERR_SUCCESS:
                 self._logger.warning("[mqtt] Failed to re-subscribe to topic: %s (rc=%s)", topic, result)
