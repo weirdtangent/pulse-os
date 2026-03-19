@@ -611,17 +611,36 @@ class CalendarSyncService:
 
     async def _await_and_fire(self, key: str, reminder: CalendarReminder) -> None:
         delay = (reminder.trigger_time - _now()).total_seconds()
+        self._logger.info(
+            "[calendar] Scheduled reminder '%s' (uid=%s) in %.0fs at %s",
+            reminder.summary,
+            reminder.uid,
+            delay,
+            reminder.trigger_time.isoformat(),
+        )
         if delay > 0:
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
+                self._logger.debug("[calendar] Reminder '%s' cancelled by stop event", reminder.summary)
                 return
             except TimeoutError:
                 pass
         if self._stop_event.is_set():
+            self._logger.debug("[calendar] Reminder '%s' skipped (stop event set after delay)", reminder.summary)
             return
         try:
             if not reminder.declined:
+                self._logger.info(
+                    "[calendar] Firing reminder '%s' (uid=%s, trigger=%s, start=%s)",
+                    reminder.summary,
+                    reminder.uid,
+                    reminder.trigger_time.isoformat(),
+                    reminder.start.isoformat(),
+                )
                 await self._trigger_callback(reminder)
+                self._logger.info("[calendar] Reminder '%s' triggered successfully", reminder.summary)
+            else:
+                self._logger.debug("[calendar] Skipping declined reminder '%s'", reminder.summary)
         except Exception:
             self._logger.exception(
                 "[calendar] Failed to trigger calendar reminder %s (%s)",
