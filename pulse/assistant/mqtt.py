@@ -18,6 +18,7 @@ class AssistantMqtt:
         self._logger = logger or logging.getLogger(__name__)
         self._client: mqtt.Client | None = None
         self._lock = threading.Lock()
+        self._subscriptions: list[tuple[str, Callable[[str], None]]] = []
 
     def connect(self) -> None:
         if not self.config.host:
@@ -49,6 +50,8 @@ class AssistantMqtt:
             # Set Last Will so broker publishes "offline" if we disconnect unexpectedly
             available_topic = f"{self.config.topic_base}/assistant/available"
             client.will_set(available_topic, payload="offline", qos=1, retain=True)
+            client.on_connect = self._on_connect
+            client.on_disconnect = self._on_disconnect
             try:
                 client.connect(self.config.host, self.config.port, keepalive=30)
             except Exception as exc:
@@ -59,6 +62,27 @@ class AssistantMqtt:
             self._available_topic = available_topic
             # Announce online status (retained so new subscribers see current state)
             client.publish(available_topic, payload="online", qos=1, retain=True)
+
+    def _on_connect(self, client, _userdata, _flags, reason_code, properties=None):  # type: ignore[no-untyped-def]
+        success = reason_code == 0 if isinstance(reason_code, int) else reason_code.is_failure is False
+        if not success:
+            self._logger.warning("[mqtt] MQTT reconnect failed (reason=%s)", reason_code)
+            return
+        self._logger.info("[mqtt] MQTT connected (reason=%s)", reason_code)
+        # Re-announce online status
+        available_topic = getattr(self, "_available_topic", None)
+        if available_topic:
+            client.publish(available_topic, payload="online", qos=1, retain=True)
+        # Restore subscriptions lost due to clean_session=True
+        for topic, _ in self._subscriptions:
+            result, _mid = client.subscribe(topic)
+            if result != mqtt.MQTT_ERR_SUCCESS:
+                self._logger.warning("[mqtt] Failed to re-subscribe to topic: %s (rc=%s)", topic, result)
+            else:
+                self._logger.debug("[mqtt] Re-subscribed to topic: %s", topic)
+
+    def _on_disconnect(self, _client, _userdata, _flags, reason_code, properties=None):  # type: ignore[no-untyped-def]
+        self._logger.warning("[mqtt] MQTT disconnected (reason=%s); paho will auto-reconnect", reason_code)
 
     def disconnect(self) -> None:
         with self._lock:
@@ -108,6 +132,7 @@ class AssistantMqtt:
                     "[mqtt] MQTT subscriber callback failed for topic '%s': %s", topic, exc, exc_info=True
                 )
 
+        self._subscriptions.append((topic, on_message))
         result, mid = client.subscribe(topic)
         if result != mqtt.MQTT_ERR_SUCCESS:
             self._logger.warning("[mqtt] Failed to subscribe to topic: %s (rc=%s)", topic, result)
