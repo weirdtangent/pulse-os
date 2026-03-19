@@ -611,13 +611,21 @@ class CalendarSyncService:
 
     async def _await_and_fire(self, key: str, reminder: CalendarReminder) -> None:
         delay = (reminder.trigger_time - _now()).total_seconds()
-        self._logger.info(
-            "[calendar] Scheduled reminder '%s' (uid=%s) in %.0fs at %s",
-            reminder.summary,
-            reminder.uid,
-            delay,
-            reminder.trigger_time.isoformat(),
-        )
+        if delay > 0:
+            self._logger.info(
+                "[calendar] Scheduled reminder '%s' (uid=%s) in %.0fs at %s",
+                reminder.summary,
+                reminder.uid,
+                delay,
+                reminder.trigger_time.isoformat(),
+            )
+        else:
+            self._logger.info(
+                "[calendar] Scheduled reminder '%s' (uid=%s) immediately at %s",
+                reminder.summary,
+                reminder.uid,
+                reminder.trigger_time.isoformat(),
+            )
         if delay > 0:
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
