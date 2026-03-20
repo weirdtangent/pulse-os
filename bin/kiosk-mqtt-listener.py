@@ -2074,6 +2074,20 @@ class KioskMqttListener:
     def _perform_update(self) -> None:
         repo_dir = self.repo_dir
         steps: list[tuple[str, list[str], str | None]] = [
+            ("git reset", ["git", "checkout", "."], repo_dir),
+            (
+                "git clean",
+                [
+                    "git",
+                    "clean",
+                    "-fd",
+                    "--exclude=pulse.conf",
+                    "--exclude=pulse.conf.*",
+                    "--exclude=pulse-devices.conf",
+                    "--exclude=pulse-mcp.conf",
+                ],
+                repo_dir,
+            ),
             ("git pull", ["git", "pull", "--ff-only"], repo_dir),
             ("setup.sh", ["./setup.sh"], repo_dir),
         ]
