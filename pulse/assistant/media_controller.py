@@ -45,7 +45,7 @@ class MediaController:
 
         # Staleness tracking
         self._last_seen_position_updated_at: str | None = None
-        self._last_remediation_time: float = 0.0
+        self._last_remediation_time: float = -(float(_STALE_COOLDOWN_SECONDS))
 
     def cancel_media_resume_task(self) -> None:
         """Cancel any pending media resume task."""
