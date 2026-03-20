@@ -254,7 +254,9 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value="test_entry_123")
+    @patch.object(
+        MediaController, "_find_music_assistant_config_entry", new_callable=AsyncMock, return_value="test_entry_123"
+    )
     async def test_detects_stale_and_remediates(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
@@ -267,7 +269,7 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_awaited_once_with("homeassistant", "reload_config_entry", {"entry_id": "test_entry_123"})
 
-    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value=None)
+    @patch.object(MediaController, "_find_music_assistant_config_entry", new_callable=AsyncMock, return_value=None)
     async def test_no_remediation_without_config_entry(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
@@ -278,7 +280,9 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value="test_entry_123")
+    @patch.object(
+        MediaController, "_find_music_assistant_config_entry", new_callable=AsyncMock, return_value="test_entry_123"
+    )
     async def test_respects_cooldown(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
@@ -323,7 +327,9 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value="test_entry_123")
+    @patch.object(
+        MediaController, "_find_music_assistant_config_entry", new_callable=AsyncMock, return_value="test_entry_123"
+    )
     async def test_cooldown_expires_allows_retry(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
