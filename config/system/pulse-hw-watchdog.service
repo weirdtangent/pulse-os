@@ -1,6 +1,6 @@
 [Unit]
 Description=Pulse Hardware Watchdog (kernel error monitor)
-After=multi-user.target
+After=local-fs.target
 
 [Service]
 Type=simple
