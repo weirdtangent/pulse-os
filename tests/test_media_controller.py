@@ -254,28 +254,32 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    async def test_detects_stale_and_remediates(self):
+    async def test_detects_stale_and_calls_remediate(self):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
         mc = _make_controller(ha_client=ha)
-        mc._find_music_assistant_config_entry = AsyncMock(return_value="test_entry_123")
+        mc._remediate_stale_player = AsyncMock()
         # First call — records timestamp
         await mc.check_media_player_staleness()
+        mc._remediate_stale_player.assert_not_awaited()
         # Second call — same timestamp, stale beyond threshold → remediate
         await mc.check_media_player_staleness()
+        mc._remediate_stale_player.assert_awaited_once_with("media_player.living_room")
+
+    async def test_remediate_reloads_config_entry(self):
+        ha = AsyncMock()
+        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
+        mc = _make_controller(ha_client=ha)
+        await mc._remediate_stale_player("media_player.living_room")
         ha.call_service.assert_awaited_once_with("homeassistant", "reload_config_entry", {"entry_id": "test_entry_123"})
 
-    async def test_no_remediation_without_config_entry(self):
+    async def test_remediate_skips_without_config_entry(self):
         ha = AsyncMock()
-        stale_time = datetime.now(UTC) - timedelta(seconds=600)
-        state = _playing_state(duration=60, updated_at=stale_time)
-        ha.get_state = AsyncMock(return_value=state)
+        ha.list_config_entries = AsyncMock(return_value=[])
         mc = _make_controller(ha_client=ha)
-        mc._find_music_assistant_config_entry = AsyncMock(return_value=None)
-        await mc.check_media_player_staleness()
-        await mc.check_media_player_staleness()
+        await mc._remediate_stale_player("media_player.living_room")
         ha.call_service.assert_not_awaited()
 
     async def test_respects_cooldown(self):
@@ -284,15 +288,15 @@ class TestCheckMediaPlayerStaleness:
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
         mc = _make_controller(ha_client=ha)
-        mc._find_music_assistant_config_entry = AsyncMock(return_value="test_entry_123")
+        mc._remediate_stale_player = AsyncMock()
         # First call — records timestamp
         await mc.check_media_player_staleness()
         # Second call — triggers remediation
         await mc.check_media_player_staleness()
-        assert ha.call_service.await_count == 1
+        assert mc._remediate_stale_player.await_count == 1
         # Third call — within cooldown, should NOT remediate again
         await mc.check_media_player_staleness()
-        assert ha.call_service.await_count == 1
+        assert mc._remediate_stale_player.await_count == 1
 
     async def test_resets_when_timestamp_changes(self):
         ha = AsyncMock()
@@ -329,12 +333,12 @@ class TestCheckMediaPlayerStaleness:
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
         mc = _make_controller(ha_client=ha)
-        mc._find_music_assistant_config_entry = AsyncMock(return_value="test_entry_123")
+        mc._remediate_stale_player = AsyncMock()
         # Record + detect stale
         await mc.check_media_player_staleness()
         await mc.check_media_player_staleness()
-        assert ha.call_service.await_count == 1
+        assert mc._remediate_stale_player.await_count == 1
         # Simulate cooldown expiry
         mc._last_remediation_time = time.monotonic() - 700
         await mc.check_media_player_staleness()
-        assert ha.call_service.await_count == 2
+        assert mc._remediate_stale_player.await_count == 2
