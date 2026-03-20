@@ -48,14 +48,14 @@ jobs:
 
       - name: Checkout repository
         if: steps.skip-check.outputs.skip != 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           fetch-depth: 1
 
       - name: Generate GitHub App token
         if: steps.skip-check.outputs.skip != 'true'
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859  # v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -151,7 +151,7 @@ jobs:
 
       - name: Claude Code Review
         if: steps.skip-check.outputs.skip != 'true' && steps.docs-check.outputs.docs_only != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@df37d2f0760a4b5683a6e617c9325bc1a36443f6  # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
