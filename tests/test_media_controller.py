@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pulse.assistant.media_controller import MediaController
@@ -254,12 +254,12 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    async def test_detects_stale_and_remediates(self):
+    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value="test_entry_123")
+    async def test_detects_stale_and_remediates(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
         mc = _make_controller(ha_client=ha)
         # First call — records timestamp
         await mc.check_media_player_staleness()
@@ -267,23 +267,23 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_awaited_once_with("homeassistant", "reload_config_entry", {"entry_id": "test_entry_123"})
 
-    async def test_no_remediation_without_config_entry(self):
+    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value=None)
+    async def test_no_remediation_without_config_entry(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha.list_config_entries = AsyncMock(return_value=[])
         mc = _make_controller(ha_client=ha)
         await mc.check_media_player_staleness()
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    async def test_respects_cooldown(self):
+    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value="test_entry_123")
+    async def test_respects_cooldown(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
         mc = _make_controller(ha_client=ha)
         # First call — records timestamp
         await mc.check_media_player_staleness()
@@ -323,12 +323,12 @@ class TestCheckMediaPlayerStaleness:
         await mc.check_media_player_staleness()
         ha.call_service.assert_not_awaited()
 
-    async def test_cooldown_expires_allows_retry(self):
+    @patch.object(MediaController, "_find_music_assistant_config_entry", return_value="test_entry_123")
+    async def test_cooldown_expires_allows_retry(self, _mock_find):
         ha = AsyncMock()
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
         mc = _make_controller(ha_client=ha)
         # Record + detect stale
         await mc.check_media_player_staleness()
