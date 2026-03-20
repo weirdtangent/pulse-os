@@ -259,7 +259,7 @@ class TestCheckMediaPlayerStaleness:
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha._request = AsyncMock(return_value=[{"domain": "music_assistant", "entry_id": "test_entry_123"}])
+        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
         mc = _make_controller(ha_client=ha)
         # First call — records timestamp
         await mc.check_media_player_staleness()
@@ -272,7 +272,7 @@ class TestCheckMediaPlayerStaleness:
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha._request = AsyncMock(return_value=[{"domain": "other_integration", "entry_id": "x"}])
+        ha.list_config_entries = AsyncMock(return_value=[])
         mc = _make_controller(ha_client=ha)
         await mc.check_media_player_staleness()
         await mc.check_media_player_staleness()
@@ -283,7 +283,7 @@ class TestCheckMediaPlayerStaleness:
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha._request = AsyncMock(return_value=[{"domain": "music_assistant", "entry_id": "test_entry_123"}])
+        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
         mc = _make_controller(ha_client=ha)
         # First call — records timestamp
         await mc.check_media_player_staleness()
@@ -328,7 +328,7 @@ class TestCheckMediaPlayerStaleness:
         stale_time = datetime.now(UTC) - timedelta(seconds=600)
         state = _playing_state(duration=60, updated_at=stale_time)
         ha.get_state = AsyncMock(return_value=state)
-        ha._request = AsyncMock(return_value=[{"domain": "music_assistant", "entry_id": "test_entry_123"}])
+        ha.list_config_entries = AsyncMock(return_value=[{"entry_id": "test_entry_123"}])
         mc = _make_controller(ha_client=ha)
         # Record + detect stale
         await mc.check_media_player_staleness()

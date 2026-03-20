@@ -46,7 +46,6 @@ class MediaController:
         # Staleness tracking
         self._last_seen_position_updated_at: str | None = None
         self._last_remediation_time: float = 0.0
-        self._remediation_attempts: int = 0
 
     def cancel_media_resume_task(self) -> None:
         """Cancel any pending media resume task."""
@@ -191,7 +190,7 @@ class MediaController:
         title = attrs.get("media_title", "unknown")
         LOGGER.warning(
             "[media] Stale media player detected: %s shows '%s' but position unchanged for %.0fs "
-            "(duration=%.0fs); requesting entity update",
+            "(duration=%.0fs); reloading music_assistant integration",
             entity,
             title,
             age_seconds,
@@ -240,11 +239,9 @@ class MediaController:
         if not self.home_assistant:
             return None
         try:
-            entries = await self.home_assistant._request("GET", "/api/config/config_entries/entry")
-            if isinstance(entries, list):
-                for entry in entries:
-                    if isinstance(entry, dict) and entry.get("domain") == "music_assistant":
-                        return entry.get("entry_id")
+            entries = await self.home_assistant.list_config_entries(domain="music_assistant")
+            if entries:
+                return entries[0].get("entry_id")
         except HomeAssistantError as exc:
             LOGGER.debug("[media] Failed to query config entries: %s", exc)
         return None
