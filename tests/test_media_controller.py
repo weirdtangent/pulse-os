@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -200,3 +202,139 @@ class TestBulkOperations:
         await mc.resume_all()
         await mc.stop_all()
         # No exceptions raised
+
+
+# ---------------------------------------------------------------------------
+# check_media_player_staleness
+# ---------------------------------------------------------------------------
+
+
+def _playing_state(
+    title: str = "Test Song",
+    duration: float = 240,
+    position: float = 0,
+    updated_at: datetime | None = None,
+) -> dict:
+    """Build a mock HA media_player state dict for a playing entity."""
+    if updated_at is None:
+        updated_at = datetime.now(UTC)
+    return {
+        "state": "playing",
+        "attributes": {
+            "media_title": title,
+            "media_duration": duration,
+            "media_position": position,
+            "media_position_updated_at": updated_at.isoformat(),
+        },
+    }
+
+
+class TestCheckMediaPlayerStaleness:
+    async def test_no_action_when_not_playing(self):
+        ha = AsyncMock()
+        ha.get_state = AsyncMock(return_value={"state": "paused", "attributes": {}})
+        mc = _make_controller(ha_client=ha)
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_not_awaited()
+
+    async def test_no_action_when_fresh(self):
+        ha = AsyncMock()
+        ha.get_state = AsyncMock(return_value=_playing_state(updated_at=datetime.now(UTC)))
+        mc = _make_controller(ha_client=ha)
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_not_awaited()
+
+    async def test_no_action_on_first_check_same_timestamp(self):
+        """First check records the timestamp; staleness is only detected on subsequent checks."""
+        ha = AsyncMock()
+        stale_time = datetime.now(UTC) - timedelta(seconds=600)
+        ha.get_state = AsyncMock(return_value=_playing_state(duration=60, updated_at=stale_time))
+        mc = _make_controller(ha_client=ha)
+        # First call — records the timestamp
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_not_awaited()
+
+    async def test_detects_stale_and_remediates(self):
+        ha = AsyncMock()
+        stale_time = datetime.now(UTC) - timedelta(seconds=600)
+        state = _playing_state(duration=60, updated_at=stale_time)
+        ha.get_state = AsyncMock(return_value=state)
+        ha._request = AsyncMock(return_value=[{"domain": "music_assistant", "entry_id": "test_entry_123"}])
+        mc = _make_controller(ha_client=ha)
+        # First call — records timestamp
+        await mc.check_media_player_staleness()
+        # Second call — same timestamp, stale beyond threshold → remediate
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_awaited_once_with("homeassistant", "reload_config_entry", {"entry_id": "test_entry_123"})
+
+    async def test_no_remediation_without_config_entry(self):
+        ha = AsyncMock()
+        stale_time = datetime.now(UTC) - timedelta(seconds=600)
+        state = _playing_state(duration=60, updated_at=stale_time)
+        ha.get_state = AsyncMock(return_value=state)
+        ha._request = AsyncMock(return_value=[{"domain": "other_integration", "entry_id": "x"}])
+        mc = _make_controller(ha_client=ha)
+        await mc.check_media_player_staleness()
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_not_awaited()
+
+    async def test_respects_cooldown(self):
+        ha = AsyncMock()
+        stale_time = datetime.now(UTC) - timedelta(seconds=600)
+        state = _playing_state(duration=60, updated_at=stale_time)
+        ha.get_state = AsyncMock(return_value=state)
+        ha._request = AsyncMock(return_value=[{"domain": "music_assistant", "entry_id": "test_entry_123"}])
+        mc = _make_controller(ha_client=ha)
+        # First call — records timestamp
+        await mc.check_media_player_staleness()
+        # Second call — triggers remediation
+        await mc.check_media_player_staleness()
+        assert ha.call_service.await_count == 1
+        # Third call — within cooldown, should NOT remediate again
+        await mc.check_media_player_staleness()
+        assert ha.call_service.await_count == 1
+
+    async def test_resets_when_timestamp_changes(self):
+        ha = AsyncMock()
+        stale_time = datetime.now(UTC) - timedelta(seconds=600)
+        state = _playing_state(duration=60, updated_at=stale_time)
+        ha.get_state = AsyncMock(return_value=state)
+        mc = _make_controller(ha_client=ha)
+        # Record initial timestamp
+        await mc.check_media_player_staleness()
+        # Now simulate the player updating (new timestamp)
+        fresh_state = _playing_state(duration=60, updated_at=datetime.now(UTC))
+        ha.get_state = AsyncMock(return_value=fresh_state)
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_not_awaited()
+
+    async def test_skips_when_no_ha_client(self):
+        mc = _make_controller(ha_client=None)
+        await mc.check_media_player_staleness()  # Should not raise
+
+    async def test_not_stale_within_duration_plus_grace(self):
+        ha = AsyncMock()
+        # 4-minute track, updated 3 minutes ago — within duration + grace
+        updated = datetime.now(UTC) - timedelta(seconds=180)
+        state = _playing_state(duration=240, updated_at=updated)
+        ha.get_state = AsyncMock(return_value=state)
+        mc = _make_controller(ha_client=ha)
+        await mc.check_media_player_staleness()
+        await mc.check_media_player_staleness()
+        ha.call_service.assert_not_awaited()
+
+    async def test_cooldown_expires_allows_retry(self):
+        ha = AsyncMock()
+        stale_time = datetime.now(UTC) - timedelta(seconds=600)
+        state = _playing_state(duration=60, updated_at=stale_time)
+        ha.get_state = AsyncMock(return_value=state)
+        ha._request = AsyncMock(return_value=[{"domain": "music_assistant", "entry_id": "test_entry_123"}])
+        mc = _make_controller(ha_client=ha)
+        # Record + detect stale
+        await mc.check_media_player_staleness()
+        await mc.check_media_player_staleness()
+        assert ha.call_service.await_count == 1
+        # Simulate cooldown expiry
+        mc._last_remediation_time = time.monotonic() - 700
+        await mc.check_media_player_staleness()
+        assert ha.call_service.await_count == 2

@@ -1,16 +1,23 @@
-"""Media player pause/resume control."""
+"""Media player pause/resume control and staleness detection."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
+import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pulse.assistant.home_assistant import HomeAssistantClient
 
 LOGGER = logging.getLogger("pulse-assistant.media")
+
+# Staleness detection thresholds
+_STALE_GRACE_SECONDS = 120  # extra grace beyond track duration before declaring stale
+_STALE_MIN_SECONDS = 300  # minimum staleness window (5 min) for very short/zero-duration tracks
+_STALE_COOLDOWN_SECONDS = 600  # minimum interval between remediation attempts
 
 
 class MediaController:
@@ -35,6 +42,11 @@ class MediaController:
         self._media_pause_pending = False
         self._media_resume_task: asyncio.Task | None = None
         self._media_resume_delay = 2.0
+
+        # Staleness tracking
+        self._last_seen_position_updated_at: str | None = None
+        self._last_remediation_time: float = 0.0
+        self._remediation_attempts: int = 0
 
     def cancel_media_resume_task(self) -> None:
         """Cancel any pending media resume task."""
@@ -125,6 +137,117 @@ class MediaController:
     async def stop_all(self) -> None:
         """Stop all configured media players."""
         await self._call_media_service("media_stop")
+
+    async def check_media_player_staleness(self) -> None:
+        """Detect stale media player state and attempt remediation.
+
+        Called periodically from the heartbeat loop. Detects when HA reports
+        a media player as "playing" but the position/track metadata has not
+        updated for longer than expected (track duration + grace period).
+        """
+        state = await self.fetch_media_player_state()
+        if not state:
+            return
+
+        status = str(state.get("state") or "").lower()
+        if status != "playing":
+            # Not playing — nothing to check, reset tracking
+            self._last_seen_position_updated_at = None
+            return
+
+        attrs = state.get("attributes") or {}
+        position_updated_at = attrs.get("media_position_updated_at")
+        if not position_updated_at:
+            return
+
+        # If the position timestamp changed since last check, player is healthy
+        if position_updated_at != self._last_seen_position_updated_at:
+            self._last_seen_position_updated_at = position_updated_at
+            return
+
+        # Position timestamp hasn't changed — check how long it's been stale
+        try:
+            updated_dt = datetime.fromisoformat(position_updated_at)
+            age_seconds = (datetime.now(UTC) - updated_dt).total_seconds()
+        except (ValueError, TypeError):
+            return
+
+        duration = attrs.get("media_duration") or 0
+        try:
+            duration = float(duration)
+        except (ValueError, TypeError):
+            duration = 0.0
+
+        stale_threshold = max(_STALE_MIN_SECONDS, duration + _STALE_GRACE_SECONDS)
+        if age_seconds < stale_threshold:
+            return
+
+        # State is stale — check cooldown before attempting remediation
+        now = time.monotonic()
+        if now - self._last_remediation_time < _STALE_COOLDOWN_SECONDS:
+            return
+
+        entity = self._entities[0] if self._entities else self.media_player_entity
+        title = attrs.get("media_title", "unknown")
+        LOGGER.warning(
+            "[media] Stale media player detected: %s shows '%s' but position unchanged for %.0fs "
+            "(duration=%.0fs); requesting entity update",
+            entity,
+            title,
+            age_seconds,
+            duration,
+        )
+
+        self._last_remediation_time = now
+        await self._remediate_stale_player(entity)
+
+    async def _remediate_stale_player(self, entity: str | None) -> None:
+        """Reload the Music Assistant integration to re-sync player state.
+
+        Discovers the ``music_assistant`` config entry ID via the HA REST API,
+        then calls ``homeassistant.reload_config_entry``.  This re-establishes
+        the HA↔MA connection without restarting the MA server or interrupting
+        audio playback through Snapcast.
+        """
+        from pulse.assistant.home_assistant import HomeAssistantError
+
+        if not self.home_assistant:
+            return
+
+        entry_id = await self._find_music_assistant_config_entry()
+        if not entry_id:
+            LOGGER.debug("[media] Could not find music_assistant config entry; skipping remediation")
+            return
+
+        try:
+            await self.home_assistant.call_service(
+                "homeassistant",
+                "reload_config_entry",
+                {"entry_id": entry_id},
+            )
+            LOGGER.info(
+                "[media] Reloaded music_assistant config entry %s to fix stale player %s",
+                entry_id,
+                entity,
+            )
+        except HomeAssistantError as exc:
+            LOGGER.warning("[media] reload_config_entry failed for %s: %s", entry_id, exc)
+
+    async def _find_music_assistant_config_entry(self) -> str | None:
+        """Query HA for the music_assistant integration config entry ID."""
+        from pulse.assistant.home_assistant import HomeAssistantError
+
+        if not self.home_assistant:
+            return None
+        try:
+            entries = await self.home_assistant._request("GET", "/api/config/config_entries/entry")
+            if isinstance(entries, list):
+                for entry in entries:
+                    if isinstance(entry, dict) and entry.get("domain") == "music_assistant":
+                        return entry.get("entry_id")
+        except HomeAssistantError as exc:
+            LOGGER.debug("[media] Failed to query config entries: %s", exc)
+        return None
 
     async def _call_media_service(self, service: str) -> None:
         if not self.home_assistant or not self._entities:
