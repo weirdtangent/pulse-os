@@ -345,6 +345,7 @@ class PulseAssistant:
             self.publisher._publish_message(self._heartbeat_topic, str(int(time.time())))
             sd_watchdog()
             await self.event_handlers.check_kiosk_health()
+            await self.media_controller.check_media_player_staleness()
             await asyncio.sleep(30)
 
     async def shutdown(self) -> None:

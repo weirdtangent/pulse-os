@@ -108,6 +108,16 @@ class HomeAssistantClient:
             return [item for item in payload if isinstance(item, dict)]
         return []
 
+    async def list_config_entries(self, domain: str | None = None) -> list[dict[str, Any]]:
+        """Return config entries, optionally filtered by integration domain."""
+        payload = await self._request("GET", "/api/config/config_entries/entry")
+        entries: list[dict[str, Any]] = []
+        if isinstance(payload, list):
+            entries = [e for e in payload if isinstance(e, dict)]
+        if domain:
+            entries = [e for e in entries if e.get("domain") == domain]
+        return entries
+
     async def list_entities(self, domain: str | None = None) -> list[dict[str, Any]]:
         """List entities, optionally filtered by domain (e.g., 'light')."""
         states = await self.list_states()
