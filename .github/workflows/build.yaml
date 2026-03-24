@@ -124,7 +124,7 @@ jobs:
 
       - name: Security audit dependencies
         if: needs.changes.outputs.python == 'true'
-        run: pip-audit --desc --skip-editable
+        run: pip-audit --desc --skip-editable --ignore-vuln GHSA-5239-wwwm-4pmq  # pygments ReDoS, no fix available
 
   # Gate job that always runs - use this as the required status check
   ci:
