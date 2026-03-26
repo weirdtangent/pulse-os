@@ -77,7 +77,7 @@ jobs:
 
       - name: Black format check
         if: needs.changes.outputs.python == 'true'
-        run: black --check .
+        run: black --check --target-version py312 .
 
       - name: Bandit security scan
         if: needs.changes.outputs.python == 'true'
@@ -124,7 +124,7 @@ jobs:
 
       - name: Security audit dependencies
         if: needs.changes.outputs.python == 'true'
-        run: pip-audit --desc --skip-editable --ignore-vuln GHSA-5239-wwwm-4pmq  # pygments ReDoS, no fix available
+        run: pip-audit --desc --skip-editable --ignore-vuln GHSA-5239-wwwm-4pmq --ignore-vuln CVE-2026-25645  # pygments ReDoS + requests 2.32.5, no fix available
 
   # Gate job that always runs - use this as the required status check
   ci:
