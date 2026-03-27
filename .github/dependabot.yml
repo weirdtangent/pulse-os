@@ -6,6 +6,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
     reviewers:
       - "weirdtangent"
     labels:
@@ -21,6 +25,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      all-actions:
+        patterns:
+          - "*"
     reviewers:
       - "weirdtangent"
     labels:
