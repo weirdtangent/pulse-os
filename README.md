@@ -13,7 +13,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - Hardened Chromium kiosk with watchdogs, self-healing restarts, and MQTT “home/update/reboot” buttons targeted at photo-frame style Lovelace dashboards.
 - Overlay timeline that keeps alarms, timers, reminders, calendar events, now-playing info, and badge-driven info cards in sync with the backend scheduler.
 - Full alarm/timer/reminder scheduler (manual UI, MQTT, or voice shortcuts) plus remote completion/delay actions from the overlay itself.
-- Local ICS/WebCal polling with multi-`VALARM` support, “declined” attendee detection, on-screen calendar cards, and auto-suppressed pop-ups for meetings you said “No” to.
+- Local ICS/WebCal polling with RRULE expansion for recurring events, multi-`VALARM` support, “declined” attendee detection, on-screen calendar cards, and auto-suppressed pop-ups for meetings you said “No” to.
 - Optional Wyoming voice stack (wake word, Whisper STT, Piper TTS) with shortcut intents for news/weather/sports and LLM routing between 6 providers: OpenAI, Gemini, Anthropic Claude, Groq, Mistral AI, and OpenRouter.
 - MQTT telemetry, syslog streaming, and safe-reboot guardrails for remote monitoring, plus built-in OTA-style updates triggered from Home Assistant.
 - Sunrise/sunset-aware backlight control, Bluetooth autoconnect for external speakers, and one-touch audio tests to confirm volume changes.

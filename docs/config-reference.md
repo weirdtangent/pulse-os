@@ -12,12 +12,14 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | --- | --- | --- |
 | `PULSE_VERSION` | git tag | Automatically derived from the repo's git tag; used for OTA/update checks. |
 | `PULSE_USER` | `pulse` | Linux account that auto logs in and runs the kiosk + services. |
+| `PULSE_HOSTNAME` | *(system hostname)* | Override the system hostname used for MQTT topics and entity IDs. |
+| `PULSE_NAME` | *(derived from hostname)* | Friendly device name (defaults to titlecased hostname with hyphens replaced by spaces). |
 
 ## Kiosk & Browser
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_URL` | `http://homeassistant.local:8123/photo-frame/home?sidebar=hide` | Chromium start page (also the target of the MQTT “Home” button). |
+| `PULSE_URL` | `http://homeassistant.local:8123/dashboard-pulse/home` | Chromium start page (also the target of the MQTT “Home” button). |
 | `PULSE_REVIVE_INTERVAL` | `2` | Minutes between cron-based watchdog sweeps that restart the kiosk stack if unhealthy. |
 | `PULSE_WATCHDOG_URL` | `http://homeassistant.local:8123/static/icons/favicon.ico` | Lightweight URL Chromium fetches to prove connectivity. |
 | `PULSE_WATCHDOG_LIMIT` | `5` | Consecutive watchdog fetch failures before Chromium is restarted. |
@@ -31,7 +33,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | --- | --- | --- |
 | `PULSE_OVERLAY_ENABLED` | `true` | Enables the overlay HTTP server. |
 | `PULSE_OVERLAY_PORT` | `8800` | TCP port serving `/overlay`. |
-| `PULSE_OVERLAY_BIND` | `0.0.0.0` | Bind address for the overlay server. |
+| `PULSE_OVERLAY_BIND` | `127.0.0.1` | Bind address for the overlay server (use `0.0.0.0` to allow remote access). |
 | `PULSE_OVERLAY_ALLOWED_ORIGINS` | `*` | Comma-separated CORS allow list for overlay requests. |
 | `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Primary overlay font (fallback stack added automatically). |
 | `PULSE_OVERLAY_AMBIENT_BG` | `rgba(0, 0, 0, 0.32)` | Background color for ambient cards. |
@@ -48,8 +50,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | --- | --- | --- |
 | `MQTT_HOST` | `mosquitto.local` | MQTT broker hostname/IP. |
 | `MQTT_PORT` | `1883` | Broker TCP port. |
-| `MQTT_USER` | *(empty)* | Optional MQTT username. |
-| `MQTT_PASS` | *(empty)* | Optional MQTT password. |
+| `MQTT_USER` | *(empty)* | Optional MQTT username (also accepts `MQTT_USERNAME`). |
+| `MQTT_PASS` | *(empty)* | Optional MQTT password (also accepts `MQTT_PASSWORD`). |
 | `MQTT_TLS_ENABLED` | `false` | Enable TLS for MQTT when `true`. |
 | `MQTT_CERT` | *(empty)* | Client certificate path (TLS only). |
 | `MQTT_KEY` | *(empty)* | Client key path (TLS only). |
@@ -73,6 +75,18 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_VOLUME_TEST_SOUND` | `true` | Plays a short “thump” after MQTT volume changes. |
 | `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. |
 | `PULSE_BT_MAC` | *(empty)* | Optional explicit Bluetooth MAC to target. |
+
+## Display Selection (DSI vs HDMI)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_DISPLAY_TYPE` | `dsi` | Select `dsi` for the ribbon Touch Display 2, or `hdmi` for external HDMI panels. Setup configures boot args accordingly. |
+| `PULSE_HDMI_CONNECTOR` | `HDMI-A-1` | Connector name for the kernel video arg (check `kmsprint`). |
+| `PULSE_HDMI_MODE` | `1280x800M@60` | Kernel video mode for cmdline (e.g., `1920x1080M@60`). |
+| `PULSE_HDMI_GROUP` | `2` | `hdmi_group` value for `config.txt`. |
+| `PULSE_HDMI_MODE_ID` | `28` | `hdmi_mode` value for `config.txt` (28 = 1280x800@60). |
+| `PULSE_HDMI_ROTATE` | `0` | Rotation for `display_hdmi_rotate` (0/1/2/3 = 0/90/180/270). |
+| `PULSE_HDMI_KMSDEV` | `/dev/dri/card1` | KMS device that owns the HDMI connector (Pi 5/CM5 often exposes HDMI on card1). |
 
 ## Sounds
 
@@ -104,7 +118,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | --- | --- | --- |
 | `PULSE_VOICE_ASSISTANT` | `false` | Enables the Wyoming + LLM assistant stack. |
 | `PULSE_ASSISTANT_WAKE_WORDS_PULSE` | `hey_jarvis` | Comma-separated wake models handled locally. |
-| `PULSE_ASSISTANT_WAKE_WORDS_HA` | `hey_house` | Models that should route through Home Assistant Assist. |
+| `PULSE_ASSISTANT_WAKE_WORDS_HA` | `ok_nabu` | Models that should route through Home Assistant Assist. |
 | `PULSE_ASSISTANT_WAKE_ROUTES` | *(empty)* | Explicit `model=pipeline` overrides. |
 | `PULSE_ASSISTANT_LANGUAGE` | `en` | Language hint passed to STT/LLM layers. |
 | `PULSE_ASSISTANT_WAKE_SOUND` | `true` | Plays a chime when a wake word fires. |
@@ -262,7 +276,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | Key | Default | Description |
 | --- | --- | --- |
 | `HOME_ASSISTANT_BASE_URL` | `http://homeassistant.local:8123` | HA base URL for Assist/API calls. |
-| `HOME_ASSISTANT_TOKEN` | *(empty)* | Long-lived token used for HA REST and Assist requests. |
+| `HOME_ASSISTANT_TOKEN` | *(empty)* | Long-lived token used for HA REST and Assist requests (also accepts `HOME_ASSISTANT_LONG_LIVED_TOKEN`). |
 | `HOME_ASSISTANT_VERIFY_SSL` | `true` | Enforce TLS certificate validation. |
 | `HOME_ASSISTANT_ASSIST_PIPELINE` | *(empty)* | Optional Assist pipeline ID override. |
 | `HOME_ASSISTANT_OPENWAKEWORD_HOST` | *(empty)* | HA-hosted wyoming-openwakeword host. |
@@ -274,6 +288,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `HOME_ASSISTANT_PIPER_PORT` | *(empty)* | HA-hosted wyoming-piper port. |
 | `HOME_ASSISTANT_TIMER_ENTITY` | *(empty)* | HA timer entity to manage via MQTT/voice (falls back to local scheduler when empty). |
 | `HOME_ASSISTANT_REMINDER_SERVICE` | *(empty)* | HA notification service used for reminders. |
+| `HOME_ASSISTANT_PRESENCE_ENTITY` | *(empty)* | HA presence entity for detecting occupancy. |
 
 ---
 
