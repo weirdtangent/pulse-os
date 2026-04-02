@@ -3,7 +3,7 @@
 ## Summary
 
 **Status:** All tests passing
-**Total tests:** 1020 across 35 test files
+**Total tests:** >1000 across 35 test files
 **Coverage:** 58%
 **Target:** 75% for v1.0
 
@@ -32,7 +32,7 @@
 | test_routines.py | 19 | Scene automation routines |
 | test_scheduler.py | 16 | Timer/reminder scheduling |
 | test_info_query_handler.py | 16 | Info query detection and dispatch |
-| test_calendar_sync.py | 7 | iCal/WebCal sync |
+| test_calendar_sync.py | 10 | iCal/WebCal sync + RRULE expansion |
 | test_assistant_shortcuts.py | 7 | Stop phrases, time-of-day extraction |
 | test_systemd_notify.py | 6 | Systemd notification |
 | test_response_modes.py | 6 | Response mode selection |
@@ -68,9 +68,9 @@ open htmlcov/index.html
 | Milestone | Tests | Coverage | Date |
 |-----------|------:|----------|------|
 | Initial test suite | 86 | ~15% | Dec 2025 |
-| Post-refactoring (Phase 10) | 700 | ~50% | Feb 2026 |
-| Current (Phase 14) | 800 | 56% | Feb 2026 |
-| Current (Phase 15) | 1020 | 58% | Feb 2026 |
+| Post-refactoring (Phase 10) | 700 | ~50% | Jan 2026 |
+| Phase 14 | 800 | 56% | Feb 2026 |
+| Phase 15 | >1000 | 58% | Mar 2026 |
 | v1.0 target | — | 75% | TBD |
 
 ## Remaining Coverage Gaps
