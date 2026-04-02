@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from io import BytesIO
 from unittest.mock import Mock, patch
 
 import pytest
@@ -11,14 +12,18 @@ from pulse.assistant.config import LLMConfig
 from pulse.assistant.llm import (
     AnthropicProvider,
     GeminiProvider,
+    GroqProvider,
     LLMResult,
+    MistralProvider,
     OpenAIProvider,
+    OpenRouterProvider,
     _error_response,
     _extract_first_json_object,
     _format_system_prompt,
     _parse_llm_response,
     build_llm_provider,
     build_llm_provider_with_overrides,
+    get_supported_providers,
 )
 
 # Mark async tests in this module to use anyio
@@ -490,3 +495,550 @@ class TestErrorResponse:
         result = _error_response(RuntimeError("something broke"))
         assert "Sorry" in result
         assert "at capacity" not in result
+
+
+# ============================================================================
+# Additional coverage tests
+# ============================================================================
+
+
+class TestProviderSubclassAccessors:
+    """Test that each OpenAI-compatible subclass returns the correct config values."""
+
+    def test_groq_accessors(self):
+        config = make_llm_config(groq_api_key="gk", groq_model="llama-x", groq_timeout=10)
+        p = GroqProvider(config)
+        assert p._get_api_key() == "gk"
+        assert p._get_model() == "llama-x"
+        assert p._get_base_url() == "https://api.groq.com/openai/v1"
+        assert p._get_timeout() == 10
+        assert p._get_provider_name() == "Groq"
+
+    def test_mistral_accessors(self):
+        config = make_llm_config(mistral_api_key="mk", mistral_model="mistral-x", mistral_timeout=20)
+        p = MistralProvider(config)
+        assert p._get_api_key() == "mk"
+        assert p._get_model() == "mistral-x"
+        assert p._get_base_url() == "https://api.mistral.ai/v1"
+        assert p._get_timeout() == 20
+        assert p._get_provider_name() == "Mistral"
+
+    def test_openrouter_accessors(self):
+        config = make_llm_config(openrouter_api_key="ork", openrouter_model="or-model", openrouter_timeout=15)
+        p = OpenRouterProvider(config)
+        assert p._get_api_key() == "ork"
+        assert p._get_model() == "or-model"
+        assert p._get_base_url() == "https://openrouter.ai/api/v1"
+        assert p._get_timeout() == 15
+        assert p._get_provider_name() == "OpenRouter"
+
+    def test_openai_accessors(self):
+        config = make_llm_config(openai_api_key="oak", openai_model="gpt-x", openai_timeout=25)
+        p = OpenAIProvider(config)
+        assert p._get_api_key() == "oak"
+        assert p._get_model() == "gpt-x"
+        assert p._get_base_url() == "https://api.openai.com/v1"
+        assert p._get_timeout() == 25
+        assert p._get_provider_name() == "OpenAI"
+
+
+class TestOpenAICompatibleCallApi:
+    """Test _call_api for the OpenAI-compatible base class."""
+
+    def _make_provider(self, **overrides):
+        config = make_llm_config(**overrides)
+        return OpenAIProvider(config)
+
+    def test_call_api_missing_api_key(self):
+        provider = self._make_provider(openai_api_key=None)
+        with pytest.raises(RuntimeError, match="OPENAI_API_KEY is not set"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_success(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps({"choices": [{"message": {"content": "hello"}}]}).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider(openai_api_key="key")
+        result = provider._call_api({"messages": []})
+        assert result == "hello"
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_http_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=500, msg="Server Error", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        provider = self._make_provider(openai_api_key="key")
+        with pytest.raises(RuntimeError, match="OpenAI HTTP error: 500"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_missing_choices(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps({"choices": []}).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider(openai_api_key="key")
+        with pytest.raises(RuntimeError, match="missing choices"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_missing_content(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps({"choices": [{"message": {}}]}).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider(openai_api_key="key")
+        with pytest.raises(RuntimeError, match="missing content"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_custom_timeout(self, mock_urlopen):
+        """Verify the custom timeout kwarg is forwarded."""
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider(openai_api_key="key")
+        provider._call_api({"messages": []}, timeout=7)
+        _, kwargs = mock_urlopen.call_args
+        assert kwargs["timeout"] == 7
+
+
+class TestOpenAICompatibleBuildPayload:
+    """Test _build_payload for OpenAI-compatible providers."""
+
+    def test_payload_structure(self):
+        config = make_llm_config(openai_api_key="key", openai_model="gpt-4o")
+        provider = OpenAIProvider(config)
+        payload = provider._build_payload("Hello", [])
+        assert payload["model"] == "gpt-4o"
+        assert payload["temperature"] == 0.3
+        assert payload["max_tokens"] == 400
+        assert payload["response_format"] == {"type": "json_object"}
+        assert len(payload["messages"]) == 2
+        assert payload["messages"][0]["role"] == "system"
+        assert payload["messages"][1]["content"] == "Hello"
+
+
+class TestOpenAICompatibleGenerate:
+    """Test generate() for OpenAI-compatible providers."""
+
+    async def test_generate_success(self):
+        config = make_llm_config(openai_api_key="key")
+        provider = OpenAIProvider(config)
+        resp = json.dumps({"response": "hi", "actions": ["a1"]})
+        with patch.object(provider, "_call_api", return_value=resp):
+            result = await provider.generate("hello", [])
+        assert result.response == "hi"
+        assert result.actions == ["a1"]
+
+    async def test_generate_exception_capacity(self):
+        config = make_llm_config(openai_api_key="key")
+        provider = OpenAIProvider(config)
+        with patch.object(provider, "_call_api", side_effect=RuntimeError("OpenAI HTTP error: 429")):
+            result = await provider.generate("hello", [])
+        assert "at capacity" in result.response
+        assert result.actions == []
+
+    async def test_generate_exception_generic(self):
+        config = make_llm_config(openai_api_key="key")
+        provider = OpenAIProvider(config)
+        with patch.object(provider, "_call_api", side_effect=RuntimeError("connection reset")):
+            result = await provider.generate("hello", [])
+        assert "Sorry" in result.response
+
+
+class TestOpenAICompatibleSimpleChat:
+    """Test simple_chat() for OpenAI-compatible providers."""
+
+    async def test_simple_chat(self):
+        config = make_llm_config(openai_api_key="key")
+        provider = OpenAIProvider(config)
+        with patch.object(provider, "_call_api", return_value="response text") as mock_call:
+            result = await provider.simple_chat("sys prompt", "user msg", timeout=3)
+        assert result == "response text"
+        call_payload = mock_call.call_args[0][0]
+        assert call_payload["messages"][0]["content"] == "sys prompt"
+        assert call_payload["messages"][1]["content"] == "user msg"
+        assert call_payload["max_tokens"] == 200
+        assert mock_call.call_args[1]["timeout"] == 3
+
+
+class TestOpenAICompatibleValidateApiKey:
+    """Test validate_api_key for OpenAI-compatible providers (extra cases)."""
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_403_returns_false(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=403, msg="Forbidden", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        config = make_llm_config(openai_api_key="bad")
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_500_is_inconclusive(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=500, msg="ISE", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        config = make_llm_config(openai_api_key="key")
+        provider = OpenAIProvider(config)
+        assert await provider.validate_api_key() is True
+
+
+class TestAnthropicProvider:
+    """Test Anthropic-specific provider behaviour."""
+
+    def _make_provider(self, **overrides):
+        defaults = {"provider": "anthropic", "anthropic_api_key": "ant-key"}
+        defaults.update(overrides)
+        config = make_llm_config(**defaults)
+        return AnthropicProvider(config)
+
+    def test_build_payload_structure(self):
+        provider = self._make_provider()
+        payload = provider._build_payload("Hello", [{"slug": "a1", "description": "Action 1"}])
+        assert payload["model"] == "claude-3-5-haiku-20241022"
+        assert payload["max_tokens"] == 400
+        assert "system" in payload
+        assert "a1" in payload["system"]
+        assert len(payload["messages"]) == 1
+        assert payload["messages"][0]["role"] == "user"
+        assert payload["messages"][0]["content"] == "Hello"
+
+    def test_call_api_missing_key(self):
+        provider = self._make_provider(anthropic_api_key=None)
+        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY is not set"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_success(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps({"content": [{"type": "text", "text": "hello from claude"}]}).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        result = provider._call_api({"messages": []})
+        assert result == "hello from claude"
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_http_error_with_body(self, mock_urlopen):
+        err = urllib.error.HTTPError(
+            url="", code=529, msg="Overloaded", hdrs=None, fp=BytesIO(b"overloaded")  # type: ignore[arg-type]
+        )
+        mock_urlopen.side_effect = err
+        provider = self._make_provider()
+        with pytest.raises(RuntimeError, match="Anthropic HTTP 529"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_missing_content(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps({"content": []}).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        with pytest.raises(RuntimeError, match="missing content"):
+            provider._call_api({"messages": []})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_skips_non_text_blocks(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps(
+            {"content": [{"type": "image", "data": "..."}, {"type": "text", "text": "actual"}]}
+        ).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        assert provider._call_api({"messages": []}) == "actual"
+
+    async def test_generate_success(self):
+        provider = self._make_provider()
+        resp = json.dumps({"response": "done", "actions": ["a"]})
+        with patch.object(provider, "_call_api", return_value=resp):
+            result = await provider.generate("do it", [])
+        assert result.response == "done"
+        assert result.actions == ["a"]
+
+    async def test_generate_exception(self):
+        provider = self._make_provider()
+        with patch.object(provider, "_call_api", side_effect=RuntimeError("Anthropic HTTP 529: overloaded")):
+            result = await provider.generate("do it", [])
+        assert "at capacity" in result.response
+
+    async def test_simple_chat(self):
+        provider = self._make_provider()
+        with patch.object(provider, "_call_api", return_value="chat reply") as mock_call:
+            result = await provider.simple_chat("sys", "user", timeout=4)
+        assert result == "chat reply"
+        payload = mock_call.call_args[0][0]
+        assert payload["system"] == "sys"
+        assert payload["messages"][0]["content"] == "user"
+        assert mock_call.call_args[1]["timeout"] == 4
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_validate_valid_key(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = b'{"data": []}'
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        assert await provider.validate_api_key() is True
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_validate_401(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=401, msg="Unauthorized", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        provider = self._make_provider()
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_validate_network_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("timeout")
+        provider = self._make_provider()
+        assert await provider.validate_api_key() is True
+
+
+class TestGeminiProvider:
+    """Test Gemini-specific provider behaviour."""
+
+    def _make_provider(self, **overrides):
+        defaults = {"provider": "gemini", "gemini_api_key": "gem-key", "gemini_model": "gemini-pro"}
+        defaults.update(overrides)
+        config = make_llm_config(**defaults)
+        return GeminiProvider(config)
+
+    def test_build_payload_structure(self):
+        provider = self._make_provider()
+        payload = provider._build_payload("Hello", [{"slug": "a1", "description": "D"}])
+        assert "contents" in payload
+        assert payload["contents"][0]["role"] == "user"
+        assert payload["contents"][0]["parts"][0]["text"] == "Hello"
+        assert "system_instruction" in payload
+        assert "a1" in payload["system_instruction"]["parts"][0]["text"]
+        assert payload["generationConfig"]["temperature"] == 0.3
+        assert payload["generationConfig"]["maxOutputTokens"] == 400
+        assert payload["generationConfig"]["responseMimeType"] == "application/json"
+
+    def test_call_api_missing_key(self):
+        provider = self._make_provider(gemini_api_key=None)
+        with pytest.raises(RuntimeError, match="GEMINI_API_KEY is not set"):
+            provider._call_api({})
+
+    def test_call_api_missing_model(self):
+        provider = self._make_provider(gemini_model="")
+        with pytest.raises(RuntimeError, match="GEMINI_MODEL is not set"):
+            provider._call_api({})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_success(self, mock_urlopen):
+        body = {"candidates": [{"content": {"parts": [{"text": "gemini says hi"}]}}]}
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps(body).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        assert provider._call_api({}) == "gemini says hi"
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_http_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=503, msg="Unavailable", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        provider = self._make_provider()
+        with pytest.raises(RuntimeError, match="Gemini HTTP error: 503"):
+            provider._call_api({})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_blocked_prompt(self, mock_urlopen):
+        body = {"candidates": [], "promptFeedback": {"blockReason": "SAFETY"}}
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps(body).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        with pytest.raises(RuntimeError, match="Gemini blocked prompt: SAFETY"):
+            provider._call_api({})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_no_candidates_no_feedback(self, mock_urlopen):
+        body = {"candidates": []}
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps(body).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        with pytest.raises(RuntimeError, match="missing content"):
+            provider._call_api({})
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    def test_call_api_skips_bad_content_types(self, mock_urlopen):
+        """Candidates with non-dict content or non-list parts are skipped."""
+        body = {
+            "candidates": [
+                {"content": "not a dict"},
+                {"content": {"parts": "not a list"}},
+                {"content": {"parts": [{"text": "good"}]}},
+            ]
+        }
+        mock_resp = Mock()
+        mock_resp.read.return_value = json.dumps(body).encode()
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        assert provider._call_api({}) == "good"
+
+    async def test_generate_success(self):
+        provider = self._make_provider()
+        resp = json.dumps({"response": "hi", "actions": []})
+        with patch.object(provider, "_call_api", return_value=resp):
+            result = await provider.generate("hey", [])
+        assert result.response == "hi"
+
+    async def test_generate_exception(self):
+        provider = self._make_provider()
+        with patch.object(provider, "_call_api", side_effect=RuntimeError("Gemini HTTP error: 503")):
+            result = await provider.generate("hey", [])
+        assert "at capacity" in result.response
+
+    async def test_simple_chat(self):
+        provider = self._make_provider()
+        with patch.object(provider, "_call_api", return_value="chat") as mock_call:
+            result = await provider.simple_chat("sys", "msg", timeout=2)
+        assert result == "chat"
+        payload = mock_call.call_args[0][0]
+        assert payload["system_instruction"]["parts"][0]["text"] == "sys"
+        assert payload["contents"][0]["parts"][0]["text"] == "msg"
+
+    async def test_simple_chat_no_system_prompt(self):
+        provider = self._make_provider()
+        with patch.object(provider, "_call_api", return_value="chat") as mock_call:
+            await provider.simple_chat("", "msg")
+        payload = mock_call.call_args[0][0]
+        assert "system_instruction" not in payload
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_validate_valid_key(self, mock_urlopen):
+        mock_resp = Mock()
+        mock_resp.read.return_value = b'{"models": []}'
+        mock_resp.__enter__ = Mock(return_value=mock_resp)
+        mock_resp.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        provider = self._make_provider()
+        assert await provider.validate_api_key() is True
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_validate_401(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="", code=401, msg="Unauthorized", hdrs=None, fp=None  # type: ignore[arg-type]
+        )
+        provider = self._make_provider()
+        assert await provider.validate_api_key() is False
+
+    @patch("pulse.assistant.llm.urllib.request.urlopen")
+    async def test_validate_network_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("dns fail")
+        provider = self._make_provider()
+        assert await provider.validate_api_key() is True
+
+
+class TestBuildLLMProviderExtended:
+    """Extended tests for the build_llm_provider factory."""
+
+    def test_build_anthropic(self):
+        config = make_llm_config(provider="anthropic", anthropic_api_key="k")
+        assert isinstance(build_llm_provider(config), AnthropicProvider)
+
+    def test_build_groq(self):
+        config = make_llm_config(provider="groq", groq_api_key="k")
+        assert isinstance(build_llm_provider(config), GroqProvider)
+
+    def test_build_mistral(self):
+        config = make_llm_config(provider="mistral", mistral_api_key="k")
+        assert isinstance(build_llm_provider(config), MistralProvider)
+
+    def test_build_openrouter(self):
+        config = make_llm_config(provider="openrouter", openrouter_api_key="k")
+        assert isinstance(build_llm_provider(config), OpenRouterProvider)
+
+    def test_unknown_provider_falls_back_to_openai(self):
+        config = make_llm_config(provider="doesnotexist")
+        provider = build_llm_provider(config)
+        assert isinstance(provider, OpenAIProvider)
+
+    def test_empty_provider_falls_back_to_openai(self):
+        config = make_llm_config(provider="")
+        provider = build_llm_provider(config)
+        assert isinstance(provider, OpenAIProvider)
+
+    def test_whitespace_provider_falls_back_to_openai(self):
+        config = make_llm_config(provider="  ")
+        provider = build_llm_provider(config)
+        assert isinstance(provider, OpenAIProvider)
+
+
+class TestBuildLLMProviderWithOverridesExtended:
+    """Extended tests for build_llm_provider_with_overrides."""
+
+    def test_unknown_provider_falls_back_to_openai(self):
+        config = make_llm_config()
+        provider = build_llm_provider_with_overrides(config, "unknown_provider", {})
+        assert isinstance(provider, OpenAIProvider)
+
+    def test_empty_provider_defaults_to_openai(self):
+        config = make_llm_config()
+        provider = build_llm_provider_with_overrides(config, "", {})
+        assert isinstance(provider, OpenAIProvider)
+
+    def test_none_provider_defaults_to_openai(self):
+        config = make_llm_config()
+        provider = build_llm_provider_with_overrides(config, None, {})  # type: ignore[arg-type]
+        assert isinstance(provider, OpenAIProvider)
+
+
+class TestGetSupportedProviders:
+    """Test get_supported_providers."""
+
+    def test_returns_all_providers(self):
+        providers = get_supported_providers()
+        assert "openai" in providers
+        assert "gemini" in providers
+        assert "anthropic" in providers
+        assert "groq" in providers
+        assert "mistral" in providers
+        assert "openrouter" in providers
+
+    def test_returns_copy(self):
+        """Ensure the returned dict is a copy, not the original."""
+        a = get_supported_providers()
+        b = get_supported_providers()
+        a["new"] = "value"
+        assert "new" not in b

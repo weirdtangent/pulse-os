@@ -345,3 +345,304 @@ class TestLLMProviderGetter:
         mock_llm = Mock()
         orchestrator.set_llm_provider_getter(lambda: mock_llm)
         assert orchestrator.llm is mock_llm
+
+
+# ============================================================================
+# Preferences Property Tests
+# ============================================================================
+
+
+class TestPreferencesProperty:
+    def test_returns_from_getter(self, orchestrator):
+        mock_prefs = Mock()
+        orchestrator.set_preferences_getter(lambda: mock_prefs)
+        assert orchestrator.preferences is mock_prefs
+
+    def test_falls_back_to_config(self, mock_orchestrator_deps, mock_logger):
+        config_prefs = Mock()
+        mock_orchestrator_deps["config"].preferences = config_prefs
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        # No getter set, should return config.preferences
+        assert orch.preferences is config_prefs
+
+    def test_getter_overrides_config(self, mock_orchestrator_deps, mock_logger):
+        config_prefs = Mock()
+        mock_orchestrator_deps["config"].preferences = config_prefs
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        custom_prefs = Mock()
+        orch.set_preferences_getter(lambda: custom_prefs)
+        assert orch.preferences is custom_prefs
+        assert orch.preferences is not config_prefs
+
+
+# ============================================================================
+# Setter Methods Tests
+# ============================================================================
+
+
+class TestSetters:
+    def test_set_llm_provider_getter(self, orchestrator):
+        assert orchestrator._get_llm is None
+
+        def getter():
+            return Mock()
+
+        orchestrator.set_llm_provider_getter(getter)
+        assert orchestrator._get_llm is getter
+
+    def test_set_preferences_getter(self, mock_orchestrator_deps, mock_logger):
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        assert orch._get_preferences is None
+
+        def getter():
+            return Mock()
+
+        orch.set_preferences_getter(getter)
+        assert orch._get_preferences is getter
+
+
+# ============================================================================
+# Home Assistant Prompt Actions Tests
+# ============================================================================
+
+
+class TestHomeAssistantPromptActions:
+    def test_returns_empty_without_home_assistant(self, mock_orchestrator_deps, mock_logger):
+        mock_orchestrator_deps["home_assistant"] = None
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        assert orch._home_assistant_prompt_actions() == []
+
+    def test_returns_actions_with_home_assistant(self, mock_orchestrator_deps, mock_logger):
+        ha = Mock()
+        mock_orchestrator_deps["home_assistant"] = ha
+        routines = Mock()
+        routines.prompt_entries.return_value = []
+        mock_orchestrator_deps["routines"] = routines
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        result = orch._home_assistant_prompt_actions()
+        assert len(result) > 0
+        # All entries should have slug and description
+        for entry in result:
+            assert "slug" in entry
+            assert "description" in entry
+
+    def test_includes_routine_entries(self, mock_orchestrator_deps, mock_logger):
+        ha = Mock()
+        mock_orchestrator_deps["home_assistant"] = ha
+        routines = Mock()
+        routine_entry = {"slug": "routine.bedtime", "description": "Run bedtime routine"}
+        routines.prompt_entries.return_value = [routine_entry]
+        mock_orchestrator_deps["routines"] = routines
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        result = orch._home_assistant_prompt_actions()
+        assert routine_entry in result
+
+    def test_has_expected_action_slugs(self, mock_orchestrator_deps, mock_logger):
+        ha = Mock()
+        mock_orchestrator_deps["home_assistant"] = ha
+        routines = Mock()
+        routines.prompt_entries.return_value = []
+        mock_orchestrator_deps["routines"] = routines
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        result = orch._home_assistant_prompt_actions()
+        slugs = [e["slug"] for e in result]
+        assert any("ha.turn_on" in s for s in slugs)
+        assert any("ha.turn_off" in s for s in slugs)
+        assert any("ha.light_on" in s for s in slugs)
+        assert any("ha.light_off" in s for s in slugs)
+        assert any("ha.scene" in s for s in slugs)
+        assert any("volume.set" in s for s in slugs)
+        assert any("media.pause" in s for s in slugs)
+        assert any("media.resume" in s for s in slugs)
+        assert any("timer.start" in s for s in slugs)
+        assert any("reminder.create" in s for s in slugs)
+
+
+# ============================================================================
+# Additional _set_assist_stage Tests
+# ============================================================================
+
+
+class TestSetAssistStageExtended:
+    def test_no_extra(self, orchestrator):
+        orchestrator._set_assist_stage("pulse", "listening")
+        pub = orchestrator.publisher
+        # Should not publish to wake topic when no extra
+        wake_calls = [c for c in pub._publish_message.call_args_list if "last_wake_word" in str(c)]
+        assert len(wake_calls) == 0
+
+    def test_extra_without_wake_word(self, orchestrator):
+        orchestrator._set_assist_stage("pulse", "listening", {"follow_up": True})
+        pub = orchestrator.publisher
+        wake_calls = [c for c in pub._publish_message.call_args_list if "last_wake_word" in str(c)]
+        assert len(wake_calls) == 0
+
+    def test_updates_internal_state(self, orchestrator):
+        orchestrator._set_assist_stage("home_assistant", "thinking")
+        assert orchestrator._assist_stage == "thinking"
+        assert orchestrator._assist_pipeline == "home_assistant"
+
+    def test_stage_topic_has_retain(self, orchestrator):
+        orchestrator._set_assist_stage("pulse", "listening", {"wake_word": "test"})
+        pub = orchestrator.publisher
+        stage_calls = [
+            c
+            for c in pub._publish_message.call_args_list
+            if "assistant/stage" in str(c) and "in_progress" not in str(c)
+        ]
+        assert len(stage_calls) == 1
+        assert stage_calls[0].kwargs.get("retain") is True or stage_calls[0][1].get("retain") is True
+
+
+# ============================================================================
+# Additional _finalize_assist_run Tests
+# ============================================================================
+
+
+class TestFinalizeAssistRunExtended:
+    def test_metrics_payload_structure(self, orchestrator):
+        import json
+
+        tracker = AssistRunTracker("pulse", "hey_pulse")
+        tracker.begin_stage("listening")
+        orchestrator._current_tracker = tracker
+        orchestrator._finalize_assist_run(status="success")
+        pub = orchestrator.publisher
+        metrics_calls = [c for c in pub._publish_message.call_args_list if "metrics" in str(c)]
+        assert len(metrics_calls) == 1
+        payload = json.loads(metrics_calls[0][0][1])
+        assert payload["pipeline"] == "pulse"
+        assert payload["wake_word"] == "hey_pulse"
+        assert payload["status"] == "success"
+        assert "total_ms" in payload
+        assert "stages" in payload
+        assert "listening" in payload["stages"]
+
+    def test_sets_stage_to_idle(self, orchestrator):
+        tracker = AssistRunTracker("home_assistant", "hey_jarvis")
+        tracker.begin_stage("speaking")
+        orchestrator._current_tracker = tracker
+        orchestrator._finalize_assist_run(status="error")
+        assert orchestrator._assist_stage == "idle"
+        assert orchestrator._assist_pipeline == "home_assistant"
+
+
+# ============================================================================
+# Additional Static Method Edge Case Tests
+# ============================================================================
+
+
+class TestExtractHaSpeechEdgeCases:
+    def test_non_dict_result(self):
+        # The method accepts dict but should handle non-dict gracefully
+        assert PipelineOrchestrator._extract_ha_speech("not a dict") is None
+
+    def test_speech_block_is_not_dict(self):
+        result = {"response": {"speech": "just a string"}}
+        assert PipelineOrchestrator._extract_ha_speech(result) is None
+
+    def test_plain_is_not_dict(self):
+        result = {"response": {"speech": {"plain": "just a string"}}}
+        assert PipelineOrchestrator._extract_ha_speech(result) is None
+
+    def test_empty_speech_string(self):
+        result = {"response": {"speech": {"plain": {"speech": "   "}}}}
+        assert PipelineOrchestrator._extract_ha_speech(result) == ""
+
+
+class TestExtractHaTranscriptEdgeCases:
+    def test_stt_output_not_dict(self):
+        result = {"stt_output": "not a dict"}
+        assert PipelineOrchestrator._extract_ha_transcript(result) is None
+
+    def test_intent_input_not_dict(self):
+        result = {"intent_input": "not a dict"}
+        assert PipelineOrchestrator._extract_ha_transcript(result) is None
+
+    def test_stt_output_empty_text(self):
+        result = {"stt_output": {"text": "   "}}
+        assert PipelineOrchestrator._extract_ha_transcript(result) == ""
+
+    def test_falls_through_to_intent_when_stt_text_not_string(self):
+        result = {"stt_output": {"text": None}, "intent_input": {"text": "hello"}}
+        assert PipelineOrchestrator._extract_ha_transcript(result) == "hello"
+
+
+class TestExtractHaTtsAudioEdgeCases:
+    def test_tts_output_not_dict(self):
+        result = {"tts_output": "not a dict"}
+        assert PipelineOrchestrator._extract_ha_tts_audio(result) is None
+
+    def test_missing_sample_width(self):
+        result = {
+            "tts_output": {
+                "audio": base64.b64encode(b"data").decode(),
+                "sample_rate": 16000,
+                "sample_width": 0,
+                "channels": 1,
+            }
+        }
+        assert PipelineOrchestrator._extract_ha_tts_audio(result) is None
+
+    def test_none_sample_rate(self):
+        result = {
+            "tts_output": {
+                "audio": base64.b64encode(b"data").decode(),
+                "sample_rate": None,
+                "sample_width": 2,
+                "channels": 1,
+            }
+        }
+        assert PipelineOrchestrator._extract_ha_tts_audio(result) is None
+
+    def test_missing_keys_default_to_zero(self):
+        result = {
+            "tts_output": {
+                "audio": base64.b64encode(b"data").decode(),
+            }
+        }
+        assert PipelineOrchestrator._extract_ha_tts_audio(result) is None
+
+
+class TestDisplayWakeWordEdgeCases:
+    def test_multiple_underscores(self):
+        assert PipelineOrchestrator.display_wake_word("hey_there_pulse") == "hey there pulse"
+
+    def test_empty_string(self):
+        assert PipelineOrchestrator.display_wake_word("") == ""
+
+    def test_only_underscores(self):
+        assert PipelineOrchestrator.display_wake_word("___") == ""
+
+
+# ============================================================================
+# Constructor Tests
+# ============================================================================
+
+
+class TestConstructor:
+    def test_default_logger(self, mock_orchestrator_deps):
+        orch = PipelineOrchestrator(**mock_orchestrator_deps)
+        # Should use module-level LOGGER when no logger arg
+        assert orch.logger is not None
+
+    def test_custom_logger(self, mock_orchestrator_deps, mock_logger):
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        assert orch.logger is mock_logger
+
+    def test_topics_use_config_base(self, mock_orchestrator_deps, mock_logger):
+        mock_orchestrator_deps["config"].mqtt.topic_base = "my-device"
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        assert orch._assist_in_progress_topic == "my-device/assistant/in_progress"
+        assert orch._assist_metrics_topic == "my-device/assistant/metrics"
+        assert orch._assist_stage_topic == "my-device/assistant/stage"
+        assert orch._assist_pipeline_topic == "my-device/assistant/active_pipeline"
+        assert orch._assist_wake_topic == "my-device/assistant/last_wake_word"
+
+    def test_initial_state(self, mock_orchestrator_deps, mock_logger):
+        orch = PipelineOrchestrator(**mock_orchestrator_deps, logger=mock_logger)
+        assert orch._current_tracker is None
+        assert orch._assist_stage == "idle"
+        assert orch._assist_pipeline is None
+        assert orch._get_llm is None
+        assert orch._get_preferences is None
