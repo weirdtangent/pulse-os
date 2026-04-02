@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import unquote, urlparse
 
 import httpx
+import recurring_ical_events
 from icalendar import Calendar  # type: ignore[import-untyped]
 
 from .config import CalendarConfig
@@ -273,20 +274,44 @@ class CalendarSyncService:
         now: datetime,
     ) -> list[CalendarReminder]:
         reminders: list[CalendarReminder] = []
-        # Process VEVENT components (calendar events)
-        for component in calendar.walk("VEVENT"):
-            reminder = self._process_vevent(component, state, now)
+        # Expand recurring events (RRULE/RDATE/EXDATE) within the lookahead window.
+        # Use a 1-hour backward buffer so events that started recently but haven't
+        # ended yet are still captured (_process_vevent filters truly past events).
+        window_start = now - timedelta(hours=1)
+        window_end = now + timedelta(hours=self._config.lookahead_hours)
+        try:
+            expanded = recurring_ical_events.of(calendar).between(window_start, window_end)
+        except Exception:
+            self._logger.exception("[calendar] RRULE expansion failed; falling back to raw VEVENT walk")
+            expanded = list(calendar.walk("VEVENT"))
+        for component in expanded:
+            comp_name = getattr(component, "name", "").upper()
+            if comp_name == "VEVENT":
+                reminder = self._process_vevent(component, state, now)
+            elif comp_name == "VTODO":
+                reminder = self._process_vtodo(component, state, now)
+            else:
+                continue
             if reminder:
-                # Filter out declined events if configured to hide them
                 if self._config.hide_declined_events:
                     reminder = [r for r in reminder if not r.declined]
                 if reminder:
                     reminders.extend(reminder)
-        # Process VTODO components (tasks)
+        # Also walk raw VTODOs since recurring_ical_events may not expand them.
+        seen_todo_keys: set[str] = {f"{r.uid}|{r.start.isoformat()}" for r in reminders}
         for component in calendar.walk("VTODO"):
+            uid = str(component.get("UID") or "")
+            try:
+                start_value = component.decoded("DUE") or component.decoded("DTSTART")
+            except Exception:
+                start_value = None
+            start_dt, _ = self._coerce_datetime(start_value, now.tzinfo) if start_value else (None, False)
+            todo_key = f"{uid}|{start_dt.isoformat() if start_dt else ''}"
+            if todo_key in seen_todo_keys:
+                continue
+            seen_todo_keys.add(todo_key)
             reminder = self._process_vtodo(component, state, now)
             if reminder:
-                # Filter out declined events if configured to hide them
                 if self._config.hide_declined_events:
                     reminder = [r for r in reminder if not r.declined]
                 if reminder:

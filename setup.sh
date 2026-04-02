@@ -622,7 +622,7 @@ install_voice_assistant_python_deps() {
     log "Ensuring Python packages for the voice assistant are installed for the pulse user…"
     if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
         --user --upgrade --disable-pip-version-check --break-system-packages \
-        wyoming httpx openlocationcode websockets; then
+        wyoming httpx openlocationcode websockets recurring-ical-events; then
         log "Warning: failed to install Python packages via pip (voice assistant may not start)."
     fi
 }
@@ -1631,4 +1631,3 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
-
