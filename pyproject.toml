@@ -12,6 +12,7 @@ dependencies = [
     "astral==3.2",
     "httpx==0.28.1",
     "icalendar==7.0.3",
+    "recurring-ical-events>=3.5.0",
     "packaging==26.0",
     "paho-mqtt==2.1.0",
     "psutil==7.2.2",
