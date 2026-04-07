@@ -159,6 +159,13 @@ jobs:
             --model claude-opus-4-5-20251101
             --allowedTools "Bash(gh:*)"
           prompt: |
-            Review this pull request for code quality, security issues,
-            potential bugs, and best practices. If everything looks good,
-            approve the PR. If you find any issues, leave review comments.
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} for code quality,
+            security issues, potential bugs, and best practices.
+
+            If you find issues, leave inline review comments describing them and DO NOT approve.
+
+            If everything looks good and you have no blocking concerns, you MUST explicitly approve
+            the PR by running:
+              gh pr review ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --approve --body "Reviewed by Claude — no issues found."
+            Do not consider the review complete until you have either left blocking comments OR run
+            the approve command above. Silence is not acceptable.
