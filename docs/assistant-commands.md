@@ -58,6 +58,7 @@ Because feeds are stored per-device (there’s no shared server), removing a URL
 - Tapping “Stop” on a ringing timer or alarm posts `/overlay/stop`, which maps to the MQTT `{"action": "stop"}` command. Snooze sends `{"action": "snooze", "minutes": 5}` for alarms.
 - Saying “Show me my alarms” keeps the overlay open until you close it or use the on-screen ⏸️ / ▶️ / 🗑️ buttons. They send `{"action": "pause_alarm"}`, `{"action": "resume_alarm"}`, or `{"action": "delete_alarm"}` (with the alarm `event_id`) over MQTT.
 - Reminder overlays include Complete/+1h/+1d/+1w buttons. Reminder info cards mirror the alarm list so you can delete or complete entries directly from the screen.
+- 20 minutes before an alarm fires, a **pre-alarm warning modal** appears with **Dismiss alarm** and **Keep alarm** buttons. Dismiss posts `{"action": "dismiss_alarm", "event_id": "<id>"}` to skip just the next occurrence (recurring alarms advance to the next scheduled occurrence based on their repeat cadence; single-shot alarms are deleted). Ignoring the modal lets the regular ringing modal replace it when the alarm fires.
 
 ## Real-time info (News, Weather, Sports)
 
@@ -96,4 +97,3 @@ These appear in the system prompt so the LLM executes them precisely. They’re 
 - Use `bin/tools/verify-conf.py` anytime alarms/timers don’t react; it validates MQTT, Wyoming, and HA connectivity.
 - Local transcript/response logging to `journalctl -u pulse-assistant.service` is controlled by `PULSE_ASSISTANT_LOG_TRANSCRIPTS` (default false). MQTT publishing is controlled separately by `PULSE_ASSISTANT_LOG_LLM`.
 - All alarm/timer changes are mirrored over MQTT (`pulse/<hostname>/assistant/schedules/state`) so dashboards or automations stay in sync.
-
