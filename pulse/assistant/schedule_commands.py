@@ -228,6 +228,8 @@ class ScheduleCommandProcessor:
             await self._resume_alarm(payload)
         elif action == "snooze":
             await self._snooze_alarm(payload)
+        elif action == "dismiss_alarm":
+            await self._dismiss_alarm(payload)
         elif action == "next_alarm":
             self._publish_next_alarm()
 
@@ -320,6 +322,12 @@ class ScheduleCommandProcessor:
             minutes = 5
         if event_id:
             await self.schedule_service.snooze_alarm(str(event_id), minutes=max(1, minutes))
+
+    async def _dismiss_alarm(self, payload: dict[str, Any]) -> None:
+        """Dismiss the next occurrence of an alarm so it does not fire."""
+        event_id = payload.get("event_id")
+        if event_id:
+            await self.schedule_service.dismiss_alarm_occurrence(str(event_id))
 
     def _publish_next_alarm(self) -> None:
         """Publish next alarm information."""

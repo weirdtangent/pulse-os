@@ -685,6 +685,47 @@ window.PulseOverlay.initialize = function() {
       return;
     }
 
+    const dismissButton = e.target.closest('[data-dismiss-alarm]');
+    if (dismissButton) {
+      const eventId = dismissButton.dataset.eventId;
+      if (!eventId) {
+        return;
+      }
+      const previous = dismissButton.textContent;
+      dismissButton.disabled = true;
+      dismissButton.textContent = 'Dismissing...';
+      const card = dismissButton.closest('.overlay-card--pre-alarm');
+      if (card) {
+        card.style.transition = 'opacity 0.2s';
+        card.style.opacity = '0';
+      }
+      fetch(stopEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss_alarm', event_id: eventId })
+      }).catch(() => {
+        dismissButton.disabled = false;
+        dismissButton.textContent = previous;
+        if (card) {
+          card.style.opacity = '1';
+        }
+      });
+      return;
+    }
+
+    const keepAlarmButton = e.target.closest('[data-keep-alarm]');
+    if (keepAlarmButton) {
+      const card = keepAlarmButton.closest('.overlay-card--pre-alarm');
+      if (card) {
+        card.style.transition = 'opacity 0.2s';
+        card.style.opacity = '0';
+        // Remove from layout so it doesn't block taps; the next overlay refresh will rebuild it
+        // if the assistant still has it active.
+        setTimeout(() => { card.remove(); }, 220);
+      }
+      return;
+    }
+
     // Block background navigation when tapping inside the info card or notification bar
     const infoCardElement = root.querySelector('.overlay-info-card');
     if (infoCardElement && infoCardElement.contains(e.target)) {

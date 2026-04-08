@@ -699,6 +699,17 @@ body {
   animation: overlayPulse 1.2s ease-in-out infinite alternate;
 }
 
+.overlay-card--pre-alarm {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 2vh;
+  padding: 3vh 3vw;
+  animation: none;
+}
+
 .overlay-card--reminder {
   text-align: left;
 }

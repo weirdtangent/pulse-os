@@ -139,6 +139,39 @@ class OverlayRenderTests(unittest.TestCase):
         )
         self.assertIn(expected, html)
 
+    def test_pre_alarm_card_rendered_with_dismiss_button(self) -> None:
+        snapshot = self._snapshot(
+            active_alarm={
+                "state": "pre_alarm",
+                "minutes_until_fire": 20,
+                "event": {"id": "alarm-xyz", "label": "Wake up", "time": "07:00"},
+            },
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("overlay-card--pre-alarm", html)
+        self.assertIn("Alarm at 07:00 in 20 min", html)
+        self.assertIn("data-dismiss-alarm", html)
+        self.assertIn('data-event-id="alarm-xyz"', html)
+        self.assertIn("data-keep-alarm", html)
+        # Should NOT show the ringing buttons
+        self.assertNotIn("Snooze 5 min", html)
+
+    def test_pre_alarm_state_normalized_via_state_manager(self) -> None:
+        manager = OverlayStateManager()
+        change = manager.update_active_event(
+            "alarm",
+            {
+                "state": "pre_alarm",
+                "minutes_until_fire": 20,
+                "event": {"id": "a1", "label": "Wake up"},
+            },
+        )
+        self.assertTrue(change.changed)
+        snapshot = manager.snapshot()
+        assert snapshot.active_alarm is not None
+        self.assertEqual(snapshot.active_alarm["state"], "pre_alarm")
+        self.assertEqual(snapshot.active_alarm["minutes_until_fire"], 20)
+
     def test_alarm_info_card_renders_action_buttons(self) -> None:
         alarms = (
             {"id": "alarm1", "label": "Wake Up", "time_of_day": "08:00", "repeat_days": [0, 1, 2, 3, 4]},
