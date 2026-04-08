@@ -742,6 +742,7 @@ class KioskMqttListener:
                 on_state_change=self._handle_overlay_change,
                 on_stop_request=self._handle_overlay_stop_request,
                 on_snooze_request=self._handle_overlay_snooze_request,
+                on_dismiss_alarm=self._handle_overlay_dismiss_alarm_request,
                 on_delete_alarm=self._handle_overlay_delete_alarm_request,
                 on_pause_alarm=self._handle_overlay_pause_alarm_request,
                 on_resume_alarm=self._handle_overlay_resume_alarm_request,
@@ -1118,6 +1119,15 @@ class KioskMqttListener:
     def _handle_overlay_snooze_request(self, event_id: str, minutes: int) -> None:
         payload = json.dumps({"action": "snooze", "event_id": event_id, "minutes": minutes})
         self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+
+    def _handle_overlay_dismiss_alarm_request(self, event_id: str) -> None:
+        payload = json.dumps({"action": "dismiss_alarm", "event_id": event_id})
+        self._safe_publish(None, self.assistant_topics.command, payload, qos=1, retain=False)
+        # Optimistically clear the pre-alarm modal locally so the user gets immediate feedback;
+        # the assistant will confirm via the active-alarm topic shortly.
+        if self.overlay_state:
+            change = self.overlay_state.update_active_event("alarm", None)
+            self._handle_overlay_change(change)
 
     def _handle_overlay_delete_alarm_request(self, event_id: str) -> None:
         payload = json.dumps({"action": "delete_alarm", "event_id": event_id})

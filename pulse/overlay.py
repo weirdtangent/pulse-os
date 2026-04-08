@@ -496,12 +496,17 @@ def _normalize_active_payload(payload: dict[str, Any] | None) -> dict[str, Any] 
     if not isinstance(payload, dict):
         return None
     state = str(payload.get("state") or "").lower()
-    if state not in {"ringing", "active"}:
+    if state not in {"ringing", "active", "pre_alarm"}:
         return None
     normalized: dict[str, Any] = {"state": state}
     event = payload.get("event")
     if isinstance(event, dict):
         normalized["event"] = copy.deepcopy(event)
+    if state == "pre_alarm":
+        try:
+            normalized["minutes_until_fire"] = int(payload.get("minutes_until_fire") or 0)
+        except (TypeError, ValueError):
+            normalized["minutes_until_fire"] = 0
     return normalized
 
 
@@ -812,6 +817,9 @@ def _build_active_event_cards(snapshot: OverlaySnapshot, occupied_cells: set[str
 
 
 def _build_alarm_ringing_card(active_alarm: dict[str, Any]) -> str:
+    state = str(active_alarm.get("state") or "").lower() if isinstance(active_alarm, dict) else ""
+    if state == "pre_alarm":
+        return _build_alarm_pre_warning_card(active_alarm)
     label = _event_label(active_alarm, default="Alarm ringing")
     event_data = active_alarm.get("event") if isinstance(active_alarm, dict) else None
     event_id = event_data.get("id") if isinstance(event_data, dict) else None
@@ -832,6 +840,43 @@ def _build_alarm_ringing_card(active_alarm: dict[str, Any]) -> str:
     return f"""
 <div class="overlay-card overlay-card--alert overlay-card--ringing">
   <div class="overlay-card__title">{html_escape(label)}</div>
+  {button_html}
+</div>
+""".strip()
+
+
+def _build_alarm_pre_warning_card(active_alarm: dict[str, Any]) -> str:
+    label = _event_label(active_alarm, default="Alarm")
+    event_data = active_alarm.get("event") if isinstance(active_alarm, dict) else None
+    event_id = event_data.get("id") if isinstance(event_data, dict) else None
+    minutes = active_alarm.get("minutes_until_fire") if isinstance(active_alarm, dict) else None
+    try:
+        minutes_int = int(minutes) if minutes is not None else 20
+    except (TypeError, ValueError):
+        minutes_int = 20
+    alarm_time = ""
+    if isinstance(event_data, dict):
+        time_value = event_data.get("time")
+        if time_value:
+            alarm_time = str(time_value)
+    title = f"Alarm in {minutes_int} min"
+    if alarm_time:
+        title = f"Alarm at {alarm_time} in {minutes_int} min"
+    button_html = ""
+    if event_id:
+        event_id_escaped = html_escape(str(event_id), quote=True)
+        dismiss_button = (
+            f'<button class="overlay-button overlay-button--primary" data-dismiss-alarm '
+            f'data-event-id="{event_id_escaped}">Dismiss alarm</button>'
+        )
+        keep_button = '<button class="overlay-button" data-keep-alarm>Keep alarm</button>'
+        button_html = (
+            f'<div class="overlay-card__actions overlay-card__actions--split">{dismiss_button}{keep_button}</div>'
+        )
+    return f"""
+<div class="overlay-card overlay-card--alert overlay-card--pre-alarm">
+  <div class="overlay-card__title">{html_escape(title)}</div>
+  <div class="overlay-card__body">{html_escape(label)}</div>
   {button_html}
 </div>
 """.strip()

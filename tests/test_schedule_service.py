@@ -569,6 +569,100 @@ async def test_snooze_nonexistent_alarm(schedule_service):
 
 
 @pytest.mark.anyio
+async def test_create_alarm_schedules_pre_alarm_task(schedule_service):
+    """Creating an alarm should also schedule a pre-alarm warning task."""
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4])
+    assert event.event_id in svc._tasks
+    assert event.event_id in svc._pre_alarm_tasks
+
+
+@pytest.mark.anyio
+async def test_pause_alarm_cancels_pre_alarm_task(schedule_service):
+    """Pausing an alarm should cancel its pre-alarm warning task."""
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4])
+    assert event.event_id in svc._pre_alarm_tasks
+    await svc.pause_alarm(event.event_id)
+    assert event.event_id not in svc._pre_alarm_tasks
+    await svc.resume_alarm(event.event_id)
+    assert event.event_id in svc._pre_alarm_tasks
+
+
+@pytest.mark.anyio
+async def test_delete_alarm_cancels_pre_alarm_task(schedule_service):
+    """Deleting an alarm should cancel its pre-alarm warning task."""
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4])
+    assert event.event_id in svc._pre_alarm_tasks
+    await svc.delete_event(event.event_id)
+    assert event.event_id not in svc._pre_alarm_tasks
+    assert event.event_id not in svc._tasks
+
+
+@pytest.mark.anyio
+async def test_dismiss_alarm_occurrence_repeating_advances_to_next_day(schedule_service):
+    """Dismissing a recurring alarm should advance next_fire past the current occurrence."""
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4, 5, 6])
+    original_fire = event.next_fire_dt()
+    result = await svc.dismiss_alarm_occurrence(event.event_id)
+    assert result is True
+    updated = svc._events[event.event_id]
+    new_fire = updated.next_fire_dt()
+    assert new_fire > original_fire
+    # Should be approximately one day later (within a small tolerance)
+    delta_hours = (new_fire - original_fire).total_seconds() / 3600
+    assert 23.5 <= delta_hours <= 24.5
+
+
+@pytest.mark.anyio
+async def test_dismiss_alarm_occurrence_single_shot_deletes(schedule_service):
+    """Dismissing a single-shot alarm should delete it entirely."""
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", label="One-time")
+    assert event.event_id in svc._events
+    result = await svc.dismiss_alarm_occurrence(event.event_id)
+    assert result is True
+    assert event.event_id not in svc._events
+    assert event.event_id not in svc._tasks
+    assert event.event_id not in svc._pre_alarm_tasks
+
+
+@pytest.mark.anyio
+async def test_dismiss_alarm_occurrence_nonexistent(schedule_service):
+    svc = schedule_service
+    result = await svc.dismiss_alarm_occurrence("nonexistent")
+    assert result is False
+
+
+@pytest.mark.anyio
+async def test_dismiss_alarm_occurrence_clears_active_modal(tmp_path):
+    """Dismissing an alarm should send an idle notification to clear the active modal."""
+    notifications: list[tuple[str, dict | None]] = []
+
+    def on_active(event_type, payload):
+        notifications.append((event_type, payload))
+
+    storage_path = tmp_path / "schedules.json"
+    svc = ScheduleService(
+        storage_path=storage_path,
+        hostname="pulse-test",
+        on_state_changed=None,
+        on_active_event=on_active,
+        ha_client=None,
+    )
+    await svc.start()
+    try:
+        event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4, 5, 6])
+        notifications.clear()
+        await svc.dismiss_alarm_occurrence(event.event_id)
+        assert ("alarm", None) in notifications
+    finally:
+        await svc.stop()
+
+
+@pytest.mark.anyio
 async def test_extend_timer(schedule_service):
     svc = schedule_service
     event = await svc.create_timer(duration_seconds=60, label="Extend me")

@@ -31,6 +31,9 @@ ActiveCallback = Callable[[EventType, dict[str, Any] | None], None]
 
 LOGGER = logging.getLogger("pulse.schedule_service")
 
+# How long before an alarm fires to show a "dismiss this occurrence" warning modal.
+PRE_ALARM_WARNING_MINUTES = 20
+
 
 def _now() -> datetime:
     return datetime.now().astimezone()
@@ -765,6 +768,7 @@ class ScheduleService:
         self._sound_library.ensure_custom_dir()
         self._events: dict[str, ScheduledEvent] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        self._pre_alarm_tasks: dict[str, asyncio.Task] = {}
         self._active: dict[str, ActiveEvent] = {}
         self._lock = asyncio.Lock()
         self._started = False
@@ -842,6 +846,9 @@ class ScheduleService:
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()
+        for task in self._pre_alarm_tasks.values():
+            task.cancel()
+        self._pre_alarm_tasks.clear()
         active = list(self._active.keys())
         for event_id in active:
             await self.stop_event(event_id, reason="shutdown")
@@ -1053,9 +1060,7 @@ class ScheduleService:
             if event.paused == paused:
                 return True
             event.paused = paused
-            task = self._tasks.pop(event_id, None)
-            if task:
-                task.cancel()
+            self._cancel_event_tasks(event_id)
             if not paused and event.time_of_day:
                 event.set_next_fire(
                     self._compute_alarm_fire(
@@ -1080,9 +1085,7 @@ class ScheduleService:
             event = self._events.pop(event_id, None)
             if not event:
                 return False
-            task = self._tasks.pop(event_id, None)
-            if task:
-                task.cancel()
+            self._cancel_event_tasks(event_id)
             # Clean up enable dates for this alarm
             for date_str in list(self._ui_enable_dates.keys()):
                 self._ui_enable_dates[date_str].discard(event_id)
@@ -1113,9 +1116,7 @@ class ScheduleService:
             event_payload = stored_event.to_public_dict()
             if stored_event.event_type == "alarm":
                 if stored_event.paused:
-                    task = self._tasks.pop(event_id, None)
-                    if task:
-                        task.cancel()
+                    self._cancel_event_tasks(event_id)
                 elif stored_event.repeat_days:
                     stored_event.set_next_fire(
                         self._compute_alarm_fire(
@@ -1128,9 +1129,7 @@ class ScheduleService:
                     self._reschedule_event(stored_event)
                 else:
                     self._events.pop(event_id, None)
-                    task = self._tasks.pop(event_id, None)
-                    if task:
-                        task.cancel()
+                    self._cancel_event_tasks(event_id)
             elif stored_event.event_type == "reminder" and _reminder_repeats(stored_event):
                 _set_reminder_delay(stored_event, None)
                 next_fire = _compute_next_reminder_fire(stored_event, after=_now())
@@ -1139,14 +1138,10 @@ class ScheduleService:
                     self._reschedule_event(stored_event)
                 else:
                     self._events.pop(event_id, None)
-                    task = self._tasks.pop(event_id, None)
-                    if task:
-                        task.cancel()
+                    self._cancel_event_tasks(event_id)
             else:
                 self._events.pop(event_id, None)
-                task = self._tasks.pop(event_id, None)
-                if task:
-                    task.cancel()
+                self._cancel_event_tasks(event_id)
             await self._persist_events()
             await self._publish_state()
         if handle:
@@ -1157,6 +1152,36 @@ class ScheduleService:
             self._notify_active(event_type, None)
             return True
         return False
+
+    async def dismiss_alarm_occurrence(self, event_id: str) -> bool:
+        """Skip the next occurrence of an alarm without firing it.
+
+        For recurring alarms, advances next_fire past the current occurrence so the alarm
+        will still fire on subsequent days. For single-shot alarms, deletes the alarm
+        entirely (since dismissing prevents the only occurrence).
+        """
+        async with self._lock:
+            event = self._events.get(event_id)
+            if not event or event.event_type != "alarm":
+                return False
+            current_fire = event.next_fire_dt()
+            if event.repeat_days:
+                next_fire = self._compute_alarm_fire(
+                    event.time_of_day or "08:00",
+                    event.repeat_days,
+                    after=current_fire + timedelta(seconds=1),
+                    is_paused_alarm=event.paused,
+                    event_id=event.event_id,
+                )
+                event.set_next_fire(next_fire)
+                self._reschedule_event(event)
+            else:
+                self._events.pop(event_id, None)
+                self._cancel_event_tasks(event_id)
+            await self._persist_events()
+            await self._publish_state()
+        self._notify_active("alarm", None)
+        return True
 
     async def snooze_alarm(self, event_id: str, minutes: int = 5) -> bool:
         minutes = max(1, minutes)
@@ -1298,18 +1323,24 @@ class ScheduleService:
                 return active.event.to_public_dict(status="active")
         return None
 
-    def _schedule_event(self, event: ScheduledEvent) -> None:
-        task = self._tasks.pop(event.event_id, None)
+    def _cancel_event_tasks(self, event_id: str) -> None:
+        task = self._tasks.pop(event_id, None)
         if task:
             task.cancel()
+        pre_task = self._pre_alarm_tasks.pop(event_id, None)
+        if pre_task:
+            pre_task.cancel()
+
+    def _schedule_event(self, event: ScheduledEvent) -> None:
+        self._cancel_event_tasks(event.event_id)
         if event.event_type == "alarm" and event.paused:
             return
         self._tasks[event.event_id] = asyncio.create_task(self._wait_for_event(event.event_id))
+        if event.event_type == "alarm":
+            self._pre_alarm_tasks[event.event_id] = asyncio.create_task(self._wait_for_pre_alarm(event.event_id))
 
     def _reschedule_event(self, event: ScheduledEvent) -> None:
-        task = self._tasks.pop(event.event_id, None)
-        if task:
-            task.cancel()
+        self._cancel_event_tasks(event.event_id)
         self._schedule_event(event)
 
     async def _wait_for_event(self, event_id: str) -> None:
@@ -1328,6 +1359,37 @@ class ScheduleService:
                     return
             await self._activate_event(event_id)
             return
+
+    async def _wait_for_pre_alarm(self, event_id: str) -> None:
+        """Show a pre-alarm warning modal PRE_ALARM_WARNING_MINUTES before an alarm fires.
+
+        The user can dismiss the modal to skip this single occurrence. If they ignore it,
+        the regular alarm modal will replace it when the alarm actually fires.
+        """
+        async with self._lock:
+            event = self._events.get(event_id)
+            if not event or event.event_type != "alarm" or event.paused:
+                return
+            warning_dt = event.next_fire_dt() - timedelta(minutes=PRE_ALARM_WARNING_MINUTES)
+            delay = (warning_dt - _now()).total_seconds()
+        if delay > 0:
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                return
+        async with self._lock:
+            event = self._events.get(event_id)
+            if not event or event.event_type != "alarm" or event.paused:
+                return
+            # Don't replace a currently-ringing alarm modal with a pre-alarm warning.
+            if any(active.event.event_type == "alarm" for active in self._active.values()):
+                return
+            payload = {
+                "state": "pre_alarm",
+                "minutes_until_fire": PRE_ALARM_WARNING_MINUTES,
+                "event": event.to_public_dict(status="pre_alarm"),
+            }
+        self._notify_active("alarm", payload)
 
     async def _activate_event(self, event_id: str) -> None:
         async with self._lock:

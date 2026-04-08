@@ -63,6 +63,7 @@ class OverlayHttpServer:
         on_state_change: Callable[[OverlayChange], None] | None = None,
         on_stop_request: Callable[[str], None] | None = None,
         on_snooze_request: Callable[[str, int], None] | None = None,
+        on_dismiss_alarm: Callable[[str], None] | None = None,
         on_delete_alarm: Callable[[str], None] | None = None,
         on_complete_reminder: Callable[[str], None] | None = None,
         on_delay_reminder: Callable[[str, int], None] | None = None,
@@ -87,6 +88,7 @@ class OverlayHttpServer:
         self._on_state_change = on_state_change
         self._on_stop_request = on_stop_request
         self._on_snooze_request = on_snooze_request
+        self._on_dismiss_alarm = on_dismiss_alarm
         self._on_delete_alarm = on_delete_alarm
         self._on_complete_reminder = on_complete_reminder
         self._on_delay_reminder = on_delay_reminder
@@ -476,6 +478,11 @@ html, body {{
                     except (TypeError, ValueError):
                         snooze_minutes = 5
                     outer._on_snooze_request(str(event_id), snooze_minutes)
+                elif action == "dismiss_alarm":
+                    if not outer._on_dismiss_alarm:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Dismiss command unavailable")
+                        return
+                    outer._on_dismiss_alarm(str(event_id))
                 else:
                     self.send_error(HTTPStatus.BAD_REQUEST, "Invalid request")
                     return
