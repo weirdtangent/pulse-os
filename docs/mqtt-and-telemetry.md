@@ -216,7 +216,7 @@ Publish JSON commands to `pulse/<hostname>/assistant/schedules/command` to contr
 | `{"action": "add_time", "event_id": "<id>", "seconds": 180}` | `event_id`, `seconds` | Adds time to an existing timer (overlay uses +3 min by default). |
 | `{"action": "stop", "event_id": "<id>"}` | `event_id` | Works for either alarms or timers. |
 | `{"action": "snooze", "event_id": "<id>", "minutes": 5}` | `event_id` | Snoozes an active alarm, default 5 min. |
-| `{"action": "dismiss_alarm", "event_id": "<id>"}` | `event_id` | Skips the next occurrence of an alarm without firing it. Recurring alarms advance to the following day; single-shot alarms are deleted. Issued by the overlay's pre-alarm warning modal. |
+| `{"action": "dismiss_alarm", "event_id": "<id>"}` | `event_id` | Skips the next occurrence of an alarm without firing it. Recurring alarms advance to the next scheduled occurrence based on the alarm's repeat cadence; single-shot alarms are deleted. Issued by the overlay's pre-alarm warning modal. |
 | `{"action": "cancel_all", "event_type": "timer"}` | — | Cancels every outstanding timer. |
 | `{"action": "create_reminder", "when": "2025-01-01T09:00:00-05:00", "message": "Turn off humidifier", "repeat": {"type": "weekly", "days": [0], "time": "09:00"}}` | `when`, `message` | `repeat` is optional and mirrors the structure persisted in `schedules/state` (`type`: `weekly`, `monthly`, or `interval`). |
 | `{"action": "complete_reminder", "event_id": "<id>"}` | `event_id` | Marks the current occurrence complete (repeating reminders advance to the next cadence). |
@@ -229,7 +229,7 @@ Responses are implicit—the kiosk publishes the updated state snapshot immediat
 
 `bin/pulse-assistant-display.py` listens to the `alarms/active`, `timers/active`, and `reminders/active` topics. When something is ringing a fullscreen overlay appears with the appropriate action buttons (SNOOZE/+3 MIN for alarms/timers, Complete/+delay for reminders). Each button posts the matching command JSON back to the `schedules/command` topic, so your physical display, automations, and voice assistant all stay coordinated.
 
-Alarms also surface a **pre-alarm warning modal** 20 minutes before they fire, with **Dismiss alarm** (skip just this occurrence — recurring alarms advance to the next day, single-shot alarms are deleted) and **Keep alarm** (hide the modal, let the alarm ring normally) buttons. Ignoring the modal lets the regular ringing modal replace it when the alarm fires.
+Alarms also surface a **pre-alarm warning modal** 20 minutes before they fire, with **Dismiss alarm** (skip just this occurrence — recurring alarms advance to the next scheduled occurrence, single-shot alarms are deleted) and **Keep alarm** (hide the modal, let the alarm ring normally) buttons. Ignoring the modal lets the regular ringing modal replace it when the alarm fires.
 
 ### Transcript logging switch
 
