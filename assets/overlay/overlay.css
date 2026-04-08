@@ -710,6 +710,27 @@ body {
   animation: none;
 }
 
+.overlay-card--pre-alarm .overlay-card__actions--split {
+  width: 100%;
+  gap: 1.2rem;
+  margin-top: 1.5rem;
+}
+
+.overlay-card--pre-alarm .overlay-card__actions--split .overlay-button,
+.overlay-card--pre-alarm .overlay-card__actions--split .overlay-button--primary {
+  flex: 1;
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.4rem 1rem;
+  font-size: clamp(1rem, 1.6vw, 1.35rem);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  border-radius: 0.85rem;
+}
+
 .overlay-card--reminder {
   text-align: left;
 }
