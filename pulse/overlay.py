@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 import threading
 import time
@@ -66,6 +67,7 @@ class OverlaySnapshot:
     clocks: tuple[ClockConfig, ...]
     now_playing: str
     now_playing_state: str
+    now_playing_image: str
     timers: tuple[dict[str, Any], ...]
     alarms: tuple[dict[str, Any], ...]
     reminders: tuple[dict[str, Any], ...]
@@ -163,6 +165,7 @@ class OverlayStateManager:
         self._schedule_snapshot: dict[str, Any] | None = None
         self._now_playing = ""
         self._now_playing_state = ""
+        self._now_playing_image = ""
         self._info_card: dict[str, Any] | None = None
         self._timer_position_history: dict[str, str] = {}
         self._earmuffs_enabled = False
@@ -198,15 +201,18 @@ class OverlayStateManager:
             self._clocks = new_clocks
             return self._bump("clock")
 
-    def update_now_playing(self, text: str, state: str = "") -> OverlayChange:
+    def update_now_playing(self, text: str, state: str = "", image: str = "") -> OverlayChange:
         normalized = text.strip()
         normalized_state = state.strip().lower()
+        normalized_image = image.strip()
         with self._lock:
-            sig = f"{normalized}|{normalized_state}"
+            image_sig = hashlib.sha256(normalized_image.encode()).hexdigest()[:8] if normalized_image else "0"
+            sig = f"{normalized}|{normalized_state}|{image_sig}"
             if sig == self._signatures["now_playing"]:
                 return OverlayChange(False, self._version, "now_playing")
             self._now_playing = normalized
             self._now_playing_state = normalized_state
+            self._now_playing_image = normalized_image
             self._signatures["now_playing"] = sig
             return self._bump("now_playing")
 
@@ -446,6 +452,7 @@ class OverlayStateManager:
                 clocks=self._clocks,
                 now_playing=self._now_playing,
                 now_playing_state=self._now_playing_state,
+                now_playing_image=self._now_playing_image,
                 timers=tuple(copy.deepcopy(item) for item in self._timers),
                 alarms=tuple(copy.deepcopy(item) for item in self._alarms),
                 reminders=tuple(copy.deepcopy(item) for item in self._reminders),
@@ -975,10 +982,16 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
         f'<button class="{btn}" data-media-action="media_next_track"'
         f' aria-label="Next">\u25b6\u25b6</button>'
     )
+    image_html = ""
+    image_uri = snapshot.now_playing_image.strip()
+    if image_uri:
+        safe_uri = html_escape(image_uri, quote=True)
+        image_html = f'<img class="overlay-now-playing__art" src="{safe_uri}" alt="">'
     card = f"""
 <div class="overlay-card overlay-card--ambient overlay-card--now-playing{paused_class}">
   <div class="overlay-card__title">Now Playing</div>
   <div class="overlay-now-playing__content">
+    {image_html}
     <div class="overlay-now-playing__indicator" aria-hidden="true">
       <div class="overlay-now-playing__bar"></div>
       <div class="overlay-now-playing__bar"></div>

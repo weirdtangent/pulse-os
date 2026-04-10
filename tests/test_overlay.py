@@ -33,6 +33,7 @@ class OverlayRenderTests(unittest.TestCase):
             "clocks": (ClockConfig("clock0", "Local", None),),
             "now_playing": "",
             "now_playing_state": "",
+            "now_playing_image": "",
             "timers": (),
             "alarms": (),
             "reminders": (),
@@ -599,6 +600,7 @@ class HelpInfoCardTests(unittest.TestCase):
             "clocks": (),
             "now_playing": "",
             "now_playing_state": "",
+            "now_playing_image": "",
             "timers": (),
             "alarms": (),
             "reminders": (),
@@ -652,6 +654,7 @@ class NowPlayingCardTests(unittest.TestCase):
             "clocks": (),
             "now_playing": "",
             "now_playing_state": "",
+            "now_playing_image": "",
             "timers": (),
             "alarms": (),
             "reminders": (),
@@ -754,6 +757,45 @@ class UpdateNowPlayingTests(unittest.TestCase):
         snap = mgr.snapshot()
         self.assertEqual(snap.now_playing, "")
         self.assertEqual(snap.now_playing_state, "")
+
+    def test_image_appears_in_snapshot(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.update_now_playing("Song", state="playing", image="data:image/jpeg;base64,abc")
+        snap = mgr.snapshot()
+        self.assertEqual(snap.now_playing_image, "data:image/jpeg;base64,abc")
+
+    def test_image_change_triggers_update(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.update_now_playing("Song", state="playing", image="data:image/jpeg;base64,abc")
+        change = mgr.update_now_playing("Song", state="playing", image="data:image/jpeg;base64,xyz")
+        self.assertTrue(change.changed)
+
+
+class NowPlayingAlbumArtRenderTests(NowPlayingCardTests):
+    def test_image_rendered_when_present(self) -> None:
+        result = _build_now_playing_card(
+            self._snapshot(
+                now_playing="Artist — Song",
+                now_playing_state="playing",
+                now_playing_image="data:image/jpeg;base64,abc",
+            )
+        )
+        self.assertIsNotNone(result)
+        _, html = result  # type: ignore[misc]
+        self.assertIn('class="overlay-now-playing__art"', html)
+        self.assertIn("data:image/jpeg;base64,abc", html)
+
+    def test_no_image_when_empty(self) -> None:
+        result = _build_now_playing_card(
+            self._snapshot(
+                now_playing="Artist — Song",
+                now_playing_state="playing",
+                now_playing_image="",
+            )
+        )
+        self.assertIsNotNone(result)
+        _, html = result  # type: ignore[misc]
+        self.assertNotIn("overlay-now-playing__art", html)
 
 
 if __name__ == "__main__":
