@@ -942,6 +942,10 @@ class KioskMqttListener:
             return "", ""
         text = self._format_now_playing(payload)
         ha_state = str(payload.get("state") or "").lower()
+        # Snapcast players report "idle" when paused — treat as paused if
+        # media metadata is still present so the now-playing card stays visible.
+        if ha_state == "idle" and text:
+            ha_state = "paused"
         return text, ha_state
 
     def _build_ha_ssl_context(self) -> ssl.SSLContext | None:
@@ -1270,7 +1274,9 @@ class KioskMqttListener:
             self.log(f"media control: failed to send {service} to {entity}: {exc}")
         # Refresh now-playing state after the action
         if self.overlay_state:
+            time.sleep(1)
             now_playing, now_playing_state = self._collect_now_playing_text()
+            self.log(f"media control: after {service}, state={now_playing_state!r}, text={now_playing[:60]!r}")
             change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
             self._handle_overlay_change(change)
 
@@ -1302,7 +1308,7 @@ class KioskMqttListener:
                 return clean_state
             return ""
 
-        if state not in {"playing", "on", "buffering", "paused"}:
+        if state not in {"playing", "on", "buffering", "paused", "idle"}:
             return ""
 
         title = (
