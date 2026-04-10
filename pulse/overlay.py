@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 import threading
 import time
@@ -205,7 +206,7 @@ class OverlayStateManager:
         normalized_state = state.strip().lower()
         normalized_image = image.strip()
         with self._lock:
-            image_sig = "1" if normalized_image else "0"
+            image_sig = hashlib.sha256(normalized_image.encode()).hexdigest()[:8] if normalized_image else "0"
             sig = f"{normalized}|{normalized_state}|{image_sig}"
             if sig == self._signatures["now_playing"]:
                 return OverlayChange(False, self._version, "now_playing")
@@ -984,7 +985,8 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     image_html = ""
     image_uri = snapshot.now_playing_image.strip()
     if image_uri:
-        image_html = f'<img class="overlay-now-playing__art"' f' src="{image_uri}" alt="">'
+        safe_uri = html_escape(image_uri, quote=True)
+        image_html = f'<img class="overlay-now-playing__art" src="{safe_uri}" alt="">'
     card = f"""
 <div class="overlay-card overlay-card--ambient overlay-card--now-playing{paused_class}">
   <div class="overlay-card__title">Now Playing</div>

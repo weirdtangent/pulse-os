@@ -1371,10 +1371,18 @@ class KioskMqttListener:
         open_kwargs: dict[str, Any] = {"timeout": 5}
         if self._ha_ssl_context is not None:
             open_kwargs["context"] = self._ha_ssl_context
+        _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+        _MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
         try:
             with urllib.request.urlopen(request, **open_kwargs) as resp:  # type: ignore[arg-type]  # nosec B310
-                content_type = resp.headers.get("Content-Type", "image/jpeg")
-                image_data = resp.read()
+                content_type = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip()
+                if content_type not in _ALLOWED_IMAGE_TYPES:
+                    self.log(f"now-playing: unexpected image content-type: {content_type}")
+                    return ""
+                image_data = resp.read(_MAX_IMAGE_BYTES + 1)
+                if len(image_data) > _MAX_IMAGE_BYTES:
+                    self.log("now-playing: album art too large, skipping")
+                    return ""
             encoded = base64.b64encode(image_data).decode("ascii")
             return f"data:{content_type};base64,{encoded}"
         except Exception as exc:
