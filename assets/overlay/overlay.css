@@ -899,10 +899,15 @@ body {
   background: transparent;
   border: none;
   color: #FFFFFF;
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   cursor: pointer;
-  opacity: 0.75;
-  padding: 0.4rem;
+  opacity: 0.85;
+  padding: 0.3rem 0.5rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.2s, transform 0.15s;
   line-height: 1;
   font-family: var(--overlay-font-family, system-ui, sans-serif);
@@ -910,7 +915,7 @@ body {
 }
 
 .overlay-now-playing__control--primary {
-  font-size: 2rem;
+  font-size: 1.3rem;
   opacity: 1;
 }
 
