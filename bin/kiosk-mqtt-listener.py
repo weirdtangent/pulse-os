@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import atexit
+import base64
 import json
 import os
 import socket
@@ -673,6 +674,8 @@ class KioskMqttListener:
         self._last_assistant_restart_attempt: float = 0.0
         self._ha_ssl_context = self._build_ha_ssl_context()
         self._last_now_playing_error: float = 0.0
+        self._last_now_playing_art_key: str = ""
+        self._last_now_playing_art: str = ""
         self.assistant_topics = config.assistant_topics
         self.overlay_config = config.overlay
         self.overlay_state: OverlayStateManager | None = None
@@ -906,11 +909,15 @@ class KioskMqttListener:
             if brightness is not None:
                 metrics["brightness"] = brightness
 
-        now_playing, now_playing_state = self._collect_now_playing_text()
+        now_playing, now_playing_state, now_playing_image = self._collect_now_playing_text()
         metrics["now_playing"] = now_playing
 
         if self.overlay_state:
-            change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
+            change = self.overlay_state.update_now_playing(
+                now_playing,
+                state=now_playing_state,
+                image=now_playing_image,
+            )
             self._handle_overlay_change(change)
 
         return metrics
@@ -933,20 +940,27 @@ class KioskMqttListener:
             "brightness_supported": self._brightness_supported,
         }
 
-    def _collect_now_playing_text(self) -> tuple[str, str]:
-        """Return (display_text, ha_state) for the media player."""
+    def _collect_now_playing_text(self) -> tuple[str, str, str]:
+        """Return (display_text, ha_state, image_data_uri) for the media player."""
         if not self.config.media_player_entity or not self.config.ha_base_url or not self.config.ha_token:
-            return "", ""
+            return "", "", ""
         payload = self._fetch_media_player_state()
         if payload is None:
-            return "", ""
+            return "", "", ""
         text = self._format_now_playing(payload)
         ha_state = str(payload.get("state") or "").lower()
         # Snapcast players report "idle" when paused — treat as paused if
         # media metadata is still present so the now-playing card stays visible.
         if ha_state == "idle" and text:
             ha_state = "paused"
-        return text, ha_state
+        # Only re-fetch image when the track changes (or previous fetch failed)
+        if text and (text != self._last_now_playing_art_key or not self._last_now_playing_art):
+            self._last_now_playing_art_key = text
+            self._last_now_playing_art = self._extract_now_playing_image(payload)
+        elif not text:
+            self._last_now_playing_art_key = ""
+            self._last_now_playing_art = ""
+        return text, ha_state, self._last_now_playing_art
 
     def _build_ha_ssl_context(self) -> ssl.SSLContext | None:
         base_url = self.config.ha_base_url.lower()
@@ -1076,8 +1090,12 @@ class KioskMqttListener:
             return
         change = self.overlay_state.update_schedule_snapshot(data)
         # Also update now playing to ensure it's current when overlay refreshes
-        now_playing, now_playing_state = self._collect_now_playing_text()
-        now_playing_change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
+        now_playing, now_playing_state, now_playing_image = self._collect_now_playing_text()
+        now_playing_change = self.overlay_state.update_now_playing(
+            now_playing,
+            state=now_playing_state,
+            image=now_playing_image,
+        )
         # Handle schedule change (always triggers refresh if changed)
         if change.changed:
             self._handle_overlay_change(change)
@@ -1275,9 +1293,13 @@ class KioskMqttListener:
         # Refresh now-playing state after the action
         if self.overlay_state:
             time.sleep(1)
-            now_playing, now_playing_state = self._collect_now_playing_text()
+            now_playing, now_playing_state, now_playing_image = self._collect_now_playing_text()
             self.log(f"media control: after {service}, state={now_playing_state!r}, text={now_playing[:60]!r}")
-            change = self.overlay_state.update_now_playing(now_playing, state=now_playing_state)
+            change = self.overlay_state.update_now_playing(
+                now_playing,
+                state=now_playing_state,
+                image=now_playing_image,
+            )
             self._handle_overlay_change(change)
 
     @staticmethod
@@ -1327,6 +1349,37 @@ class KioskMqttListener:
         if title and artist:
             return f"{artist} — {title}"
         return title or artist or ""
+
+    def _extract_now_playing_image(self, payload: dict[str, Any] | None) -> str:
+        """Return a base64 data URI for the current media image, or empty string."""
+        if not isinstance(payload, dict):
+            return ""
+        attributes = payload.get("attributes") or {}
+        entity_picture = (attributes.get("entity_picture") or "").strip()
+        if not entity_picture:
+            return ""
+        # entity_picture may be a full URL or a relative HA path
+        if entity_picture.startswith(("http://", "https://")):
+            url = entity_picture
+        else:
+            base = self.config.ha_base_url.rstrip("/")
+            url = f"{base}{entity_picture}"
+        request = urllib.request.Request(url)
+        # Add HA auth for relative paths (HA proxy endpoints need it)
+        if not entity_picture.startswith(("http://", "https://")):
+            request.add_header("Authorization", f"Bearer {self.config.ha_token}")
+        open_kwargs: dict[str, Any] = {"timeout": 5}
+        if self._ha_ssl_context is not None:
+            open_kwargs["context"] = self._ha_ssl_context
+        try:
+            with urllib.request.urlopen(request, **open_kwargs) as resp:  # type: ignore[arg-type]  # nosec B310
+                content_type = resp.headers.get("Content-Type", "image/jpeg")
+                image_data = resp.read()
+            encoded = base64.b64encode(image_data).decode("ascii")
+            return f"data:{content_type};base64,{encoded}"
+        except Exception as exc:
+            self.log(f"now-playing: failed to fetch album art: {exc}")
+            return ""
 
     @staticmethod
     def _read_cpu_temperature() -> float | None:

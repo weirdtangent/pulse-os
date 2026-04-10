@@ -837,6 +837,14 @@ body {
   gap: 0.9rem;
 }
 
+.overlay-now-playing__art {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 0.4rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .overlay-now-playing__indicator {
   display: flex;
   align-items: flex-end;
