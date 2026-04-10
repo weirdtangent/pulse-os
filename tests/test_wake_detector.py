@@ -324,11 +324,13 @@ async def test_local_audio_block_increments_and_decrements():
 @pytest.mark.anyio
 async def test_local_audio_block_decrements_on_exception():
     d = _make_detector()
+    raised = False
     try:
         async with d.local_audio_block():
             raise RuntimeError("boom")
     except RuntimeError:
-        pass
+        raised = True
+    assert raised
     assert d._local_audio_depth == 0
 
 
