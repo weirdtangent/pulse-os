@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,8 +12,8 @@ dependencies = [
     "astral==3.2",
     "httpx==0.28.1",
     "icalendar==7.0.3",
-    "recurring-ical-events>=3.5.0",
-    "packaging==26.0",
+    "recurring-ical-events>=3.8.1",
+    "packaging==26.2",
     "paho-mqtt==2.1.0",
     "psutil==7.2.2",
     "websocket==0.2.1",
@@ -63,12 +63,12 @@ docstring-code-format = true
 [dependency-groups]
 dev = [
     "black>=24.8.0",
-    "mypy>=1.19.1",
-    "pre-commit>=4.5.1",
+    "mypy>=1.20.2",
+    "pre-commit>=4.6.0",
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
     "ruff>=0.6.5",
-    "types-requests>=2.32.4.20260107",
+    "types-requests>=2.33.0.20260408",
 ]
 
 [tool.pytest.ini_options]
