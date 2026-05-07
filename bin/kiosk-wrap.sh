@@ -190,6 +190,9 @@ while true; do
     --disable-logging \
     --disable-features=RendererCodeIntegrity,PreconnectToSearch,OptimizationHints,AutofillServerCommunication,PushMessaging \
     --disable-breakpad \
+    --disable-backgrounding-occluded-windows \
+    --disable-renderer-backgrounding \
+    --disable-background-timer-throttling \
     --kiosk \
     --start-fullscreen \
     --window-position=0,0 \
