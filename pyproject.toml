@@ -64,6 +64,7 @@ docstring-code-format = true
 dev = [
     "black>=24.8.0",
     "mypy>=1.20.2",
+    "pip-audit>=2.7.3",
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
