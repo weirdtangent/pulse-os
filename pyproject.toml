@@ -63,13 +63,13 @@ docstring-code-format = true
 [dependency-groups]
 dev = [
     "black>=24.8.0",
-    "mypy>=1.20.2",
-    "pip-audit>=2.7.3",
+    "mypy>=2.1.0",
+    "pip-audit>=2.10.0",
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
     "ruff>=0.6.5",
-    "types-requests>=2.33.0.20260503",
+    "types-requests>=2.33.0.20260508",
 ]
 
 [tool.pytest.ini_options]
