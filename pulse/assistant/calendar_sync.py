@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 import recurring_ical_events
-from icalendar import Calendar  # type: ignore[import-untyped]
+from icalendar import Calendar, Component  # type: ignore[import-untyped]
 
 from .config import CalendarConfig
 
@@ -269,7 +269,7 @@ class CalendarSyncService:
 
     def _collect_reminders(
         self,
-        calendar: Calendar,
+        calendar: Component,
         state: _FeedState,
         now: datetime,
     ) -> list[CalendarReminder]:
