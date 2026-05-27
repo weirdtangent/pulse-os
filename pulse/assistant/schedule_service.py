@@ -777,9 +777,22 @@ class ScheduleService:
         self._ooo_skip_dates: set[str] = set()
         self._ui_pause_dates: set[str] = set()
         self._ui_enable_dates: dict[str, set[str]] = {}  # date -> set of alarm_ids for paused alarms
+        # Per-alarm dismissed dates: alarm_id -> set of ISO date strings. Honored as additional
+        # skip dates so a user-dismissed occurrence stays dismissed even when other recomputes
+        # (e.g. periodic OOO calendar sync) reschedule alarms.
+        self._dismissed_dates: dict[str, set[str]] = {}
 
     def _effective_skip_dates(self) -> set[str]:
         return set(self._manual_skip_dates) | set(self._ooo_skip_dates) | set(self._ui_pause_dates)
+
+    def _prune_dismissed_dates(self) -> None:
+        today = _now().date().isoformat()
+        for alarm_id in list(self._dismissed_dates.keys()):
+            kept = {d for d in self._dismissed_dates[alarm_id] if d >= today}
+            if kept:
+                self._dismissed_dates[alarm_id] = kept
+            else:
+                del self._dismissed_dates[alarm_id]
 
     async def set_manual_skip_dates(self, dates: set[str]) -> None:
         async with self._lock:
@@ -884,10 +897,17 @@ class ScheduleService:
         event_id: str | None = None,
     ) -> datetime:
         skip_dates = None if is_paused_alarm else self._effective_skip_dates()
+        # Per-alarm dismissed dates always count as skip dates, including for paused alarms,
+        # so user dismisses survive subsequent reschedules.
+        dismissed = self._dismissed_dates.get(event_id) if event_id else None
+        if dismissed:
+            skip_dates = (skip_dates or set()) | dismissed
         # For paused alarms, get enable dates that belong to this specific alarm
         enable_dates: set[str] | None = None
         if is_paused_alarm and event_id:
             enable_dates = {date for date, alarm_ids in self._ui_enable_dates.items() if event_id in alarm_ids}
+            if dismissed:
+                enable_dates -= dismissed
 
         return _compute_next_alarm_fire(
             time_str,
@@ -1091,6 +1111,7 @@ class ScheduleService:
                 self._ui_enable_dates[date_str].discard(event_id)
                 if not self._ui_enable_dates[date_str]:
                     del self._ui_enable_dates[date_str]
+            self._dismissed_dates.pop(event_id, None)
             await self._persist_events()
             await self._publish_state()
             return True
@@ -1159,6 +1180,9 @@ class ScheduleService:
         For recurring alarms, advances next_fire past the current occurrence so the alarm
         will still fire on subsequent days. For single-shot alarms, deletes the alarm
         entirely (since dismissing prevents the only occurrence).
+
+        The dismissed occurrence date is recorded in `_dismissed_dates` so that later
+        reschedules (e.g. periodic calendar OOO sync) don't restore today's fire time.
         """
         async with self._lock:
             event = self._events.get(event_id)
@@ -1166,6 +1190,8 @@ class ScheduleService:
                 return False
             current_fire = event.next_fire_dt()
             if event.repeat_days:
+                self._dismissed_dates.setdefault(event_id, set()).add(current_fire.date().isoformat())
+                self._prune_dismissed_dates()
                 next_fire = self._compute_alarm_fire(
                     event.time_of_day or "08:00",
                     event.repeat_days,
@@ -1178,6 +1204,7 @@ class ScheduleService:
             else:
                 self._events.pop(event_id, None)
                 self._cancel_event_tasks(event_id)
+                self._dismissed_dates.pop(event_id, None)
             await self._persist_events()
             await self._publish_state()
         self._notify_active("alarm", None)
@@ -1428,12 +1455,14 @@ class ScheduleService:
         await self.stop_event(event_id, reason="auto_timeout")
 
     async def _persist_events(self) -> None:
+        self._prune_dismissed_dates()
         payload = {
             "events": [event.to_json_dict() for event in self._events.values()],
             "paused_dates": sorted(self._ui_pause_dates),
             "enabled_dates": {
                 date: sorted(alarm_ids) for date, alarm_ids in self._ui_enable_dates.items()
             },  # dict[str, list[str]] of date -> alarm_ids
+            "dismissed_dates": {alarm_id: sorted(dates) for alarm_id, dates in self._dismissed_dates.items()},
         }
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._storage_path.with_suffix(".tmp")
@@ -1468,6 +1497,15 @@ class ScheduleService:
         elif isinstance(enabled_dates, list):
             # Very old legacy format: list of dates without alarm_ids - cannot be migrated, drop
             pass
+        dismissed_dates = data.get("dismissed_dates") or {}
+        if isinstance(dismissed_dates, dict):
+            for alarm_id, dates in dismissed_dates.items():
+                if not isinstance(alarm_id, str) or not isinstance(dates, list):
+                    continue
+                cleaned = {d for d in dates if isinstance(d, str)}
+                if cleaned:
+                    self._dismissed_dates[alarm_id] = cleaned
+        self._prune_dismissed_dates()
         for item in data.get("events", []):
             try:
                 event = ScheduledEvent.from_dict(item)
