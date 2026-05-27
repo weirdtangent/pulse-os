@@ -11,7 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "astral==3.2",
     "httpx==0.28.1",
-    "icalendar==7.1.1",
+    "icalendar==7.1.2",
     "recurring-ical-events>=3.8.2",
     "packaging==26.2",
     "paho-mqtt==2.1.0",
