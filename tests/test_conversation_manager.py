@@ -12,6 +12,7 @@ from pulse.assistant.conversation_manager import (
     build_conversation_stop_prefixes,
     evaluate_follow_up_transcript,
     is_conversation_stop_command,
+    looks_like_noise_initial_transcript,
     normalize_conversation_stop_text,
     should_listen_for_follow_up,
 )
@@ -239,3 +240,41 @@ class TestConversationManager:
         mgr.mic.read_chunk = AsyncMock(return_value=b"\x00" * 960)
         result = await mgr.record_follow_up_phrase()
         assert isinstance(result, bytes)
+
+
+class TestLooksLikeNoiseInitialTranscript:
+    @pytest.mark.parametrize(
+        "transcript",
+        [
+            None,
+            "",
+            "   ",
+            "uh",
+            "Um.",
+            "Hmm?",
+            "you",
+            "Thanks for watching!",
+            "thank you for watching the video",
+            "Bye.",
+            "Okay",
+            "ok",
+        ],
+    )
+    def test_classifies_as_noise(self, transcript):
+        assert looks_like_noise_initial_transcript(transcript) is True
+
+    @pytest.mark.parametrize(
+        "transcript",
+        [
+            "what's the weather",
+            "turn on the lights",
+            "set an alarm for 7 am",
+            "stop the timer",
+            "play music",
+            # Multi-word stop phrases should NOT be misclassified as noise.
+            "never mind",
+            "thanks a lot for the help",
+        ],
+    )
+    def test_classifies_as_real(self, transcript):
+        assert looks_like_noise_initial_transcript(transcript) is False

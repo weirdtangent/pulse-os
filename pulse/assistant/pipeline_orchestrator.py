@@ -11,7 +11,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from pulse.assistant.conversation_manager import should_listen_for_follow_up
+from pulse.assistant.conversation_manager import (
+    looks_like_noise_initial_transcript,
+    should_listen_for_follow_up,
+)
 from pulse.assistant.response_modes import select_ha_response
 from pulse.assistant.wyoming import play_tts_stream, transcribe_audio
 from pulse.audio import play_sound, play_volume_feedback
@@ -173,6 +176,14 @@ class PipelineOrchestrator:
             if not transcript:
                 self._finalize_assist_run(status="no_transcript")
                 return
+            if looks_like_noise_initial_transcript(transcript):
+                self.logger.info(
+                    "[pipeline] Ignoring likely-noise transcript for wake word %s: %r",
+                    wake_word,
+                    transcript,
+                )
+                self._finalize_assist_run(status="no_transcript")
+                return
             if self.config.log_transcripts:
                 self.logger.info("[pipeline] Transcript [%s]: %s", wake_word, transcript)
             if self.preference_manager.log_llm_messages:
@@ -321,14 +332,21 @@ class PipelineOrchestrator:
                 self._finalize_assist_run(status="error")
                 return
             transcript = self._extract_ha_transcript(ha_result)
-            if transcript:
-                if self.config.log_transcripts:
-                    self.logger.info("[pipeline] Transcript [%s/HA]: %s", wake_word, transcript)
-                if self.preference_manager.log_llm_messages:
-                    self.publisher._publish_message(
-                        self.config.transcript_topic,
-                        json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
-                    )
+            if not transcript or looks_like_noise_initial_transcript(transcript):
+                self.logger.info(
+                    "[pipeline] Ignoring HA result with empty/noise transcript for wake word %s: %r",
+                    wake_word,
+                    transcript,
+                )
+                self._finalize_assist_run(status="no_transcript")
+                return
+            if self.config.log_transcripts:
+                self.logger.info("[pipeline] Transcript [%s/HA]: %s", wake_word, transcript)
+            if self.preference_manager.log_llm_messages:
+                self.publisher._publish_message(
+                    self.config.transcript_topic,
+                    json.dumps({"text": transcript, "wake_word": wake_word, "pipeline": "home_assistant"}),
+                )
             speech_text = self._extract_ha_speech(ha_result) or "Okay."
             if self.config.log_transcripts:
                 self.logger.info("[pipeline] Response [%s/HA]: %s", wake_word, speech_text)

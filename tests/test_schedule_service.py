@@ -663,6 +663,72 @@ async def test_dismiss_alarm_occurrence_clears_active_modal(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_dismiss_alarm_survives_reschedule_all(schedule_service):
+    """Dismissed occurrence must stay dismissed even when set_ooo_skip_dates triggers
+    a full reschedule (the calendar OOO sync runs periodically and was clobbering the
+    dismissal by recomputing next_fire from scratch)."""
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4, 5, 6])
+    original_fire = event.next_fire_dt()
+    await svc.dismiss_alarm_occurrence(event.event_id)
+    after_dismiss = svc._events[event.event_id].next_fire_dt()
+    assert after_dismiss > original_fire
+    # Simulate calendar OOO sync running between dismiss and the original fire time.
+    await svc.set_ooo_skip_dates(set())
+    after_reschedule = svc._events[event.event_id].next_fire_dt()
+    assert after_reschedule.date() == after_dismiss.date()
+    # Dismissed date is still tracked
+    assert original_fire.date().isoformat() in svc._dismissed_dates[event.event_id]
+
+
+@pytest.mark.anyio
+async def test_dismiss_alarm_survives_restart(tmp_path):
+    """Restarting the service must not clear a recorded dismissal."""
+    storage_path = tmp_path / "schedules.json"
+    svc = ScheduleService(
+        storage_path=storage_path,
+        hostname="pulse-test",
+        on_state_changed=None,
+        on_active_event=None,
+        ha_client=None,
+    )
+    await svc.start()
+    try:
+        event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4, 5, 6])
+        original_fire = event.next_fire_dt()
+        await svc.dismiss_alarm_occurrence(event.event_id)
+        after_dismiss = svc._events[event.event_id].next_fire_dt()
+    finally:
+        await svc.stop()
+
+    svc2 = ScheduleService(
+        storage_path=storage_path,
+        hostname="pulse-test",
+        on_state_changed=None,
+        on_active_event=None,
+        ha_client=None,
+    )
+    await svc2.start()
+    try:
+        reloaded = svc2._events[event.event_id]
+        # next_fire is recomputed on load, so verify it's still past the dismissed date.
+        assert reloaded.next_fire_dt().date() == after_dismiss.date()
+        assert original_fire.date().isoformat() in svc2._dismissed_dates[event.event_id]
+    finally:
+        await svc2.stop()
+
+
+@pytest.mark.anyio
+async def test_delete_alarm_clears_dismissed_dates(schedule_service):
+    svc = schedule_service
+    event = await svc.create_alarm(time_of_day="08:00", days=[0, 1, 2, 3, 4, 5, 6])
+    await svc.dismiss_alarm_occurrence(event.event_id)
+    assert event.event_id in svc._dismissed_dates
+    await svc.delete_event(event.event_id)
+    assert event.event_id not in svc._dismissed_dates
+
+
+@pytest.mark.anyio
 async def test_extend_timer(schedule_service):
     svc = schedule_service
     event = await svc.create_timer(duration_seconds=60, label="Extend me")

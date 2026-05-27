@@ -134,6 +134,79 @@ def evaluate_follow_up_transcript(
     return True, normalized
 
 
+# Transcripts that almost always indicate a false wake (silence or background noise) rather
+# than a real request. Whisper-class models commonly hallucinate these on near-silent audio.
+# We bail out silently when the initial transcript matches one of these so a spurious wake
+# doesn't trigger an "I'm here, how can I help?" style response.
+_NOISE_INITIAL_TRANSCRIPTS: frozenset[str] = frozenset(
+    {
+        # Single-token filler / STT artifacts
+        "you",
+        "ya",
+        "u",
+        "i",
+        "a",
+        "the",
+        "is",
+        "it",
+        "to",
+        "of",
+        "uh",
+        "um",
+        "umm",
+        "uhh",
+        "uhm",
+        "hmm",
+        "hm",
+        "huh",
+        "mm",
+        "mmm",
+        "mhm",
+        "ah",
+        "ahh",
+        "eh",
+        "oh",
+        "ooh",
+        "ow",
+        "yo",
+        # Whisper outro hallucinations
+        "thanks",
+        "thank you",
+        "thanks for watching",
+        "thank you for watching",
+        "thanks for watching the video",
+        "thank you for watching the video",
+        "see you next time",
+        "see you in the next video",
+        "subtitles by the amara org community",
+        "subtitles by",
+        "bye",
+        "goodbye",
+        "okay",
+        "ok",
+    }
+)
+
+
+def looks_like_noise_initial_transcript(transcript: str | None) -> bool:
+    """Return True if `transcript` looks like noise/silence rather than a real request.
+
+    Used to silently ignore false wakes when the post-wake STT produces empty output or
+    a known hallucination/filler token. Should only be applied to the very first transcript
+    of a turn — follow-ups have their own filter in `evaluate_follow_up_transcript`.
+    """
+    if not transcript:
+        return True
+    normalized = re.sub(r"[^a-z0-9'\s]", " ", transcript.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return True
+    cleaned = normalized.replace("'", "")
+    if cleaned in _NOISE_INITIAL_TRANSCRIPTS:
+        return True
+    return False
+
+
 def is_conversation_stop_command(transcript: str | None, conversation_stop_prefixes: tuple[str, ...]) -> bool:
     """Check if transcript is a conversation stop command."""
     normalized = normalize_conversation_stop_text(
