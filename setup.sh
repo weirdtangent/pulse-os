@@ -1568,12 +1568,18 @@ configure_watchdog() {
     sudo install -m 0644 "$REPO_DIR/config/system/watchdog/watchdog.conf" \
         /etc/watchdog.conf
     sudo mkdir -p /etc/systemd/system.conf.d
-    sudo install -m 0644 \
+    local runtime_wd_dropin=/etc/systemd/system.conf.d/disable-runtime-watchdog.conf
+    if ! sudo cmp -s \
         "$REPO_DIR/config/system/watchdog/disable-runtime-watchdog.conf" \
-        /etc/systemd/system.conf.d/disable-runtime-watchdog.conf
-    # Re-exec PID 1 so it releases /dev/watchdog (RuntimeWatchdogSec=0) before
-    # the daemon tries to claim it.
-    sudo systemctl daemon-reexec
+        "$runtime_wd_dropin"; then
+        sudo install -m 0644 \
+            "$REPO_DIR/config/system/watchdog/disable-runtime-watchdog.conf" \
+            "$runtime_wd_dropin"
+        # Re-exec PID 1 so it picks up RuntimeWatchdogSec=0 and releases
+        # /dev/watchdog for the daemon. Only when the drop-in actually changed,
+        # since daemon-reexec is disruptive on a routine setup.sh re-run.
+        sudo systemctl daemon-reexec
+    fi
     sudo systemctl enable --now watchdog
 
     # --- 2. Reactive dmesg watcher -----------------------------------------
