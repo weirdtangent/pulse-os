@@ -1565,13 +1565,25 @@ configure_watchdog() {
     # --- 1. Health-aware watchdog daemon -----------------------------------
     sudo install -m 0755 "$REPO_DIR/bin/pulse-net-check.sh" \
         /usr/local/sbin/pulse-net-check.sh
-    sudo install -m 0644 "$REPO_DIR/config/system/watchdog/watchdog.conf" \
-        /etc/watchdog.conf
+
+    # Only (re)install watchdog.conf when it changed, and track that so we can
+    # restart the daemon — `enable --now` starts a stopped service but will NOT
+    # restart an already-running one, so on a routine setup.sh re-run an updated
+    # config would otherwise not take effect until a reboot. (cmp stderr is
+    # silenced for the first-run case where the target doesn't exist yet.)
+    local watchdog_conf_changed=false
+    if ! sudo cmp -s "$REPO_DIR/config/system/watchdog/watchdog.conf" \
+        /etc/watchdog.conf 2>/dev/null; then
+        sudo install -m 0644 "$REPO_DIR/config/system/watchdog/watchdog.conf" \
+            /etc/watchdog.conf
+        watchdog_conf_changed=true
+    fi
+
     sudo mkdir -p /etc/systemd/system.conf.d
     local runtime_wd_dropin=/etc/systemd/system.conf.d/disable-runtime-watchdog.conf
     if ! sudo cmp -s \
         "$REPO_DIR/config/system/watchdog/disable-runtime-watchdog.conf" \
-        "$runtime_wd_dropin"; then
+        "$runtime_wd_dropin" 2>/dev/null; then
         sudo install -m 0644 \
             "$REPO_DIR/config/system/watchdog/disable-runtime-watchdog.conf" \
             "$runtime_wd_dropin"
@@ -1580,7 +1592,11 @@ configure_watchdog() {
         # since daemon-reexec is disruptive on a routine setup.sh re-run.
         sudo systemctl daemon-reexec
     fi
+
     sudo systemctl enable --now watchdog
+    if [ "$watchdog_conf_changed" = true ]; then
+        sudo systemctl restart watchdog
+    fi
 
     # --- 2. Reactive dmesg watcher -----------------------------------------
     sudo ln -sf "$REPO_DIR/config/system/pulse-hw-watchdog.service" \
