@@ -32,7 +32,8 @@ jobs:
       - name: Check if review should be skipped
         id: skip-check
         run: |
-          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+          if [ "${{ github.actor }}" = "dependabot[bot]" ] || \
+             [ "${{ github.event.pull_request.user.login }}" = "dependabot[bot]" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping Claude review for dependabot PR"
           elif [ "${{ github.event_name }}" = "pull_request" ] && \
@@ -55,7 +56,7 @@ jobs:
       - name: Generate GitHub App token
         if: steps.skip-check.outputs.skip != 'true'
         id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -157,7 +158,7 @@ jobs:
         id: review1
         if: steps.skip-check.outputs.skip != 'true' && steps.docs-check.outputs.docs_only != 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@80b31826338489861333dc17217865dfe8085cdc  # v1
+        uses: anthropics/claude-code-action@a92e7c70a4da9793dc164451d829089dc057a464  # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
@@ -203,7 +204,7 @@ jobs:
         id: review2
         if: steps.skip-check.outputs.skip != 'true' && steps.docs-check.outputs.docs_only != 'true' && steps.review_check.outputs.ok != 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@80b31826338489861333dc17217865dfe8085cdc  # v1
+        uses: anthropics/claude-code-action@a92e7c70a4da9793dc164451d829089dc057a464  # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
