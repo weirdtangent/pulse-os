@@ -258,6 +258,7 @@ uxplay
 v4l-utils
 vim-common
 vim-tiny
+watchdog
 whiptail
 wireless-tools
 wireplumber
