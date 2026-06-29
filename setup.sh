@@ -1550,6 +1550,39 @@ restart_pulse_services() {
     fi
 }
 
+configure_watchdog() {
+    # Two complementary hardware watchdogs guard against the device hanging in
+    # a state that requires a manual power-cycle:
+    #
+    #   1. watchdog(8) daemon — proactive. Pets /dev/watchdog only while a
+    #      gateway-reachability health check passes, so a SILENT network-wedge
+    #      hang (systemd alive, nothing logged) forces a hardware reset.
+    #   2. pulse-hw-watchdog.service — reactive. Watches dmesg for *logged*
+    #      fatal events (brcmfmac firmware crash, USB HC death, GPU hang) and
+    #      reboots immediately.
+    log "Configuring hardware watchdogs…"
+
+    # --- 1. Health-aware watchdog daemon -----------------------------------
+    sudo install -m 0755 "$REPO_DIR/bin/pulse-net-check.sh" \
+        /usr/local/sbin/pulse-net-check.sh
+    sudo install -m 0644 "$REPO_DIR/config/system/watchdog/watchdog.conf" \
+        /etc/watchdog.conf
+    sudo mkdir -p /etc/systemd/system.conf.d
+    sudo install -m 0644 \
+        "$REPO_DIR/config/system/watchdog/disable-runtime-watchdog.conf" \
+        /etc/systemd/system.conf.d/disable-runtime-watchdog.conf
+    # Re-exec PID 1 so it releases /dev/watchdog (RuntimeWatchdogSec=0) before
+    # the daemon tries to claim it.
+    sudo systemctl daemon-reexec
+    sudo systemctl enable --now watchdog
+
+    # --- 2. Reactive dmesg watcher -----------------------------------------
+    sudo ln -sf "$REPO_DIR/config/system/pulse-hw-watchdog.service" \
+        /etc/systemd/system/pulse-hw-watchdog.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now pulse-hw-watchdog.service
+}
+
 main() {
     # Publish MQTT overlay refresh at the very start to prompt HA to reload overlay
     # This ensures the browser is ready to show the popup when we update it
@@ -1608,6 +1641,7 @@ main() {
     generate_sound_files
     link_home_files
     link_system_files
+    configure_watchdog
     configure_snapclient
     install_boot_splash
     enable_services
