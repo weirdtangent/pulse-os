@@ -1565,19 +1565,27 @@ configure_wifi() {
     #      and is plenty for the workload, so we remove the roam trigger.
     #
     # Everything here is idempotent and deliberately NON-disruptive: config is
-    # updated and power-save is toggled at runtime, but wlan0 is never bounced
-    # (re-associating is exactly what triggers the wedge). The band pin takes
-    # effect on the next reboot. Safe to re-run on every app upgrade.
+    # updated and power-save is toggled at runtime, but the Wi-Fi interface is
+    # never bounced (re-associating is exactly what triggers the wedge). The band
+    # pin takes effect on the next reboot. Safe to re-run on every app upgrade.
 
     # --- 1. Disable Wi-Fi power-save (NetworkManager global drop-in) --------
+    # The drop-in is the durable, interface-agnostic mechanism (NM applies it to
+    # every Wi-Fi connection); the runtime `iw` toggle below just makes it take
+    # effect now without a reconnect.
     sudo mkdir -p /etc/NetworkManager/conf.d
     sudo install -m 0644 \
         "$REPO_DIR/config/system/NetworkManager/wifi-powersave-off.conf" \
         /etc/NetworkManager/conf.d/wifi-powersave-off.conf
-    # Reload NM config so the new default is picked up, and turn power-save off
-    # on the live interface now without re-associating. Both best-effort.
     sudo nmcli general reload conf 2>/dev/null || true
-    sudo iw dev wlan0 set power_save off 2>/dev/null || true
+    # Turn power-save off on the live Wi-Fi interface now (best-effort). Derive
+    # the interface name rather than assuming wlan0, in case predictable names
+    # (wlp*) are in use.
+    local wif
+    wif=$(iw dev 2>/dev/null | awk '/Interface/{print $2; exit}' || true)
+    if [ -n "$wif" ]; then
+        sudo iw dev "$wif" set power_save off 2>/dev/null || true
+    fi
 
     # --- 2. Pin Wi-Fi to the 2.4 GHz band (band=bg) ------------------------
     command -v nmcli >/dev/null 2>&1 || {
