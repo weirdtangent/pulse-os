@@ -1550,13 +1550,60 @@ restart_pulse_services() {
     fi
 }
 
+configure_wifi_band() {
+    # Pin Wi-Fi to the 2.4 GHz band (NetworkManager `band=bg`).
+    #
+    # The Pi's brcmfmac SDIO stack intermittently wedges the whole network — and
+    # sometimes the entire board — when it roams onto a 5 GHz BSSID. Observed
+    # twice on pulse-kitchen (2026-06-28 and 2026-06-30): a 5 GHz roam, then a
+    # silent hang needing a manual power-cycle. 2.4 GHz on these boards is far
+    # more stable and is plenty for the device's workload, so we lock the radio
+    # to it and remove the roam trigger entirely.
+    #
+    # Idempotent and deliberately NON-disruptive: we only update the stored
+    # connection profile and never bounce wlan0 here — re-associating is exactly
+    # what triggers the wedge, so the change is left to take effect on the next
+    # reboot.
+    command -v nmcli >/dev/null 2>&1 || {
+        log "nmcli not found; skipping Wi-Fi band pin."
+        return 0
+    }
+
+    # Best-effort throughout: NetworkManager may not be up yet (or D-Bus may be
+    # transiently busy) during provisioning, and band pinning must never abort
+    # the whole setup run under `set -euo pipefail` — so every nmcli call is
+    # non-fatal and we just skip/retry on the next run.
+
+    # First Wi-Fi connection profile (these devices have exactly one).
+    local con
+    con=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+        | awk -F: '$2=="802-11-wireless" || $2=="wifi" {print $1; exit}' || true)
+    if [ -z "$con" ]; then
+        log "No Wi-Fi connection profile found (NM down?); skipping band pin."
+        return 0
+    fi
+
+    local current
+    current=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
+    if [ "$current" = "bg" ]; then
+        log "Wi-Fi band already pinned to 2.4 GHz on '$con'."
+        return 0
+    fi
+
+    log "Pinning Wi-Fi to 2.4 GHz (band=bg) on '$con' — applies on next reboot."
+    sudo nmcli connection modify "$con" 802-11-wireless.band bg \
+        || log "Warning: failed to pin Wi-Fi band; will retry on next setup run."
+}
+
 configure_watchdog() {
     # Two complementary hardware watchdogs guard against the device hanging in
     # a state that requires a manual power-cycle:
     #
-    #   1. watchdog(8) daemon — proactive. Pets /dev/watchdog only while a
-    #      gateway-reachability health check passes, so a SILENT network-wedge
-    #      hang (systemd alive, nothing logged) forces a hardware reset.
+    #   1. watchdog(8) daemon — proactive. Pets /dev/watchdog only while an
+    #      upstream-reachability health check passes (a real TCP round-trip, not
+    #      just a gateway ping the wedged firmware can still answer), so a SILENT
+    #      network-wedge hang (systemd alive, nothing logged) forces a hardware
+    #      reset.
     #   2. pulse-hw-watchdog.service — reactive. Watches dmesg for *logged*
     #      fatal events (brcmfmac firmware crash, USB HC death, GPU hang) and
     #      reboots immediately.
@@ -1663,6 +1710,7 @@ main() {
     generate_sound_files
     link_home_files
     link_system_files
+    configure_wifi_band
     configure_watchdog
     configure_snapclient
     install_boot_splash
