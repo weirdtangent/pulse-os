@@ -229,5 +229,22 @@ When the guard declines a reboot, you'll see `pulse-safe-reboot` entries in sysl
 
 If you prefer not to schedule a reboot at 03:00 every day, leave `PULSE_DAILY_REBOOT_ENABLED="false"` (the default) or set it explicitly to `false` and rerun `./setup.sh` to disable the timer.
 
-Send PRs with any other gotchas so future builders don't have to rediscover them.
+## Wi-Fi keeps dropping, or the device wedges until a power-cycle
 
+**Problem**: The device periodically loses Wi-Fi, becomes intermittently unreachable over SSH, or goes completely dark (no logs, no network) and only comes back after pulling power. Logs may show `wpa_supplicant` `DISCONNECTED`/`ASSOC-REJECT` churn, or simply stop entirely with no error.
+
+**Cause**: The Pi's onboard `brcmfmac` Wi-Fi has two failure modes here:
+
+1. **Power-save flapping** — the radio sleeps between beacons, causing association churn and making the device intermittently unreachable.
+2. **5 GHz roam wedge** — the SDIO firmware can wedge the whole network stack (and occasionally hang the board) when it roams onto a 5 GHz BSSID. The hang is *silent* — systemd stays alive but networking is dead, so nothing is logged.
+
+**Solution**: `setup.sh` (`configure_wifi`) applies two generic mitigations automatically on every run:
+
+1. Installs `/etc/NetworkManager/conf.d/wifi-powersave-off.conf` (`wifi.powersave = 2`) to disable power-save.
+2. Pins the connection to 2.4 GHz (`band=bg`), which is far more stable on these boards and removes the roam trigger.
+
+Both are non-disruptive (they never bounce `wlan0`); the band pin takes effect on the next reboot. Verify with `iw dev wlan0 get power_save` (should read `off`) and `iw dev wlan0 link` (frequency should be 2.4 GHz, i.e. 2412–2472 MHz).
+
+As a backstop, the `watchdog(8)` daemon (see `configure_watchdog`) runs `pulse-net-check.sh`, which does a real TCP round-trip to an upstream host — not just a gateway ping the wedged firmware can still answer — so a silent wedge forces a hardware reset within a few minutes instead of waiting for a manual power-cycle.
+
+Send PRs with any other gotchas so future builders don't have to rediscover them.

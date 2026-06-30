@@ -1550,20 +1550,36 @@ restart_pulse_services() {
     fi
 }
 
-configure_wifi_band() {
-    # Pin Wi-Fi to the 2.4 GHz band (NetworkManager `band=bg`).
+configure_wifi() {
+    # Wi-Fi reliability hardening for the Pi's brcmfmac SDIO stack, which can
+    # wedge the whole network — and sometimes the entire board — until a manual
+    # power-cycle. Two independent, generic measures:
     #
-    # The Pi's brcmfmac SDIO stack intermittently wedges the whole network — and
-    # sometimes the entire board — when it roams onto a 5 GHz BSSID. Observed
-    # twice on pulse-kitchen (2026-06-28 and 2026-06-30): a 5 GHz roam, then a
-    # silent hang needing a manual power-cycle. 2.4 GHz on these boards is far
-    # more stable and is plenty for the device's workload, so we lock the radio
-    # to it and remove the roam trigger entirely.
+    #   1. Disable Wi-Fi power-save — brcmfmac power-save causes association
+    #      flapping and leaves the device intermittently unreachable (the radio
+    #      sleeps between beacons).
+    #   2. Pin the radio to 2.4 GHz (band=bg) — the silent wedge is
+    #      overwhelmingly triggered by roaming onto a 5 GHz BSSID. Observed twice
+    #      on pulse-kitchen (2026-06-28 and 2026-06-30): a 5 GHz roam, then a
+    #      hang needing a power-cycle. 2.4 GHz on these boards is far more stable
+    #      and is plenty for the workload, so we remove the roam trigger.
     #
-    # Idempotent and deliberately NON-disruptive: we only update the stored
-    # connection profile and never bounce wlan0 here — re-associating is exactly
-    # what triggers the wedge, so the change is left to take effect on the next
-    # reboot.
+    # Everything here is idempotent and deliberately NON-disruptive: config is
+    # updated and power-save is toggled at runtime, but wlan0 is never bounced
+    # (re-associating is exactly what triggers the wedge). The band pin takes
+    # effect on the next reboot. Safe to re-run on every app upgrade.
+
+    # --- 1. Disable Wi-Fi power-save (NetworkManager global drop-in) --------
+    sudo mkdir -p /etc/NetworkManager/conf.d
+    sudo install -m 0644 \
+        "$REPO_DIR/config/system/NetworkManager/wifi-powersave-off.conf" \
+        /etc/NetworkManager/conf.d/wifi-powersave-off.conf
+    # Reload NM config so the new default is picked up, and turn power-save off
+    # on the live interface now without re-associating. Both best-effort.
+    sudo nmcli general reload conf 2>/dev/null || true
+    sudo iw dev wlan0 set power_save off 2>/dev/null || true
+
+    # --- 2. Pin Wi-Fi to the 2.4 GHz band (band=bg) ------------------------
     command -v nmcli >/dev/null 2>&1 || {
         log "nmcli not found; skipping Wi-Fi band pin."
         return 0
@@ -1710,7 +1726,7 @@ main() {
     generate_sound_files
     link_home_files
     link_system_files
-    configure_wifi_band
+    configure_wifi
     configure_watchdog
     configure_snapclient
     install_boot_splash
