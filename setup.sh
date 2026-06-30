@@ -1569,24 +1569,30 @@ configure_wifi_band() {
         return 0
     }
 
+    # Best-effort throughout: NetworkManager may not be up yet (or D-Bus may be
+    # transiently busy) during provisioning, and band pinning must never abort
+    # the whole setup run under `set -euo pipefail` — so every nmcli call is
+    # non-fatal and we just skip/retry on the next run.
+
     # First Wi-Fi connection profile (these devices have exactly one).
     local con
     con=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
-        | awk -F: '$2=="802-11-wireless" || $2=="wifi" {print $1; exit}')
+        | awk -F: '$2=="802-11-wireless" || $2=="wifi" {print $1; exit}' || true)
     if [ -z "$con" ]; then
-        log "No Wi-Fi connection profile found; skipping band pin."
+        log "No Wi-Fi connection profile found (NM down?); skipping band pin."
         return 0
     fi
 
     local current
-    current=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null)
+    current=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
     if [ "$current" = "bg" ]; then
         log "Wi-Fi band already pinned to 2.4 GHz on '$con'."
         return 0
     fi
 
     log "Pinning Wi-Fi to 2.4 GHz (band=bg) on '$con' — applies on next reboot."
-    sudo nmcli connection modify "$con" 802-11-wireless.band bg
+    sudo nmcli connection modify "$con" 802-11-wireless.band bg \
+        || log "Warning: failed to pin Wi-Fi band; will retry on next setup run."
 }
 
 configure_watchdog() {
