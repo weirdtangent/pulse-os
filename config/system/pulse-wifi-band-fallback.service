@@ -7,6 +7,11 @@ ConditionPathExists=/opt/pulse-os/bin/pulse-wifi-band-fallback.sh
 
 [Service]
 Type=oneshot
+# The script polls upstream for up to ~150s before reverting the pin. That
+# exceeds systemd's default TimeoutStartSec (90s), which would kill the oneshot
+# mid-poll and leave the 5 GHz pin in place — defeating the safety net. Give it
+# ample margin over the poll loop plus net-check/reboot overhead.
+TimeoutStartSec=300
 ExecStart=/opt/pulse-os/bin/pulse-wifi-band-fallback.sh
 
 [Install]

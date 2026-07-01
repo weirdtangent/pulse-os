@@ -1638,8 +1638,13 @@ configure_wifi() {
     cur_band=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
     cur_bssid=$(nmcli -g 802-11-wireless.bssid connection show "$con" 2>/dev/null || echo "")
     cur_bssid=${cur_bssid//\\/}   # nmcli may escape the ':' separators
+    # "Already correct" means band matches AND the BSSID pin matches the policy:
+    # for band=a the BSSID must equal the wanted one; for band=bg it must be
+    # empty — otherwise a stale BSSID left over from a previous 5 GHz pin would
+    # keep the device BSSID-locked and unable to roam/fall back.
     if [ "$cur_band" = "$want_band" ] \
-        && { [ "$want_band" != "a" ] || [ "${cur_bssid^^}" = "${want_bssid^^}" ]; }; then
+        && { { [ "$want_band" = "a" ] && [ "${cur_bssid^^}" = "${want_bssid^^}" ]; } \
+             || { [ "$want_band" != "a" ] && [ -z "$cur_bssid" ]; }; }; then
         log "Wi-Fi band already '$want_band'${want_bssid:+ pinned to $want_bssid} on '$con'."
     elif [ "$want_band" = "a" ]; then
         log "Pinning Wi-Fi to 5 GHz BSSID $want_bssid on '$con' — applies on next reboot."
