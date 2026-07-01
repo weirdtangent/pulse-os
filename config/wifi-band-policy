@@ -1,0 +1,30 @@
+# Per-device Wi-Fi band policy, consumed by configure_wifi() in setup.sh.
+#
+# Background: the Pi's brcmfmac SDIO Wi-Fi stack can wedge the board when it
+# ROAMS onto a 5 GHz BSSID (see configure_wifi). The blanket mitigation is to
+# pin devices to 2.4 GHz. But 2.4 GHz is half-duplex and congested, so a live
+# camera stream (go2rtc) buffers badly on the kiosks that display one. For those
+# devices we instead pin a SINGLE strong 5 GHz BSSID: locking the BSSID removes
+# the roam trigger (a stationary kiosk never needs to roam) while restoring the
+# ~6x throughput and low jitter the stream needs.
+#
+# Format — one device per line:
+#   <location>   <band>   [bssid]
+#     location : the value from /etc/pulse-location (hostname is pulse-<location>)
+#     band     : "a" (5 GHz, BSSID pin REQUIRED) or "bg" (2.4 GHz)
+#     bssid    : AP MAC to lock to; mandatory when band=a, ignored for bg
+#
+# Anything not listed here defaults to "bg" (2.4 GHz) — the wedge-safe baseline.
+# Comments (#) and blank lines are ignored; whitespace-separated fields.
+#
+# NOTE: band=a entries hardcode a physical AP's BSSID. Pick a NON-DFS channel on
+# that AP (UNII-1 36-48 / UNII-3 149-165) — a DFS channel's periodic CAC / radar
+# vacate makes a BSSID-locked client drop with no fallback, and cold-boot
+# association to a DFS "No-IR" channel is unreliable. If you swap/replace that
+# AP, update the BSSID here; otherwise the boot-time fallback (see
+# pulse-wifi-band-fallback.service) reverts the device to 2.4 GHz so it stays
+# online (streaming will just buffer until this is corrected).
+
+office        a    9A:2A:6F:BE:EB:D6   # camera kiosk — AP on ch149 (non-DFS)
+great-room    a    9A:2A:6F:A2:57:22   # camera kiosk — AP on ch36  (non-DFS)
+# kitchen / bedroom: unlisted -> 2.4 GHz (kitchen is the wedge-prone unit)

@@ -1,0 +1,13 @@
+[Unit]
+Description=Pulse Wi-Fi band fallback (revert an unreachable 5 GHz pin to 2.4 GHz at boot)
+After=NetworkManager.service network.target
+Wants=NetworkManager.service
+# Only meaningful on boot; the script no-ops unless the device is 5 GHz-pinned.
+ConditionPathExists=/opt/pulse-os/bin/pulse-wifi-band-fallback.sh
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pulse-os/bin/pulse-wifi-band-fallback.sh
+
+[Install]
+WantedBy=multi-user.target
