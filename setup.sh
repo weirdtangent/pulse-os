@@ -1558,11 +1558,15 @@ configure_wifi() {
     #   1. Disable Wi-Fi power-save — brcmfmac power-save causes association
     #      flapping and leaves the device intermittently unreachable (the radio
     #      sleeps between beacons).
-    #   2. Pin the radio to 2.4 GHz (band=bg) — the silent wedge is
-    #      overwhelmingly triggered by roaming onto a 5 GHz BSSID. Observed twice
-    #      on pulse-kitchen (2026-06-28 and 2026-06-30): a 5 GHz roam, then a
-    #      hang needing a power-cycle. 2.4 GHz on these boards is far more stable
-    #      and is plenty for the workload, so we remove the roam trigger.
+    #   2. Pin the Wi-Fi band per config/wifi-band-policy — the silent wedge is
+    #      overwhelmingly triggered by roaming onto a 5 GHz BSSID (observed on
+    #      pulse-kitchen 2026-06-28 and -06-30: a 5 GHz roam, then a hang needing
+    #      a power-cycle). Default is 2.4 GHz (band=bg); camera-kiosk devices
+    #      instead LOCK a single strong 5 GHz BSSID, which removes the roam
+    #      trigger (a stationary kiosk never needs to roam) while giving the
+    #      go2rtc stream the ~6x bandwidth and low jitter it needs. A boot-time
+    #      guard (pulse-wifi-band-fallback.service) reverts a device to 2.4 GHz
+    #      if its pinned BSSID is ever unreachable, so it can't strand.
     #
     # Everything here is idempotent and deliberately NON-disruptive: config is
     # updated and power-save is toggled at runtime, but the Wi-Fi interface is
@@ -1587,11 +1591,34 @@ configure_wifi() {
         sudo iw dev "$wif" set power_save off 2>/dev/null || true
     fi
 
-    # --- 2. Pin Wi-Fi to the 2.4 GHz band (band=bg) ------------------------
+    # --- 2. Pin the Wi-Fi band per the device policy -----------------------
     command -v nmcli >/dev/null 2>&1 || {
         log "nmcli not found; skipping Wi-Fi band pin."
         return 0
     }
+
+    # Resolve this device's desired band/bssid from config/wifi-band-policy.
+    # Default is bg (2.4 GHz); a "band a" entry must carry a BSSID to lock.
+    local location="${1:-}"
+    [ -n "$location" ] || location=$(cat "$LOCATION_FILE" 2>/dev/null || true)
+    local want_band="bg" want_bssid="" pline=""
+    if [ -n "$location" ] && [ -r "$REPO_DIR/config/wifi-band-policy" ]; then
+        pline=$(awk -v loc="$location" \
+            '$1 !~ /^#/ && $1==loc {print $2, $3; exit}' \
+            "$REPO_DIR/config/wifi-band-policy" 2>/dev/null || true)
+        if [ -n "$pline" ]; then
+            want_band=${pline%% *}
+            want_bssid=${pline#* }
+            { [ "$want_bssid" = "$pline" ] || [ "${want_bssid:0:1}" = "#" ]; } \
+                && want_bssid=""
+        fi
+    fi
+    if [ "$want_band" = "a" ] && [ -z "$want_bssid" ]; then
+        # Never enable roaming 5 GHz (band=a with no BSSID) — that is the wedge
+        # trigger this whole function exists to avoid.
+        log "Policy for '$location' requests 5 GHz without a BSSID; staying on 2.4 GHz."
+        want_band="bg"
+    fi
 
     # Best-effort throughout: NetworkManager may not be up yet (or D-Bus may be
     # transiently busy) during provisioning, and band pinning must never abort
@@ -1607,16 +1634,41 @@ configure_wifi() {
         return 0
     fi
 
-    local current
-    current=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
-    if [ "$current" = "bg" ]; then
-        log "Wi-Fi band already pinned to 2.4 GHz on '$con'."
-        return 0
+    local cur_band cur_bssid
+    cur_band=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
+    cur_bssid=$(nmcli -g 802-11-wireless.bssid connection show "$con" 2>/dev/null || echo "")
+    cur_bssid=${cur_bssid//\\/}   # nmcli may escape the ':' separators
+    # "Already correct" means band matches AND the BSSID pin matches the policy:
+    # for band=a the BSSID must equal the wanted one; for band=bg it must be
+    # empty — otherwise a stale BSSID left over from a previous 5 GHz pin would
+    # keep the device BSSID-locked and unable to roam/fall back.
+    if [ "$cur_band" = "$want_band" ] \
+        && { { [ "$want_band" = "a" ] && [ "${cur_bssid^^}" = "${want_bssid^^}" ]; } \
+             || { [ "$want_band" != "a" ] && [ -z "$cur_bssid" ]; }; }; then
+        log "Wi-Fi band already '$want_band'${want_bssid:+ pinned to $want_bssid} on '$con'."
+    elif [ "$want_band" = "a" ]; then
+        log "Pinning Wi-Fi to 5 GHz BSSID $want_bssid on '$con' — applies on next reboot."
+        sudo nmcli connection modify "$con" \
+            802-11-wireless.band a 802-11-wireless.bssid "$want_bssid" \
+            || log "Warning: failed to pin 5 GHz BSSID; will retry on next setup run."
+    else
+        log "Pinning Wi-Fi to 2.4 GHz (band=bg) on '$con' — applies on next reboot."
+        sudo nmcli connection modify "$con" \
+            802-11-wireless.band bg 802-11-wireless.bssid "" \
+            || log "Warning: failed to pin Wi-Fi band; will retry on next setup run."
     fi
 
-    log "Pinning Wi-Fi to 2.4 GHz (band=bg) on '$con' — applies on next reboot."
-    sudo nmcli connection modify "$con" 802-11-wireless.band bg \
-        || log "Warning: failed to pin Wi-Fi band; will retry on next setup run."
+    # --- 3. Boot-time fallback for 5 GHz-pinned devices --------------------
+    # Guard that reverts an unreachable 5 GHz pin to 2.4 GHz at boot so a
+    # pinned-AP outage can never strand a kiosk. `enable` (not --now): it must
+    # run at boot, not during setup (the band change only takes effect on
+    # reboot). Also retire the ad-hoc self-heal drop-in from manual rollouts.
+    sudo rm -f /etc/cron.d/pulse-wifi-selfheal /usr/local/sbin/pulse-wifi-selfheal.sh
+    sudo ln -sf "$REPO_DIR/config/system/pulse-wifi-band-fallback.service" \
+        /etc/systemd/system/pulse-wifi-band-fallback.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable pulse-wifi-band-fallback.service 2>/dev/null \
+        || log "Warning: could not enable pulse-wifi-band-fallback.service."
 }
 
 configure_watchdog() {
@@ -1734,7 +1786,7 @@ main() {
     generate_sound_files
     link_home_files
     link_system_files
-    configure_wifi
+    configure_wifi "$location"
     configure_watchdog
     configure_snapclient
     install_boot_splash

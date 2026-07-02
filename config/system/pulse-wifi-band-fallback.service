@@ -1,0 +1,18 @@
+[Unit]
+Description=Pulse Wi-Fi band fallback (revert an unreachable 5 GHz pin to 2.4 GHz at boot)
+After=NetworkManager.service network.target
+Wants=NetworkManager.service
+# Only meaningful on boot; the script no-ops unless the device is 5 GHz-pinned.
+ConditionPathExists=/opt/pulse-os/bin/pulse-wifi-band-fallback.sh
+
+[Service]
+Type=oneshot
+# The script polls upstream for up to ~150s before reverting the pin. That
+# exceeds systemd's default TimeoutStartSec (90s), which would kill the oneshot
+# mid-poll and leave the 5 GHz pin in place — defeating the safety net. Give it
+# ample margin over the poll loop plus net-check/reboot overhead.
+TimeoutStartSec=300
+ExecStart=/opt/pulse-os/bin/pulse-wifi-band-fallback.sh
+
+[Install]
+WantedBy=multi-user.target
