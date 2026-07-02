@@ -38,5 +38,18 @@ done
 logger -t pulse-wifi-band-fallback \
     "5 GHz pin on '$con' unreachable after boot; reverting to band=bg and rebooting"
 nmcli connection modify "$con" 802-11-wireless.band bg 802-11-wireless.bssid "" \
-    || logger -t pulse-wifi-band-fallback "Warning: failed to revert band; rebooting anyway"
-systemctl reboot
+    || logger -t pulse-wifi-band-fallback "Warning: nmcli revert reported failure."
+
+# Only reboot if the revert actually took. If the band is still 'a' (nmcli
+# failed, D-Bus wedged, etc.), rebooting would re-enter this exact path on the
+# next boot — band=a, unreachable, revert fails, reboot — an endless reboot
+# loop. In that case leave the device up (stranded but stable) and let the next
+# setup.sh run re-attempt the revert.
+new_band=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
+if [ "$new_band" = "bg" ]; then
+    systemctl reboot
+else
+    logger -t pulse-wifi-band-fallback \
+        "Band still '$new_band' after revert attempt; NOT rebooting to avoid a reboot loop — setup.sh will retry."
+    exit 1
+fi
