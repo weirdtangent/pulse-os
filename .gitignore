@@ -47,3 +47,6 @@ pulse-devices.conf
 htmlcov/
 .pytest_cache/
 
+
+# Machine-local Wi-Fi band policy (contains AP BSSIDs — never commit)
+config/wifi-band-policy

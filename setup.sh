@@ -1597,7 +1597,9 @@ configure_wifi() {
         return 0
     }
 
-    # Resolve this device's desired band/bssid from config/wifi-band-policy.
+    # Resolve this device's desired band/bssid from config/wifi-band-policy —
+    # a machine-local, untracked file (see config/wifi-band-policy.sample; it
+    # holds AP BSSIDs, which are geolocatable and must never be committed).
     # Default is bg (2.4 GHz); a "band a" entry must carry a BSSID to lock.
     local location="${1:-}"
     [ -n "$location" ] || location=$(cat "$LOCATION_FILE" 2>/dev/null || true)
