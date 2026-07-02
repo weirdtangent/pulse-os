@@ -1,0 +1,52 @@
+# Per-device Wi-Fi band policy, consumed by configure_wifi() in setup.sh.
+#
+# THIS IS A SAMPLE. The real policy file is machine-local and untracked:
+#
+#   cp config/wifi-band-policy.sample config/wifi-band-policy
+#
+# then fill in your own locations and AP BSSIDs. The real file is gitignored
+# on purpose — BSSIDs are geolocatable identifiers (public war-driving
+# databases map AP MACs to street addresses), so they must never be
+# committed. If no policy file is present, every device defaults to 2.4 GHz
+# (band=bg), the wedge-safe baseline.
+#
+# Why pin a band at all: the Pi's brcmfmac SDIO Wi-Fi stack can wedge the
+# board when it ROAMS onto a 5 GHz BSSID (see configure_wifi). The blanket
+# mitigation is to pin devices to 2.4 GHz. Two reasons to instead pin a
+# device to a SINGLE strong 5 GHz BSSID (locking the BSSID removes the roam
+# trigger — a stationary device never needs to roam):
+#
+#   1. Camera kiosks: 2.4 GHz is half-duplex and congested, so a live camera
+#      stream (go2rtc) buffers badly there. 5 GHz restores the ~6x throughput
+#      and low jitter the stream needs.
+#   2. Bluetooth coexistence: bt-autoconnect polls the paired speaker every
+#      15s (by design, for instant reconnect when it powers on). While the
+#      speaker is off, each poll is a ~5s Bluetooth page on the antenna
+#      SHARED with 2.4 GHz Wi-Fi — long enough to starve latency-sensitive
+#      clients (e.g. snapcast's time-sync). 5 GHz doesn't contend with BT,
+#      so the polling is harmless there. BSSID-locking also disables
+#      wpa_supplicant's periodic full-band roam scans (~4-5s off-channel),
+#      the other source of multi-second 2.4 GHz stalls.
+#
+# Format — one device per line:
+#   <location>   <band>   [bssid]
+#     location : the value from /etc/pulse-location (hostname is pulse-<location>)
+#     band     : "a" (5 GHz, BSSID pin REQUIRED) or "bg" (2.4 GHz)
+#     bssid    : AP MAC to lock to; mandatory when band=a, ignored for bg
+#
+# Anything not listed here defaults to "bg" (2.4 GHz).
+# Comments (#) and blank lines are ignored; whitespace-separated fields.
+#
+# NOTE: band=a entries hardcode a physical AP's BSSID. Pick a NON-DFS channel
+# on that AP (UNII-1 36-48 / UNII-3 149-165) — a DFS channel's periodic CAC /
+# radar vacate makes a BSSID-locked client drop with no fallback, and
+# cold-boot association to a DFS "No-IR" channel is unreliable. If you swap
+# or replace that AP, update the BSSID here; otherwise the boot-time fallback
+# (pulse-wifi-band-fallback.service) reverts the device to 2.4 GHz so it
+# stays online.
+#
+# Example entries (replace with your own):
+#
+# living-room   a    XX:XX:XX:XX:XX:XX   # camera kiosk on a non-DFS 5 GHz channel
+# den           a    XX:XX:XX:XX:XX:XX   # BT speaker polling was starving 2.4 GHz
+# porch         bg                       # explicit 2.4 GHz (same as unlisted)
