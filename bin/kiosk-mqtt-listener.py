@@ -2162,6 +2162,13 @@ class KioskMqttListener:
                     "--exclude=pulse.conf.*",
                     "--exclude=pulse-devices.conf",
                     "--exclude=pulse-mcp.conf",
+                    # Machine-local files must be excluded here even when
+                    # .gitignore covers them: this clean runs BEFORE git pull,
+                    # so it consults the OLD checkout's .gitignore — an update
+                    # crossing the commit that gitignored a file would delete
+                    # it (this wiped every device's Wi-Fi band policy once,
+                    # knocking the fleet back to unpinned 2.4 GHz).
+                    "--exclude=config/wifi-band-policy",
                 ],
                 repo_dir,
             ),
