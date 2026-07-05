@@ -1601,6 +1601,10 @@ configure_wifi() {
     # a machine-local, untracked file (see config/wifi-band-policy.sample; it
     # holds AP BSSIDs, which are geolocatable and must never be committed).
     # Default is bg (2.4 GHz); a "band a" entry must carry a BSSID to lock.
+    # A "band bg" entry MAY carry a BSSID: locking 2.4 GHz to one AP disables
+    # wpa_supplicant's periodic full-spectrum roam scans (~5 s off-channel),
+    # which stall the datapath and starve snapclient on devices that hear
+    # several APs at similar strength.
     local location="${1:-}"
     [ -n "$location" ] || location=$(cat "$LOCATION_FILE" 2>/dev/null || true)
     local want_band="bg" want_bssid="" pline=""
@@ -1640,24 +1644,19 @@ configure_wifi() {
     cur_band=$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || echo "")
     cur_bssid=$(nmcli -g 802-11-wireless.bssid connection show "$con" 2>/dev/null || echo "")
     cur_bssid=${cur_bssid//\\/}   # nmcli may escape the ':' separators
-    # "Already correct" means band matches AND the BSSID pin matches the policy:
-    # for band=a the BSSID must equal the wanted one; for band=bg it must be
-    # empty — otherwise a stale BSSID left over from a previous 5 GHz pin would
-    # keep the device BSSID-locked and unable to roam/fall back.
-    if [ "$cur_band" = "$want_band" ] \
-        && { { [ "$want_band" = "a" ] && [ "${cur_bssid^^}" = "${want_bssid^^}" ]; } \
-             || { [ "$want_band" != "a" ] && [ -z "$cur_bssid" ]; }; }; then
+    # "Already correct" means band matches AND the BSSID pin matches the
+    # policy exactly (empty matches empty) — otherwise a stale BSSID left over
+    # from a previous pin would keep the device locked to an AP the policy no
+    # longer names, unable to roam/fall back.
+    if [ "$cur_band" = "$want_band" ] && [ "${cur_bssid^^}" = "${want_bssid^^}" ]; then
         log "Wi-Fi band already '$want_band'${want_bssid:+ pinned to $want_bssid} on '$con'."
-    elif [ "$want_band" = "a" ]; then
-        log "Pinning Wi-Fi to 5 GHz BSSID $want_bssid on '$con' — applies on next reboot."
-        sudo nmcli connection modify "$con" \
-            802-11-wireless.band a 802-11-wireless.bssid "$want_bssid" \
-            || log "Warning: failed to pin 5 GHz BSSID; will retry on next setup run."
     else
-        log "Pinning Wi-Fi to 2.4 GHz (band=bg) on '$con' — applies on next reboot."
+        local band_desc="2.4 GHz (band=bg)"
+        [ "$want_band" = "a" ] && band_desc="5 GHz"
+        log "Pinning Wi-Fi to $band_desc${want_bssid:+ BSSID $want_bssid} on '$con' — applies on next reboot."
         sudo nmcli connection modify "$con" \
-            802-11-wireless.band bg 802-11-wireless.bssid "" \
-            || log "Warning: failed to pin Wi-Fi band; will retry on next setup run."
+            802-11-wireless.band "$want_band" 802-11-wireless.bssid "$want_bssid" \
+            || log "Warning: failed to pin Wi-Fi band/BSSID; will retry on next setup run."
     fi
 
     # --- 3. Boot-time fallback for 5 GHz-pinned devices --------------------
