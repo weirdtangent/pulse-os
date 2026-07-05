@@ -243,7 +243,7 @@ If you prefer not to schedule a reboot at 03:00 every day, leave `PULSE_DAILY_RE
 1. Installs `/etc/NetworkManager/conf.d/wifi-powersave-off.conf` (`wifi.powersave = 2`) to disable power-save.
 2. Pins the connection to 2.4 GHz (`band=bg`), which is far more stable on these boards and removes the roam trigger.
 
-Both are non-disruptive (they never bounce the Wi-Fi interface); the band pin takes effect on the next reboot. Verify with `iw dev wlan0 get power_save` (should read `off`) and `iw dev wlan0 link` (frequency should be 2.4 GHz, i.e. 2412–2472 MHz). On Raspberry Pi OS the interface is `wlan0`; if predictable names are enabled, substitute your interface (find it with `iw dev`).
+Both are non-disruptive (they never bounce the Wi-Fi interface); the band pin takes effect on the next reboot. If a 2.4 GHz device still sees periodic multi-second stalls (snapcast time-sync timeouts every 60-90s with no disconnect), the cause is usually wpa_supplicant's full-spectrum roam scans — pin the device to its strongest AP with a `bg <bssid>` entry in `config/wifi-band-policy` (see the sample file), which disables roam scanning entirely. Verify with `iw dev wlan0 get power_save` (should read `off`) and `iw dev wlan0 link` (frequency should be 2.4 GHz, i.e. 2412–2472 MHz). On Raspberry Pi OS the interface is `wlan0`; if predictable names are enabled, substitute your interface (find it with `iw dev`).
 
 As a backstop, the `watchdog(8)` daemon (see `configure_watchdog`) runs `pulse-net-check.sh`, which does a real TCP round-trip to an upstream host — not just a gateway ping the wedged firmware can still answer — so a silent wedge forces a hardware reset within a few minutes instead of waiting for a manual power-cycle.
 

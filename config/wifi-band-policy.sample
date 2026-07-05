@@ -32,7 +32,10 @@
 #   <location>   <band>   [bssid]
 #     location : the value from /etc/pulse-location (hostname is pulse-<location>)
 #     band     : "a" (5 GHz, BSSID pin REQUIRED) or "bg" (2.4 GHz)
-#     bssid    : AP MAC to lock to; mandatory when band=a, ignored for bg
+#     bssid    : AP MAC to lock to; mandatory when band=a, OPTIONAL for bg —
+#                pin a bg device that hears several APs at similar strength,
+#                where roam scans cause periodic multi-second stalls but the
+#                device must stay on 2.4 GHz (e.g. a wedge-prone unit)
 #
 # Anything not listed here defaults to "bg" (2.4 GHz).
 # Comments (#) and blank lines are ignored; whitespace-separated fields.
@@ -50,3 +53,4 @@
 # living-room   a    XX:XX:XX:XX:XX:XX   # camera kiosk on a non-DFS 5 GHz channel
 # den           a    XX:XX:XX:XX:XX:XX   # BT speaker polling was starving 2.4 GHz
 # porch         bg                       # explicit 2.4 GHz (same as unlisted)
+# pantry        bg   XX:XX:XX:XX:XX:XX   # 2.4 GHz locked to one AP: stops roam-scan stalls
