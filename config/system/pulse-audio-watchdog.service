@@ -11,8 +11,11 @@ EnvironmentFile=-/etc/default/pulse-snapclient
 # reach the pulse user's PipeWire socket to see sink-inputs.
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+# on-failure (not always): main() exits 0 when there is nothing to watch
+# (e.g. SNAPCAST_HOST unset); that is a deliberate clean stop, not a crash to
+# restart-loop over. Real crashes still exit non-zero and get restarted.
 ExecStart=/usr/bin/python3 /opt/pulse-os/bin/pulse-audio-watchdog.py
-Restart=always
+Restart=on-failure
 RestartSec=10
 
 [Install]

@@ -52,6 +52,8 @@ def log(msg: str) -> None:
     try:
         subprocess.run(["logger", "-t", LOG_TAG, msg], check=False)
     except Exception:
+        # Best-effort syslog only; logging must never take down the watchdog.
+        # The stderr/journal write below still happens regardless.
         pass
     print(f"[{LOG_TAG}] {msg}", file=sys.stderr, flush=True)
 
