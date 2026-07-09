@@ -120,6 +120,8 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
    ```
 3. Verify with `pactl list sink-inputs | grep -B3 snapclient` while Music Assistant plays; you should now see a `snapclient` sink input and the speakers will output the stream.
 
+> **Auto-recovery:** A related failure looks identical from the couch but is not a PipeWire-not-running problem: snapclient resolves the `default` sink once, when its player connects, so if that sink later disappears and is re-created with a new index — a USB DAC re-enumerating, or PipeWire restarting — snapclient keeps "connected" to the server while feeding a sink that no longer exists, and the room goes silent. Because the process never crashes, `Restart=always` can't catch it. `pulse-audio-watchdog.service` handles this case: it asks the snapserver (over `SNAPCAST_HTTP_PORT`, default `1780`) whether this client should be playing and, if so but there is no local `snapclient` sink input for ~20s, it restarts `pulse-snapclient.service`. It never acts while the stream is idle, the client is muted/disconnected, or the server is unreachable. Watch it with `journalctl -u pulse-audio-watchdog.service -f`. It is enabled automatically whenever the Snapcast client is enabled.
+
 ## Duplicate Music Assistant players or blank Now Playing
 
 **Problem**: Music Assistant shows two players for the same Pulse (for example `media_player.pulse_office` and `media_player.pulse_office_2`), and the default Now Playing entity points at the unavailable one so the overlay/MQTT sensor never updates.
