@@ -266,6 +266,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_SNAPCAST_HOST` | *(empty)* | Snapserver host. |
 | `PULSE_SNAPCAST_PORT` | `1704` | Snapserver PCM stream port. |
 | `PULSE_SNAPCAST_CONTROL_PORT` | `1705` | Snapserver control port. |
+| `PULSE_SNAPCAST_HTTP_PORT` | `1780` | Snapserver JSON-RPC/HTTP port, used by the audio watchdog to check whether this client should be playing. |
 | `PULSE_SNAPCLIENT_SOUNDCARD` | `default` | Soundcard argument passed to snapclient. |
 | `PULSE_SNAPCLIENT_LATENCY_MS` | *(empty)* | Optional latency override (milliseconds). |
 | `PULSE_SNAPCLIENT_EXTRA_ARGS` | `--player pulse` | Extra CLI flags for snapclient. |

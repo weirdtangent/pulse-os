@@ -666,6 +666,7 @@ configure_snapclient() {
 SNAPCAST_HOST="${PULSE_SNAPCAST_HOST}"
 SNAPCAST_PORT="${PULSE_SNAPCAST_PORT:-1704}"
 SNAPCAST_CONTROL_PORT="${PULSE_SNAPCAST_CONTROL_PORT:-1705}"
+SNAPCAST_HTTP_PORT="${PULSE_SNAPCAST_HTTP_PORT:-1780}"
 SNAPCLIENT_SOUNDCARD="${PULSE_SNAPCLIENT_SOUNDCARD:-default}"
 SNAPCLIENT_LATENCY_MS="${PULSE_SNAPCLIENT_LATENCY_MS:-}"
 SNAPCLIENT_EXTRA_ARGS="${PULSE_SNAPCLIENT_EXTRA_ARGS:---player pulse}"
@@ -821,6 +822,9 @@ link_system_files() {
     sudo ln -sf "$REPO_DIR/config/system/pulse-snapclient.service" \
         /etc/systemd/system/pulse-snapclient.service
 
+    sudo ln -sf "$REPO_DIR/config/system/pulse-audio-watchdog.service" \
+        /etc/systemd/system/pulse-audio-watchdog.service
+
     write_backlight_conf
 
     log "Linking systemd/user files…"
@@ -964,9 +968,12 @@ enable_services() {
     if [ "$PULSE_SNAPCLIENT" = "true" ] && [ -n "${PULSE_SNAPCAST_HOST:-}" ]; then
         log "Enabling Snapcast client..."
         sudo systemctl enable --now pulse-snapclient.service
+        log "Enabling audio watchdog (snapclient silent-recovery)..."
+        sudo systemctl enable --now pulse-audio-watchdog.service
     else
         log "Snapcast client disabled; stopping service..."
         sudo systemctl disable --now pulse-snapclient.service 2>/dev/null || true
+        sudo systemctl disable --now pulse-audio-watchdog.service 2>/dev/null || true
     fi
 
     log "Enabling user services (user-global)…"
