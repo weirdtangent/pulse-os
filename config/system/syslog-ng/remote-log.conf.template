@@ -1,7 +1,11 @@
 @version: 4.7
 
 template t_ietf {
-    template("<${PRI}>1 ${ISODATE} ${HOST} ${PROGRAM} ${PID} - - ${MSGHDR}${MSG}\n");
+    # RFC 5424 requires NILVALUE ("-") for empty APP-NAME/PROCID. Kernel
+    # messages (and other PID-less logs) have an empty ${PID}; emitting it
+    # raw produces a malformed frame that Alloy's strict RFC 5424 parser
+    # drops, silently losing all kern-facility logs (e.g. undervoltage).
+    template("<${PRI}>1 ${ISODATE} ${HOST} $(if ('${PROGRAM}' eq '') '-' '${PROGRAM}') $(if ('${PID}' eq '') '-' '${PID}') - - ${MSGHDR}${MSG}\n");
 };
 
 filter f_pulse_drop_syslogng_stats {
@@ -24,4 +28,3 @@ log {
     filter(f_pulse_drop_syslogng_stats);
     destination(d_remote);
 };
-
