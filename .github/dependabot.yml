@@ -1,8 +1,12 @@
 version: 2
 updates:
   # Enable version updates for Python dependencies
+  # Note: pip does not auto-follow subdirectories, so the mcp-server
+  # project must be listed explicitly or its deps/advisories never get PRs.
   - package-ecosystem: "pip"
-    directory: "/"
+    directories:
+      - "/"
+      - "/mcp-server"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
