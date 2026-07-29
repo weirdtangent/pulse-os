@@ -460,6 +460,23 @@ EOF
         log "Configured WirePlumber Bluetooth keepalive at $conf_file"
     fi
 
+    local hfp_file="${conf_dir}/51-pulse-bt-disable-hfp.conf"
+    if [ ! -f "$hfp_file" ]; then
+        sudo -u "$user" mkdir -p "$conf_dir"
+        sudo -u "$user" tee "$hfp_file" >/dev/null <<'EOF'
+# Pulse speakers only ever use A2DP for music. Restrict the bluez roles to A2DP
+# (plus LE-audio BAP) and disable the HFP backend, so WirePlumber never
+# advertises or chases a Hands-Free profile on an offline/absent speaker: that
+# retry loop fires every ~60s, grabs the shared 2.4GHz radio (Wi-Fi + BT on one
+# chip), and stalls Wi-Fi long enough to break snapcast time-sync.
+monitor.bluez.properties = {
+  bluez5.roles = [ a2dp_sink a2dp_source bap_sink bap_source ]
+  bluez5.hfp-backend = none
+}
+EOF
+        log "Configured WirePlumber Bluetooth HFP/HSP disable at $hfp_file"
+    fi
+
     local uid
     uid=$(id -u "$user")
     local runtime="/run/user/${uid}"
