@@ -833,35 +833,38 @@ class KioskMqttListener:
             thread.start()
 
     def stop_ticker(self) -> None:
+        # Only signal + join here. The worker owns its httpx client and closes it in its
+        # own finally, so we never close the client from another thread mid-fetch.
         with self._ticker_lock:
             if not self._ticker_thread:
                 return
             self._ticker_stop_event.set()
             self._ticker_thread.join(timeout=self.overlay_config.ticker_interval)
             self._ticker_thread = None
-        if self._stock_ticker:
-            self._stock_ticker.close()
 
     def _ticker_loop(self) -> None:
         ticker = self._stock_ticker
         state = self.overlay_state
         if not ticker or not state:
             return
-        while not self._ticker_stop_event.is_set():
-            try:
-                quotes = ticker.fetch()
-                state.set_ticker([quote.as_dict() for quote in quotes])
-            except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
-                self.log(f"ticker: fetch loop error: {exc}")
-            # Poll fast while US markets are open, slow otherwise. Non-US symbols still
-            # refresh on the closed-market cadence — see PULSE_TICKER_INTERVAL_CLOSED.
-            interval = (
-                self.overlay_config.ticker_interval
-                if is_us_market_hours()
-                else self.overlay_config.ticker_interval_closed
-            )
-            if self._ticker_stop_event.wait(interval):
-                break
+        try:
+            while not self._ticker_stop_event.is_set():
+                try:
+                    quotes = ticker.fetch()
+                    state.set_ticker([quote.as_dict() for quote in quotes])
+                except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
+                    self.log(f"ticker: fetch loop error: {exc}")
+                # Poll fast while US markets are open, slow otherwise. Non-US symbols still
+                # refresh on the closed-market cadence — see PULSE_TICKER_INTERVAL_CLOSED.
+                interval = (
+                    self.overlay_config.ticker_interval
+                    if is_us_market_hours()
+                    else self.overlay_config.ticker_interval_closed
+                )
+                if self._ticker_stop_event.wait(interval):
+                    break
+        finally:
+            ticker.close()
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread and self._watchdog_thread.is_alive():

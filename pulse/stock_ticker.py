@@ -174,15 +174,21 @@ class StockTicker:
     # -- public API ------------------------------------------------------------
 
     def fetch(self) -> list[TickerQuote]:
-        """Return the freshest quotes available, never raising and never blank-on-hiccup."""
+        """Return the freshest quotes available, never raising and never blank-on-hiccup.
+
+        Newly fetched quotes are merged over the last-good cache per symbol, so a symbol
+        that a given response happens to omit keeps its previous value instead of
+        vanishing from the ticker until the next full fetch.
+        """
         if not self.symbols:
             return []
-        quotes = self._fetch_yahoo_quote() or self._fetch_yahoo_chart()
-        if quotes:
-            with self._lock:
-                self._cache = tuple(quotes)
-            return quotes
+        fetched = self._fetch_yahoo_quote() or self._fetch_yahoo_chart() or []
         with self._lock:
+            if fetched:
+                merged = {quote.symbol: quote for quote in self._cache}
+                merged.update({quote.symbol: quote for quote in fetched})
+                # Keep only currently-configured symbols, in configured order.
+                self._cache = tuple(merged[symbol] for symbol in self.symbols if symbol in merged)
             return list(self._cache)
 
     # -- http client -----------------------------------------------------------
@@ -206,6 +212,7 @@ class StockTicker:
             try:
                 client.get(YAHOO_COOKIE_SEED_URL)
             except httpx.HTTPError:
+                # Best-effort seed; the crumb request below sets cookies on its own too.
                 pass
             response = client.get(YAHOO_CRUMB_URL)
             crumb = response.text.strip()

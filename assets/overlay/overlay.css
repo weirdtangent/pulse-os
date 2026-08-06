@@ -1263,8 +1263,9 @@ body {
 
 /* --- Stock ticker bar (bottom, scrolling marquee over the HA dashboard) --- */
 .overlay-root--ticker {
-  /* Reserve space so the ticker never covers the bottom grid cells (e.g. the clock). */
-  padding-bottom: calc(3vh + 5.5vh);
+  /* Reserve at least the ticker's own height (which has a 34px min-height) plus breathing
+     room, so it never covers the bottom grid cells (e.g. the clock) on short viewports. */
+  padding-bottom: calc(max(5.5vh, 44px) + 2.5vh);
 }
 
 .pulse-ticker {

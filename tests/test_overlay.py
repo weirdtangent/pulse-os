@@ -58,6 +58,42 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-cell="bottom-left"', html)
         self.assertIn("Local", html)
 
+    def test_ticker_rendered_when_enabled(self) -> None:
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+            show_ticker=True,
+        )
+        ticker = (
+            {
+                "symbol": "^SPX",
+                "label": "S&P 500",
+                "price": 7736.61,
+                "change": 13.06,
+                "change_pct": 12.5,  # outsized move -> emoji accent
+                "is_up": True,
+                "market_state": "POST",
+                "after_hours": 7740.0,
+            },
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), theme)
+        self.assertIn('class="pulse-ticker"', html)
+        self.assertIn("overlay-root--ticker", html)
+        self.assertIn("data-ticker-track", html)
+        self.assertIn("S&amp;P 500", html)
+        self.assertIn("🚀", html)  # >= +10%
+        self.assertIn("AH 7,740.00", html)
+
+    def test_ticker_absent_when_disabled(self) -> None:
+        ticker = (
+            {"symbol": "^SPX", "label": "S&P 500", "price": 1.0, "change": 0.0, "change_pct": 0.0, "is_up": True},
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), self.theme)  # theme.show_ticker defaults False
+        self.assertNotIn('class="pulse-ticker"', html)
+
     def test_only_first_clock_used_if_multiple_provided(self) -> None:
         # Even if multiple clocks are provided, only the first one is rendered
         clocks = (
