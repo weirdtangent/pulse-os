@@ -22,12 +22,14 @@ class _Router:
         self.post_price: float | None = None
         self.finnhub_status = 200
         self.finnhub_prices: dict[str, dict] = {}  # symbol -> {"c","d","dp"}
+        self.finnhub_requests: list[httpx.Request] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         # Route on the parsed host/path rather than substring-matching the whole URL.
         host = request.url.host
         path = request.url.path
         if host == "finnhub.io":
+            self.finnhub_requests.append(request)
             if self.finnhub_status != 200:
                 return httpx.Response(self.finnhub_status, json={})
             symbol = request.url.params.get("symbol", "")
@@ -212,6 +214,18 @@ class TestFinnhubProvider:
         ticker = _ticker(symbols=("AAPL",))  # no api_key
         by_symbol = {q.symbol: q for q in ticker.fetch()}
         assert by_symbol["AAPL"].price == 200.0  # Yahoo, not the Finnhub 999
+        assert router.finnhub_requests == []
+        ticker.close()
+
+    def test_api_key_sent_as_header_not_in_url(self, router):
+        # The key must never appear in the query string (it can leak via error/log URLs).
+        router.finnhub_prices = {"AAPL": {"c": 210.0, "d": 5.0, "dp": 2.44}}
+        ticker = _ticker(symbols=("AAPL",), api_key="SECRETKEY")
+        ticker.fetch()
+        assert router.finnhub_requests, "expected a Finnhub request"
+        req = router.finnhub_requests[0]
+        assert "SECRETKEY" not in str(req.url)
+        assert req.headers.get("X-Finnhub-Token") == "SECRETKEY"
         ticker.close()
 
 

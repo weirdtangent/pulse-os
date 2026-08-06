@@ -66,6 +66,11 @@ other symbols show their Yahoo short name.
 > set `PULSE_TICKER_API_KEY` to a free [Finnhub](https://finnhub.io) key: Finnhub is then
 > the preferred provider for the symbols it can price (US equities/ETFs on the free tier),
 > and Yahoo fills in the rest (indices, which Finnhub's free tier doesn't cover).
+>
+> Note: after-hours prices (`AH`) come only from the Yahoo v7 path — Finnhub's free
+> `/quote` endpoint has no after-hours field, so symbols priced by Finnhub won't show an
+> `AH` value even with `PULSE_TICKER_AFTERHOURS=true`. Leave the key unset if after-hours
+> display matters more to you than a licensed source.
 
 | Key | Default | Description |
 | --- | --- | --- |

@@ -264,16 +264,24 @@ class StockTicker:
     # whatever it can price (or None). fetch() merges results across providers per symbol.
 
     def _fetch_finnhub(self, symbols: list[str]) -> list[TickerQuote] | None:
-        """Optional licensed provider: Finnhub /quote, one request per symbol."""
+        """Optional licensed provider: Finnhub /quote, one request per symbol.
+
+        The API key is sent via the X-Finnhub-Token header (never the query string), so it
+        can't leak into logs through an httpx error message that echoes the request URL.
+        Note: the free /quote endpoint has no after-hours field, so Finnhub-priced symbols
+        carry no `AH` value — after-hours display is a Yahoo-only enrichment (documented).
+        """
         if not self.api_key:
             return None
         client = self._get_client()
+        headers = {"X-Finnhub-Token": self.api_key}
         quotes: list[TickerQuote] = []
         for canonical in symbols:
             try:
                 response = client.get(
                     FINNHUB_QUOTE_URL,
-                    params={"symbol": self._finnhub_symbol(canonical), "token": self.api_key},
+                    params={"symbol": self._finnhub_symbol(canonical)},
+                    headers=headers,
                 )
                 if response.status_code in (401, 403):
                     self._log("ticker: finnhub auth failed — check PULSE_TICKER_API_KEY")
@@ -284,7 +292,7 @@ class StockTicker:
                 response.raise_for_status()
                 data = response.json()
             except (httpx.HTTPError, ValueError) as exc:
-                self._log(f"ticker: finnhub {canonical} failed ({exc})")
+                self._log(f"ticker: finnhub {canonical} failed ({_redact(str(exc), self.api_key)})")
                 continue
             price = _coerce_float(data.get("c"))
             change = _coerce_float(data.get("d"))
@@ -417,6 +425,13 @@ def _coerce_float(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return result
+
+
+def _redact(message: str, secret: str | None) -> str:
+    """Never let the API key reach the logs, even if some layer echoes it."""
+    if secret and secret in message:
+        return message.replace(secret, "***")
+    return message
 
 
 if __name__ == "__main__":  # pragma: no cover - manual smoke test
