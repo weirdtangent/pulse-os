@@ -1260,3 +1260,89 @@ body {
   padding: 0.3rem 0.6rem;
   white-space: nowrap;
 }
+
+/* --- Stock ticker bar (bottom, scrolling marquee over the HA dashboard) --- */
+.overlay-root--ticker {
+  /* Reserve at least the ticker's own height (which has a 34px min-height) plus breathing
+     room, so it never covers the bottom grid cells (e.g. the clock) on short viewports. */
+  padding-bottom: calc(max(5.5vh, 44px) + 2.5vh);
+}
+
+.pulse-ticker {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5vh;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  z-index: 40;
+  pointer-events: none;
+  /* Match the overlay cards / now-playing box, biased opaque for legibility over photos. */
+  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--overlay-text-color, #ffffff);
+  font-size: 2.6vh;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pulse-ticker__track {
+  display: inline-flex;
+  align-items: center;
+  will-change: transform;
+  /* Duration + wall-clock phase are refined by overlay.js; this is the pre-JS fallback. */
+  animation: pulse-ticker-scroll var(--pulse-ticker-duration, 60s) linear infinite;
+}
+
+@keyframes pulse-ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* Item set is duplicated in markup, so -50% of the track = exactly one full set. */
+    transform: translateX(-50%);
+  }
+}
+
+.pulse-ticker__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5ch;
+  padding: 0 2.2ch;
+}
+
+.pulse-ticker__label {
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.pulse-ticker__price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse-ticker__change {
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse-ticker__item--up .pulse-ticker__change {
+  color: #4caf50;
+}
+
+.pulse-ticker__item--down .pulse-ticker__change {
+  color: #ff5c5c;
+}
+
+.pulse-ticker__ah {
+  opacity: 0.6;
+  font-size: 0.82em;
+}
+
+.pulse-ticker__emoji {
+  font-size: 1.05em;
+}

@@ -58,6 +58,93 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn('data-cell="bottom-left"', html)
         self.assertIn("Local", html)
 
+    def test_ticker_rendered_when_enabled(self) -> None:
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+            show_ticker=True,
+        )
+        ticker = (
+            {
+                "symbol": "^SPX",
+                "label": "S&P 500",
+                "price": 7736.61,
+                "change": 13.06,
+                "change_pct": 12.5,  # outsized move -> emoji accent
+                "is_up": True,
+                "market_state": "POST",
+                "after_hours": 7740.0,
+            },
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), theme)
+        self.assertIn('class="pulse-ticker"', html)
+        self.assertIn("overlay-root--ticker", html)
+        self.assertIn("data-ticker-track", html)
+        self.assertIn("S&amp;P 500", html)
+        self.assertIn("🚀", html)  # >= +10%
+        self.assertIn("AH 7,740.00", html)
+
+    def test_ticker_label_mode_ticker_shows_symbol(self) -> None:
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_ticker=True,
+            ticker_label_mode="ticker",
+        )
+        ticker = (
+            {"symbol": "^SPX", "label": "S&P 500", "price": 1.0, "change": 0.0, "change_pct": 0.0, "is_up": True},
+            {
+                "symbol": "VTI",
+                "label": "Vanguard Morningstar Total Stoc",
+                "price": 380.0,
+                "change": 0.6,
+                "change_pct": 0.16,
+                "is_up": True,
+            },
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), theme)
+        self.assertIn(">SPX<", html)  # caret stripped
+        self.assertIn(">VTI<", html)  # symbol, not the long fund name
+        self.assertNotIn("Vanguard Morningstar", html)
+        self.assertNotIn("S&amp;P 500", html)
+
+    def test_ticker_label_mode_auto_names_indices_symbols_others(self) -> None:
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_ticker=True,
+            ticker_label_mode="auto",
+        )
+        ticker = (
+            {"symbol": "^SPX", "label": "S&P 500", "price": 1.0, "change": 0.0, "change_pct": 0.0, "is_up": True},
+            {
+                "symbol": "VTI",
+                "label": "Vanguard Morningstar Total Stoc",
+                "price": 380.0,
+                "change": 0.6,
+                "change_pct": 0.16,
+                "is_up": True,
+            },
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), theme)
+        self.assertIn("S&amp;P 500", html)  # index -> friendly name
+        self.assertIn(">VTI<", html)  # custom ticker -> symbol
+        self.assertNotIn("Vanguard Morningstar", html)
+
+    def test_ticker_absent_when_disabled(self) -> None:
+        ticker = (
+            {"symbol": "^SPX", "label": "S&P 500", "price": 1.0, "change": 0.0, "change_pct": 0.0, "is_up": True},
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), self.theme)  # theme.show_ticker defaults False
+        self.assertNotIn('class="pulse-ticker"', html)
+
     def test_only_first_clock_used_if_multiple_provided(self) -> None:
         # Even if multiple clocks are provided, only the first one is rendered
         clocks = (
@@ -127,6 +214,31 @@ class OverlayRenderTests(unittest.TestCase):
         alarm_card = manager.snapshot().info_card
         assert alarm_card is not None
         self.assertIn("alarms", alarm_card)
+
+    def test_set_ticker_bumps_only_on_symbol_change(self) -> None:
+        manager = OverlayStateManager()
+        v0 = manager.snapshot().version
+
+        def q(symbol, price):
+            return {"symbol": symbol, "label": symbol, "price": price, "change": 0.0, "change_pct": 0.0, "is_up": True}
+
+        # First population -> bump (so the card refetches and the bar appears).
+        c1 = manager.set_ticker([q("^SPX", 1.0)])
+        self.assertTrue(c1.changed)
+        v1 = manager.snapshot().version
+        self.assertGreater(v1, v0)
+
+        # Same symbols, new prices -> NO bump (avoids reloading the overlay every poll)...
+        c2 = manager.set_ticker([q("^SPX", 2.0)])
+        self.assertFalse(c2.changed)
+        self.assertEqual(manager.snapshot().version, v1)
+        # ...but the data is still updated for the next natural refresh.
+        self.assertEqual(manager.snapshot().ticker[0]["price"], 2.0)
+
+        # Symbol set changes -> bump again.
+        c3 = manager.set_ticker([q("^SPX", 2.0), q("AAPL", 3.0)])
+        self.assertTrue(c3.changed)
+        self.assertGreater(manager.snapshot().version, v1)
 
     def test_active_timer_card_uses_previous_position(self) -> None:
         snapshot = self._snapshot(

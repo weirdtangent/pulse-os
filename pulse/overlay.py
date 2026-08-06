@@ -83,6 +83,7 @@ class OverlaySnapshot:
     schedule_snapshot: dict[str, Any] | None
     earmuffs_enabled: bool
     update_available: bool
+    ticker: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,7 @@ class OverlayStateManager:
         self._timer_position_history: dict[str, str] = {}
         self._earmuffs_enabled = False
         self._update_available = False
+        self._ticker: tuple[dict[str, Any], ...] = ()
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -187,6 +189,7 @@ class OverlayStateManager:
             "info_card": "",
             "earmuffs_enabled": "",
             "update_available": "",
+            "ticker": "",
         }
 
     @property
@@ -436,6 +439,24 @@ class OverlayStateManager:
             self._signatures["earmuffs_enabled"] = signature
             return self._bump("earmuffs_enabled")
 
+    def set_ticker(self, quotes: Sequence[dict[str, Any]]) -> OverlayChange:
+        """Store the latest stock quotes for the ticker bar.
+
+        Bumps the overlay version (which nudges the photo-card to refetch) only when the
+        SET OF SYMBOLS changes — i.e. when the ticker first populates after boot, or the
+        configured symbols change — NOT on every price tick. That makes the bar appear
+        promptly at startup without reloading the overlay iframe on every poll; ordinary
+        price updates ride the card's normal refresh cadence.
+        """
+        normalized = tuple(dict(item) for item in quotes if isinstance(item, dict))
+        signature = ",".join(str(item.get("symbol", "")) for item in normalized)
+        with self._lock:
+            self._ticker = normalized
+            if signature == self._signatures["ticker"]:
+                return OverlayChange(False, self._version, "ticker")
+            self._signatures["ticker"] = signature
+            return self._bump("ticker")
+
     def update_update_available(self, available: bool) -> OverlayChange:
         signature = str(available)
         with self._lock:
@@ -468,6 +489,7 @@ class OverlayStateManager:
                 schedule_snapshot=copy.deepcopy(self._schedule_snapshot),
                 earmuffs_enabled=self._earmuffs_enabled,
                 update_available=self._update_available,
+                ticker=tuple(dict(item) for item in self._ticker),
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -535,6 +557,10 @@ class OverlayTheme:
     accent_color: str
     show_notification_bar: bool = True
     font_family: str = DEFAULT_FONT_STACK
+    show_ticker: bool = False
+    ticker_scroll_speed: int = 60  # pixels per second
+    ticker_emoji: bool = True
+    ticker_label_mode: str = "auto"  # "name" | "ticker" | "auto" (name for indices, symbol otherwise)
 
 
 CELL_ORDER = (
@@ -589,6 +615,94 @@ def _pick_available_cell(occupied: set[str], preferred: Sequence[str], fallback:
     return fallback
 
 
+def _format_ticker_number(value: Any) -> str:
+    try:
+        return f"{float(value):,.2f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _ticker_move_emoji(pct: float) -> str:
+    """A little accent for outsized moves (empty for ordinary days)."""
+    if pct >= 10:
+        return "🚀"
+    if pct >= 5:
+        return "🔥"
+    if pct <= -10:
+        return "🧊"
+    if pct <= -5:
+        return "📉"
+    return ""
+
+
+def _ticker_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
+    quotes = snapshot.ticker or ()
+    mode = theme.ticker_label_mode  # "name" | "ticker" | "auto"
+    items: list[str] = []
+    for quote in quotes:
+        if not isinstance(quote, dict):
+            continue
+        symbol = str(quote.get("symbol") or "")
+        name = str(quote.get("label") or "")
+        # "auto": friendly name for indices (symbols with a caret prefix, e.g. ^SPX),
+        # ticker symbol for everything else (avoids long/truncated ETF/stock names).
+        use_symbol = mode == "ticker" or (mode == "auto" and not symbol.startswith("^"))
+        if use_symbol:
+            raw_label = symbol.lstrip("^") or name  # e.g. "^SPX" -> "SPX", "VTI" -> "VTI"
+        else:
+            raw_label = name or symbol
+        label = html_escape(raw_label).strip()
+        if not label:
+            continue
+        price = _ticker_float(quote.get("price"))
+        change = _ticker_float(quote.get("change"))
+        pct = _ticker_float(quote.get("change_pct"))
+        if price is None or change is None or pct is None:
+            continue
+        raw_is_up = quote.get("is_up")
+        is_up = bool(raw_is_up) if raw_is_up is not None else change >= 0
+        direction = "up" if is_up else "down"
+        arrow = "▲" if is_up else "▼"
+        change_text = f"{arrow} {abs(change):,.2f} ({abs(pct):.2f}%)"
+        emoji_markup = ""
+        if theme.ticker_emoji:
+            emoji = _ticker_move_emoji(pct)
+            if emoji:
+                emoji_markup = f'<span class="pulse-ticker__emoji">{emoji}</span>'
+        after_hours_markup = ""
+        after_hours = quote.get("after_hours")
+        if after_hours is not None:
+            after_hours_markup = f'<span class="pulse-ticker__ah">AH {_format_ticker_number(after_hours)}</span>'
+        items.append(
+            f'<span class="pulse-ticker__item pulse-ticker__item--{direction}">'
+            f'<span class="pulse-ticker__label">{label}</span>'
+            f'<span class="pulse-ticker__price">{_format_ticker_number(price)}</span>'
+            f'<span class="pulse-ticker__change">{change_text}</span>'
+            f"{after_hours_markup}{emoji_markup}"
+            f"</span>"
+        )
+    if not items:
+        return ""
+    track_items = "".join(items)
+    speed = max(10, int(theme.ticker_scroll_speed or 60))
+    # The item set is duplicated so the marquee loops seamlessly. overlay.js measures the
+    # real track width to set a constant px/sec duration and a wall-clock animation phase,
+    # so the scroll survives the photo-card's periodic iframe reloads without jumping.
+    return (
+        '<div class="pulse-ticker" aria-hidden="true">'
+        f'<div class="pulse-ticker__track" data-ticker-track data-speed="{speed}">'
+        f"{track_items}{track_items}"
+        "</div></div>"
+    )
+
+
 def render_overlay_html(
     snapshot: OverlaySnapshot,
     theme: OverlayTheme,
@@ -637,13 +751,16 @@ def render_overlay_html(
 
     notification_html = _build_notification_bar(snapshot) if theme.show_notification_bar else ""
 
+    ticker_html = _build_ticker_bar(snapshot, theme) if theme.show_ticker else ""
+    root_class = "overlay-root overlay-root--ticker" if ticker_html else "overlay-root"
+
     stop_endpoint = stop_endpoint or "/overlay/stop"
     info_endpoint = info_endpoint or "/overlay/info-card"
     stop_endpoint_attr = html_escape(stop_endpoint, quote=True)
     info_endpoint_attr = html_escape(info_endpoint, quote=True)
     root_attrs = (
         f'id="pulse-overlay-root" '
-        f'class="overlay-root" '
+        f'class="{root_class}" '
         f'data-version="{snapshot.version}" '
         f'data-generated-at="{int(snapshot.generated_at * 1000)}" '
         f'data-clock-hour12="{"true" if clock_hour12 else "false"}" '
@@ -667,6 +784,7 @@ def render_overlay_html(
 <div class="overlay-grid">
 {grid_markup}
 </div>
+{ticker_html}
 </div>
 <script>
 {OVERLAY_JS}

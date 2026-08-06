@@ -13,6 +13,31 @@ window.PulseOverlay.initialize = function() {
     return;
   }
 
+  // --- Stock ticker marquee ---
+  // Constant px/sec speed (independent of symbol count) plus a wall-clock animation
+  // phase, so the scroll resumes seamlessly across the photo-card's periodic iframe
+  // reloads instead of jumping back to the start each time.
+  const tickerTrack = root.querySelector('[data-ticker-track]');
+  if (tickerTrack) {
+    const speed = parseFloat(tickerTrack.getAttribute('data-speed')) || 60; // px/sec
+    const applyTickerMotion = () => {
+      // The item set is duplicated in markup, so half the scroll width is one full set.
+      const half = tickerTrack.scrollWidth / 2;
+      if (half > 0) {
+        const duration = half / speed; // seconds for one full set to scroll past
+        tickerTrack.style.animationDuration = duration + 's';
+        const phase = (Date.now() / 1000) % duration;
+        tickerTrack.style.animationDelay = '-' + phase + 's';
+      }
+    };
+    applyTickerMotion();
+    // Web-font / emoji load can shift the measured width slightly; re-measure once settled.
+    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(applyTickerMotion).catch(() => {});
+    }
+    window.setTimeout(applyTickerMotion, 250);
+  }
+
   // Clean up previous event listeners to prevent duplicates
   if (window.PulseOverlay.clockInterval) {
     clearInterval(window.PulseOverlay.clockInterval);

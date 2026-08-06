@@ -34,7 +34,8 @@ from pulse.overlay import (
     parse_clock_config,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
-from pulse.utils import parse_bool, sanitize_hostname_for_entity_id
+from pulse.stock_ticker import StockTicker, is_us_market_hours, parse_symbols
+from pulse.utils import parse_bool, parse_int, sanitize_hostname_for_entity_id
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,15 @@ class OverlayConfig:
     clock_24h: bool
     font_family: str
     auth_token: str | None
+    ticker_enabled: bool
+    ticker_symbols: tuple[str, ...]
+    ticker_interval: int
+    ticker_interval_closed: int
+    ticker_afterhours: bool
+    ticker_speed: int
+    ticker_emoji: bool
+    ticker_label_mode: str
+    ticker_api_key: str | None
 
 
 @dataclass(frozen=True)
@@ -438,6 +448,8 @@ def load_config() -> EnvConfig:
         default_label=friendly_name,
         log=log,
     )
+    ticker_label_raw = (os.environ.get("PULSE_TICKER_LABEL") or "auto").strip().lower()
+    ticker_label_mode = ticker_label_raw if ticker_label_raw in {"name", "ticker", "auto"} else "auto"
     overlay_config = OverlayConfig(
         enabled=overlay_enabled,
         bind_address=overlay_bind,
@@ -452,6 +464,15 @@ def load_config() -> EnvConfig:
         clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
         font_family=overlay_font_stack,
         auth_token=(os.environ.get("PULSE_OVERLAY_AUTH_TOKEN") or "").strip() or None,
+        ticker_enabled=parse_bool(os.environ.get("PULSE_TICKER_ENABLED"), False),
+        ticker_symbols=tuple(parse_symbols(os.environ.get("PULSE_TICKER_SYMBOLS")) or ["^SPX", "^DJI", "^NDX"]),
+        ticker_interval=max(15, parse_int(os.environ.get("PULSE_TICKER_INTERVAL"), 60)),
+        ticker_interval_closed=max(60, parse_int(os.environ.get("PULSE_TICKER_INTERVAL_CLOSED"), 900)),
+        ticker_afterhours=parse_bool(os.environ.get("PULSE_TICKER_AFTERHOURS"), True),
+        ticker_speed=max(10, parse_int(os.environ.get("PULSE_TICKER_SPEED"), 60)),
+        ticker_emoji=parse_bool(os.environ.get("PULSE_TICKER_EMOJI"), True),
+        ticker_label_mode=ticker_label_mode,
+        ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -665,6 +686,10 @@ class KioskMqttListener:
         self._telemetry_lock = threading.Lock()
         self._telemetry_thread: threading.Thread | None = None
         self._telemetry_stop_event = threading.Event()
+        self._ticker_lock = threading.Lock()
+        self._ticker_thread: threading.Thread | None = None
+        self._ticker_stop_event = threading.Event()
+        self._stock_ticker: StockTicker | None = None
         self._watchdog_thread: threading.Thread | None = None
         self._watchdog_stop_event = threading.Event()
         self._last_mqtt_ok: float = time.monotonic()
@@ -707,6 +732,13 @@ class KioskMqttListener:
 
         if self.overlay_config.enabled:
             self.overlay_state = OverlayStateManager(self.overlay_config.clocks)
+            if self.overlay_config.ticker_enabled and self.overlay_config.ticker_symbols:
+                self._stock_ticker = StockTicker(
+                    self.overlay_config.ticker_symbols,
+                    afterhours=self.overlay_config.ticker_afterhours,
+                    api_key=self.overlay_config.ticker_api_key,
+                    log=self.log,
+                )
             self._overlay_theme = OverlayTheme(
                 ambient_background=self.overlay_config.ambient_background,
                 alert_background=self.overlay_config.alert_background,
@@ -714,6 +746,10 @@ class KioskMqttListener:
                 accent_color=self.overlay_config.accent_color,
                 show_notification_bar=self.overlay_config.show_notification_bar,
                 font_family=self._current_font_stack,
+                show_ticker=self.overlay_config.ticker_enabled,
+                ticker_scroll_speed=self.overlay_config.ticker_speed,
+                ticker_emoji=self.overlay_config.ticker_emoji,
+                ticker_label_mode=self.overlay_config.ticker_label_mode,
             )
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
@@ -792,6 +828,57 @@ class KioskMqttListener:
             self._telemetry_stop_event.set()
             self._telemetry_thread.join(timeout=self.config.telemetry_interval_seconds * 2)
             self._telemetry_thread = None
+
+    def start_ticker(self) -> None:
+        if not self._stock_ticker or not self.overlay_state:
+            return
+        with self._ticker_lock:
+            if self._ticker_thread and self._ticker_thread.is_alive():
+                return
+            self._ticker_stop_event.clear()
+            thread = threading.Thread(target=self._ticker_loop, name="pulse-ticker", daemon=True)
+            self._ticker_thread = thread
+            thread.start()
+
+    def stop_ticker(self) -> None:
+        # Only signal + join here. The worker owns its httpx client and closes it in its
+        # own finally, so we never close the client from another thread mid-fetch.
+        with self._ticker_lock:
+            if not self._ticker_thread:
+                return
+            self._ticker_stop_event.set()
+            self._ticker_thread.join(timeout=self.overlay_config.ticker_interval)
+            self._ticker_thread = None
+
+    def _ticker_loop(self) -> None:
+        ticker = self._stock_ticker
+        state = self.overlay_state
+        if not ticker or not state:
+            return
+        try:
+            while not self._ticker_stop_event.is_set():
+                try:
+                    quotes = ticker.fetch()
+                    change = state.set_ticker([quote.as_dict() for quote in quotes])
+                    # set_ticker bumps the version only when the symbol set changes (e.g. the
+                    # bar first populates after boot), so this emit actually moves the refresh
+                    # sensor and the photo-card refetches — instead of re-publishing the same
+                    # version, which the card ignores. Price-only updates don't bump/emit.
+                    if change.changed:
+                        self._emit_overlay_refresh(change.version, change.reason)
+                except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
+                    self.log(f"ticker: fetch loop error: {exc}")
+                # Poll fast while US markets are open, slow otherwise. Non-US symbols still
+                # refresh on the closed-market cadence — see PULSE_TICKER_INTERVAL_CLOSED.
+                interval = (
+                    self.overlay_config.ticker_interval
+                    if is_us_market_hours()
+                    else self.overlay_config.ticker_interval_closed
+                )
+                if self._ticker_stop_event.wait(interval):
+                    break
+        finally:
+            ticker.close()
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread and self._watchdog_thread.is_alive():
@@ -1047,6 +1134,10 @@ class KioskMqttListener:
             accent_color=self.overlay_config.accent_color,
             show_notification_bar=self.overlay_config.show_notification_bar,
             font_family=new_stack,
+            show_ticker=self.overlay_config.ticker_enabled,
+            ticker_scroll_speed=self.overlay_config.ticker_speed,
+            ticker_emoji=self.overlay_config.ticker_emoji,
+            ticker_label_mode=self.overlay_config.ticker_label_mode,
         )
         if self._overlay_http:
             self._overlay_http.theme = self._overlay_theme
@@ -1933,10 +2024,14 @@ class KioskMqttListener:
         self.publish_update_button_availability(client, self.is_update_available())
         self.start_update_checker(client)
         self.start_telemetry()
+        self.start_ticker()
         if self.overlay_state:
-            self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
+            # Start the HTTP server BEFORE announcing the boot refresh, otherwise the
+            # photo-card re-fetches /overlay against a not-yet-listening port, fails, and
+            # hides the overlay until its next poll (up to ~2 min). Server first, then emit.
             if self._overlay_http:
                 self._overlay_http.start()
+            self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
         self._start_watchdog()
         from pulse.systemd_notify import ready as sd_ready
 
@@ -2230,6 +2325,7 @@ def main():
     listener = KioskMqttListener(config)
     atexit.register(listener.stop_update_checker)
     atexit.register(listener.stop_telemetry)
+    atexit.register(listener.stop_ticker)
     atexit.register(listener.stop_overlay_server)
     atexit.register(listener._stop_watchdog)
 

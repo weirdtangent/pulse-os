@@ -46,6 +46,55 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_CLOCK_24H` | `false` | Forces 24-hour clock labels when `true`. |
 | `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
 
+## Stock ticker
+
+An optional scrolling ticker bar across the bottom of the overlay. Quotes are fetched
+on-device from Yahoo Finance (near-real-time, no API key) using two independent endpoints
+(v7 quote, then v8 chart) plus a last-good cache, so the bar never goes blank on a
+transient upstream failure. Any symbol Yahoo lists works — including non-US indices
+(`^N225`, `^FTSE`, `^GDAXI`, `^HSI`, `^FCHI`, `^STOXX50E`) and foreign tickers with an
+exchange suffix (`SAP.DE`, `7203.T`). Friendly labels are built in for common indices;
+other symbols show their Yahoo short name.
+
+> **Data source & usage.** The Yahoo endpoints are *unofficial and undocumented* — Yahoo
+> retired its free public Finance API years ago, and this module uses the same endpoints
+> the [`yfinance`](https://pypi.org/project/yfinance/) library does (obtaining Yahoo's
+> cookie + crumb transparently). That is appropriate for **personal, non-commercial,
+> low-volume home display** — which is what we do here (one request per device every
+> 60s/15min, cached, not redistributed) — but it is **not a licensed or ToS-sanctioned
+> use**, and Yahoo may change or block the endpoints at any time. For a licensed source,
+> set `PULSE_TICKER_API_KEY` to a free [Finnhub](https://finnhub.io) key: Finnhub is then
+> the preferred provider for the symbols it can price (US equities/ETFs on the free tier),
+> and Yahoo fills in the rest (indices, which Finnhub's free tier doesn't cover).
+>
+> Note: after-hours prices (`AH`) come only from the Yahoo v7 path — Finnhub's free
+> `/quote` endpoint has no after-hours field, so symbols priced by Finnhub won't show an
+> `AH` value even with `PULSE_TICKER_AFTERHOURS=true`. Leave the key unset if after-hours
+> display matters more to you than a licensed source.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_TICKER_ENABLED` | `false` | Master switch for the ticker bar (optional per device). |
+| `PULSE_TICKER_SYMBOLS` | `^SPX,^DJI,^NDX` | Comma-separated symbols to display (indices use a `^` prefix). |
+| `PULSE_TICKER_INTERVAL` | `60` | Seconds between fetches while US markets are open (min 15). |
+| `PULSE_TICKER_INTERVAL_CLOSED` | `900` | Seconds between fetches when US markets are closed (min 60). Non-US symbols refresh on this cadence during their own sessions — lower it if you mainly watch overseas markets. |
+| `PULSE_TICKER_AFTERHOURS` | `true` | Append the post-market price (marked `AH`) when the provider reports one. |
+| `PULSE_TICKER_SPEED` | `60` | Scroll speed in pixels per second (min 10; higher = faster). |
+| `PULSE_TICKER_EMOJI` | `true` | Add an accent emoji for outsized moves (🚀 ≥ +10%, 🔥 ≥ +5%, 📉 ≤ -5%, 🧊 ≤ -10%). |
+| `PULSE_TICKER_LABEL` | `auto` | Label before each price: `auto` (friendly name for indices like "S&P 500", ticker symbol for everything else — avoids long/truncated ETF names), `name` (friendly name for all), or `ticker` (symbol for all). |
+| `PULSE_TICKER_API_KEY` | _(unset)_ | Optional free [Finnhub](https://finnhub.io) API key. When set, Finnhub is the preferred (licensed) source for symbols it can price; Yahoo covers the rest. |
+
+Notes:
+- Gains render green with a ▲, losses red with a ▼; the bar matches the overlay's
+  translucent card styling and is pinned to the bottom over whatever is on screen.
+- The fast/slow fetch cadence is keyed to US regular-session hours (holidays are not
+  tracked — an extra harmless fast poll may occur). Data itself is global.
+- **DNS/ad-blocker allowlist:** the device fetches quotes from these hosts — if you run
+  Pi-hole/AdGuard or similar, make sure they resolve: `query1.finance.yahoo.com` (quote +
+  chart) and `fc.yahoo.com` (cookie/crumb). A blocked host shows up as `ticker:` fetch
+  warnings in the logs and a bar that only ever shows cached/last-good values. See
+  [troubleshooting.md](troubleshooting.md#stock-ticker).
+
 ## Telemetry & MQTT
 
 | Key | Default | Description |
