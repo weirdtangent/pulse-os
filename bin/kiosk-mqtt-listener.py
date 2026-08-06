@@ -855,11 +855,18 @@ class KioskMqttListener:
         state = self.overlay_state
         if not ticker or not state:
             return
+        first_fetch = True
         try:
             while not self._ticker_stop_event.is_set():
                 try:
                     quotes = ticker.fetch()
                     state.set_ticker([quote.as_dict() for quote in quotes])
+                    if first_fetch and quotes:
+                        # Nudge the overlay once so the bar appears promptly after boot,
+                        # instead of waiting for the card's next poll. Subsequent updates
+                        # ride the card's normal poll (set_ticker intentionally doesn't bump).
+                        first_fetch = False
+                        self._emit_overlay_refresh(state.snapshot().version, "ticker-init")
                 except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
                     self.log(f"ticker: fetch loop error: {exc}")
                 # Poll fast while US markets are open, slow otherwise. Non-US symbols still
@@ -2020,9 +2027,12 @@ class KioskMqttListener:
         self.start_telemetry()
         self.start_ticker()
         if self.overlay_state:
-            self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
+            # Start the HTTP server BEFORE announcing the boot refresh, otherwise the
+            # photo-card re-fetches /overlay against a not-yet-listening port, fails, and
+            # hides the overlay until its next poll (up to ~2 min). Server first, then emit.
             if self._overlay_http:
                 self._overlay_http.start()
+            self._emit_overlay_refresh(self.overlay_state.snapshot().version, "boot", client=client)
         self._start_watchdog()
         from pulse.systemd_notify import ready as sd_ready
 
