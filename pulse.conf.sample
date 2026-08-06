@@ -25,6 +25,8 @@ PULSE_USER="pulse"
 # ============================================================================
 
 # PULSE_URL — Chromium kiosk landing page opened after boot.
+# Note: HA 2026.8+ new Home Assistant OS installs serve on port 80 — drop ":8123"
+# (e.g. http://homeassistant.local/dashboard-pulse/home) if yours uses the new default.
 PULSE_URL="http://homeassistant.local:8123/dashboard-pulse/home"
 
 # PULSE_REVIVE_INTERVAL — minutes between watchdog cron runs that restart the kiosk if needed.
@@ -540,6 +542,7 @@ PULSE_SNAPCLIENT_HOST_ID=""
 
 # --- Base connection & Assist pipeline -------------------------------------
 # HOME_ASSISTANT_BASE_URL — base URL for your Home Assistant instance (used for Assist + REST calls).
+# Note: drop ":8123" if your HA instance uses the 2026.8+ port-80 default (new HA OS installs).
 HOME_ASSISTANT_BASE_URL="http://homeassistant.local:8123"
 
 # HOME_ASSISTANT_TOKEN — long-lived access token the assistant uses when calling Home Assistant APIs.

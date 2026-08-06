@@ -25,6 +25,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_WATCHDOG_LIMIT` | `5` | Consecutive watchdog fetch failures before Chromium is restarted. |
 | `PULSE_WATCHDOG_INTERVAL` | `60` | Seconds between watchdog fetches. |
 | `CHROMIUM_DEVTOOLS_URL` | `http://localhost:9222/json` | Remote debugging endpoint for kiosk automation. |
+
+> **Home Assistant port (2026.8+):** new Home Assistant OS installs serve on **port 80**, so drop `:8123` from `PULSE_URL` / `PULSE_WATCHDOG_URL` (e.g. `http://homeassistant.local/dashboard-pulse/home`) if your instance uses the new default. Existing installs keep the port they already used (`:8123` unless changed).
 | `CHROMIUM_DEVTOOLS_TIMEOUT` | `3` | Timeout (seconds) for DevTools HTTP/WebSocket operations. |
 
 ## Overlay & Photo Frame
@@ -276,7 +278,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `HOME_ASSISTANT_BASE_URL` | `http://homeassistant.local:8123` | HA base URL for Assist/API calls. |
+| `HOME_ASSISTANT_BASE_URL` | `http://homeassistant.local:8123` | HA base URL for Assist/API calls. Drop `:8123` if your HA instance uses the 2026.8+ port-80 default (see the Kiosk & Browser note above). |
 | `HOME_ASSISTANT_TOKEN` | *(empty)* | Long-lived token used for HA REST and Assist requests (also accepts `HOME_ASSISTANT_LONG_LIVED_TOKEN`). |
 | `HOME_ASSISTANT_VERIFY_SSL` | `true` | Enforce TLS certificate validation. |
 | `HOME_ASSISTANT_ASSIST_PIPELINE` | *(empty)* | Optional Assist pipeline ID override. |
