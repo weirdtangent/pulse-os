@@ -448,8 +448,8 @@ def load_config() -> EnvConfig:
         default_label=friendly_name,
         log=log,
     )
-    ticker_label_raw = (os.environ.get("PULSE_TICKER_LABEL") or "name").strip().lower()
-    ticker_label_mode = "ticker" if ticker_label_raw == "ticker" else "name"
+    ticker_label_raw = (os.environ.get("PULSE_TICKER_LABEL") or "auto").strip().lower()
+    ticker_label_mode = ticker_label_raw if ticker_label_raw in {"name", "ticker", "auto"} else "auto"
     overlay_config = OverlayConfig(
         enabled=overlay_enabled,
         bind_address=overlay_bind,

@@ -139,10 +139,12 @@ PULSE_TICKER_SPEED="60"
 # 📉 <= -5%, 🧊 <= -10%). Set "false" for numbers only.
 PULSE_TICKER_EMOJI="true"
 
-# PULSE_TICKER_LABEL — what to show before each price: "name" for the friendly/company
-# name (e.g. "S&P 500", "Apple Inc.") or "ticker" for the symbol (e.g. "SPX", "AAPL",
-# "VTI"). "ticker" is more compact and avoids long/truncated ETF names.
-PULSE_TICKER_LABEL="name"
+# PULSE_TICKER_LABEL — what to show before each price:
+#   "auto"   — friendly name for indices (e.g. "S&P 500"), ticker symbol for everything
+#              else (e.g. "AAPL", "VTI"). Best of both; the default.
+#   "name"   — friendly/company name for all (long ETF names may be truncated by the source).
+#   "ticker" — the symbol for all (e.g. "SPX", "AAPL", "VTI"). Most compact.
+PULSE_TICKER_LABEL="auto"
 
 # PULSE_TICKER_API_KEY — optional free Finnhub API key (https://finnhub.io). When set,
 # Finnhub is the preferred, licensed source for symbols it can price; Yahoo covers the

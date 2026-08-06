@@ -553,7 +553,7 @@ class OverlayTheme:
     show_ticker: bool = False
     ticker_scroll_speed: int = 60  # pixels per second
     ticker_emoji: bool = True
-    ticker_label_mode: str = "name"  # "name" (friendly name) or "ticker" (symbol)
+    ticker_label_mode: str = "auto"  # "name" | "ticker" | "auto" (name for indices, symbol otherwise)
 
 
 CELL_ORDER = (
@@ -637,17 +637,20 @@ def _ticker_float(value: Any) -> float | None:
 
 def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     quotes = snapshot.ticker or ()
-    show_symbol = theme.ticker_label_mode == "ticker"
+    mode = theme.ticker_label_mode  # "name" | "ticker" | "auto"
     items: list[str] = []
     for quote in quotes:
         if not isinstance(quote, dict):
             continue
-        if show_symbol:
-            # Ticker-symbol mode: e.g. "^SPX" -> "SPX", "VTI" -> "VTI" (avoids long/truncated
-            # provider names). Fall back to the friendly name if a symbol is somehow missing.
-            raw_label = str(quote.get("symbol") or "").lstrip("^") or str(quote.get("label") or "")
+        symbol = str(quote.get("symbol") or "")
+        name = str(quote.get("label") or "")
+        # "auto": friendly name for indices (symbols with a caret prefix, e.g. ^SPX),
+        # ticker symbol for everything else (avoids long/truncated ETF/stock names).
+        use_symbol = mode == "ticker" or (mode == "auto" and not symbol.startswith("^"))
+        if use_symbol:
+            raw_label = symbol.lstrip("^") or name  # e.g. "^SPX" -> "SPX", "VTI" -> "VTI"
         else:
-            raw_label = str(quote.get("label") or quote.get("symbol") or "")
+            raw_label = name or symbol
         label = html_escape(raw_label).strip()
         if not label:
             continue
