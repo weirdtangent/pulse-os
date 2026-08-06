@@ -215,6 +215,31 @@ class OverlayRenderTests(unittest.TestCase):
         assert alarm_card is not None
         self.assertIn("alarms", alarm_card)
 
+    def test_set_ticker_bumps_only_on_symbol_change(self) -> None:
+        manager = OverlayStateManager()
+        v0 = manager.snapshot().version
+
+        def q(symbol, price):
+            return {"symbol": symbol, "label": symbol, "price": price, "change": 0.0, "change_pct": 0.0, "is_up": True}
+
+        # First population -> bump (so the card refetches and the bar appears).
+        c1 = manager.set_ticker([q("^SPX", 1.0)])
+        self.assertTrue(c1.changed)
+        v1 = manager.snapshot().version
+        self.assertGreater(v1, v0)
+
+        # Same symbols, new prices -> NO bump (avoids reloading the overlay every poll)...
+        c2 = manager.set_ticker([q("^SPX", 2.0)])
+        self.assertFalse(c2.changed)
+        self.assertEqual(manager.snapshot().version, v1)
+        # ...but the data is still updated for the next natural refresh.
+        self.assertEqual(manager.snapshot().ticker[0]["price"], 2.0)
+
+        # Symbol set changes -> bump again.
+        c3 = manager.set_ticker([q("^SPX", 2.0), q("AAPL", 3.0)])
+        self.assertTrue(c3.changed)
+        self.assertGreater(manager.snapshot().version, v1)
+
     def test_active_timer_card_uses_previous_position(self) -> None:
         snapshot = self._snapshot(
             timers=(),

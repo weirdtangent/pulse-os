@@ -855,18 +855,17 @@ class KioskMqttListener:
         state = self.overlay_state
         if not ticker or not state:
             return
-        first_fetch = True
         try:
             while not self._ticker_stop_event.is_set():
                 try:
                     quotes = ticker.fetch()
-                    state.set_ticker([quote.as_dict() for quote in quotes])
-                    if first_fetch and quotes:
-                        # Nudge the overlay once so the bar appears promptly after boot,
-                        # instead of waiting for the card's next poll. Subsequent updates
-                        # ride the card's normal poll (set_ticker intentionally doesn't bump).
-                        first_fetch = False
-                        self._emit_overlay_refresh(state.snapshot().version, "ticker-init")
+                    change = state.set_ticker([quote.as_dict() for quote in quotes])
+                    # set_ticker bumps the version only when the symbol set changes (e.g. the
+                    # bar first populates after boot), so this emit actually moves the refresh
+                    # sensor and the photo-card refetches — instead of re-publishing the same
+                    # version, which the card ignores. Price-only updates don't bump/emit.
+                    if change.changed:
+                        self._emit_overlay_refresh(change.version, change.reason)
                 except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
                     self.log(f"ticker: fetch loop error: {exc}")
                 # Poll fast while US markets are open, slow otherwise. Non-US symbols still

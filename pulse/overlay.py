@@ -189,6 +189,7 @@ class OverlayStateManager:
             "info_card": "",
             "earmuffs_enabled": "",
             "update_available": "",
+            "ticker": "",
         }
 
     @property
@@ -438,17 +439,23 @@ class OverlayStateManager:
             self._signatures["earmuffs_enabled"] = signature
             return self._bump("earmuffs_enabled")
 
-    def set_ticker(self, quotes: Sequence[dict[str, Any]]) -> None:
+    def set_ticker(self, quotes: Sequence[dict[str, Any]]) -> OverlayChange:
         """Store the latest stock quotes for the ticker bar.
 
-        Deliberately does NOT bump the overlay version: the photo-card reloads the
-        overlay iframe on its own poll (<=120s) and picks these up then. Bumping would
-        force an extra iframe reload (and a visible repaint) every fetch, which is not
-        worth it for an ambient ticker whose data is already delayed.
+        Bumps the overlay version (which nudges the photo-card to refetch) only when the
+        SET OF SYMBOLS changes — i.e. when the ticker first populates after boot, or the
+        configured symbols change — NOT on every price tick. That makes the bar appear
+        promptly at startup without reloading the overlay iframe on every poll; ordinary
+        price updates ride the card's normal refresh cadence.
         """
         normalized = tuple(dict(item) for item in quotes if isinstance(item, dict))
+        signature = ",".join(str(item.get("symbol", "")) for item in normalized)
         with self._lock:
             self._ticker = normalized
+            if signature == self._signatures["ticker"]:
+                return OverlayChange(False, self._version, "ticker")
+            self._signatures["ticker"] = signature
+            return self._bump("ticker")
 
     def update_update_available(self, available: bool) -> OverlayChange:
         signature = str(available)
