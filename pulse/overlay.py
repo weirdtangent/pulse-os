@@ -553,6 +553,7 @@ class OverlayTheme:
     show_ticker: bool = False
     ticker_scroll_speed: int = 60  # pixels per second
     ticker_emoji: bool = True
+    ticker_label_mode: str = "name"  # "name" (friendly name) or "ticker" (symbol)
 
 
 CELL_ORDER = (
@@ -636,11 +637,18 @@ def _ticker_float(value: Any) -> float | None:
 
 def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     quotes = snapshot.ticker or ()
+    show_symbol = theme.ticker_label_mode == "ticker"
     items: list[str] = []
     for quote in quotes:
         if not isinstance(quote, dict):
             continue
-        label = html_escape(str(quote.get("label") or quote.get("symbol") or "")).strip()
+        if show_symbol:
+            # Ticker-symbol mode: e.g. "^SPX" -> "SPX", "VTI" -> "VTI" (avoids long/truncated
+            # provider names). Fall back to the friendly name if a symbol is somehow missing.
+            raw_label = str(quote.get("symbol") or "").lstrip("^") or str(quote.get("label") or "")
+        else:
+            raw_label = str(quote.get("label") or quote.get("symbol") or "")
+        label = html_escape(raw_label).strip()
         if not label:
             continue
         price = _ticker_float(quote.get("price"))

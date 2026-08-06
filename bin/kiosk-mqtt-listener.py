@@ -99,6 +99,7 @@ class OverlayConfig:
     ticker_afterhours: bool
     ticker_speed: int
     ticker_emoji: bool
+    ticker_label_mode: str
     ticker_api_key: str | None
 
 
@@ -447,6 +448,8 @@ def load_config() -> EnvConfig:
         default_label=friendly_name,
         log=log,
     )
+    ticker_label_raw = (os.environ.get("PULSE_TICKER_LABEL") or "name").strip().lower()
+    ticker_label_mode = "ticker" if ticker_label_raw == "ticker" else "name"
     overlay_config = OverlayConfig(
         enabled=overlay_enabled,
         bind_address=overlay_bind,
@@ -468,6 +471,7 @@ def load_config() -> EnvConfig:
         ticker_afterhours=parse_bool(os.environ.get("PULSE_TICKER_AFTERHOURS"), True),
         ticker_speed=max(10, int(os.environ.get("PULSE_TICKER_SPEED", "60") or "60")),
         ticker_emoji=parse_bool(os.environ.get("PULSE_TICKER_EMOJI"), True),
+        ticker_label_mode=ticker_label_mode,
         ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
     )
 
@@ -745,6 +749,7 @@ class KioskMqttListener:
                 show_ticker=self.overlay_config.ticker_enabled,
                 ticker_scroll_speed=self.overlay_config.ticker_speed,
                 ticker_emoji=self.overlay_config.ticker_emoji,
+                ticker_label_mode=self.overlay_config.ticker_label_mode,
             )
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
@@ -1126,6 +1131,7 @@ class KioskMqttListener:
             show_ticker=self.overlay_config.ticker_enabled,
             ticker_scroll_speed=self.overlay_config.ticker_speed,
             ticker_emoji=self.overlay_config.ticker_emoji,
+            ticker_label_mode=self.overlay_config.ticker_label_mode,
         )
         if self._overlay_http:
             self._overlay_http.theme = self._overlay_theme

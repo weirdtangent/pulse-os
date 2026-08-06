@@ -87,6 +87,32 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn("🚀", html)  # >= +10%
         self.assertIn("AH 7,740.00", html)
 
+    def test_ticker_label_mode_ticker_shows_symbol(self) -> None:
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_ticker=True,
+            ticker_label_mode="ticker",
+        )
+        ticker = (
+            {"symbol": "^SPX", "label": "S&P 500", "price": 1.0, "change": 0.0, "change_pct": 0.0, "is_up": True},
+            {
+                "symbol": "VTI",
+                "label": "Vanguard Morningstar Total Stoc",
+                "price": 380.0,
+                "change": 0.6,
+                "change_pct": 0.16,
+                "is_up": True,
+            },
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), theme)
+        self.assertIn(">SPX<", html)  # caret stripped
+        self.assertIn(">VTI<", html)  # symbol, not the long fund name
+        self.assertNotIn("Vanguard Morningstar", html)
+        self.assertNotIn("S&amp;P 500", html)
+
     def test_ticker_absent_when_disabled(self) -> None:
         ticker = (
             {"symbol": "^SPX", "label": "S&P 500", "price": 1.0, "change": 0.0, "change_pct": 0.0, "is_up": True},

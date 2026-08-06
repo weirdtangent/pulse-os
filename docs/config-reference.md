@@ -81,6 +81,7 @@ other symbols show their Yahoo short name.
 | `PULSE_TICKER_AFTERHOURS` | `true` | Append the post-market price (marked `AH`) when the provider reports one. |
 | `PULSE_TICKER_SPEED` | `60` | Scroll speed in pixels per second (min 10; higher = faster). |
 | `PULSE_TICKER_EMOJI` | `true` | Add an accent emoji for outsized moves (🚀 ≥ +10%, 🔥 ≥ +5%, 📉 ≤ -5%, 🧊 ≤ -10%). |
+| `PULSE_TICKER_LABEL` | `name` | Label before each price: `name` (friendly/company name, e.g. "S&P 500", "Apple Inc.") or `ticker` (the symbol, e.g. "SPX", "AAPL", "VTI" — compact, avoids long/truncated ETF names). |
 | `PULSE_TICKER_API_KEY` | _(unset)_ | Optional free [Finnhub](https://finnhub.io) API key. When set, Finnhub is the preferred (licensed) source for symbols it can price; Yahoo covers the rest. |
 
 Notes:
