@@ -35,7 +35,7 @@ from pulse.overlay import (
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
 from pulse.stock_ticker import StockTicker, is_us_market_hours, parse_symbols
-from pulse.utils import parse_bool, sanitize_hostname_for_entity_id
+from pulse.utils import parse_bool, parse_int, sanitize_hostname_for_entity_id
 
 
 @dataclass(frozen=True)
@@ -466,10 +466,10 @@ def load_config() -> EnvConfig:
         auth_token=(os.environ.get("PULSE_OVERLAY_AUTH_TOKEN") or "").strip() or None,
         ticker_enabled=parse_bool(os.environ.get("PULSE_TICKER_ENABLED"), False),
         ticker_symbols=tuple(parse_symbols(os.environ.get("PULSE_TICKER_SYMBOLS")) or ["^SPX", "^DJI", "^NDX"]),
-        ticker_interval=max(15, int(os.environ.get("PULSE_TICKER_INTERVAL", "60") or "60")),
-        ticker_interval_closed=max(60, int(os.environ.get("PULSE_TICKER_INTERVAL_CLOSED", "900") or "900")),
+        ticker_interval=max(15, parse_int(os.environ.get("PULSE_TICKER_INTERVAL"), 60)),
+        ticker_interval_closed=max(60, parse_int(os.environ.get("PULSE_TICKER_INTERVAL_CLOSED"), 900)),
         ticker_afterhours=parse_bool(os.environ.get("PULSE_TICKER_AFTERHOURS"), True),
-        ticker_speed=max(10, int(os.environ.get("PULSE_TICKER_SPEED", "60") or "60")),
+        ticker_speed=max(10, parse_int(os.environ.get("PULSE_TICKER_SPEED"), 60)),
         ticker_emoji=parse_bool(os.environ.get("PULSE_TICKER_EMOJI"), True),
         ticker_label_mode=ticker_label_mode,
         ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
