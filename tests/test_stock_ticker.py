@@ -22,12 +22,14 @@ class _Router:
         self.post_price: float | None = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
-        if "getcrumb" in url:
+        # Route on the parsed host/path rather than substring-matching the whole URL.
+        host = request.url.host
+        path = request.url.path
+        if path.endswith("/v1/test/getcrumb"):
             return httpx.Response(200 if self.crumb_ok else 500, text="CRUMB" if self.crumb_ok else "")
-        if "fc.yahoo.com" in url:
+        if host == "fc.yahoo.com":
             return httpx.Response(200, text="ok")
-        if "v7/finance/quote" in url:
+        if path.endswith("/v7/finance/quote"):
             if self.quote_status != 200:
                 return httpx.Response(self.quote_status, json={})
             catalog = {
@@ -52,10 +54,10 @@ class _Router:
                 catalog["AAPL"]["postMarketPrice"] = self.post_price
             result = [catalog[s] for s in self.quote_symbols if s in catalog]
             return httpx.Response(200, json={"quoteResponse": {"result": result}})
-        if "v8/finance/chart/" in url:
+        if path.startswith("/v8/finance/chart/"):
             if not self.chart_ok:
                 return httpx.Response(500, json={})
-            symbol = url.split("/chart/")[1].split("?")[0]
+            symbol = path.rsplit("/chart/", 1)[1]
             return httpx.Response(
                 200,
                 json={
