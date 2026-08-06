@@ -99,6 +99,7 @@ class OverlayConfig:
     ticker_afterhours: bool
     ticker_speed: int
     ticker_emoji: bool
+    ticker_api_key: str | None
 
 
 @dataclass(frozen=True)
@@ -467,6 +468,7 @@ def load_config() -> EnvConfig:
         ticker_afterhours=parse_bool(os.environ.get("PULSE_TICKER_AFTERHOURS"), True),
         ticker_speed=max(10, int(os.environ.get("PULSE_TICKER_SPEED", "60") or "60")),
         ticker_emoji=parse_bool(os.environ.get("PULSE_TICKER_EMOJI"), True),
+        ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -730,6 +732,7 @@ class KioskMqttListener:
                 self._stock_ticker = StockTicker(
                     self.overlay_config.ticker_symbols,
                     afterhours=self.overlay_config.ticker_afterhours,
+                    api_key=self.overlay_config.ticker_api_key,
                     log=self.log,
                 )
             self._overlay_theme = OverlayTheme(

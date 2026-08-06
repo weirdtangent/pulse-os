@@ -3,19 +3,25 @@
 Fetches quotes for a configured list of symbols (major indices plus any equities
 the user cares to watch) for display in the scrolling overlay ticker.
 
-Reliability model (chosen with the user):
-- Primary: Yahoo Finance v7 quote (one request for all symbols; carries daily
-  change, marketState, and after-hours price). Yahoo now gates this behind a
-  cookie + crumb, which this module obtains transparently and refreshes on expiry.
-- Fallback: Yahoo v8 chart, one request per symbol, needs no auth so it survives
-  crumb-flow breakage (gives price vs. previous close; no marketState/after-hours).
-  This is an independent request path from v7, so it also covers a v7 outage.
-- Last resort: the most recent successfully-fetched values, so the ticker never
-  goes blank when the providers hiccup.
+Provider chain (per symbol, first source that answers wins for that symbol):
+- Optional: Finnhub (https://finnhub.io) when PULSE_TICKER_API_KEY is set. This is a
+  licensed API with an explicit free tier for personal use, so it is the preferred
+  source when configured. Free tier covers US equities/ETFs but generally not indices,
+  which is fine — anything Finnhub can't price falls through to Yahoo below.
+- Yahoo Finance v7 quote (one request for all remaining symbols; carries daily change,
+  marketState, and after-hours price). Yahoo gates this behind a cookie + crumb, which
+  this module obtains transparently and refreshes on expiry.
+- Yahoo v8 chart, one request per symbol, needs no auth so it survives crumb-flow
+  breakage (price vs. previous close; no marketState/after-hours).
+- Last resort: the most recent successfully-fetched values, so the ticker never goes
+  blank when the providers hiccup.
 
-(Stooq was evaluated as a non-Yahoo fallback but now puts its CSV endpoints behind
-a JavaScript proof-of-work anti-bot challenge, so it is unusable from a headless
-client and was dropped.)
+Data-source note: the Yahoo endpoints are unofficial/undocumented (Yahoo has no free
+public API) and are used here the same way the yfinance library does — appropriate for
+personal, non-commercial, low-volume home display, but not a licensed/ToS-sanctioned
+use. Set PULSE_TICKER_API_KEY to prefer Finnhub, which does provide a licensed free
+tier. (Stooq was evaluated but now gates its CSV endpoints behind a JavaScript anti-bot
+challenge, so it is unusable headless and was dropped.)
 
 Runs synchronously in a background daemon thread (see kiosk-mqtt-listener.py),
 mirroring the httpx style used by pulse/assistant/info_sources.py.
@@ -38,6 +44,7 @@ YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 YAHOO_COOKIE_SEED_URL = "https://fc.yahoo.com/"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/"
+FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
 # Yahoo rejects the default httpx User-Agent, so present a browser-like one.
 _USER_AGENT = "Mozilla/5.0 (X11; Linux aarch64) PulseOS-ticker/1.0"
 
@@ -139,18 +146,20 @@ def parse_symbols(spec: str | None) -> list[str]:
 
 
 class StockTicker:
-    """Fetches quotes with Yahoo v7 -> Yahoo v8 -> Stooq -> last-good-cache fallback."""
+    """Fetches quotes via an optional Finnhub key, then Yahoo v7/v8, then last-good cache."""
 
     def __init__(
         self,
         symbols: Sequence[str],
         *,
         afterhours: bool = True,
+        api_key: str | None = None,
         timeout: float = 10.0,
         log: Callable[[str], None] | None = None,
     ) -> None:
         self.symbols = [s.strip().upper() for s in symbols if s and s.strip()]
         self.afterhours = afterhours
+        self.api_key = (api_key or "").strip() or None
         self.timeout = timeout
         self._log = log or LOGGER.info
         self._lock = threading.Lock()
@@ -168,25 +177,51 @@ class StockTicker:
     def _yahoo_symbol(self, canonical: str) -> str:
         return _YAHOO_SYMBOLS.get(canonical, canonical)
 
+    def _finnhub_symbol(self, canonical: str) -> str:
+        # Finnhub uses plain tickers for US equities/ETFs; indices (with a caret) are
+        # not on the free tier and simply return no data, so they fall through to Yahoo.
+        return canonical
+
     def _label(self, canonical: str, fallback: str | None) -> str:
         return _LABELS.get(canonical) or (fallback or "").strip() or canonical.lstrip("^")
+
+    def _provider_chain(self) -> list[Callable[[list[str]], list[TickerQuote] | None]]:
+        chain: list[Callable[[list[str]], list[TickerQuote] | None]] = []
+        if self.api_key:
+            chain.append(self._fetch_finnhub)
+        chain.append(self._fetch_yahoo_quote)
+        chain.append(self._fetch_yahoo_chart)
+        return chain
 
     # -- public API ------------------------------------------------------------
 
     def fetch(self) -> list[TickerQuote]:
         """Return the freshest quotes available, never raising and never blank-on-hiccup.
 
-        Newly fetched quotes are merged over the last-good cache per symbol, so a symbol
-        that a given response happens to omit keeps its previous value instead of
-        vanishing from the ticker until the next full fetch.
+        Each provider is asked only for the symbols still uncovered, so (e.g.) Finnhub
+        can price the equities while Yahoo fills in the indices it doesn't support. The
+        result is then merged over the last-good cache per symbol, so a symbol a round
+        happens to miss keeps its previous value instead of vanishing from the ticker.
         """
         if not self.symbols:
             return []
-        fetched = self._fetch_yahoo_quote() or self._fetch_yahoo_chart() or []
+        collected: dict[str, TickerQuote] = {}
+        remaining = list(self.symbols)
+        for provider in self._provider_chain():
+            if not remaining:
+                break
+            try:
+                found = provider(remaining) or []
+            except Exception as exc:  # nosec B112 - a bad provider must not stop the chain
+                self._log(f"ticker: provider {provider.__name__} errored ({exc})")
+                found = []
+            for quote in found:
+                collected[quote.symbol] = quote
+            remaining = [symbol for symbol in self.symbols if symbol not in collected]
         with self._lock:
-            if fetched:
+            if collected:
                 merged = {quote.symbol: quote for quote in self._cache}
-                merged.update({quote.symbol: quote for quote in fetched})
+                merged.update(collected)
                 # Keep only currently-configured symbols, in configured order.
                 self._cache = tuple(merged[symbol] for symbol in self.symbols if symbol in merged)
             return list(self._cache)
@@ -225,20 +260,64 @@ class StockTicker:
         return None
 
     # -- providers -------------------------------------------------------------
+    # Each provider takes the list of still-uncovered symbols and returns quotes for
+    # whatever it can price (or None). fetch() merges results across providers per symbol.
 
-    def _fetch_yahoo_quote(self) -> list[TickerQuote] | None:
-        """Primary: v7 quote (cookie + crumb), one request for all symbols."""
+    def _fetch_finnhub(self, symbols: list[str]) -> list[TickerQuote] | None:
+        """Optional licensed provider: Finnhub /quote, one request per symbol."""
+        if not self.api_key:
+            return None
+        client = self._get_client()
+        quotes: list[TickerQuote] = []
+        for canonical in symbols:
+            try:
+                response = client.get(
+                    FINNHUB_QUOTE_URL,
+                    params={"symbol": self._finnhub_symbol(canonical), "token": self.api_key},
+                )
+                if response.status_code in (401, 403):
+                    self._log("ticker: finnhub auth failed — check PULSE_TICKER_API_KEY")
+                    return quotes or None
+                if response.status_code == 429:
+                    self._log("ticker: finnhub rate-limited; leaving rest to Yahoo")
+                    return quotes or None
+                response.raise_for_status()
+                data = response.json()
+            except (httpx.HTTPError, ValueError) as exc:
+                self._log(f"ticker: finnhub {canonical} failed ({exc})")
+                continue
+            price = _coerce_float(data.get("c"))
+            change = _coerce_float(data.get("d"))
+            pct = _coerce_float(data.get("dp"))
+            # Finnhub returns c=0 (and null d/dp) for symbols it can't price, e.g. indices
+            # on the free tier — skip those so they fall through to Yahoo.
+            if not price or price <= 0 or change is None or pct is None:
+                continue
+            quotes.append(
+                TickerQuote(
+                    symbol=canonical,
+                    label=self._label(canonical, None),
+                    price=price,
+                    change=change,
+                    change_pct=pct,
+                    is_up=change >= 0,
+                )
+            )
+        return quotes or None
+
+    def _fetch_yahoo_quote(self, symbols: list[str]) -> list[TickerQuote] | None:
+        """v7 quote (cookie + crumb), one request for all requested symbols."""
         client = self._get_client()
         crumb = self._ensure_crumb(client)
         if not crumb:
             return None
-        payload = self._yahoo_quote_request(client, crumb)
+        payload = self._yahoo_quote_request(client, crumb, symbols)
         if payload is None:
             # A stale crumb comes back as 401; refresh once and retry.
             crumb = self._ensure_crumb(client, force=True)
             if not crumb:
                 return None
-            payload = self._yahoo_quote_request(client, crumb)
+            payload = self._yahoo_quote_request(client, crumb, symbols)
         if payload is None:
             return None
         results = (payload.get("quoteResponse") or {}).get("result") or []
@@ -246,7 +325,7 @@ class StockTicker:
             return None
         by_symbol = {str(item.get("symbol", "")).upper(): item for item in results}
         quotes: list[TickerQuote] = []
-        for canonical in self.symbols:
+        for canonical in symbols:
             item = by_symbol.get(self._yahoo_symbol(canonical).upper())
             if not item:
                 continue
@@ -276,8 +355,8 @@ class StockTicker:
                 continue
         return quotes or None
 
-    def _yahoo_quote_request(self, client: httpx.Client, crumb: str) -> dict | None:
-        yahoo_symbols = [self._yahoo_symbol(s) for s in self.symbols]
+    def _yahoo_quote_request(self, client: httpx.Client, crumb: str, symbols: list[str]) -> dict | None:
+        yahoo_symbols = [self._yahoo_symbol(s) for s in symbols]
         try:
             response = client.get(
                 YAHOO_QUOTE_URL,
@@ -291,11 +370,11 @@ class StockTicker:
             self._log(f"ticker: yahoo quote failed ({exc})")
             return None
 
-    def _fetch_yahoo_chart(self) -> list[TickerQuote] | None:
+    def _fetch_yahoo_chart(self, symbols: list[str]) -> list[TickerQuote] | None:
         """Fallback: v8 chart, one request per symbol, no auth required."""
         client = self._get_client()
         quotes: list[TickerQuote] = []
-        for canonical in self.symbols:
+        for canonical in symbols:
             meta = self._chart_meta(client, self._yahoo_symbol(canonical))
             if not meta:
                 continue
@@ -341,11 +420,12 @@ def _coerce_float(value: object) -> float | None:
 
 
 if __name__ == "__main__":  # pragma: no cover - manual smoke test
+    import os
     import sys
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     requested = parse_symbols(",".join(sys.argv[1:])) or ["^SPX", "^DJI", "^NDX"]
-    ticker = StockTicker(requested)
+    ticker = StockTicker(requested, api_key=os.environ.get("PULSE_TICKER_API_KEY"))
     for quote in ticker.fetch():
         print(quote.as_dict())
     print(f"market_hours={is_us_market_hours()}")

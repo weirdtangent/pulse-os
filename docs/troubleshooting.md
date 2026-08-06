@@ -264,6 +264,7 @@ values (or nothing on a fresh boot before the first successful fetch).
 
 - `query1.finance.yahoo.com` — v7 quote, crumb, and v8 chart endpoints
 - `fc.yahoo.com` — cookie/crumb seed for the Yahoo quote API
+- `finnhub.io` — only if you set `PULSE_TICKER_API_KEY` (licensed provider)
 
 Confirm resolution from the device with `nslookup query1.finance.yahoo.com` (it should not
 resolve to `0.0.0.0`/your Pi-hole), then check the fetcher directly:
@@ -273,7 +274,9 @@ cadence is keyed to US market hours, so quotes only refresh every `PULSE_TICKER_
 seconds (default 15 min) outside US trading — a "stale" bar overnight can be normal.
 
 > Quotes come from Yahoo via two independent endpoints (v7 quote, then a no-auth v8 chart
-> fallback) plus the cache. Stooq was considered as a non-Yahoo source but now gates its CSV
-> endpoints behind a JavaScript anti-bot challenge, so it is unusable from a headless client.
+> fallback) plus the cache. Setting `PULSE_TICKER_API_KEY` adds Finnhub as a preferred,
+> licensed source for the symbols it can price. Stooq was considered as a non-Yahoo source
+> but now gates its CSV endpoints behind a JavaScript anti-bot challenge, so it is unusable
+> from a headless client.
 
 Send PRs with any other gotchas so future builders don't have to rediscover them.

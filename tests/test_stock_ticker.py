@@ -20,11 +20,19 @@ class _Router:
         self.chart_ok = True
         self.market_state = "REGULAR"
         self.post_price: float | None = None
+        self.finnhub_status = 200
+        self.finnhub_prices: dict[str, dict] = {}  # symbol -> {"c","d","dp"}
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         # Route on the parsed host/path rather than substring-matching the whole URL.
         host = request.url.host
         path = request.url.path
+        if host == "finnhub.io":
+            if self.finnhub_status != 200:
+                return httpx.Response(self.finnhub_status, json={})
+            symbol = request.url.params.get("symbol", "")
+            data = self.finnhub_prices.get(symbol, {"c": 0, "d": None, "dp": None})
+            return httpx.Response(200, json=data)
         if path.endswith("/v1/test/getcrumb"):
             return httpx.Response(200 if self.crumb_ok else 500, text="CRUMB" if self.crumb_ok else "")
         if host == "fc.yahoo.com":
@@ -115,11 +123,11 @@ class TestFetch:
         calls = {"n": 0}
         real = ticker._yahoo_quote_request
 
-        def flaky(client, crumb):  # 401 on first attempt, real data on retry
+        def flaky(client, crumb, symbols):  # 401 on first attempt, real data on retry
             calls["n"] += 1
             if calls["n"] == 1:
                 return None
-            return real(client, crumb)
+            return real(client, crumb, symbols)
 
         ticker._yahoo_quote_request = flaky  # type: ignore[method-assign]
         quotes = ticker.fetch()
@@ -178,6 +186,32 @@ class TestFetch:
     def test_no_symbols_returns_empty(self, router):
         ticker = _ticker(symbols=())
         assert ticker.fetch() == []
+        ticker.close()
+
+
+class TestFinnhubProvider:
+    def test_finnhub_prices_equities_yahoo_fills_indices(self, router):
+        # Finnhub covers AAPL; it can't price the ^SPX index, which falls through to Yahoo.
+        router.finnhub_prices = {"AAPL": {"c": 210.0, "d": 5.0, "dp": 2.44}}
+        ticker = _ticker(symbols=("^SPX", "AAPL"), api_key="KEY")
+        by_symbol = {q.symbol: q for q in ticker.fetch()}
+        assert by_symbol["AAPL"].price == 210.0  # from Finnhub
+        assert by_symbol["^SPX"].price == 100.0  # index from Yahoo v7
+        ticker.close()
+
+    def test_finnhub_bad_key_falls_back_to_yahoo(self, router):
+        router.finnhub_status = 401
+        ticker = _ticker(symbols=("AAPL",), api_key="BADKEY")
+        by_symbol = {q.symbol: q for q in ticker.fetch()}
+        assert by_symbol["AAPL"].price == 200.0  # Yahoo v7
+        ticker.close()
+
+    def test_no_key_skips_finnhub_entirely(self, router):
+        # Even with a Finnhub price available, no key => provider not consulted.
+        router.finnhub_prices = {"AAPL": {"c": 999.0, "d": 1.0, "dp": 1.0}}
+        ticker = _ticker(symbols=("AAPL",))  # no api_key
+        by_symbol = {q.symbol: q for q in ticker.fetch()}
+        assert by_symbol["AAPL"].price == 200.0  # Yahoo, not the Finnhub 999
         ticker.close()
 
 

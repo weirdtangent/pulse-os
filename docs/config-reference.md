@@ -56,6 +56,17 @@ transient upstream failure. Any symbol Yahoo lists works — including non-US in
 exchange suffix (`SAP.DE`, `7203.T`). Friendly labels are built in for common indices;
 other symbols show their Yahoo short name.
 
+> **Data source & usage.** The Yahoo endpoints are *unofficial and undocumented* — Yahoo
+> retired its free public Finance API years ago, and this module uses the same endpoints
+> the [`yfinance`](https://pypi.org/project/yfinance/) library does (obtaining Yahoo's
+> cookie + crumb transparently). That is appropriate for **personal, non-commercial,
+> low-volume home display** — which is what we do here (one request per device every
+> 60s/15min, cached, not redistributed) — but it is **not a licensed or ToS-sanctioned
+> use**, and Yahoo may change or block the endpoints at any time. For a licensed source,
+> set `PULSE_TICKER_API_KEY` to a free [Finnhub](https://finnhub.io) key: Finnhub is then
+> the preferred provider for the symbols it can price (US equities/ETFs on the free tier),
+> and Yahoo fills in the rest (indices, which Finnhub's free tier doesn't cover).
+
 | Key | Default | Description |
 | --- | --- | --- |
 | `PULSE_TICKER_ENABLED` | `false` | Master switch for the ticker bar (optional per device). |
@@ -65,6 +76,7 @@ other symbols show their Yahoo short name.
 | `PULSE_TICKER_AFTERHOURS` | `true` | Append the post-market price (marked `AH`) when the provider reports one. |
 | `PULSE_TICKER_SPEED` | `60` | Scroll speed in pixels per second (min 10; higher = faster). |
 | `PULSE_TICKER_EMOJI` | `true` | Add an accent emoji for outsized moves (🚀 ≥ +10%, 🔥 ≥ +5%, 📉 ≤ -5%, 🧊 ≤ -10%). |
+| `PULSE_TICKER_API_KEY` | _(unset)_ | Optional free [Finnhub](https://finnhub.io) API key. When set, Finnhub is the preferred (licensed) source for symbols it can price; Yahoo covers the rest. |
 
 Notes:
 - Gains render green with a ▲, losses red with a ▼; the bar matches the overlay's
