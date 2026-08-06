@@ -49,11 +49,12 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 ## Stock ticker
 
 An optional scrolling ticker bar across the bottom of the overlay. Quotes are fetched
-on-device from Yahoo Finance (near-real-time, no API key) with a Stooq CSV fallback and
-a last-good cache, so the bar never goes blank on a transient upstream failure. Any
-symbol Yahoo lists works — including non-US indices (`^N225`, `^FTSE`, `^GDAXI`, `^HSI`,
-`^FCHI`, `^STOXX50E`) and foreign tickers with an exchange suffix (`SAP.DE`, `7203.T`).
-Friendly labels are built in for common indices; other symbols show their Yahoo short name.
+on-device from Yahoo Finance (near-real-time, no API key) using two independent endpoints
+(v7 quote, then v8 chart) plus a last-good cache, so the bar never goes blank on a
+transient upstream failure. Any symbol Yahoo lists works — including non-US indices
+(`^N225`, `^FTSE`, `^GDAXI`, `^HSI`, `^FCHI`, `^STOXX50E`) and foreign tickers with an
+exchange suffix (`SAP.DE`, `7203.T`). Friendly labels are built in for common indices;
+other symbols show their Yahoo short name.
 
 | Key | Default | Description |
 | --- | --- | --- |
@@ -71,10 +72,10 @@ Notes:
 - The fast/slow fetch cadence is keyed to US regular-session hours (holidays are not
   tracked — an extra harmless fast poll may occur). Data itself is global.
 - **DNS/ad-blocker allowlist:** the device fetches quotes from these hosts — if you run
-  Pi-hole/AdGuard or similar, make sure they resolve: `query1.finance.yahoo.com`,
-  `fc.yahoo.com` (cookie/crumb), and `stooq.com` (fallback). A blocked host shows up as
-  `ticker:` fetch warnings in the logs and a bar that only ever shows cached/last-good
-  values. See [troubleshooting.md](troubleshooting.md#stock-ticker).
+  Pi-hole/AdGuard or similar, make sure they resolve: `query1.finance.yahoo.com` (quote +
+  chart) and `fc.yahoo.com` (cookie/crumb). A blocked host shows up as `ticker:` fetch
+  warnings in the logs and a bar that only ever shows cached/last-good values. See
+  [troubleshooting.md](troubleshooting.md#stock-ticker).
 
 ## Telemetry & MQTT
 

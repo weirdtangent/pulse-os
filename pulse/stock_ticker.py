@@ -9,9 +9,13 @@ Reliability model (chosen with the user):
   cookie + crumb, which this module obtains transparently and refreshes on expiry.
 - Fallback: Yahoo v8 chart, one request per symbol, needs no auth so it survives
   crumb-flow breakage (gives price vs. previous close; no marketState/after-hours).
-- Fallback: Stooq's light CSV endpoint (delayed ~15 min, no key).
+  This is an independent request path from v7, so it also covers a v7 outage.
 - Last resort: the most recent successfully-fetched values, so the ticker never
   goes blank when the providers hiccup.
+
+(Stooq was evaluated as a non-Yahoo fallback but now puts its CSV endpoints behind
+a JavaScript proof-of-work anti-bot challenge, so it is unusable from a headless
+client and was dropped.)
 
 Runs synchronously in a background daemon thread (see kiosk-mqtt-listener.py),
 mirroring the httpx style used by pulse/assistant/info_sources.py.
@@ -19,8 +23,6 @@ mirroring the httpx style used by pulse/assistant/info_sources.py.
 
 from __future__ import annotations
 
-import csv
-import io
 import logging
 import threading
 from collections.abc import Callable, Sequence
@@ -36,29 +38,26 @@ YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 YAHOO_COOKIE_SEED_URL = "https://fc.yahoo.com/"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/"
-STOOQ_QUOTE_URL = "https://stooq.com/q/l/"
-# Yahoo and Stooq both reject the default httpx User-Agent, so present a browser-like one.
+# Yahoo rejects the default httpx User-Agent, so present a browser-like one.
 _USER_AGENT = "Mozilla/5.0 (X11; Linux aarch64) PulseOS-ticker/1.0"
 
 _MARKET_TZ = ZoneInfo("America/New_York")
 
-# Canonical (config) symbol -> (yahoo symbol, stooq symbol).
-# Index tickers differ per provider; plain equities (AAPL, MSFT, ...) pass through
-# unchanged (upper-case for Yahoo, lower-case for Stooq) via _yahoo_symbol/_stooq_symbol.
-_INDEX_MAP: dict[str, tuple[str, str]] = {
-    "^SPX": ("^GSPC", "^spx"),  # S&P 500
-    "^GSPC": ("^GSPC", "^spx"),
-    "^DJI": ("^DJI", "^dji"),  # Dow Jones Industrial Average
-    "^IXIC": ("^IXIC", "^ndq"),  # Nasdaq Composite
-    "^NDX": ("^NDX", "^ndx"),  # Nasdaq 100
-    "^RUT": ("^RUT", "^rut"),  # Russell 2000
-    "^VIX": ("^VIX", "^vix"),  # Volatility index
-    "^FTSE": ("^FTSE", "^ftm"),  # FTSE 100 (UK)
-    "^GDAXI": ("^GDAXI", "^dax"),  # DAX (Germany)
-    "^FCHI": ("^FCHI", "^cac"),  # CAC 40 (France)
-    "^STOXX50E": ("^STOXX50E", "^stx"),  # Euro Stoxx 50
-    "^N225": ("^N225", "^nkx"),  # Nikkei 225 (Japan)
-    "^HSI": ("^HSI", "^hsi"),  # Hang Seng (Hong Kong)
+# Friendly (config) symbol -> Yahoo symbol, for indices whose tickers differ from what
+# a user would naturally type. Plain equities (AAPL, MSFT, ...) pass through unchanged.
+_YAHOO_SYMBOLS: dict[str, str] = {
+    "^SPX": "^GSPC",  # S&P 500
+    "^DJI": "^DJI",  # Dow Jones Industrial Average
+    "^IXIC": "^IXIC",  # Nasdaq Composite
+    "^NDX": "^NDX",  # Nasdaq 100
+    "^RUT": "^RUT",  # Russell 2000
+    "^VIX": "^VIX",  # Volatility index
+    "^FTSE": "^FTSE",  # FTSE 100 (UK)
+    "^GDAXI": "^GDAXI",  # DAX (Germany)
+    "^FCHI": "^FCHI",  # CAC 40 (France)
+    "^STOXX50E": "^STOXX50E",  # Euro Stoxx 50
+    "^N225": "^N225",  # Nikkei 225 (Japan)
+    "^HSI": "^HSI",  # Hang Seng (Hong Kong)
 }
 
 # Friendly display labels for common indices (fallback: provider short name or symbol).
@@ -167,12 +166,7 @@ class StockTicker:
     # -- symbol mapping helpers ------------------------------------------------
 
     def _yahoo_symbol(self, canonical: str) -> str:
-        mapped = _INDEX_MAP.get(canonical)
-        return mapped[0] if mapped else canonical
-
-    def _stooq_symbol(self, canonical: str) -> str:
-        mapped = _INDEX_MAP.get(canonical)
-        return mapped[1] if mapped else canonical.lower()
+        return _YAHOO_SYMBOLS.get(canonical, canonical)
 
     def _label(self, canonical: str, fallback: str | None) -> str:
         return _LABELS.get(canonical) or (fallback or "").strip() or canonical.lstrip("^")
@@ -183,7 +177,7 @@ class StockTicker:
         """Return the freshest quotes available, never raising and never blank-on-hiccup."""
         if not self.symbols:
             return []
-        quotes = self._fetch_yahoo_quote() or self._fetch_yahoo_chart() or self._fetch_stooq()
+        quotes = self._fetch_yahoo_quote() or self._fetch_yahoo_chart()
         if quotes:
             with self._lock:
                 self._cache = tuple(quotes)
@@ -329,53 +323,6 @@ class StockTicker:
         except (httpx.HTTPError, ValueError) as exc:
             self._log(f"ticker: yahoo chart {yahoo_symbol} failed ({exc})")
             return None
-
-    def _fetch_stooq(self) -> list[TickerQuote] | None:
-        # Stooq multi-quote uses '+'-separated symbols. Build the query manually so the
-        # '^' and '+' are not percent-encoded away by the client.
-        stooq_symbols = "+".join(self._stooq_symbol(s) for s in self.symbols)
-        url = f"{STOOQ_QUOTE_URL}?s={stooq_symbols}&f=sohlc&h&e=csv"
-        try:
-            client = self._get_client()
-            response = client.get(url)
-            response.raise_for_status()
-            text = response.text
-        except httpx.HTTPError as exc:
-            self._log(f"ticker: stooq fetch failed ({exc})")
-            return None
-        if "<" in text[:64]:  # Stooq serves an HTML 404 page when it blocks/rate-limits.
-            self._log("ticker: stooq returned non-CSV (blocked or bad symbols)")
-            return None
-        try:
-            rows = list(csv.DictReader(io.StringIO(text)))
-        except csv.Error as exc:
-            self._log(f"ticker: stooq parse failed ({exc})")
-            return None
-        by_symbol = {str(row.get("Symbol", "")).upper(): row for row in rows}
-        quotes: list[TickerQuote] = []
-        for canonical in self.symbols:
-            row = by_symbol.get(self._stooq_symbol(canonical).upper())
-            if not row:
-                continue
-            # Stooq's light CSV has no previous-close field, so approximate the move as
-            # close-vs-open. This is a delayed fallback only; Yahoo carries daily change.
-            open_price = _coerce_float(row.get("Open"))
-            close_price = _coerce_float(row.get("Close"))
-            if not open_price or not close_price or close_price <= 0:
-                continue
-            change = close_price - open_price
-            quotes.append(
-                TickerQuote(
-                    symbol=canonical,
-                    label=self._label(canonical, None),
-                    price=close_price,
-                    change=change,
-                    change_pct=change / open_price * 100.0,
-                    is_up=change >= 0,
-                    market_state="DELAYED",
-                )
-            )
-        return quotes or None
 
 
 def _coerce_float(value: object) -> float | None:

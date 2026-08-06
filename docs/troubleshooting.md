@@ -255,17 +255,15 @@ As a backstop, the `watchdog(8)` daemon (see `configure_watchdog`) runs `pulse-n
 on stale numbers, or the logs show repeated `ticker: yahoo ...`/`ticker: stooq ...` fetch
 warnings.
 
-**Cause**: The device fetches quotes directly from the internet, so a DNS-level ad-blocker
-(Pi-hole, AdGuard Home, NextDNS) or a firewall can silently block the provider hosts. Yahoo
-in particular is served from domains ad-blockers sometimes catch. When every provider is
-blocked, the fetcher falls back to its last-good cache, so the bar shows frozen values (or
-nothing on a fresh boot before the first successful fetch).
+**Cause**: The device fetches quotes directly from Yahoo Finance, so a DNS-level ad-blocker
+(Pi-hole, AdGuard Home, NextDNS) or a firewall can silently block the provider hosts. When
+Yahoo is unreachable, the fetcher falls back to its last-good cache, so the bar shows frozen
+values (or nothing on a fresh boot before the first successful fetch).
 
 **Solution**: Allowlist the quote hosts on your DNS filter / firewall:
 
-- `query1.finance.yahoo.com` — quote, crumb, and chart endpoints (primary source)
+- `query1.finance.yahoo.com` — v7 quote, crumb, and v8 chart endpoints
 - `fc.yahoo.com` — cookie/crumb seed for the Yahoo quote API
-- `stooq.com` — delayed CSV fallback
 
 Confirm resolution from the device with `nslookup query1.finance.yahoo.com` (it should not
 resolve to `0.0.0.0`/your Pi-hole), then check the fetcher directly:
@@ -273,5 +271,9 @@ resolve to `0.0.0.0`/your Pi-hole), then check the fetcher directly:
 quote dicts; blocked hosts print the matching `ticker:` warning. Note the fast/slow poll
 cadence is keyed to US market hours, so quotes only refresh every `PULSE_TICKER_INTERVAL_CLOSED`
 seconds (default 15 min) outside US trading — a "stale" bar overnight can be normal.
+
+> Quotes come from Yahoo via two independent endpoints (v7 quote, then a no-auth v8 chart
+> fallback) plus the cache. Stooq was considered as a non-Yahoo source but now gates its CSV
+> endpoints behind a JavaScript anti-bot challenge, so it is unusable from a headless client.
 
 Send PRs with any other gotchas so future builders don't have to rediscover them.
