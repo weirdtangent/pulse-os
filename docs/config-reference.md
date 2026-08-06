@@ -46,6 +46,36 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_CLOCK_24H` | `false` | Forces 24-hour clock labels when `true`. |
 | `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
 
+## Stock ticker
+
+An optional scrolling ticker bar across the bottom of the overlay. Quotes are fetched
+on-device from Yahoo Finance (near-real-time, no API key) with a Stooq CSV fallback and
+a last-good cache, so the bar never goes blank on a transient upstream failure. Any
+symbol Yahoo lists works — including non-US indices (`^N225`, `^FTSE`, `^GDAXI`, `^HSI`,
+`^FCHI`, `^STOXX50E`) and foreign tickers with an exchange suffix (`SAP.DE`, `7203.T`).
+Friendly labels are built in for common indices; other symbols show their Yahoo short name.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_TICKER_ENABLED` | `false` | Master switch for the ticker bar (optional per device). |
+| `PULSE_TICKER_SYMBOLS` | `^SPX,^DJI,^NDX` | Comma-separated symbols to display (indices use a `^` prefix). |
+| `PULSE_TICKER_INTERVAL` | `60` | Seconds between fetches while US markets are open (min 15). |
+| `PULSE_TICKER_INTERVAL_CLOSED` | `900` | Seconds between fetches when US markets are closed (min 60). Non-US symbols refresh on this cadence during their own sessions — lower it if you mainly watch overseas markets. |
+| `PULSE_TICKER_AFTERHOURS` | `true` | Append the post-market price (marked `AH`) when the provider reports one. |
+| `PULSE_TICKER_SPEED` | `60` | Scroll speed in pixels per second (min 10; higher = faster). |
+| `PULSE_TICKER_EMOJI` | `true` | Add an accent emoji for outsized moves (🚀 ≥ +10%, 🔥 ≥ +5%, 📉 ≤ -5%, 🧊 ≤ -10%). |
+
+Notes:
+- Gains render green with a ▲, losses red with a ▼; the bar matches the overlay's
+  translucent card styling and is pinned to the bottom over whatever is on screen.
+- The fast/slow fetch cadence is keyed to US regular-session hours (holidays are not
+  tracked — an extra harmless fast poll may occur). Data itself is global.
+- **DNS/ad-blocker allowlist:** the device fetches quotes from these hosts — if you run
+  Pi-hole/AdGuard or similar, make sure they resolve: `query1.finance.yahoo.com`,
+  `fc.yahoo.com` (cookie/crumb), and `stooq.com` (fallback). A blocked host shows up as
+  `ticker:` fetch warnings in the logs and a bar that only ever shows cached/last-good
+  values. See [troubleshooting.md](troubleshooting.md#stock-ticker).
+
 ## Telemetry & MQTT
 
 | Key | Default | Description |

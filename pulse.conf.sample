@@ -99,6 +99,40 @@ PULSE_OVERLAY_CLOCK_24H="false"
 # PULSE_OVERLAY_AUTH_TOKEN=""
 
 # ============================================================================
+# Stock ticker (optional scrolling bar across the bottom of the overlay)
+# ============================================================================
+# Quotes come from Yahoo Finance (near-real-time, no key), with a Stooq fallback
+# and a last-good cache so the bar never goes blank. Any symbol Yahoo lists works,
+# including non-US indices (^N225, ^FTSE, ^GDAXI, ^HSI, ...) and foreign tickers
+# with an exchange suffix (SAP.DE, 7203.T).
+
+# PULSE_TICKER_ENABLED — master switch for the ticker bar (default off; optional per device).
+PULSE_TICKER_ENABLED="false"
+
+# PULSE_TICKER_SYMBOLS — comma-separated symbols to show. Indices use a caret prefix.
+# Friendly labels are built in for common indices; add your own tickers freely.
+# Defaults to the three big US indices when unset.
+PULSE_TICKER_SYMBOLS="^SPX,^DJI,^NDX"
+
+# PULSE_TICKER_INTERVAL — seconds between fetches while US markets are open (min 15).
+PULSE_TICKER_INTERVAL="60"
+
+# PULSE_TICKER_INTERVAL_CLOSED — seconds between fetches when US markets are closed
+# (nights/weekends, min 60). Non-US symbols refresh on this cadence during their own
+# sessions, so lower it if you mainly watch overseas markets.
+PULSE_TICKER_INTERVAL_CLOSED="900"
+
+# PULSE_TICKER_AFTERHOURS — append the post-market price (marked "AH") when available.
+PULSE_TICKER_AFTERHOURS="true"
+
+# PULSE_TICKER_SPEED — scroll speed in pixels per second (min 10; higher = faster).
+PULSE_TICKER_SPEED="60"
+
+# PULSE_TICKER_EMOJI — add an accent emoji for outsized moves (🚀 >= +10%, 🔥 >= +5%,
+# 📉 <= -5%, 🧊 <= -10%). Set "false" for numbers only.
+PULSE_TICKER_EMOJI="true"
+
+# ============================================================================
 # Telemetry & MQTT
 # ============================================================================
 
