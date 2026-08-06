@@ -25,9 +25,9 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_WATCHDOG_LIMIT` | `5` | Consecutive watchdog fetch failures before Chromium is restarted. |
 | `PULSE_WATCHDOG_INTERVAL` | `60` | Seconds between watchdog fetches. |
 | `CHROMIUM_DEVTOOLS_URL` | `http://localhost:9222/json` | Remote debugging endpoint for kiosk automation. |
+| `CHROMIUM_DEVTOOLS_TIMEOUT` | `3` | Timeout (seconds) for DevTools HTTP/WebSocket operations. |
 
 > **Home Assistant port (2026.8+):** new Home Assistant OS installs serve on **port 80**, so drop `:8123` from `PULSE_URL` / `PULSE_WATCHDOG_URL` (e.g. `http://homeassistant.local/dashboard-pulse/home`) if your instance uses the new default. Existing installs keep the port they already used (`:8123` unless changed).
-| `CHROMIUM_DEVTOOLS_TIMEOUT` | `3` | Timeout (seconds) for DevTools HTTP/WebSocket operations. |
 
 ## Overlay & Photo Frame
 
