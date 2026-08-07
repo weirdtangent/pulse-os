@@ -65,8 +65,50 @@ if [ -z "$MAC" ]; then
   exit 0
 fi
 
-# Try to connect (harmless if already connected)
-bluetoothctl connect "$MAC" >/dev/null 2>&1 || true
+# Try to connect, but back off when the target speaker is unreachable.
+#
+# bt-autoconnect runs every ~15s. A `bluetoothctl connect` to a powered-off
+# classic-BT speaker blocks ~60s before failing "Host is down", and each attempt
+# grabs the shared 2.4GHz radio long enough (2-4s) to stall WiFi and break
+# snapcast time-sync on the room display. So: if the device is already
+# connected, skip the call; otherwise only retry on an exponential backoff
+# (PULSE_BT_MIN_BACKOFF doubling up to PULSE_BT_MAX_BACKOFF) — a briefly-off
+# speaker reconnects quickly, a long-gone one is retried rarely, and the display
+# is no longer collateral damage when the speaker is off.
+BT_MIN_BACKOFF="${PULSE_BT_MIN_BACKOFF:-15}"
+BT_MAX_BACKOFF="${PULSE_BT_MAX_BACKOFF:-300}"
+BT_BACKOFF_STATE="/run/user/$(id -u)/pulse-bt-backoff"  # "<next_attempt_epoch> <backoff_secs>"
+
+bt_is_connected() {
+  bluetoothctl info "$MAC" 2>/dev/null | grep -q "Connected: yes"
+}
+
+if bt_is_connected; then
+  # Already connected — clear any backoff state and carry on.
+  rm -f "$BT_BACKOFF_STATE" 2>/dev/null || true
+else
+  now=$(date +%s)
+  next_attempt=0
+  backoff="$BT_MIN_BACKOFF"
+  if [ -f "$BT_BACKOFF_STATE" ]; then
+    read -r next_attempt backoff < "$BT_BACKOFF_STATE" 2>/dev/null || true
+  fi
+  # Guard against an empty/garbled state file.
+  case "$next_attempt" in ''|*[!0-9]*) next_attempt=0 ;; esac
+  case "$backoff" in ''|*[!0-9]*) backoff="$BT_MIN_BACKOFF" ;; esac
+
+  if [ "$now" -ge "$next_attempt" ]; then
+    if bluetoothctl connect "$MAC" >/dev/null 2>&1 && bt_is_connected; then
+      rm -f "$BT_BACKOFF_STATE" 2>/dev/null || true
+    else
+      next_backoff=$(( backoff * 2 ))
+      if [ "$next_backoff" -gt "$BT_MAX_BACKOFF" ]; then
+        next_backoff="$BT_MAX_BACKOFF"
+      fi
+      echo "$(( now + backoff )) $next_backoff" > "$BT_BACKOFF_STATE" 2>/dev/null || true
+    fi
+  fi
+fi
 
 # Ensure we know our XDG_RUNTIME_DIR (needed for pactl/pw-cli)
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -124,4 +166,3 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
     fi
   fi
 fi
-
