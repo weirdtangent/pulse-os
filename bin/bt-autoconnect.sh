@@ -105,7 +105,10 @@ else
       if [ "$next_backoff" -gt "$BT_MAX_BACKOFF" ]; then
         next_backoff="$BT_MAX_BACKOFF"
       fi
-      echo "$(( now + backoff )) $next_backoff" > "$BT_BACKOFF_STATE" 2>/dev/null || true
+      # Schedule the next attempt relative to a *fresh* timestamp: the connect
+      # above can block ~60s on a powered-off speaker, so reusing the pre-connect
+      # "now" would put next_attempt in the past and defeat short backoffs.
+      echo "$(( $(date +%s) + backoff )) $next_backoff" > "$BT_BACKOFF_STATE" 2>/dev/null || true
     fi
   fi
 fi
