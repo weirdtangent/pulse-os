@@ -129,6 +129,18 @@ PULSE_TICKER_INTERVAL="60"
 # sessions, so lower it if you mainly watch overseas markets.
 PULSE_TICKER_INTERVAL_CLOSED="900"
 
+# PULSE_TICKER_HOURS — when the ticker bar is visible (it hides itself and reclaims the
+# screen strip when it shouldn't show):
+#   "market"   — only during the regular US session (09:30-16:00 ET, Mon-Fri). Hidden
+#                overnight, weekends, and market holidays. The default.
+#   "extended" — also show during pre-market and after-hours; hidden only when fully closed.
+#   "always"   — show 24/7 (the pre-0.90 behavior; the bar just freezes when closed).
+# Session is read from the quote feed's live market state (so holidays/half-days are
+# honored automatically), falling back to an ET clock when that state isn't available.
+# Note: this controls whether the BAR shows; PULSE_TICKER_AFTERHOURS below is separate —
+# it only controls whether an "AH" price is appended to a quote while the bar is up.
+PULSE_TICKER_HOURS="market"
+
 # PULSE_TICKER_AFTERHOURS — append the post-market price (marked "AH") when available.
 PULSE_TICKER_AFTERHOURS="true"
 

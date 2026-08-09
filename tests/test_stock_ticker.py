@@ -250,3 +250,73 @@ class TestMarketHours:
 
         wednesday_evening = datetime(2026, 8, 5, 20, 0, tzinfo=ZoneInfo("America/New_York"))
         assert st.is_us_market_hours(wednesday_evening) is False
+
+
+class TestMarketPhaseAndVisibility:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    _ET = ZoneInfo("America/New_York")
+
+    def _q(self, symbol, state):
+        return {"symbol": symbol, "market_state": state}
+
+    # -- schedule fallback (no marketState on the quotes) --------------------
+
+    def test_schedule_regular_when_no_state(self):
+        from datetime import datetime
+
+        midday = datetime(2026, 8, 5, 11, 0, tzinfo=self._ET)  # Wed
+        assert st.us_market_phase([self._q("AAPL", "")], now=midday) == "regular"
+
+    def test_schedule_pre_and_post(self):
+        from datetime import datetime
+
+        pre = datetime(2026, 8, 5, 7, 0, tzinfo=self._ET)
+        post = datetime(2026, 8, 5, 18, 0, tzinfo=self._ET)
+        assert st.us_market_phase([], now=pre) == "pre"
+        assert st.us_market_phase([], now=post) == "post"
+
+    def test_schedule_weekend_closed(self):
+        from datetime import datetime
+
+        saturday = datetime(2026, 8, 8, 12, 0, tzinfo=self._ET)
+        assert st.us_market_phase([], now=saturday) == "closed"
+
+    # -- exchange truth wins over the clock ---------------------------------
+
+    def test_marketstate_overrides_clock_on_holiday(self):
+        from datetime import datetime
+
+        # Clock says regular hours, but the exchange reports CLOSED (a holiday) -> closed.
+        midday = datetime(2026, 8, 5, 11, 0, tzinfo=self._ET)
+        assert st.us_market_phase([self._q("AAPL", "CLOSED")], now=midday) == "closed"
+
+    def test_most_open_us_quote_wins(self):
+        quotes = [self._q("AAPL", "POST"), self._q("MSFT", "REGULAR")]
+        assert st.us_market_phase(quotes) == "regular"
+
+    def test_foreign_index_state_ignored(self):
+        # Nikkei trading (REGULAR) must not make the US ticker read as open.
+        quotes = [self._q("^N225", "REGULAR"), self._q("AAPL", "CLOSED")]
+        assert st.us_market_phase(quotes) == "closed"
+
+    def test_prepost_states_collapse(self):
+        assert st.us_market_phase([self._q("AAPL", "PREPRE")]) == "pre"
+        assert st.us_market_phase([self._q("AAPL", "POSTPOST")]) == "post"
+
+    # -- visibility rule per mode -------------------------------------------
+
+    def test_visible_always(self):
+        for phase in ("closed", "pre", "regular", "post"):
+            assert st.ticker_visible("always", phase) is True
+
+    def test_visible_market_regular_only(self):
+        assert st.ticker_visible("market", "regular") is True
+        for phase in ("closed", "pre", "post"):
+            assert st.ticker_visible("market", phase) is False
+
+    def test_visible_extended(self):
+        for phase in ("pre", "regular", "post"):
+            assert st.ticker_visible("extended", phase) is True
+        assert st.ticker_visible("extended", "closed") is False
