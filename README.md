@@ -1,5 +1,20 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/splash/graystorm-pulse_splash.png" alt="Pulse OS social preview" width="640" />
+  <img src="assets/splash/graystorm-pulse_splash.png" alt="Pulse OS social preview" width="640" />
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/pulse-ambient.jpg" alt="Ambient photo and clock" width="80%" /><br />
+  <em>Ambient photo &amp; clock — a rotating wallpaper with the time, date, and room name</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/pulse-now-playing.jpg" alt="Now Playing card with album art and controls" width="80%" /><br />
+  <em>Now Playing — album art, track, and transport controls slide in when music is playing</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/pulse-ticker.jpg" alt="Live scrolling stock ticker across the bottom" width="80%" /><br />
+  <em>Live stock ticker — indices plus your own symbols, shown during market hours</em>
 </p>
 
 # Pulse Kiosk v1 — Complete Setup Guide
