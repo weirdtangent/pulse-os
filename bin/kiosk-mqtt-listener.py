@@ -34,7 +34,13 @@ from pulse.overlay import (
     parse_clock_config,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
-from pulse.stock_ticker import StockTicker, is_us_market_hours, parse_symbols
+from pulse.stock_ticker import (
+    TICKER_HOURS_MODES,
+    StockTicker,
+    parse_symbols,
+    ticker_visible,
+    us_market_phase,
+)
 from pulse.utils import parse_bool, parse_int, sanitize_hostname_for_entity_id
 
 
@@ -97,6 +103,7 @@ class OverlayConfig:
     ticker_interval: int
     ticker_interval_closed: int
     ticker_afterhours: bool
+    ticker_hours: str  # "always" | "market" | "extended" — when the bar is visible
     ticker_speed: int
     ticker_emoji: bool
     ticker_label_mode: str
@@ -450,6 +457,8 @@ def load_config() -> EnvConfig:
     )
     ticker_label_raw = (os.environ.get("PULSE_TICKER_LABEL") or "auto").strip().lower()
     ticker_label_mode = ticker_label_raw if ticker_label_raw in {"name", "ticker", "auto"} else "auto"
+    ticker_hours_raw = (os.environ.get("PULSE_TICKER_HOURS") or "market").strip().lower()
+    ticker_hours = ticker_hours_raw if ticker_hours_raw in TICKER_HOURS_MODES else "market"
     overlay_config = OverlayConfig(
         enabled=overlay_enabled,
         bind_address=overlay_bind,
@@ -469,6 +478,7 @@ def load_config() -> EnvConfig:
         ticker_interval=max(15, parse_int(os.environ.get("PULSE_TICKER_INTERVAL"), 60)),
         ticker_interval_closed=max(60, parse_int(os.environ.get("PULSE_TICKER_INTERVAL_CLOSED"), 900)),
         ticker_afterhours=parse_bool(os.environ.get("PULSE_TICKER_AFTERHOURS"), True),
+        ticker_hours=ticker_hours,
         ticker_speed=max(10, parse_int(os.environ.get("PULSE_TICKER_SPEED"), 60)),
         ticker_emoji=parse_bool(os.environ.get("PULSE_TICKER_EMOJI"), True),
         ticker_label_mode=ticker_label_mode,
@@ -855,24 +865,40 @@ class KioskMqttListener:
         state = self.overlay_state
         if not ticker or not state:
             return
+        mode = self.overlay_config.ticker_hours
         try:
             while not self._ticker_stop_event.is_set():
+                # Baseline the session on the wall clock, so a fetch error still paces the
+                # loop correctly instead of assuming the market is open; a successful fetch
+                # refines it from the live quotes below.
+                phase = us_market_phase()
                 try:
                     quotes = ticker.fetch()
-                    change = state.set_ticker([quote.as_dict() for quote in quotes])
-                    # set_ticker bumps the version only when the symbol set changes (e.g. the
-                    # bar first populates after boot), so this emit actually moves the refresh
-                    # sensor and the photo-card refetches — instead of re-publishing the same
-                    # version, which the card ignores. Price-only updates don't bump/emit.
+                    payload = [quote.as_dict() for quote in quotes]
+                    # Derive the current US session from the freshest quotes (Yahoo's
+                    # marketState honors holidays/half-days) and hide the bar entirely when
+                    # the configured hours mode says it shouldn't show — pushing an empty
+                    # ticker reclaims the strip rather than freezing a stale bar. The cache
+                    # inside StockTicker keeps last-good quotes warm, so the bar repopulates
+                    # the instant it becomes visible again.
+                    phase = us_market_phase(payload)
+                    visible = ticker_visible(mode, phase)
+                    change = state.set_ticker(payload if visible else [])
+                    # set_ticker bumps the version only when the symbol set changes — the bar
+                    # first populating after boot, or flipping visible<->hidden here — so this
+                    # emit moves the refresh sensor and the photo-card refetches, instead of
+                    # re-publishing the same version (which the card ignores). Price-only
+                    # updates while visible don't bump/emit.
                     if change.changed:
                         self._emit_overlay_refresh(change.version, change.reason)
                 except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
                     self.log(f"ticker: fetch loop error: {exc}")
-                # Poll fast while US markets are open, slow otherwise. Non-US symbols still
-                # refresh on the closed-market cadence — see PULSE_TICKER_INTERVAL_CLOSED.
+                # Poll fast while any US session (pre/regular/post) is active, slow when fully
+                # closed — keeping last-good quotes warm for the next open. Non-US symbols
+                # also refresh on the closed cadence; see PULSE_TICKER_INTERVAL_CLOSED.
                 interval = (
                     self.overlay_config.ticker_interval
-                    if is_us_market_hours()
+                    if phase != "closed"
                     else self.overlay_config.ticker_interval_closed
                 )
                 if self._ticker_stop_event.wait(interval):

@@ -78,6 +78,7 @@ other symbols show their Yahoo short name.
 | `PULSE_TICKER_SYMBOLS` | `^SPX,^DJI,^NDX` | Comma-separated symbols to display (indices use a `^` prefix). |
 | `PULSE_TICKER_INTERVAL` | `60` | Seconds between fetches while US markets are open (min 15). |
 | `PULSE_TICKER_INTERVAL_CLOSED` | `900` | Seconds between fetches when US markets are closed (min 60). Non-US symbols refresh on this cadence during their own sessions — lower it if you mainly watch overseas markets. |
+| `PULSE_TICKER_HOURS` | `market` | When the bar is visible (it hides and reclaims its screen strip otherwise): `market` (regular US session only, hidden overnight/weekends/holidays), `extended` (also pre-market and after-hours), or `always` (24/7; pre-0.90 behavior). Session is read from the feed's live market state, so holidays and half-days are honored automatically, falling back to an ET clock when unavailable. Distinct from `PULSE_TICKER_AFTERHOURS`, which only annotates a quote while the bar is up. |
 | `PULSE_TICKER_AFTERHOURS` | `true` | Append the post-market price (marked `AH`) when the provider reports one. |
 | `PULSE_TICKER_SPEED` | `60` | Scroll speed in pixels per second (min 10; higher = faster). |
 | `PULSE_TICKER_EMOJI` | `true` | Add an accent emoji for outsized moves (🚀 ≥ +10%, 🔥 ≥ +5%, 📉 ≤ -5%, 🧊 ≤ -10%). |

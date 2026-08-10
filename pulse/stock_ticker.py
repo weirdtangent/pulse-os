@@ -98,6 +98,113 @@ def is_us_market_hours(now: datetime | None = None) -> bool:
     return 9 * 60 + 30 <= minutes <= 16 * 60
 
 
+# --- Ticker visibility by market session ------------------------------------
+# The bar can be shown 24/7, only during the regular session, or through extended
+# (pre/after) hours. The current session is taken from the exchange truth (Yahoo's
+# per-symbol marketState) when available, so holidays and half-days are honored for
+# free; when no quote carries a marketState (e.g. only Finnhub-priced equities, or the
+# v8 chart fallback answered), we fall back to a plain ET clock schedule that can't see
+# holidays — the same "just guess" tradeoff already used to pace the fetch cadence.
+
+TICKER_HOURS_MODES = ("always", "market", "extended")
+
+# Canonical Yahoo symbols for the non-US indices in _YAHOO_SYMBOLS. Their marketState
+# reflects a foreign session, so they must not drive the US-session visibility decision.
+_FOREIGN_INDEX_SYMBOLS = frozenset({"^FTSE", "^GDAXI", "^FCHI", "^STOXX50E", "^N225", "^HSI"})
+
+# How "open" each Yahoo marketState is, so the most-open US quote wins (e.g. on a normal
+# day one anchor may lag into POST while another still reads REGULAR — trust the latter).
+_MARKET_STATE_RANK: dict[str, int] = {
+    "REGULAR": 3,
+    "PRE": 2,
+    "PREPRE": 2,
+    "POST": 1,
+    "POSTPOST": 1,
+    "CLOSED": 0,
+}
+# Yahoo's fine-grained states collapsed to the three sessions we care about.
+_STATE_TO_PHASE: dict[str, str] = {
+    "REGULAR": "regular",
+    "PRE": "pre",
+    "PREPRE": "pre",
+    "POST": "post",
+    "POSTPOST": "post",
+    "CLOSED": "closed",
+}
+# How "open" each collapsed phase is, so we can compare the exchange state against the
+# clock and keep whichever is *less* open (see us_market_phase).
+_PHASE_OPENNESS: dict[str, int] = {"closed": 0, "post": 1, "pre": 2, "regular": 3}
+
+
+def _us_market_state(quotes: Sequence[dict[str, object]]) -> str | None:
+    """Most-open marketState among US quotes, or None if none carry one.
+
+    Foreign indices are skipped (their session is not the US session); plain equities and
+    US indices are trusted to represent the US market on these providers.
+    """
+    best: str | None = None
+    best_rank = -1
+    for quote in quotes:
+        symbol = str(quote.get("symbol") or "").upper()
+        canonical = _YAHOO_SYMBOLS.get(symbol, symbol).upper()
+        if symbol in _FOREIGN_INDEX_SYMBOLS or canonical in _FOREIGN_INDEX_SYMBOLS:
+            continue
+        state = str(quote.get("market_state") or "").upper()
+        rank = _MARKET_STATE_RANK.get(state)
+        if rank is None:
+            continue
+        if rank > best_rank:
+            best_rank = rank
+            best = state
+    return best
+
+
+def _schedule_phase(now: datetime | None = None) -> str:
+    """US session from the ET clock alone: pre 04:00-09:30, regular 09:30-16:00,
+    post 16:00-20:00, else closed. Weekends are closed. Ignores holidays."""
+    current = now.astimezone(_MARKET_TZ) if now else datetime.now(_MARKET_TZ)
+    if current.weekday() >= 5:  # Saturday/Sunday
+        return "closed"
+    minutes = current.hour * 60 + current.minute
+    if 9 * 60 + 30 <= minutes <= 16 * 60:
+        return "regular"
+    if 4 * 60 <= minutes < 9 * 60 + 30:
+        return "pre"
+    if 16 * 60 < minutes <= 20 * 60:
+        return "post"
+    return "closed"
+
+
+def us_market_phase(quotes: Sequence[dict[str, object]] | None = None, now: datetime | None = None) -> str:
+    """Current US session — "regular", "pre", "post", or "closed".
+
+    Starts from a plain ET clock, then lets the exchange truth carried on the quotes
+    (Yahoo marketState) pull the session toward *closed* — this is what makes holidays and
+    half-days hide the bar for free. The exchange is deliberately NOT allowed to make the
+    session look *more* open than the clock: StockTicker.fetch() serves its last-good cache
+    unchanged when a poll round returns nothing, so a stale "REGULAR" left in that cache
+    must not keep the bar visible overnight or on a weekend. With no marketState available
+    at all (Finnhub-only equities, or the v8 chart fallback), the clock stands alone.
+    """
+    clock_phase = _schedule_phase(now)
+    state = _us_market_state(quotes or ())
+    if state is None:
+        return clock_phase
+    state_phase = _STATE_TO_PHASE.get(state, "closed")
+    if _PHASE_OPENNESS[state_phase] <= _PHASE_OPENNESS[clock_phase]:
+        return state_phase
+    return clock_phase
+
+
+def ticker_visible(mode: str, phase: str) -> bool:
+    """Whether the ticker bar should be shown, given the configured hours mode."""
+    if mode == "always":
+        return True
+    if mode == "extended":
+        return phase in {"pre", "regular", "post"}
+    return phase == "regular"  # "market" (default)
+
+
 @dataclass(frozen=True)
 class TickerQuote:
     """A single quote for the ticker bar."""
