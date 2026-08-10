@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/weirdtangent/pulse-os/main/assets/splash/graystorm-pulse_splash.png" alt="Pulse OS social preview" width="640" />
+  <img src="assets/splash/graystorm-pulse_splash.png" alt="Pulse OS social preview" width="640" />
 </p>
 
 <p align="center">
