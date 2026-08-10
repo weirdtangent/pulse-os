@@ -680,12 +680,21 @@ def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
         after_hours = quote.get("after_hours")
         if after_hours is not None:
             after_hours_markup = f'<span class="pulse-ticker__ah">AH {_format_ticker_number(after_hours)}</span>'
+        # Freshness marker. Invisible on a healthy bar: an explicit exchange delay wins
+        # (it's a property of the feed), otherwise a clock appears only once the quote has
+        # gone cold — see stock_ticker.annotate_staleness for when that's evaluated.
+        freshness_markup = ""
+        delayed_by = _ticker_float(quote.get("delayed_by"))
+        if delayed_by is not None and delayed_by > 0:
+            freshness_markup = f'<span class="pulse-ticker__delay">{int(delayed_by)}m</span>'
+        elif quote.get("is_stale"):
+            freshness_markup = '<span class="pulse-ticker__stale">⏱</span>'
         items.append(
             f'<span class="pulse-ticker__item pulse-ticker__item--{direction}">'
             f'<span class="pulse-ticker__label">{label}</span>'
             f'<span class="pulse-ticker__price">{_format_ticker_number(price)}</span>'
             f'<span class="pulse-ticker__change">{change_text}</span>'
-            f"{after_hours_markup}{emoji_markup}"
+            f"{after_hours_markup}{freshness_markup}{emoji_markup}"
             f"</span>"
         )
     if not items:

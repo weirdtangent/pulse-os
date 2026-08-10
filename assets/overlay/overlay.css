@@ -1346,3 +1346,11 @@ body {
 .pulse-ticker__emoji {
   font-size: 1.05em;
 }
+
+/* Freshness markers — absent entirely on a healthy bar, so they read as an exception
+   rather than chrome. Muted on purpose: they qualify the price, they aren't the point. */
+.pulse-ticker__delay,
+.pulse-ticker__stale {
+  opacity: 0.55;
+  font-size: 0.78em;
+}

@@ -87,6 +87,56 @@ class OverlayRenderTests(unittest.TestCase):
         self.assertIn("🚀", html)  # >= +10%
         self.assertIn("AH 7,740.00", html)
 
+    def _ticker_theme(self) -> OverlayTheme:
+        return OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+            show_ticker=True,
+        )
+
+    def _quote(self, **overrides) -> dict:
+        quote = {
+            "symbol": "VOO",
+            "label": "VOO",
+            "price": 710.39,
+            "change": -0.32,
+            "change_pct": -0.04,
+            "is_up": False,
+        }
+        quote.update(overrides)
+        return quote
+
+    # The class names also appear in the inlined stylesheet, so these assert on the
+    # rendered markup rather than the bare class string.
+    _STALE_MARKUP = '<span class="pulse-ticker__stale">'
+    _DELAY_MARKUP = '<span class="pulse-ticker__delay">'
+
+    def test_healthy_quote_shows_no_freshness_marker(self) -> None:
+        html = render_overlay_html(self._snapshot(ticker=(self._quote(),)), self._ticker_theme())
+        self.assertNotIn(self._STALE_MARKUP, html)
+        self.assertNotIn(self._DELAY_MARKUP, html)
+
+    def test_stale_quote_marked(self) -> None:
+        ticker = (self._quote(is_stale=True),)
+        html = render_overlay_html(self._snapshot(ticker=ticker), self._ticker_theme())
+        self.assertIn(f"{self._STALE_MARKUP}⏱</span>", html)
+
+    def test_delayed_feed_shows_minutes(self) -> None:
+        ticker = (self._quote(delayed_by=15),)
+        html = render_overlay_html(self._snapshot(ticker=ticker), self._ticker_theme())
+        self.assertIn(f"{self._DELAY_MARKUP}15m</span>", html)
+
+    def test_explicit_delay_wins_over_stale(self) -> None:
+        # A known exchange delay is the more specific statement, so it should be the one
+        # rendered rather than stacking two markers on one quote.
+        ticker = (self._quote(delayed_by=15, is_stale=True),)
+        html = render_overlay_html(self._snapshot(ticker=ticker), self._ticker_theme())
+        self.assertIn(f"{self._DELAY_MARKUP}15m</span>", html)
+        self.assertNotIn(self._STALE_MARKUP, html)
+
     def test_ticker_label_mode_ticker_shows_symbol(self) -> None:
         theme = OverlayTheme(
             ambient_background="rgba(0,0,0,0.32)",

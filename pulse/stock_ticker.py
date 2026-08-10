@@ -14,7 +14,9 @@ Provider chain (per symbol, first source that answers wins for that symbol):
 - Yahoo v8 chart, one request per symbol, needs no auth so it survives crumb-flow
   breakage (price vs. previous close; no marketState/after-hours).
 - Last resort: the most recent successfully-fetched values, so the ticker never goes
-  blank when the providers hiccup.
+  blank when the providers hiccup. Because that cache can quietly serve an old price
+  indefinitely, every quote carries the provider's own timestamp (`quote_time`) and
+  annotate_staleness() flags the ones that have gone cold, so the overlay can say so.
 
 Data-source note: the Yahoo endpoints are unofficial/undocumented (Yahoo has no free
 public API) and are used here the same way the yfinance library does — appropriate for
@@ -31,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -217,6 +220,8 @@ class TickerQuote:
     is_up: bool
     after_hours: float | None = None  # post-market price, when available
     market_state: str = ""  # REGULAR / PRE / POST / CLOSED / DELAYED / ...
+    quote_time: int | None = None  # unix seconds the provider stamped on the price
+    delayed_by: int = 0  # minutes the exchange says this feed is delayed (0 = real-time)
 
     def as_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -230,7 +235,42 @@ class TickerQuote:
         }
         if self.after_hours is not None:
             payload["after_hours"] = round(self.after_hours, 2)
+        if self.quote_time is not None:
+            payload["quote_time"] = self.quote_time
+        if self.delayed_by > 0:
+            payload["delayed_by"] = self.delayed_by
         return payload
+
+
+def annotate_staleness(
+    quotes: list[dict[str, object]],
+    *,
+    stale_after: int,
+    phase: str,
+    now: float | None = None,
+) -> list[dict[str, object]]:
+    """Flag quotes whose price is older than `stale_after` seconds, in place.
+
+    Exists because fetch() merges each round over a last-good cache so the bar never goes
+    blank — which means a symbol whose provider has been failing for an hour keeps showing
+    an hour-old price with no visual cue. This adds `is_stale: True` so the overlay can
+    mark it.
+
+    Only evaluated during the **regular** session. Outside it every quote is legitimately
+    old (Finnhub's free /quote and Yahoo's regularMarketTime both stamp the last regular
+    trade), so flagging then would light up the whole bar and mean nothing. `stale_after`
+    of 0 disables the check entirely.
+    """
+    if stale_after <= 0 or phase != "regular":
+        return quotes
+    current = now if now is not None else time.time()
+    for quote in quotes:
+        stamped = _coerce_float(quote.get("quote_time"))
+        if stamped is None or stamped <= 0:
+            continue
+        if current - stamped > stale_after:
+            quote["is_stale"] = True
+    return quotes
 
 
 def parse_symbols(spec: str | None) -> list[str]:
@@ -416,6 +456,9 @@ class StockTicker:
                     change=change,
                     change_pct=pct,
                     is_up=change >= 0,
+                    # `t` is the trade timestamp; free-tier US equities stamp within seconds
+                    # during the session, so it doubles as the staleness clock.
+                    quote_time=_coerce_int(data.get("t")),
                 )
             )
         return quotes or None
@@ -464,6 +507,11 @@ class StockTicker:
                         is_up=float(change) >= 0,
                         after_hours=after_hours,
                         market_state=market_state,
+                        quote_time=_coerce_int(item.get("regularMarketTime")),
+                        # Yahoo reports the exchange's own delay in minutes (0 = real-time).
+                        # Distinct from sourceInterval, which is the source's refresh period
+                        # (e.g. 120s for ^DJI) and says nothing about how delayed it is.
+                        delayed_by=max(0, _coerce_int(item.get("exchangeDataDelayedBy")) or 0),
                     )
                 )
             except (TypeError, ValueError):
@@ -506,6 +554,7 @@ class StockTicker:
                     change=change,
                     change_pct=change / prev_close * 100.0,
                     is_up=change >= 0,
+                    quote_time=_coerce_int(meta.get("regularMarketTime")),
                 )
             )
         return quotes or None
@@ -532,6 +581,11 @@ def _coerce_float(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return result
+
+
+def _coerce_int(value: object) -> int | None:
+    result = _coerce_float(value)
+    return int(result) if result is not None else None
 
 
 def _redact(message: str, secret: str | None) -> str:

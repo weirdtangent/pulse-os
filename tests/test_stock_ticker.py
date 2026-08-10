@@ -26,6 +26,8 @@ class _Router:
         self.finnhub_status = 200
         self.finnhub_prices: dict[str, dict] = {}  # symbol -> {"c","d","dp"}
         self.finnhub_requests: list[httpx.Request] = []
+        self.quote_time = 1_700_000_000  # what Yahoo stamps as regularMarketTime
+        self.delayed_by = 0  # Yahoo exchangeDataDelayedBy, in minutes
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         # Route on the parsed host/path rather than substring-matching the whole URL.
@@ -65,6 +67,9 @@ class _Router:
             }
             if self.post_price is not None:
                 catalog["AAPL"]["postMarketPrice"] = self.post_price
+            for entry in catalog.values():
+                entry["regularMarketTime"] = self.quote_time
+                entry["exchangeDataDelayedBy"] = self.delayed_by
             result = [catalog[s] for s in self.quote_symbols if s in catalog]
             return httpx.Response(200, json={"quoteResponse": {"result": result}})
         if path.startswith("/v8/finance/chart/"):
@@ -82,6 +87,7 @@ class _Router:
                                     "shortName": symbol,
                                     "regularMarketPrice": 50.0,
                                     "chartPreviousClose": 49.0,
+                                    "regularMarketTime": self.quote_time,
                                 }
                             }
                         ]
@@ -325,3 +331,91 @@ class TestMarketPhaseAndVisibility:
         for phase in ("pre", "regular", "post"):
             assert st.ticker_visible("extended", phase) is True
         assert st.ticker_visible("extended", "closed") is False
+
+
+class TestQuoteFreshness:
+    """Provider timestamps land on the quote, and go stale only when they should."""
+
+    NOW = 1_700_000_000.0
+
+    def _q(self, age_seconds):
+        return {"symbol": "AAPL", "quote_time": self.NOW - age_seconds}
+
+    # -- annotate_staleness ---------------------------------------------------
+
+    def test_old_quote_flagged_during_regular_session(self):
+        quotes = [self._q(600)]
+        st.annotate_staleness(quotes, stale_after=300, phase="regular", now=self.NOW)
+        assert quotes[0]["is_stale"] is True
+
+    def test_fresh_quote_not_flagged(self):
+        quotes = [self._q(30)]
+        st.annotate_staleness(quotes, stale_after=300, phase="regular", now=self.NOW)
+        assert "is_stale" not in quotes[0]
+
+    def test_not_evaluated_outside_regular_session(self):
+        # After the close every quote is legitimately hours old — flagging then would
+        # light up the whole bar and mean nothing.
+        for phase in ("pre", "post", "closed"):
+            quotes = [self._q(99_999)]
+            st.annotate_staleness(quotes, stale_after=300, phase=phase, now=self.NOW)
+            assert "is_stale" not in quotes[0], phase
+
+    def test_zero_threshold_disables(self):
+        quotes = [self._q(99_999)]
+        st.annotate_staleness(quotes, stale_after=0, phase="regular", now=self.NOW)
+        assert "is_stale" not in quotes[0]
+
+    def test_quote_without_timestamp_is_never_flagged(self):
+        quotes = [{"symbol": "AAPL"}, {"symbol": "MSFT", "quote_time": 0}]
+        st.annotate_staleness(quotes, stale_after=300, phase="regular", now=self.NOW)
+        assert all("is_stale" not in q for q in quotes)
+
+    # -- providers populate the timestamp ------------------------------------
+
+    def test_yahoo_v7_carries_time_and_delay(self, router):
+        router.quote_time = 1_699_999_000
+        router.delayed_by = 15
+        ticker = _ticker(("AAPL",))
+        quote = ticker.fetch()[0]
+        assert quote.quote_time == 1_699_999_000
+        assert quote.delayed_by == 15
+        assert quote.as_dict()["delayed_by"] == 15
+        ticker.close()
+
+    def test_realtime_feed_omits_delay_from_payload(self, router):
+        router.delayed_by = 0
+        ticker = _ticker(("AAPL",))
+        payload = ticker.fetch()[0].as_dict()
+        assert "delayed_by" not in payload  # nothing to say -> nothing rendered
+        assert payload["quote_time"] == router.quote_time
+        ticker.close()
+
+    def test_finnhub_carries_trade_timestamp(self, router):
+        router.finnhub_prices = {"AAPL": {"c": 210.0, "d": 1.0, "dp": 0.5, "t": 1_699_998_888}}
+        ticker = _ticker(("AAPL",), api_key="k")
+        quote = ticker.fetch()[0]
+        assert quote.quote_time == 1_699_998_888
+        assert quote.delayed_by == 0  # Finnhub has no delay field; treat as real-time
+        ticker.close()
+
+    def test_yahoo_v8_chart_carries_time(self, router):
+        router.crumb_ok = False  # force the no-auth chart fallback
+        router.quote_time = 1_699_997_777
+        ticker = _ticker(("AAPL",))
+        quote = ticker.fetch()[0]
+        assert quote.quote_time == 1_699_997_777
+        ticker.close()
+
+    def test_cached_quote_goes_stale_when_provider_stops_answering(self, router):
+        # The regression this whole feature exists for: fetch() serves last-good values
+        # forever, so a dead provider must eventually show on the bar.
+        ticker = _ticker(("AAPL",))
+        first = ticker.fetch()
+        assert first and "is_stale" not in first[0].as_dict()
+        router.quote_status = 500
+        router.chart_ok = False
+        cached = [q.as_dict() for q in ticker.fetch()]
+        st.annotate_staleness(cached, stale_after=300, phase="regular", now=router.quote_time + 3600)
+        assert cached[0]["is_stale"] is True
+        ticker.close()

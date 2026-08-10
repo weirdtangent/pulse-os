@@ -84,8 +84,20 @@ other symbols show their Yahoo short name.
 | `PULSE_TICKER_EMOJI` | `true` | Add an accent emoji for outsized moves (🚀 ≥ +10%, 🔥 ≥ +5%, 📉 ≤ -5%, 🧊 ≤ -10%). |
 | `PULSE_TICKER_LABEL` | `auto` | Label before each price: `auto` (friendly name for indices like "S&P 500", ticker symbol for everything else — avoids long/truncated ETF names), `name` (friendly name for all), or `ticker` (symbol for all). |
 | `PULSE_TICKER_API_KEY` | _(unset)_ | Optional free [Finnhub](https://finnhub.io) API key. When set, Finnhub is the preferred (licensed) source for symbols it can price; Yahoo covers the rest. |
+| `PULSE_TICKER_STALE_AFTER` | `300` | Seconds before a quote is marked stale with a `⏱`. Set `0` to disable the marker. Only evaluated during the regular session (see notes). |
 
 Notes:
+- **Freshness markers.** The bar never goes blank — a symbol its provider fails to price
+  keeps its last-good value — so a quote that has gone cold is marked rather than shown as
+  if it were current. Two markers, both muted and both absent on a healthy bar:
+  - `⏱` — the price is older than `PULSE_TICKER_STALE_AFTER`. Checked **only during the
+    regular session**; outside it every quote is legitimately hours old (both providers
+    stamp the last regular trade), so flagging then would mark the whole bar and mean
+    nothing.
+  - `15m` — the exchange itself reports the feed as delayed by that many minutes (Yahoo's
+    `exchangeDataDelayedBy`). Shown whenever non-zero, and it takes precedence over `⏱`
+    since it's the more specific statement. Finnhub's `/quote` has no delay field, so
+    Finnhub-priced symbols never show this one.
 - Gains render green with a ▲, losses red with a ▼; the bar matches the overlay's
   translucent card styling and is pinned to the bottom over whatever is on screen.
 - The fast/slow fetch cadence is keyed to US regular-session hours (holidays are not
