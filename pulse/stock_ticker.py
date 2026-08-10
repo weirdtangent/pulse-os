@@ -131,6 +131,9 @@ _STATE_TO_PHASE: dict[str, str] = {
     "POSTPOST": "post",
     "CLOSED": "closed",
 }
+# How "open" each collapsed phase is, so we can compare the exchange state against the
+# clock and keep whichever is *less* open (see us_market_phase).
+_PHASE_OPENNESS: dict[str, int] = {"closed": 0, "post": 1, "pre": 2, "regular": 3}
 
 
 def _us_market_state(quotes: Sequence[dict[str, object]]) -> str | None:
@@ -175,14 +178,22 @@ def _schedule_phase(now: datetime | None = None) -> str:
 def us_market_phase(quotes: Sequence[dict[str, object]] | None = None, now: datetime | None = None) -> str:
     """Current US session — "regular", "pre", "post", or "closed".
 
-    Prefers the exchange truth carried on the quotes (Yahoo marketState, which already
-    accounts for holidays and half-days); falls back to a plain ET clock when no quote
-    reports a state.
+    Starts from a plain ET clock, then lets the exchange truth carried on the quotes
+    (Yahoo marketState) pull the session toward *closed* — this is what makes holidays and
+    half-days hide the bar for free. The exchange is deliberately NOT allowed to make the
+    session look *more* open than the clock: StockTicker.fetch() serves its last-good cache
+    unchanged when a poll round returns nothing, so a stale "REGULAR" left in that cache
+    must not keep the bar visible overnight or on a weekend. With no marketState available
+    at all (Finnhub-only equities, or the v8 chart fallback), the clock stands alone.
     """
+    clock_phase = _schedule_phase(now)
     state = _us_market_state(quotes or ())
-    if state is not None:
-        return _STATE_TO_PHASE.get(state, "closed")
-    return _schedule_phase(now)
+    if state is None:
+        return clock_phase
+    state_phase = _STATE_TO_PHASE.get(state, "closed")
+    if _PHASE_OPENNESS[state_phase] <= _PHASE_OPENNESS[clock_phase]:
+        return state_phase
+    return clock_phase
 
 
 def ticker_visible(mode: str, phase: str) -> bool:

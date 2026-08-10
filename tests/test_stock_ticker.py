@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import httpx
 import pulse.stock_ticker as st
 import pytest
@@ -253,10 +256,11 @@ class TestMarketHours:
 
 
 class TestMarketPhaseAndVisibility:
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
     _ET = ZoneInfo("America/New_York")
+    _MIDDAY = datetime(2026, 8, 5, 11, 0, tzinfo=_ET)  # Wed, regular session
+    _PRE = datetime(2026, 8, 5, 7, 0, tzinfo=_ET)
+    _POST = datetime(2026, 8, 5, 18, 0, tzinfo=_ET)
+    _SATURDAY = datetime(2026, 8, 8, 12, 0, tzinfo=_ET)
 
     def _q(self, symbol, state):
         return {"symbol": symbol, "market_state": state}
@@ -264,46 +268,47 @@ class TestMarketPhaseAndVisibility:
     # -- schedule fallback (no marketState on the quotes) --------------------
 
     def test_schedule_regular_when_no_state(self):
-        from datetime import datetime
-
-        midday = datetime(2026, 8, 5, 11, 0, tzinfo=self._ET)  # Wed
-        assert st.us_market_phase([self._q("AAPL", "")], now=midday) == "regular"
+        assert st.us_market_phase([self._q("AAPL", "")], now=self._MIDDAY) == "regular"
 
     def test_schedule_pre_and_post(self):
-        from datetime import datetime
-
-        pre = datetime(2026, 8, 5, 7, 0, tzinfo=self._ET)
-        post = datetime(2026, 8, 5, 18, 0, tzinfo=self._ET)
-        assert st.us_market_phase([], now=pre) == "pre"
-        assert st.us_market_phase([], now=post) == "post"
+        assert st.us_market_phase([], now=self._PRE) == "pre"
+        assert st.us_market_phase([], now=self._POST) == "post"
 
     def test_schedule_weekend_closed(self):
-        from datetime import datetime
+        assert st.us_market_phase([], now=self._SATURDAY) == "closed"
 
-        saturday = datetime(2026, 8, 8, 12, 0, tzinfo=self._ET)
-        assert st.us_market_phase([], now=saturday) == "closed"
-
-    # -- exchange truth wins over the clock ---------------------------------
+    # -- exchange truth pulls the session toward closed ---------------------
 
     def test_marketstate_overrides_clock_on_holiday(self):
-        from datetime import datetime
-
         # Clock says regular hours, but the exchange reports CLOSED (a holiday) -> closed.
-        midday = datetime(2026, 8, 5, 11, 0, tzinfo=self._ET)
-        assert st.us_market_phase([self._q("AAPL", "CLOSED")], now=midday) == "closed"
+        assert st.us_market_phase([self._q("AAPL", "CLOSED")], now=self._MIDDAY) == "closed"
+
+    def test_marketstate_half_day_early_close(self):
+        # Clock still reads regular at 11:00, but a half-day has flipped to POST -> post.
+        assert st.us_market_phase([self._q("AAPL", "POST")], now=self._MIDDAY) == "post"
+
+    def test_stale_open_state_cannot_reopen_closed_market(self):
+        # StockTicker serves last-good cache (stale REGULAR) when a poll returns nothing;
+        # on a weekend the clock must win so the bar stays hidden. Regression for the bar
+        # remaining visible overnight/weekends on a stale marketState.
+        stale = [self._q("AAPL", "REGULAR")]
+        assert st.us_market_phase(stale, now=self._SATURDAY) == "closed"
+        # ...and overnight on a weekday, too.
+        overnight = datetime(2026, 8, 5, 2, 0, tzinfo=self._ET)
+        assert st.us_market_phase(stale, now=overnight) == "closed"
 
     def test_most_open_us_quote_wins(self):
         quotes = [self._q("AAPL", "POST"), self._q("MSFT", "REGULAR")]
-        assert st.us_market_phase(quotes) == "regular"
+        assert st.us_market_phase(quotes, now=self._MIDDAY) == "regular"
 
     def test_foreign_index_state_ignored(self):
         # Nikkei trading (REGULAR) must not make the US ticker read as open.
         quotes = [self._q("^N225", "REGULAR"), self._q("AAPL", "CLOSED")]
-        assert st.us_market_phase(quotes) == "closed"
+        assert st.us_market_phase(quotes, now=self._MIDDAY) == "closed"
 
     def test_prepost_states_collapse(self):
-        assert st.us_market_phase([self._q("AAPL", "PREPRE")]) == "pre"
-        assert st.us_market_phase([self._q("AAPL", "POSTPOST")]) == "post"
+        assert st.us_market_phase([self._q("AAPL", "PREPRE")], now=self._PRE) == "pre"
+        assert st.us_market_phase([self._q("AAPL", "POSTPOST")], now=self._POST) == "post"
 
     # -- visibility rule per mode -------------------------------------------
 

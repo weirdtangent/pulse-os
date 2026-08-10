@@ -868,7 +868,10 @@ class KioskMqttListener:
         mode = self.overlay_config.ticker_hours
         try:
             while not self._ticker_stop_event.is_set():
-                phase = "regular"
+                # Baseline the session on the wall clock, so a fetch error still paces the
+                # loop correctly instead of assuming the market is open; a successful fetch
+                # refines it from the live quotes below.
+                phase = us_market_phase()
                 try:
                     quotes = ticker.fetch()
                     payload = [quote.as_dict() for quote in quotes]
