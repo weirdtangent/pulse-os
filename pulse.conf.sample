@@ -163,6 +163,13 @@ PULSE_TICKER_LABEL="auto"
 # rest. Leave empty to use Yahoo only.
 # PULSE_TICKER_API_KEY=""
 
+# PULSE_TICKER_STALE_AFTER — seconds before a quote is marked with a "⏱" because its
+# price has gone cold. The bar never blanks (a symbol keeps its last-good value when its
+# provider fails), so without this a dead feed looks like a market that stopped moving.
+# Only checked during the regular session — outside it every quote is legitimately hours
+# old. Set "0" to turn the marker off.
+PULSE_TICKER_STALE_AFTER="300"
+
 # ============================================================================
 # Telemetry & MQTT
 # ============================================================================

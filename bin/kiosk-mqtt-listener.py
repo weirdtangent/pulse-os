@@ -37,6 +37,7 @@ from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
 from pulse.stock_ticker import (
     TICKER_HOURS_MODES,
     StockTicker,
+    annotate_staleness,
     parse_symbols,
     ticker_visible,
     us_market_phase,
@@ -108,6 +109,7 @@ class OverlayConfig:
     ticker_emoji: bool
     ticker_label_mode: str
     ticker_api_key: str | None
+    ticker_stale_after: int  # seconds before a quote is marked stale (0 disables)
 
 
 @dataclass(frozen=True)
@@ -483,6 +485,7 @@ def load_config() -> EnvConfig:
         ticker_emoji=parse_bool(os.environ.get("PULSE_TICKER_EMOJI"), True),
         ticker_label_mode=ticker_label_mode,
         ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
+        ticker_stale_after=max(0, parse_int(os.environ.get("PULSE_TICKER_STALE_AFTER"), 300)),
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -882,6 +885,14 @@ class KioskMqttListener:
                     # inside StockTicker keeps last-good quotes warm, so the bar repopulates
                     # the instant it becomes visible again.
                     phase = us_market_phase(payload)
+                    # Mark quotes the cache has been carrying for too long, so a provider
+                    # that has quietly stopped answering shows up on the bar instead of
+                    # looking like a market that stopped moving.
+                    annotate_staleness(
+                        payload,
+                        stale_after=self.overlay_config.ticker_stale_after,
+                        phase=phase,
+                    )
                     visible = ticker_visible(mode, phase)
                     change = state.set_ticker(payload if visible else [])
                     # set_ticker bumps the version only when the symbol set changes — the bar
