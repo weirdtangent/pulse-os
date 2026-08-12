@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/pulse-ticker.jpg" alt="Live scrolling stock ticker across the bottom" width="80%" /><br />
-  <em>Live stock ticker — indices plus your own symbols, shown during market hours</em>
+  <img src="assets/screenshots/pulse-ticker.jpg" alt="Live scrolling stock ticker with the market pill in the badge row" width="80%" /><br />
+  <em>Live stock ticker — indices plus your own symbols during market hours, with a market pill in the badge row up top for an at-a-glance read</em>
 </p>
 
 # Pulse Kiosk v1 — Complete Setup Guide
