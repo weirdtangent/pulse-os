@@ -50,7 +50,10 @@ body {
   align-items: center;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
-  background: var(--overlay-ambient-bg);
+  /* The opaque-biased background the ticker bar uses, not the lighter ambient one the
+     cards use: badges sit over whatever photo or camera feed is on screen, and a bright
+     sky washes their text out — colored text (the market pill) worst of all. */
+  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
   backdrop-filter: blur(12px);
   cursor: default;
   user-select: none;
@@ -86,9 +89,6 @@ body {
 .overlay-badge--market {
   gap: 0.5rem;
   font-variant-numeric: tabular-nums;
-  /* The bar's opaque-biased background rather than the lighter ambient badge one: green
-     and red on a translucent pill wash out badly over a bright photo or camera feed. */
-  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
 }
 
 .overlay-market__move {
