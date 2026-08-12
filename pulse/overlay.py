@@ -605,6 +605,7 @@ ICON_MAP = {
     "earmuffs": "&#127911;",  # 🎧
     "update": "&#128260;",  # 🔄
     "sound": "&#127925;",  # 🎵
+    "market": "&#128200;",  # 📈
 }
 
 
@@ -642,6 +643,20 @@ def _ticker_float(value: Any) -> float | None:
         return None
 
 
+def _ticker_display_label(quote: dict[str, Any], mode: str) -> str:
+    """Raw (unescaped) display name for a quote under the configured label mode.
+
+    "auto": friendly name for indices (symbols with a caret prefix, e.g. ^SPX), ticker
+    symbol for everything else (avoids long/truncated ETF/stock names).
+    """
+    symbol = str(quote.get("symbol") or "")
+    name = str(quote.get("label") or "")
+    use_symbol = mode == "ticker" or (mode == "auto" and not symbol.startswith("^"))
+    if use_symbol:
+        return (symbol.lstrip("^") or name).strip()  # e.g. "^SPX" -> "SPX", "VTI" -> "VTI"
+    return (name or symbol).strip()
+
+
 def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     quotes = snapshot.ticker or ()
     mode = theme.ticker_label_mode  # "name" | "ticker" | "auto"
@@ -649,16 +664,7 @@ def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     for quote in quotes:
         if not isinstance(quote, dict):
             continue
-        symbol = str(quote.get("symbol") or "")
-        name = str(quote.get("label") or "")
-        # "auto": friendly name for indices (symbols with a caret prefix, e.g. ^SPX),
-        # ticker symbol for everything else (avoids long/truncated ETF/stock names).
-        use_symbol = mode == "ticker" or (mode == "auto" and not symbol.startswith("^"))
-        if use_symbol:
-            raw_label = symbol.lstrip("^") or name  # e.g. "^SPX" -> "SPX", "VTI" -> "VTI"
-        else:
-            raw_label = name or symbol
-        label = html_escape(raw_label).strip()
+        label = html_escape(_ticker_display_label(quote, mode))
         if not label:
             continue
         price = _ticker_float(quote.get("price"))
@@ -712,6 +718,68 @@ def _build_ticker_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     )
 
 
+# How many symbols the notification-bar pill summarizes. Three covers the default
+# ^SPX/^DJI/^NDX set without crowding the other badges — the scrolling bar below carries
+# the full list, prices included.
+_MARKET_PILL_MAX = 3
+
+
+def _market_pill_quotes(quotes: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The (at most three) quotes the pill summarizes.
+
+    Indices win whenever any are configured — the pill is meant to read as "the market",
+    so a caret symbol beats whatever equities happen to come first. With no indices at all
+    (an all-equities symbol list), the first few configured symbols are the stand-in.
+    """
+    usable = [
+        quote for quote in quotes if isinstance(quote, dict) and _ticker_float(quote.get("change_pct")) is not None
+    ]
+    indices = [quote for quote in usable if str(quote.get("symbol") or "").startswith("^")]
+    return (indices or usable)[:_MARKET_PILL_MAX]
+
+
+def _build_market_pill(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
+    """Compact market summary badge for the notification bar.
+
+    Appears and disappears with the ticker bar itself: the caller gates on
+    theme.show_ticker, and the ticker thread pushes an empty quote list whenever the
+    configured hours mode says the bar shouldn't show, so an off-hours pill is impossible.
+
+    Deliberately numbers-only (arrow + percent, no labels) because badge space is scarce;
+    the index names are spelled out in the aria-label/tooltip, and in full on the bar.
+    """
+    picks = _market_pill_quotes(snapshot.ticker or ())
+    if not picks:
+        return ""
+    moves: list[str] = []
+    described: list[str] = []
+    for quote in picks:
+        pct = _ticker_float(quote.get("change_pct"))
+        if pct is None:
+            continue
+        raw_is_up = quote.get("is_up")
+        is_up = bool(raw_is_up) if raw_is_up is not None else pct >= 0
+        direction = "up" if is_up else "down"
+        arrow = "▲" if is_up else "▼"
+        moves.append(
+            f'<span class="overlay-market__move overlay-market__move--{direction}">' f"{arrow}{abs(pct):.2f}</span>"
+        )
+        # Tooltip names follow the same label mode as the bar, so a display configured for
+        # bare symbols doesn't get long fund names smuggled back in via the pill.
+        name = _ticker_display_label(quote, theme.ticker_label_mode)
+        described.append(f"{name} {direction} {abs(pct):.2f}%")
+    if not moves:
+        return ""
+    icon = ICON_MAP.get("market", "&#9679;")
+    detail = html_escape(f"Markets: {', '.join(described)}", quote=True)
+    return (
+        f'<span class="overlay-badge overlay-badge--market" aria-label="{detail}" title="{detail}">'
+        f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
+        f"{''.join(moves)}"
+        "</span>"
+    )
+
+
 def render_overlay_html(
     snapshot: OverlaySnapshot,
     theme: OverlayTheme,
@@ -758,7 +826,7 @@ def render_overlay_html(
     if info_card_markup:
         grid_markup += info_card_markup
 
-    notification_html = _build_notification_bar(snapshot) if theme.show_notification_bar else ""
+    notification_html = _build_notification_bar(snapshot, theme) if theme.show_notification_bar else ""
 
     ticker_html = _build_ticker_bar(snapshot, theme) if theme.show_ticker else ""
     root_class = "overlay-root overlay-root--ticker" if ticker_html else "overlay-root"
@@ -1134,7 +1202,7 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
     return "bottom-right", card
 
 
-def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
+def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     badges: list[str] = []
     badges.append(_render_badge("help", "Help"))
     badges.append(_render_badge("config", "Config"))
@@ -1166,6 +1234,12 @@ def _build_notification_bar(snapshot: OverlaySnapshot) -> str:
         badges.append(_render_badge("music", "Now playing"))
     if snapshot.update_available:
         badges.append(_render_badge("update", "Update available"))
+    if theme.show_ticker:
+        # Least urgent of the informational badges, so it sits after the time-critical
+        # ones and just before the earmuffs toggle.
+        market_pill = _build_market_pill(snapshot, theme)
+        if market_pill:
+            badges.append(market_pill)
     badges.append(_render_earmuffs_badge(snapshot.earmuffs_enabled))
     classes = ["overlay-notification-bar"]
     if not badges:
