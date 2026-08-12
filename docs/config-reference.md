@@ -100,6 +100,13 @@ Notes:
     Finnhub-priced symbols never show this one.
 - Gains render green with a ▲, losses red with a ▼; the bar matches the overlay's
   translucent card styling and is pinned to the bottom over whatever is on screen.
+- **Market pill.** Whenever the bar is up, a matching 📈 pill joins the notification
+  badges at the top of the overlay with an at-a-glance read on the market: the day's
+  percent move for up to three symbols (indices first — e.g. `📈 ▲0.42 ▲0.31 ▼0.12` for
+  the default `^SPX,^DJI,^NDX`), green/red with the same ▲/▼ as the bar. Names are left
+  off to keep the pill narrow; they're in its tooltip (following `PULSE_TICKER_LABEL`) and
+  spelled out in full on the bar below. The pill hides with the bar, so
+  `PULSE_TICKER_HOURS` governs both.
 - The fast/slow fetch cadence is keyed to US regular-session hours (holidays are not
   tracked — an extra harmless fast poll may occur). Data itself is global.
 - **DNS/ad-blocker allowlist:** the device fetches quotes from these hosts — if you run

@@ -195,6 +195,66 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(self._snapshot(ticker=ticker), self.theme)  # theme.show_ticker defaults False
         self.assertNotIn('class="pulse-ticker"', html)
 
+    # --- Market summary pill (notification bar) ---------------------------------
+    _MARKET_PILL_MARKUP = '<span class="overlay-badge overlay-badge--market"'
+
+    def _index(self, symbol: str, label: str, pct: float) -> dict:
+        return {
+            "symbol": symbol,
+            "label": label,
+            "price": 100.0,
+            "change": pct,
+            "change_pct": pct,
+            "is_up": pct >= 0,
+        }
+
+    def test_market_pill_shows_percents_with_direction(self) -> None:
+        ticker = (
+            self._index("^SPX", "S&P 500", 0.42),
+            self._index("^DJI", "Dow", 0.31),
+            self._index("^IXIC", "Nasdaq", -0.12),
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), self._ticker_theme())
+        self.assertIn(self._MARKET_PILL_MARKUP, html)
+        self.assertIn(">▲0.42</span>", html)
+        self.assertIn(">▲0.31</span>", html)
+        self.assertIn(">▼0.12</span>", html)  # sign lives in the arrow, not the number
+        self.assertIn("overlay-market__move--up", html)
+        self.assertIn("overlay-market__move--down", html)
+        # Names are dropped from the visible pill but kept for hover/screen readers.
+        self.assertIn("Markets: S&amp;P 500 up 0.42%, Dow up 0.31%, Nasdaq down 0.12%", html)
+
+    def test_market_pill_prefers_indices_and_caps_at_three(self) -> None:
+        ticker = (
+            self._index("VTI", "VTI", 1.0),
+            self._index("^SPX", "S&P 500", 0.42),
+            self._index("^DJI", "Dow", 0.31),
+            self._index("^IXIC", "Nasdaq", -0.12),
+            self._index("^RUT", "Russell 2000", 0.55),
+        )
+        html = render_overlay_html(self._snapshot(ticker=ticker), self._ticker_theme())
+        self.assertIn(">▲0.42</span>", html)
+        self.assertIn("Markets: S&amp;P 500 up 0.42%, Dow up 0.31%, Nasdaq down 0.12%", html)
+        self.assertNotIn(">▲1.00</span>", html)  # equity skipped in favor of indices
+        self.assertNotIn(">▲0.55</span>", html)  # fourth index trimmed
+
+    def test_market_pill_falls_back_to_equities_when_no_indices(self) -> None:
+        ticker = (self._index("VTI", "VTI", 1.0), self._index("VOO", "VOO", -0.25))
+        html = render_overlay_html(self._snapshot(ticker=ticker), self._ticker_theme())
+        self.assertIn(">▲1.00</span>", html)
+        self.assertIn(">▼0.25</span>", html)
+
+    def test_market_pill_absent_when_ticker_disabled(self) -> None:
+        ticker = (self._index("^SPX", "S&P 500", 0.42),)
+        html = render_overlay_html(self._snapshot(ticker=ticker), self.theme)  # show_ticker False
+        self.assertNotIn(self._MARKET_PILL_MARKUP, html)
+
+    def test_market_pill_absent_when_no_quotes(self) -> None:
+        # The ticker thread pushes an empty list when the hours mode hides the bar, so the
+        # pill must vanish with it rather than freezing the last quotes on screen.
+        html = render_overlay_html(self._snapshot(ticker=()), self._ticker_theme())
+        self.assertNotIn(self._MARKET_PILL_MARKUP, html)
+
     def test_only_first_clock_used_if_multiple_provided(self) -> None:
         # Even if multiple clocks are provided, only the first one is rendered
         clocks = (
