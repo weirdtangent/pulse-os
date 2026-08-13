@@ -236,9 +236,7 @@ class OpenAICompatibleProvider(LLMProvider):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(
-                request, timeout=timeout or self._get_timeout()
-            ) as response:  # nosec B310 - timeout in kwargs
+            with urllib.request.urlopen(request, timeout=timeout or self._get_timeout()) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"{self._get_provider_name()} HTTP error: {exc.code}") from exc
@@ -425,9 +423,7 @@ class AnthropicProvider(LLMProvider):
         )
 
         try:
-            with urllib.request.urlopen(
-                request, timeout=timeout or self.config.anthropic_timeout
-            ) as response:  # nosec B310 - timeout in kwargs
+            with urllib.request.urlopen(request, timeout=timeout or self.config.anthropic_timeout) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             error_body = ""
@@ -552,9 +548,7 @@ class GeminiProvider(LLMProvider):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(
-                request, timeout=timeout or self.config.gemini_timeout
-            ) as response:  # nosec B310 - timeout in kwargs
+            with urllib.request.urlopen(request, timeout=timeout or self.config.gemini_timeout) as response:  # nosec B310 - timeout in kwargs
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Gemini HTTP error: {exc.code}") from exc

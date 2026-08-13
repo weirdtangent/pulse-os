@@ -424,7 +424,11 @@ class TestValidateApiKey:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_openai_invalid_key_401(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=401, msg="Unauthorized", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         config = make_llm_config(openai_api_key="bad-key")
         provider = OpenAIProvider(config)
@@ -433,7 +437,11 @@ class TestValidateApiKey:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_openai_rate_limit_429_is_inconclusive(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=429, msg="Too Many Requests", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         config = make_llm_config(openai_api_key="valid-key")
         provider = OpenAIProvider(config)
@@ -454,7 +462,11 @@ class TestValidateApiKey:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_anthropic_invalid_key_403(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=403, msg="Forbidden", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=403,
+            msg="Forbidden",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         config = make_llm_config(anthropic_api_key="bad-key")
         provider = AnthropicProvider(config)
@@ -468,7 +480,11 @@ class TestValidateApiKey:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_gemini_server_error_is_inconclusive(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=500, msg="Internal Server Error", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=500,
+            msg="Internal Server Error",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         config = make_llm_config(gemini_api_key="valid-key")
         provider = GeminiProvider(config)
@@ -569,7 +585,11 @@ class TestOpenAICompatibleCallApi:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     def test_call_api_http_error(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=500, msg="Server Error", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=500,
+            msg="Server Error",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         provider = self._make_provider(openai_api_key="key")
         with pytest.raises(RuntimeError, match="OpenAI HTTP error: 500"):
@@ -680,7 +700,11 @@ class TestOpenAICompatibleValidateApiKey:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_403_returns_false(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=403, msg="Forbidden", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=403,
+            msg="Forbidden",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         config = make_llm_config(openai_api_key="bad")
         provider = OpenAIProvider(config)
@@ -689,7 +713,11 @@ class TestOpenAICompatibleValidateApiKey:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_500_is_inconclusive(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=500, msg="ISE", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=500,
+            msg="ISE",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         config = make_llm_config(openai_api_key="key")
         provider = OpenAIProvider(config)
@@ -736,7 +764,11 @@ class TestAnthropicProvider:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     def test_call_api_http_error_with_body(self, mock_urlopen):
         err = urllib.error.HTTPError(
-            url="", code=529, msg="Overloaded", hdrs=None, fp=BytesIO(b"overloaded")  # type: ignore[arg-type]
+            url="",
+            code=529,
+            msg="Overloaded",
+            hdrs=None,
+            fp=BytesIO(b"overloaded"),  # type: ignore[arg-type]
         )
         mock_urlopen.side_effect = err
         provider = self._make_provider()
@@ -806,7 +838,11 @@ class TestAnthropicProvider:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_validate_401(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=401, msg="Unauthorized", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         provider = self._make_provider()
         assert await provider.validate_api_key() is False
@@ -864,7 +900,11 @@ class TestGeminiProvider:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     def test_call_api_http_error(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=503, msg="Unavailable", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=503,
+            msg="Unavailable",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         provider = self._make_provider()
         with pytest.raises(RuntimeError, match="Gemini HTTP error: 503"):
@@ -958,7 +998,11 @@ class TestGeminiProvider:
     @patch("pulse.assistant.llm.urllib.request.urlopen")
     async def test_validate_401(self, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.HTTPError(
-            url="", code=401, msg="Unauthorized", hdrs=None, fp=None  # type: ignore[arg-type]
+            url="",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,  # type: ignore[arg-type]
         )
         provider = self._make_provider()
         assert await provider.validate_api_key() is False

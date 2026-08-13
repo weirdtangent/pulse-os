@@ -24,7 +24,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "black==26.3.1",
     "pytest==9.0.3",
     "pytest-cov==7.1.0",
     "ruff==0.15.7",
@@ -32,10 +31,6 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["pulse", "pulse.*"]
-
-[tool.black]
-line-length = 120
-target-version = ["py313"]
 
 [tool.ruff]
 line-length = 120
@@ -62,13 +57,12 @@ docstring-code-format = true
 
 [dependency-groups]
 dev = [
-    "black>=24.8.0",
     "mypy>=2.3.0",
     "pip-audit>=2.10.1",
     "pre-commit>=4.6.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
-    "ruff>=0.6.5",
+    "ruff==0.15.7",
     "types-requests>=2.33.0.20260712",
 ]
 
