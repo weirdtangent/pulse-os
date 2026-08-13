@@ -15,14 +15,14 @@ Thanks for helping improve Pulse OS! This guide covers how to propose changes, t
 
 ## Required checks (run locally before opening a PR)
 - `uv run ruff check .` (lint)
-- `uv run black --check .` (format, 120 cols)
+- `uv run ruff format --check .` (format, 120 cols)
 - `uv run pytest` (tests; add/adjust tests for your changes)
 - If you touch release or packaging logic, ensure `release.config.js`, `CHANGELOG.md`, and version metadata stay coherent (semantic versioning).
 
 CI reruns these checks (plus CodeQL and dependency auditing) on every PR and main-branch push.
 
 ## Coding standards
-- Style is enforced by Black (120 columns) and Ruff; prefer type hints where practical.
+- Style is enforced by Ruff (lint + format, 120 columns); prefer type hints where practical.
 - Keep log messages clear and actionable; avoid leaking secrets or personal data.
 - Update docs/comments when behavior or interfaces change (config keys, MQTT topics, CLI flags, APIs).
 

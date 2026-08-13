@@ -38,7 +38,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 ### How to obtain, get help, and contribute
 - Obtain: clone from GitHub (`git clone https://github.com/weirdtangent/pulse-os.git`) and follow the setup steps below (we publish interim commits, not just tagged drops).
 - Bugs & enhancements: open [issues](https://github.com/weirdtangent/pulse-os/issues) with repro details and expected behavior.
-- Contribute: follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`TESTING.md`](TESTING.md) for coding standards (Black 120 cols, Ruff) and required checks (ruff, black, pytest).
+- Contribute: follow [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`TESTING.md`](TESTING.md) for coding standards (Ruff, 120 cols) and required checks (ruff check, ruff format, pytest).
 - Security reports: use the process in [`SECURITY.md`](SECURITY.md); please do not open public issues for vulnerabilities.
 - CPE: not published / N/A.
 
