@@ -255,6 +255,54 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(self._snapshot(ticker=()), self._ticker_theme())
         self.assertNotIn(self._MARKET_PILL_MARKUP, html)
 
+    # --- Speaker-offline badge (notification bar) -------------------------------
+    _SPEAKER_PILL_MARKUP = '<span class="overlay-badge overlay-badge--speaker-offline"'
+
+    def test_speaker_pill_absent_when_speaker_reachable(self) -> None:
+        # The healthy case is the common one and gets no badge at all — a permanent
+        # "speaker OK" pill would train everyone to stop reading the bar.
+        html = render_overlay_html(self._snapshot(speaker_offline=None), self.theme)
+        self.assertNotIn(self._SPEAKER_PILL_MARKUP, html)
+
+    def test_speaker_pill_names_the_bluetooth_speaker(self) -> None:
+        snapshot = self._snapshot(speaker_offline={"name": "Living Room", "kind": "bluetooth"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn(self._SPEAKER_PILL_MARKUP, html)
+        self.assertIn("<span>Living Room offline</span>", html)
+        self.assertIn("power-cycle the speaker", html)
+
+    def test_speaker_pill_wired_says_check_the_cables(self) -> None:
+        # A USB speaker can't be power-cycled from the couch, so the wired variant has
+        # to point at the actual fix rather than reusing the Bluetooth wording.
+        snapshot = self._snapshot(speaker_offline={"name": "Speaker", "kind": "wired"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("<span>Speaker unplugged</span>", html)
+        self.assertIn("USB and power cables", html)
+        self.assertNotIn("power-cycle the speaker", html)
+
+    def test_speaker_pill_escapes_speaker_name(self) -> None:
+        # Speaker names come from BlueZ, i.e. from whatever the device advertises.
+        snapshot = self._snapshot(speaker_offline={"name": '<b>"Bad"</b>', "kind": "bluetooth"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertNotIn("<b>", html)
+        self.assertIn("&lt;b&gt;", html)
+
+    def test_speaker_pill_falls_back_to_generic_name(self) -> None:
+        # BlueZ returns an empty name for a device that has never been resolved.
+        snapshot = self._snapshot(speaker_offline={"name": "", "kind": "bluetooth"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("<span>Speaker offline</span>", html)
+
+    def test_speaker_pill_precedes_alarm_badge(self) -> None:
+        # Ordering is load-bearing: a speaker that's off means the alarm won't be heard,
+        # so the badge has to land ahead of the alarm badge, not after it.
+        snapshot = self._snapshot(
+            speaker_offline={"name": "Living Room", "kind": "bluetooth"},
+            active_alarm={"label": "Wake up"},
+        )
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertLess(html.index(self._SPEAKER_PILL_MARKUP), html.index("Alarm ringing"))
+
     def test_only_first_clock_used_if_multiple_provided(self) -> None:
         # Even if multiple clocks are provided, only the first one is rendered
         clocks = (

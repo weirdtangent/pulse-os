@@ -34,6 +34,7 @@ from pulse.overlay import (
     parse_clock_config,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
+from pulse.speaker import SpeakerConfig, check_speaker
 from pulse.stock_ticker import (
     TICKER_HOURS_MODES,
     StockTicker,
@@ -110,6 +111,13 @@ class OverlayConfig:
     ticker_label_mode: str
     ticker_api_key: str | None
     ticker_stale_after: int  # seconds before a quote is marked stale (0 disables)
+    speaker_alert: bool  # show a badge when the configured speaker is unreachable
+    speaker_interval: int  # seconds between reachability checks
+    # Reused from the Bluetooth autoconnect settings — the badge and bin/bt-autoconnect.sh
+    # must agree on which speaker this room owns, so they read the same two variables.
+    bt_autoconnect: bool
+    bt_mac: str
+    speaker_sink: str  # substring of the expected wired sink; empty disables that check
 
 
 @dataclass(frozen=True)
@@ -484,6 +492,13 @@ def load_config() -> EnvConfig:
         ticker_label_mode=ticker_label_mode,
         ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
         ticker_stale_after=max(0, parse_int(os.environ.get("PULSE_TICKER_STALE_AFTER"), 300)),
+        speaker_alert=parse_bool(os.environ.get("PULSE_SPEAKER_ALERT"), True),
+        # Floor of 15s matches the bt-autoconnect timer cadence; polling faster than the
+        # thing doing the reconnecting only burns CPU on a Pi.
+        speaker_interval=max(15, parse_int(os.environ.get("PULSE_SPEAKER_INTERVAL"), 60)),
+        bt_autoconnect=parse_bool(os.environ.get("PULSE_BLUETOOTH_AUTOCONNECT"), True),
+        bt_mac=(os.environ.get("PULSE_BT_MAC") or "").strip(),
+        speaker_sink=(os.environ.get("PULSE_SPEAKER_SINK") or "").strip(),
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -701,6 +716,10 @@ class KioskMqttListener:
         self._ticker_thread: threading.Thread | None = None
         self._ticker_stop_event = threading.Event()
         self._stock_ticker: StockTicker | None = None
+        self._speaker_lock = threading.Lock()
+        self._speaker_thread: threading.Thread | None = None
+        self._speaker_stop_event = threading.Event()
+        self._speaker_offline_streak = 0
         self._watchdog_thread: threading.Thread | None = None
         self._watchdog_stop_event = threading.Event()
         self._last_mqtt_ok: float = time.monotonic()
@@ -860,6 +879,67 @@ class KioskMqttListener:
             self._ticker_stop_event.set()
             self._ticker_thread.join(timeout=self.overlay_config.ticker_interval)
             self._ticker_thread = None
+
+    def start_speaker_monitor(self) -> None:
+        if not self.overlay_state or not self.overlay_config.speaker_alert:
+            return
+        with self._speaker_lock:
+            if self._speaker_thread and self._speaker_thread.is_alive():
+                return
+            self._speaker_stop_event.clear()
+            thread = threading.Thread(target=self._speaker_loop, name="pulse-speaker", daemon=True)
+            self._speaker_thread = thread
+            thread.start()
+
+    def stop_speaker_monitor(self) -> None:
+        with self._speaker_lock:
+            if not self._speaker_thread:
+                return
+            self._speaker_stop_event.set()
+            self._speaker_thread.join(timeout=self.overlay_config.speaker_interval)
+            self._speaker_thread = None
+
+    # A single bad read must not raise the badge. BlueZ briefly reports a speaker as
+    # disconnected while it renegotiates A2DP (and during the ~15s bt-autoconnect
+    # window after a reboot), so requiring two consecutive offline reads costs one
+    # extra poll of latency and buys immunity to that flapping. Recovery is not
+    # debounced — the moment the speaker answers, the badge goes away.
+    _SPEAKER_OFFLINE_STREAK_TO_ALERT = 2
+
+    def _speaker_loop(self) -> None:
+        state = self.overlay_state
+        if not state:
+            return
+        config = SpeakerConfig(
+            bt_autoconnect=self.overlay_config.bt_autoconnect,
+            bt_mac=self.overlay_config.bt_mac,
+            wired_sink=self.overlay_config.speaker_sink,
+        )
+        try:
+            while not self._speaker_stop_event.is_set():
+                try:
+                    status = check_speaker(config)
+                    if status is None or not status.offline:
+                        # Reachable, unconfigured, or the check couldn't run — in all
+                        # three cases we have nothing to tell anyone.
+                        self._speaker_offline_streak = 0
+                        change = state.update_speaker_offline(None)
+                    else:
+                        self._speaker_offline_streak += 1
+                        if self._speaker_offline_streak < self._SPEAKER_OFFLINE_STREAK_TO_ALERT:
+                            change = None
+                        else:
+                            if self._speaker_offline_streak == self._SPEAKER_OFFLINE_STREAK_TO_ALERT:
+                                self.log(f"speaker: {status.kind} speaker '{status.name}' is not connected")
+                            change = state.update_speaker_offline({"name": status.name, "kind": status.kind})
+                    if change and change.changed:
+                        self._emit_overlay_refresh(change.version, change.reason)
+                except Exception as exc:  # nosec B110 - never let a probe error kill the loop
+                    self.log(f"speaker: check failed: {exc}")
+                if self._speaker_stop_event.wait(self.overlay_config.speaker_interval):
+                    break
+        finally:
+            self._speaker_offline_streak = 0
 
     def _ticker_loop(self) -> None:
         ticker = self._stock_ticker
@@ -2056,6 +2136,7 @@ class KioskMqttListener:
         self.start_update_checker(client)
         self.start_telemetry()
         self.start_ticker()
+        self.start_speaker_monitor()
         if self.overlay_state:
             # Start the HTTP server BEFORE announcing the boot refresh, otherwise the
             # photo-card re-fetches /overlay against a not-yet-listening port, fails, and
@@ -2355,6 +2436,7 @@ def main():
     atexit.register(listener.stop_update_checker)
     atexit.register(listener.stop_telemetry)
     atexit.register(listener.stop_ticker)
+    atexit.register(listener.stop_speaker_monitor)
     atexit.register(listener.stop_overlay_server)
     atexit.register(listener._stop_watchdog)
 
