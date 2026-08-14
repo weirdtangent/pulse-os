@@ -452,6 +452,76 @@ def test_publish_assistant_discovery(publisher, mock_mqtt):
         assert call[1]["retain"] is True
 
 
+def _discovery_payload(mock_mqtt, suffix):
+    """Pull a published discovery payload by topic suffix."""
+    for call in mock_mqtt.publish.call_args_list:
+        topic = call[0][0] if call[0] else call[1].get("topic", "")
+        if topic.endswith(suffix):
+            payload = call[0][1] if len(call[0]) > 1 else call[1].get("payload")
+            return json.loads(payload)
+    raise AssertionError(f"no discovery config published for {suffix}")
+
+
+def test_llm_provider_discovery_lists_every_supported_provider(publisher, mock_mqtt):
+    """The select must offer every provider the command handler accepts.
+
+    It was hardcoded to ["openai", "gemini"], so a device running any other
+    provider published a state outside its own options and Home Assistant logged
+    "Invalid option for select.<device>_llm_provider: 'anthropic'".
+    """
+    from pulse.assistant.llm import get_supported_providers
+
+    publisher._publish_assistant_discovery(hostname="test-device", device_name="Test Device")
+    config = _discovery_payload(mock_mqtt, "_llm_provider/config")
+
+    assert config["options"] == list(get_supported_providers().keys())
+    assert "anthropic" in config["options"]
+
+
+def test_ha_tone_sound_discovery_offers_all_sound_kinds(publisher, mock_mqtt):
+    """ha_tone_sound holds an arbitrary sound_id, so its options span every kind.
+
+    Scoped to "notification" it excluded e.g. alarm-kind sounds, so a device
+    configured with one published an out-of-options state.
+    """
+    publisher._publish_assistant_discovery(hostname="test-device", device_name="Test Device")
+    config = _discovery_payload(mock_mqtt, "_ha_tone_sound/config")
+
+    # "Digital Rise" is alarm-kind in the fixture, "Soft Chime" is notification-kind
+    assert "Digital Rise" in config["options"]
+    assert "Soft Chime" in config["options"]
+
+
+def test_ha_tone_sound_state_resolves_non_notification_sound(publisher, mock_mqtt):
+    """A non-notification sound must publish its label, not the raw sound_id."""
+    preferences = Mock()
+    preferences.wake_sound = True
+    preferences.speaking_style = "normal"
+    preferences.wake_sensitivity = "high"
+    preferences.ha_response_mode = "full"
+    preferences.ha_tone_sound = "alarm-digital-rise"  # alarm-kind, not notification
+
+    publisher._publish_preferences(
+        preferences=preferences,
+        log_llm=True,
+        active_pipeline="test_pipeline",
+        active_provider="openai",
+        config_sounds=SoundSettings(
+            default_alarm="alarm-digital-rise",
+            default_timer="timer-woodblock",
+            default_reminder="reminder-marimba",
+            default_notification="notify-soft-chime",
+        ),
+    )
+
+    published = [
+        call[0][1] if len(call[0]) > 1 else call[1].get("payload")
+        for call in mock_mqtt.publish.call_args_list
+        if (call[0][0] if call[0] else "").endswith("/ha_tone_sound/state")
+    ]
+    assert published == ["Digital Rise"]
+
+
 def test_clone_schedule_snapshot(publisher):
     """Test cloning schedule snapshot."""
     snapshot = {

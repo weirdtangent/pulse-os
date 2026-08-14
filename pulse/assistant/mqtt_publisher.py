@@ -216,6 +216,37 @@ class AssistantMqttPublisher:
         """
         return [label for _, label in self._sound_options.get(kind, [])]
 
+    def _get_all_sound_labels(self) -> list[str]:
+        """Get every sound label across all kinds, de-duplicated.
+
+        ``ha_tone_sound`` holds an arbitrary sound_id — PULSE_ASSISTANT_HA_TONE_SOUND
+        accepts any sound in the library, not just notification-kind ones — so its
+        select must offer every sound. Scoping it to "notification" meant a device
+        configured with, say, ``alarm-sonar`` published a state that was not in its
+        own options list, and Home Assistant rejected it with
+        "Invalid option for select.<device>_ha_tone_sound".
+
+        Returns:
+            Sorted list of unique sound labels
+        """
+        labels = {label for options in self._sound_options.values() for _, label in options}
+        return sorted(labels, key=str.lower)
+
+    def _get_sound_label_by_id_any(self, sound_id: str) -> str | None:
+        """Look up a sound label by ID across all kinds.
+
+        Args:
+            sound_id: Sound ID to look up
+
+        Returns:
+            Sound label, or None if no kind knows this ID
+        """
+        for options in self._sound_options.values():
+            for sid, label in options:
+                if sid == sound_id:
+                    return label
+        return None
+
     def _get_sound_id_by_label(self, kind: str, label: str) -> str | None:
         """Look up sound_id from its label.
 
@@ -470,7 +501,7 @@ class AssistantMqttPublisher:
         self._publish_preference_state("wake_sensitivity", preferences.wake_sensitivity)
         self._publish_preference_state("ha_response_mode", preferences.ha_response_mode)
 
-        tone_label = self._get_sound_label_by_id("notification", preferences.ha_tone_sound) or preferences.ha_tone_sound
+        tone_label = self._get_sound_label_by_id_any(preferences.ha_tone_sound) or preferences.ha_tone_sound
         self._publish_preference_state("ha_tone_sound", tone_label)
         self._publish_preference_state("ha_pipeline", active_pipeline or "")
         self._publish_preference_state("llm_provider", active_provider)
@@ -492,6 +523,10 @@ class AssistantMqttPublisher:
             hostname: Device hostname
             device_name: Human-readable device name
         """
+        # Imported here to avoid a circular dependency, matching the pattern in
+        # preference_manager._handle_llm_provider_command.
+        from pulse.assistant.llm import get_supported_providers
+
         device = {
             "identifiers": [f"pulse:{hostname}"],
             "manufacturer": "Pulse",
@@ -667,7 +702,7 @@ class AssistantMqttPublisher:
                     "unique_id": f"{hostname}-llm-provider",
                     "state_topic": f"{self._preferences_topic}/llm_provider/state",
                     "command_topic": f"{self._preferences_topic}/llm_provider/set",
-                    "options": ["openai", "gemini"],
+                    "options": list(get_supported_providers().keys()),
                     "device": device,
                     "entity_category": "config",
                 }
@@ -692,7 +727,7 @@ class AssistantMqttPublisher:
             retain=True,
         )
 
-        tone_options = self._get_sound_options_for_kind("notification")
+        tone_options = self._get_all_sound_labels()
         if tone_options:
             self._publish_message(
                 f"{prefix}/select/{hostname_safe}_ha_tone_sound/config",

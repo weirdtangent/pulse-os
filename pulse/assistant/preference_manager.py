@@ -170,6 +170,39 @@ class PreferenceManager:
                 return sound_id
         return None
 
+    def get_sound_id_by_label_any(self, label: str) -> str | None:
+        """Look up sound_id from its label across all kinds.
+
+        Used by ha_tone_sound, whose select offers every sound rather than only
+        notification-kind ones, so a label may come from any kind.
+
+        Args:
+            label: Display label to look up
+
+        Returns:
+            Sound ID or None if no kind knows this label
+        """
+        for options in self._sound_options.values():
+            for sound_id, sound_label in options:
+                if sound_label == label:
+                    return sound_id
+        return None
+
+    def get_sound_label_by_id_any(self, sound_id: str) -> str | None:
+        """Look up label from sound_id across all kinds.
+
+        Args:
+            sound_id: Sound ID to look up
+
+        Returns:
+            Sound label or None if no kind knows this ID
+        """
+        for options in self._sound_options.values():
+            for sid, label in options:
+                if sid == sound_id:
+                    return label
+        return None
+
     def get_sound_label_by_id(self, kind: str, sound_id: str) -> str | None:
         """Look up label from sound_id.
 
@@ -352,11 +385,11 @@ class PreferenceManager:
         label = payload.strip()
         if not label:
             return
-        sound_id = self.get_sound_id_by_label("notification", label) or label
+        sound_id = self.get_sound_id_by_label_any(label) or label
         if sound_id == self.preferences.ha_tone_sound:
             return
         self.preferences = replace(self.preferences, ha_tone_sound=sound_id)
-        label_or_id = self.get_sound_label_by_id("notification", sound_id) or label
+        label_or_id = self.get_sound_label_by_id_any(sound_id) or label
         self.publisher._publish_preference_state("ha_tone_sound", label_or_id)
         persist_preference("ha_tone_sound", sound_id, logger=self.logger)
 
