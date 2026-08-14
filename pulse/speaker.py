@@ -140,11 +140,19 @@ def bt_connected(mac: str) -> bool | None:
 
 
 def wired_sink_present(token: str) -> bool | None:
-    """Is a non-monitor sink whose name contains ``token`` present? None if pactl failed."""
+    """Is a non-monitor sink whose name contains ``token`` present?
+
+    None when pactl failed, and also when ``token`` is blank: an empty needle is a
+    substring of every sink name, so answering True there would report "speaker fine"
+    for a display nobody has actually told us what to look for. Silently healthy is
+    the one answer this module must never invent.
+    """
+    needle = token.strip().lower()
+    if not needle:
+        return None
     out = _run(["pactl", "list", "sinks", "short"])
     if out is None:
         return None
-    needle = token.strip().lower()
     for line in out.splitlines():
         parts = line.split()
         if len(parts) < 2:
@@ -172,7 +180,10 @@ def check_speaker(config: SpeakerConfig) -> SpeakerStatus | None:
             if connected is None:
                 return None
             return SpeakerStatus(offline=not connected, name=name or "Speaker", kind="bluetooth")
-    if config.wired_sink:
+    # Strip here too, not just inside wired_sink_present: a whitespace-only setting is
+    # an unconfigured display, and must fall through to "no opinion" rather than count
+    # as a wired speaker to watch.
+    if config.wired_sink.strip():
         present = wired_sink_present(config.wired_sink)
         if present is None:
             return None

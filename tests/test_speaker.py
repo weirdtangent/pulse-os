@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest import mock
+from unittest.mock import patch
 
 from pulse.speaker import (
     SpeakerConfig,
@@ -32,7 +32,7 @@ _SINKS_SHORT = (
 
 
 def _patch_run(side_effect):
-    return mock.patch("pulse.speaker._run", side_effect=side_effect)
+    return patch("pulse.speaker._run", side_effect=side_effect)
 
 
 class BtConnectedTests(unittest.TestCase):
@@ -97,6 +97,14 @@ class WiredSinkTests(unittest.TestCase):
         with _patch_run(lambda args: None):
             self.assertIsNone(wired_sink_present("C-Media"))
 
+    def test_blank_token_is_unknown_not_present(self) -> None:
+        # An empty needle is a substring of every sink name, so the naive answer here is
+        # True — i.e. "speaker fine" for a display nobody named a sink for. Reporting a
+        # silent room as healthy is the one mistake this module can't afford.
+        with _patch_run(lambda args: _SINKS_SHORT):
+            self.assertIsNone(wired_sink_present(""))
+            self.assertIsNone(wired_sink_present("   "))
+
 
 class CheckSpeakerTests(unittest.TestCase):
     def test_bluetooth_offline(self) -> None:
@@ -124,6 +132,12 @@ class CheckSpeakerTests(unittest.TestCase):
         # violate, so it must never show the badge.
         with _patch_run(lambda args: _SINKS_SHORT):
             self.assertIsNone(check_speaker(SpeakerConfig(bt_autoconnect=False)))
+
+    def test_whitespace_only_sink_counts_as_unconfigured(self) -> None:
+        # Same trap as the blank needle, one level up: a truthy-but-blank setting must
+        # not make a display look like it has a wired speaker being watched.
+        with _patch_run(lambda args: _SINKS_SHORT):
+            self.assertIsNone(check_speaker(SpeakerConfig(bt_autoconnect=False, wired_sink="   ")))
 
     def test_stale_pairing_alone_does_not_trigger(self) -> None:
         # pulse-office keeps a pairing to a speaker that now lives in the kitchen. With
