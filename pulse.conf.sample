@@ -276,6 +276,19 @@ PULSE_BLUETOOTH_AUTOCONNECT="true"
 # PULSE_BT_MAC — optional Bluetooth MAC (XX:XX:XX:XX:XX:XX) to force which device we connect to.
 PULSE_BT_MAC=""
 
+# PULSE_SPEAKER_ALERT — show a notification-bar badge when the configured speaker can't be
+# reached. A powered-off Bluetooth speaker is otherwise invisible: the room just goes quiet.
+PULSE_SPEAKER_ALERT="true"
+
+# PULSE_SPEAKER_SINK — for displays driving a WIRED speaker (PULSE_BLUETOOTH_AUTOCONNECT="false"),
+# a substring of the expected sink name from `pactl list sinks short`, e.g. "C-Media". When the
+# matching sink disappears the same badge appears. Leave empty to skip the wired check — without
+# a name to expect there's no way to tell "unplugged" from "never had one".
+PULSE_SPEAKER_SINK=""
+
+# PULSE_SPEAKER_INTERVAL — seconds between speaker reachability checks (minimum 15).
+PULSE_SPEAKER_INTERVAL="60"
+
 # ============================================================================
 # Logging & Reliability
 # ============================================================================

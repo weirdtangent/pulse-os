@@ -84,6 +84,9 @@ class OverlaySnapshot:
     earmuffs_enabled: bool
     update_available: bool
     ticker: tuple[dict[str, Any], ...] = ()
+    # {"name": str, "kind": "bluetooth"|"wired"} while the configured speaker is
+    # unreachable; None whenever it is reachable, unconfigured, or unknown.
+    speaker_offline: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -172,6 +175,7 @@ class OverlayStateManager:
         self._earmuffs_enabled = False
         self._update_available = False
         self._ticker: tuple[dict[str, Any], ...] = ()
+        self._speaker_offline: dict[str, Any] | None = None
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -190,6 +194,7 @@ class OverlayStateManager:
             "earmuffs_enabled": "",
             "update_available": "",
             "ticker": "",
+            "speaker_offline": "",
         }
 
     @property
@@ -466,6 +471,21 @@ class OverlayStateManager:
             self._signatures["update_available"] = signature
             return self._bump("update_available")
 
+    def update_speaker_offline(self, speaker: dict[str, Any] | None) -> OverlayChange:
+        """Record that the configured speaker is (un)reachable.
+
+        Pass None for reachable/unconfigured/unknown. Bumps only on a real transition,
+        so the poll loop can call this every cycle without churning the overlay version.
+        """
+        normalized = dict(speaker) if speaker else None
+        signature = "" if normalized is None else f"{normalized.get('kind', '')}:{normalized.get('name', '')}"
+        with self._lock:
+            if signature == self._signatures["speaker_offline"]:
+                return OverlayChange(False, self._version, "speaker_offline")
+            self._speaker_offline = normalized
+            self._signatures["speaker_offline"] = signature
+            return self._bump("speaker_offline")
+
     def snapshot(self) -> OverlaySnapshot:
         with self._lock:
             return OverlaySnapshot(
@@ -490,6 +510,7 @@ class OverlayStateManager:
                 earmuffs_enabled=self._earmuffs_enabled,
                 update_available=self._update_available,
                 ticker=tuple(dict(item) for item in self._ticker),
+                speaker_offline=copy.deepcopy(self._speaker_offline),
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -606,6 +627,7 @@ ICON_MAP = {
     "update": "&#128260;",  # 🔄
     "sound": "&#127925;",  # 🎵
     "market": "&#128200;",  # 📈
+    "speaker_off": "&#128263;",  # 🔇
 }
 
 
@@ -776,6 +798,37 @@ def _build_market_pill(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
         f'<span class="overlay-badge overlay-badge--market" aria-label="{detail}" title="{detail}">'
         f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
         f"{''.join(moves)}"
+        "</span>"
+    )
+
+
+def _build_speaker_pill(snapshot: OverlaySnapshot) -> str:
+    """Badge shown only while the configured speaker is unreachable.
+
+    Deliberately one-sided: there is no "speaker OK" badge, because the healthy state
+    is the overwhelmingly common one and a permanent green pill would train everyone
+    to stop reading the bar. This appears only when the room has gone silent for a
+    reason a person can fix, and says which fix — power-cycle vs. reseat the cable.
+    """
+    speaker = snapshot.speaker_offline
+    if not speaker:
+        return ""
+    name = str(speaker.get("name") or "Speaker").strip() or "Speaker"
+    kind = str(speaker.get("kind") or "bluetooth")
+    if kind == "wired":
+        label = "Speaker unplugged"
+        detail = f"{name} is not connected — check the speaker's USB and power cables."
+    else:
+        label = f"{name} offline"
+        detail = f'Bluetooth speaker "{name}" is not connected — power-cycle the speaker to restore audio.'
+    icon = ICON_MAP.get("speaker_off", "&#9679;")
+    safe_label = html_escape(label)
+    safe_detail = html_escape(detail, quote=True)
+    return (
+        f'<span class="overlay-badge overlay-badge--speaker-offline" '
+        f'aria-label="{safe_detail}" title="{safe_detail}">'
+        f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
+        f"<span>{safe_label}</span>"
         "</span>"
     )
 
@@ -1206,6 +1259,12 @@ def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> s
     badges: list[str] = []
     badges.append(_render_badge("help", "Help"))
     badges.append(_render_badge("config", "Config"))
+    # Ahead of the alarm/timer badges on purpose: a speaker that is off doesn't just
+    # mean no music, it means the alarm sitting next to it won't be heard either. If
+    # anything on this bar deserves to be read first, it's this.
+    speaker_pill = _build_speaker_pill(snapshot)
+    if speaker_pill:
+        badges.append(speaker_pill)
     upcoming = _filter_upcoming_alarms(snapshot.alarms)
     if snapshot.active_alarm:
         badges.append(_render_badge("alarm_ringing", "Alarm ringing"))

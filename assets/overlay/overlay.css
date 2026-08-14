@@ -107,6 +107,35 @@ body {
   color: #ff5c5c;
 }
 
+/* Speaker-offline badge — the one badge on this bar that reports a fault, so it gets
+   amber rather than the neutral translucent background. Amber, not the earmuffs red:
+   red on this bar already means "earmuffs are on", a deliberate user choice, and a
+   broken speaker shouldn't read as the same kind of thing at a glance. */
+.overlay-badge.overlay-badge--speaker-offline {
+  background: #cb4b16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  color: #ffffff !important;
+  animation: overlaySpeakerOfflinePulse 2.4s ease-in-out infinite alternate;
+}
+
+/* Slower and dimmer than overlayPulse (the ringing-alarm glow). This condition can
+   persist for hours until somebody walks over to the speaker, so it needs to catch a
+   passing glance without strobing at whoever is sitting in the room. */
+@keyframes overlaySpeakerOfflinePulse {
+  from {
+    box-shadow: 0 0 0 rgba(203, 75, 22, 0.35);
+  }
+  to {
+    box-shadow: 0 0 14px rgba(203, 75, 22, 0.75);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-badge.overlay-badge--speaker-offline {
+    animation: none;
+  }
+}
+
 .overlay-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

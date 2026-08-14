@@ -146,6 +146,29 @@ Notes:
 | `PULSE_VOLUME_TEST_SOUND` | `true` | Plays a short “thump” after MQTT volume changes. |
 | `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. |
 | `PULSE_BT_MAC` | *(empty)* | Optional explicit Bluetooth MAC to target. |
+| `PULSE_SPEAKER_ALERT` | `true` | Shows a notification-bar badge while the configured speaker is unreachable. |
+| `PULSE_SPEAKER_SINK` | *(empty)* | Substring of the expected wired sink name (`pactl list sinks short`) to watch on non-Bluetooth displays. |
+| `PULSE_SPEAKER_INTERVAL` | `60` | Seconds between speaker reachability checks (minimum 15). |
+
+### Speaker-offline badge
+
+A speaker that has been switched off or unplugged fails silently — playback "succeeds",
+snapclient stays connected, and the only evidence is bluetoothd retrying in the journal
+(`avdtp_connect_cb() connect to …: Host is down (112)`). `PULSE_SPEAKER_ALERT` surfaces that
+as an amber badge at the front of the notification bar, ahead of the alarm badges, because a
+silent speaker also means a silent alarm.
+
+Which speaker is watched follows the same rules `bin/bt-autoconnect.sh` uses, so the badge and
+the reconnect loop can't disagree:
+
+- `PULSE_BLUETOOTH_AUTOCONNECT="true"` (the default) → `PULSE_BT_MAC` if set, otherwise the
+  connected device, otherwise the first paired one.
+- `PULSE_BLUETOOTH_AUTOCONNECT="false"` → the wired check, and only if `PULSE_SPEAKER_SINK` is set.
+
+Displays with neither configured are never checked, so stale pairings left over from a
+re-purposed display can't produce a badge that never clears. The badge needs two consecutive
+failed checks to appear (riding out the A2DP renegotiation blips and the post-reboot
+autoconnect window) and clears on the first successful one.
 
 ## Display Selection (DSI vs HDMI)
 
