@@ -26,7 +26,7 @@ dependencies = [
 dev = [
     "pytest==9.0.3",
     "pytest-cov==7.1.0",
-    "ruff==0.15.7",
+    "ruff==0.16.3",
 ]
 
 [tool.setuptools.packages.find]
@@ -57,12 +57,12 @@ docstring-code-format = true
 
 [dependency-groups]
 dev = [
-    "mypy>=2.3.0",
+    "mypy>=2.3.1",
     "pip-audit>=2.10.1",
-    "pre-commit>=4.6.1",
+    "pre-commit>=4.6.2",
     "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
-    "ruff==0.15.7",
+    "ruff==0.16.3",
     "types-requests>=2.33.0.20260712",
 ]
 
