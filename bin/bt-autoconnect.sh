@@ -105,9 +105,49 @@ bt_is_connected() {
   bluetoothctl info "$MAC" 2>/dev/null | grep -q "Connected: yes"
 }
 
+# Is there actually an audio path, not just an ACL link?
+bt_sink_present() {
+  pactl list sinks short 2>/dev/null | grep -qi "bluez_output.${MAC//:/_}"
+}
+
+# WirePlumber only builds a bluez card when it observes the device *connect*. If
+# it restarts while the speaker is already connected — an update, a crash, a
+# manual restart — no card is ever created. bluetoothctl still says
+# "Connected: yes" and the ACL link genuinely is up, so nothing here noticed and
+# nothing logged an error, while the room had no audio path at all. That state
+# persisted for days on two displays before anyone spotted it.
+#
+# Re-issuing connect on the already-connected device makes BlueZ re-establish the
+# audio profile, which WirePlumber then picks up. Deliberately WITHOUT a
+# disconnect first: dropping the ACL link can convince a speaker it is idle so it
+# powers itself off, turning a self-healing state into one that needs somebody to
+# walk over and press a button.
+BT_NOSINK_COOLDOWN="${PULSE_BT_NOSINK_COOLDOWN:-60}"
+BT_NOSINK_STATE="/run/user/$(id -u)/pulse-bt-nosink"  # "<last_recovery_epoch>"
+
 if bt_is_connected; then
   # Already connected — clear any backoff state and carry on.
   rm -f "$BT_BACKOFF_STATE" 2>/dev/null || true
+
+  if bt_sink_present; then
+    rm -f "$BT_NOSINK_STATE" 2>/dev/null || true
+  else
+    # Connected but no sink. Rate-limit the retry so a device WirePlumber
+    # genuinely refuses cannot become a connect loop, and so we do not race the
+    # couple of seconds it normally takes to publish the card after a connect.
+    now=$(date +%s)
+    last_recover=0
+    if [ -f "$BT_NOSINK_STATE" ]; then
+      read -r last_recover < "$BT_NOSINK_STATE" 2>/dev/null || true
+      case "$last_recover" in ''|*[!0-9]*) last_recover=0 ;; esac
+    fi
+    if [ "$(( now - last_recover ))" -ge "$BT_NOSINK_COOLDOWN" ]; then
+      echo "$now" > "$BT_NOSINK_STATE" 2>/dev/null || true
+      # Fast on a reachable device: the ~60s block that motivated the backoff
+      # below only happens when the speaker is powered off, and we know it is not.
+      bluetoothctl connect "$MAC" >/dev/null 2>&1 || true
+    fi
+  fi
 else
   now=$(date +%s)
   next_attempt=0
