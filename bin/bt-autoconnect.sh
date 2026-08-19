@@ -6,30 +6,52 @@ set -euo pipefail
 MAC="${PULSE_BT_MAC:-}"
 BOOT_SOUND="/opt/pulse-os/sounds/pulse-revived.wav"
 FLAG="/run/user/$(id -u)/pulse-boot-sound-played"
-KEEPALIVE_SOUND="/tmp/pulse-bt-keepalive.wav"
+KEEPALIVE_SOUND="/tmp/pulse-bt-keepalive-v2.wav"
 KEEPALIVE_INTERVAL=120  # Send keepalive every 2 minutes
 LAST_KEEPALIVE="/run/user/$(id -u)/pulse-bt-last-keepalive"
 
-# Generate keepalive sound file if it doesn't exist (very short, very quiet silence)
+# Generate the keepalive tone if it doesn't exist.
+#
+# This must NOT be digital silence. Speakers with auto-power-off decide they are idle
+# from the *signal*, not from whether an A2DP socket is open, so a buffer of zero
+# samples resets nothing and the speaker sleeps anyway -- and pw-play still exits 0,
+# so the failure is completely invisible. It also has to run long enough that PipeWire
+# does not suspend the bluez sink again milliseconds later.
+#
+# So: a 30 Hz tone at ~1.2% full scale for 2s. A small Bluetooth driver cannot
+# reproduce 30 Hz audibly, but the DSP sees a real signal and restarts its idle timer.
+# Amplitude stays well above the codec noise floor on purpose -- a few LSBs would risk
+# SBC quantising it back to silence, which is exactly the bug this replaces.
 generate_keepalive_sound() {
   if [ ! -f "$KEEPALIVE_SOUND" ]; then
-    # Generate a 0.1 second silent WAV file using Python
     python3 -c "
-import wave
+import math
 import struct
 import sys
+import wave
 
 sample_rate = 44100
-duration = 0.1  # 100ms
+duration = 2.0
+freq = 30.0        # below what a small BT speaker can reproduce
+amplitude = 400    # of 32767 -- inaudible, but not zero
+fade = int(sample_rate * 0.05)  # 50ms raised-cosine fade, avoids a click
+
 num_samples = int(sample_rate * duration)
-# Generate silence (all zeros)
-samples = b''.join([struct.pack('<h', 0) for _ in range(num_samples)])
+out = bytearray()
+for i in range(num_samples):
+    v = amplitude * math.sin(2.0 * math.pi * freq * i / sample_rate)
+    if i < fade:
+        v *= 0.5 * (1.0 - math.cos(math.pi * i / fade))
+    elif i > num_samples - fade:
+        j = num_samples - i
+        v *= 0.5 * (1.0 - math.cos(math.pi * j / fade))
+    out += struct.pack('<h', int(v))
 
 with wave.open(sys.argv[1], 'wb') as wav_file:
     wav_file.setnchannels(1)  # Mono
     wav_file.setsampwidth(2)  # 16-bit
     wav_file.setframerate(sample_rate)
-    wav_file.writeframes(samples)
+    wav_file.writeframes(bytes(out))
 " "$KEEPALIVE_SOUND" 2>/dev/null || true
   fi
 }
