@@ -11,7 +11,7 @@ Thanks for helping improve Pulse OS! This guide covers how to propose changes, t
 ## Development setup
 1) Use Python 3.13+.
 2) Install [uv](https://docs.astral.sh/uv/) if you don't have it.
-3) Install dependencies: `uv sync --all-extras --dev`.
+3) Install dependencies: `uv sync --dev`.
 
 ## Required checks (run locally before opening a PR)
 - `uv run ruff check .` (lint)

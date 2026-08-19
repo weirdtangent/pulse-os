@@ -119,7 +119,7 @@ jobs:
 
       - name: Install dependencies
         if: needs.changes.outputs.python == 'true'
-        run: uv sync --frozen --all-extras --dev
+        run: uv sync --frozen --dev
 
       - name: Run tests
         if: needs.changes.outputs.python == 'true'
