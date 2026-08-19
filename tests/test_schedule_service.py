@@ -557,8 +557,14 @@ async def test_snooze_alarm(schedule_service):
     assert result is True
     updated = svc._events.get(event.event_id)
     assert updated is not None
-    # Snoozed fire should be ~10 minutes from now, not the original
-    assert updated.next_fire_dt() > original_fire or True  # time-sensitive; just check it updated
+    # snooze_alarm sets next_fire to now + minutes, so the new fire time lands
+    # ~10 minutes out. That is normally *earlier* than the original 08:00
+    # occurrence, so the old `> original_fire` comparison was the wrong way
+    # round; it was suffixed with `or True`, which made the assert vacuous.
+    expected = datetime.now().astimezone() + timedelta(minutes=10)
+    actual = updated.next_fire_dt()
+    assert abs((actual - expected).total_seconds()) < 60
+    assert actual != original_fire
 
 
 @pytest.mark.anyio
@@ -837,8 +843,16 @@ async def test_get_next_alarm_none(schedule_service):
 @pytest.mark.anyio
 async def test_get_next_alarm(schedule_service):
     svc = schedule_service
-    await svc.create_alarm(time_of_day="09:00", label="Later")
-    await svc.create_alarm(time_of_day="07:00", label="Earlier")
+    # Derive both times from the current clock. With hardcoded "07:00" and
+    # "09:00" this depended on the wall clock: a one-time alarm whose time has
+    # already passed today rolls to tomorrow, so "07:00" sorted *after*
+    # "09:00" whenever the suite ran between 07:00 and 09:00 local time.
+    now = datetime.now().astimezone()
+    later = (now + timedelta(hours=2)).strftime("%H:%M")
+    earlier = (now + timedelta(hours=1)).strftime("%H:%M")
+    # Created out of order on purpose: this exercises the sort, not insertion order.
+    await svc.create_alarm(time_of_day=later, label="Later")
+    await svc.create_alarm(time_of_day=earlier, label="Earlier")
     result = svc.get_next_alarm()
     assert result is not None
     assert result["label"] == "Earlier"
