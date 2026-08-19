@@ -184,8 +184,9 @@ if [ -n "$SINK" ] && pactl list sinks short | grep -q "$SINK"; then
 
     # Send keepalive if enough time has passed
     if [ "$time_diff" -ge "$KEEPALIVE_INTERVAL" ]; then
-      # Play silent keepalive to prevent speaker from auto-powering off
-      # The silent sound keeps the audio connection active
+      # Play the keepalive tone to prevent the speaker auto-powering off.
+      # It has to be an actual signal, not silence: the speaker judges idleness
+      # on what it receives, so zero samples would leave its timer running.
       pw-play --target "$SINK" "$KEEPALIVE_SOUND" >/dev/null 2>&1 || true
       echo "$current_time" > "$LAST_KEEPALIVE" 2>/dev/null || true
     fi
