@@ -172,7 +172,7 @@ Update either asset and rerun `./setup.sh <location>` to refresh the splash on a
 
 ```bash
 # Install dependencies (requires uv: https://docs.astral.sh/uv/)
-uv sync --all-extras --dev
+uv sync --dev
 
 # Run linting and tests
 uv run ruff check .
