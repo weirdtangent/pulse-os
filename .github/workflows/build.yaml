@@ -69,7 +69,7 @@ jobs:
         if: needs.changes.outputs.python == 'true'
         run: |
           python -m pip install --upgrade "pip==26.0"
-          pip install "ruff==0.15.7" "bandit[toml]==1.7.10"
+          pip install "ruff==0.16.3" "bandit[toml]==1.7.10"
 
       - name: Ruff lint
         if: needs.changes.outputs.python == 'true'
