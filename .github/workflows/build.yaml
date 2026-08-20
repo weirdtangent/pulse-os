@@ -39,7 +39,8 @@ jobs:
           filters: |
             python:
               - '**/*.py'
-              - 'pyproject.toml'
+              - '**/pyproject.toml'
+              - '**/uv.lock'
               - 'requirements*.txt'
 
   lint:
@@ -116,6 +117,15 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
         with:
           version: "latest"
+
+      # `uv sync --frozen` installs straight from the lockfile without
+      # validating it against pyproject.toml, so drift would silently test the
+      # old pinned versions. Check both projects explicitly.
+      - name: Lockfiles up to date
+        if: needs.changes.outputs.python == 'true' && matrix.python-version == '3.13'
+        run: |
+          uv lock --check
+          uv lock --check --directory mcp-server
 
       - name: Install dependencies
         if: needs.changes.outputs.python == 'true'

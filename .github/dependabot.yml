@@ -1,9 +1,11 @@
 version: 2
 updates:
-  # Enable version updates for Python dependencies
-  # Note: pip does not auto-follow subdirectories, so the mcp-server
-  # project must be listed explicitly or its deps/advisories never get PRs.
-  - package-ecosystem: "pip"
+  # Enable version updates for Python dependencies.
+  # The uv ecosystem updates uv.lock alongside pyproject.toml, so lockfiles
+  # stay in step with the floors dependabot bumps.
+  # Note: subdirectories are not auto-followed, so the mcp-server project
+  # must be listed explicitly or its deps/advisories never get PRs.
+  - package-ecosystem: "uv"
     directories:
       - "/"
       - "/mcp-server"
