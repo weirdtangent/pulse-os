@@ -37,7 +37,9 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_PORT` | `8800` | TCP port serving `/overlay`. |
 | `PULSE_OVERLAY_BIND` | `127.0.0.1` | Bind address for the overlay server (use `0.0.0.0` to allow remote access). |
 | `PULSE_OVERLAY_ALLOWED_ORIGINS` | `*` | Comma-separated CORS allow list for overlay requests. |
-| `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Primary overlay font (fallback stack added automatically). Also settable from [Device controls](#on-screen-device-controls) on the display, which writes the choice back here. |
+| `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Configured default font stack, used when nothing is picked. Never rewritten by a pick, so "System default" keeps its meaning. |
+| `PULSE_OVERLAY_FONT` | *(empty)* | Font picked from [Device controls](#on-screen-device-controls) or Home Assistant. Empty = use the default above. |
+| `PULSE_OVERLAY_CLOCK_FONT` | *(empty)* | Font for the big clock only. Empty = follow the overlay font. |
 | `PULSE_OVERLAY_AMBIENT_BG` | `rgba(0, 0, 0, 0.32)` | Background color for ambient cards. |
 | `PULSE_OVERLAY_ALERT_BG` | `rgba(0, 0, 0, 0.65)` | Background color for alert cards. |
 | `PULSE_OVERLAY_TEXT_COLOR` | `#FFFFFF` | Overlay text color. |
@@ -250,14 +252,22 @@ drift apart.
 | Brightness | The backlight, right now | No — the sunrise/sunset schedule overwrites it. Set the targets below to make it stick |
 | Day / night targets | `PULSE_DAY_BRIGHTNESS` / `PULSE_NIGHT_BRIGHTNESS` | Yes, to `pulse.conf` and the generated backlight conf |
 | Volume | The audio sink, right now | No — left to the audio stack |
-| Overlay font | `PULSE_OVERLAY_FONT_FAMILY` | Yes, to `pulse.conf` |
+| Overlay font | `PULSE_OVERLAY_FONT` | Yes, to `pulse.conf` |
+| Clock font | `PULSE_OVERLAY_CLOCK_FONT` | Yes, to `pulse.conf` |
 | Go home | Navigates back to `PULSE_URL` | n/a |
 | Reboot | Safe reboot | n/a — armed by the first tap, fired by the second, and disarms itself after five seconds so a stray touch can't restart the room |
 
 Persisted values survive both a reboot and an update: `setup.sh` merges new template
 variables into `pulse.conf` on every update while preserving what is already set.
 
-The font list shows the families actually installed on that Pi, each previewed in its own
+There are two font pickers: one for the clock and one for everything else. The clock is
+the only element rendered at 100px+, where a face chosen to stay legible in a 14px badge
+often looks wrong, so the two are chosen separately; leaving the clock on "Same as overlay"
+makes it follow the other. Picking a font writes `PULSE_OVERLAY_FONT` (or
+`PULSE_OVERLAY_CLOCK_FONT`) and never touches `PULSE_OVERLAY_FONT_FAMILY`, so "System
+default" always means the configured default and any pick can be undone.
+
+Both lists show the families actually installed on that Pi, each previewed in its own
 face, with symbol, dingbat, math, and emoji families filtered out — they render the overlay
 as gibberish if chosen. It is an inline scrolling list rather than a dropdown on purpose: a
 popup holding every installed font is taller than a 720px kiosk screen, so it opens against

@@ -19,6 +19,7 @@ from pulse.overlay import (
     _build_now_playing_card,
     _copyright_years,
     _get_library_versions,
+    _theme_css,
     parse_clock_config,
     render_overlay_html,
 )
@@ -1170,6 +1171,21 @@ class DeviceControlsCardTests(unittest.TestCase):
         safe_option = next(opt for opt in options if 'value="ok"' in opt)
         self.assertIn("font-family: 'ok'", safe_option)
 
+    def test_clock_font_picker_is_separate_from_the_overlay_font(self) -> None:
+        """The clock is rendered at 100px+; a face picked for a 14px badge often looks wrong."""
+        html = _build_device_controls_info_overlay(
+            self._card(clock_fonts=["Same as overlay", "Liberation Sans"], clock_font="Liberation Sans")
+        )
+        self.assertIn("data-clock-font-select", html)
+        self.assertIn("data-font-select", html)
+        clock_block = html.split("data-clock-font-select", 1)[1].split("</select>", 1)[0]
+        self.assertIn('value="Liberation Sans" ', clock_block)
+        self.assertIn("selected", clock_block)
+
+    def test_clock_font_picker_absent_without_options(self) -> None:
+        html = _build_device_controls_info_overlay(self._card(clock_fonts=[]))
+        self.assertNotIn("data-clock-font-select", html)
+
     def test_no_font_select_without_options(self) -> None:
         html = _build_device_controls_info_overlay(self._card(fonts=[]))
         self.assertNotIn("data-font-select", html)
@@ -1211,9 +1227,71 @@ class OverlayThemeConstructionTests(unittest.TestCase):
 
     def test_every_theme_field_is_passed_by_the_builder(self) -> None:
         listener = Path(__file__).resolve().parent.parent / "bin" / "kiosk-mqtt-listener.py"
-        body = listener.read_text().split("OverlayTheme(", 1)[1].split(")", 1)[0]
+        # Balance the parens rather than splitting on the first ")": argument values are
+        # themselves calls (clock_font_family=self._resolve_clock_font_stack()), so a naive
+        # split truncates the argument list and the check silently passes on a short body.
+        tail = listener.read_text().split("OverlayTheme(", 1)[1]
+        depth, end = 1, len(tail)
+        for index, char in enumerate(tail):
+            depth += (char == "(") - (char == ")")
+            if depth == 0:
+                end = index
+                break
+        body = tail[:end]
         missing = sorted(f.name for f in dataclasses.fields(OverlayTheme) if f"{f.name}=" not in body)
         self.assertEqual(missing, [], f"theme fields never set by the builder: {missing}")
+
+
+class ClockFontThemeTests(unittest.TestCase):
+    def _theme(self, **kw) -> OverlayTheme:
+        base = dict(
+            ambient_background="rgba(0,0,0,0.3)",
+            alert_background="rgba(0,0,0,0.6)",
+            text_color="#FFF",
+            accent_color="#88C0D0",
+            font_family='"Nimbus Sans"',
+        )
+        base.update(kw)
+        return OverlayTheme(**base)  # type: ignore[arg-type]
+
+    def test_clock_font_falls_back_to_the_overlay_font(self) -> None:
+        css = _theme_css(self._theme())
+        self.assertIn('--overlay-clock-font-family: "Nimbus Sans"', css)
+
+    def test_clock_font_overrides_independently(self) -> None:
+        css = _theme_css(self._theme(clock_font_family='"Liberation Sans"'))
+        self.assertIn('--overlay-clock-font-family: "Liberation Sans"', css)
+        self.assertIn('--overlay-font-family: "Nimbus Sans"', css)
+
+    def test_clock_markup_consumes_the_clock_variable(self) -> None:
+        """The variable is pointless if nothing reads it."""
+        html = render_overlay_html(
+            OverlaySnapshot(
+                version=1,
+                clocks=(ClockConfig("clock0", "Local", None),),
+                now_playing="",
+                now_playing_state="",
+                now_playing_image="",
+                timers=(),
+                alarms=(),
+                reminders=(),
+                calendar_events=(),
+                active_alarm=None,
+                active_timer=None,
+                active_reminder=None,
+                notifications=(),
+                timer_positions={},
+                info_card=None,
+                last_reason="test",
+                generated_at=0.0,
+                schedule_snapshot=None,
+                earmuffs_enabled=False,
+                update_available=False,
+            ),
+            self._theme(clock_font_family='"Liberation Sans"'),
+        )
+        styles = html.split("</style>", 1)[0]
+        self.assertIn("var(--overlay-clock-font-family", styles)
 
 
 class WeatherAlertOverlayTests(OverlayRenderTests):

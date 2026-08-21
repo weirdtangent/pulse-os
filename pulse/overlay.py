@@ -449,6 +449,12 @@ class OverlayStateManager:
                     if fonts:
                         normalized["fonts"] = fonts
                         normalized["font"] = str(card.get("font") or fonts[0])
+                clock_fonts_payload = card.get("clock_fonts")
+                if isinstance(clock_fonts_payload, list):
+                    clock_fonts = [str(name) for name in clock_fonts_payload if str(name).strip()]
+                    if clock_fonts:
+                        normalized["clock_fonts"] = clock_fonts
+                        normalized["clock_font"] = str(card.get("clock_font") or clock_fonts[0])
                 normalized["home_supported"] = bool(card.get("home_supported"))
                 normalized["reboot_supported"] = bool(card.get("reboot_supported"))
             if not normalized:
@@ -634,6 +640,9 @@ class OverlayTheme:
     ticker_label_mode: str = "auto"  # "name" | "ticker" | "auto" (name for indices, symbol otherwise)
     # Minutes a brand-new weather alert gets a banner before collapsing to the pill.
     # 0 disables banners entirely; the pill still carries every active alert.
+    # Empty means the clock inherits font_family. The clock is the one element rendered
+    # at 100px+, where a face chosen to be legible in a 14px badge often looks wrong.
+    clock_font_family: str = ""
     weather_alert_banner_minutes: int = BANNER_ALWAYS
     # Seconds each alert holds the banner when several are active; 0 shows only the most
     # urgent. Floor of 5s is enforced client-side.
@@ -1283,6 +1292,7 @@ def _theme_css(theme: OverlayTheme) -> str:
         f"  --overlay-alert-bg: {theme.alert_background};\n"
         f"  --overlay-accent-color: {theme.accent_color};\n"
         f"  --overlay-font-family: {theme.font_family};\n"
+        f"  --overlay-clock-font-family: {theme.clock_font_family or theme.font_family};\n"
         "}"
     )
 
@@ -2251,30 +2261,46 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
             + "</div>"
         )
 
-    fonts = card.get("fonts")
-    font_markup = ""
-    if isinstance(fonts, list) and fonts:
-        current_font = str(card.get("font") or fonts[0])
+    def _render_font_picker(*, entries: Any, current: Any, attribute: str, label: str, description: str) -> str:
+        if not isinstance(entries, list) or not entries:
+            return ""
+        current_font = str(current or entries[0])
         options = "".join(
             f'<option value="{html_escape(str(name), quote=True)}"{_css_font_style(str(name))}'
             f"{' selected' if str(name) == current_font else ''}>{html_escape(str(name))}</option>"
-            for name in fonts
+            for name in entries
         )
-        select_style = _css_font_style(current_font)
-        font_markup = f"""
+        return f"""
   <div class="overlay-control">
     <div class="overlay-control__header">
       <div>
-        <div class="overlay-control__label">Overlay font</div>
-        <div class="overlay-control__description">Typeface used across the overlay.</div>
+        <div class="overlay-control__label">{html_escape(label)}</div>
+        <div class="overlay-control__description">{html_escape(description)}</div>
       </div>
     </div>
-    <select class="overlay-control__select" data-font-select size="6"
-            aria-label="Overlay font"{select_style}>
+    <select class="overlay-control__select" {attribute} size="6"
+            aria-label="{html_escape(label, quote=True)}"{_css_font_style(current_font)}>
       {options}
     </select>
   </div>
 """.strip()
+
+    # Two pickers, because the clock is the one element rendered at 100px+ and a face
+    # chosen to stay legible in a 14px badge often looks wrong that large.
+    font_markup = _render_font_picker(
+        entries=card.get("fonts"),
+        current=card.get("font"),
+        attribute="data-font-select",
+        label="Overlay font",
+        description="Typeface for everything except the clock.",
+    )
+    clock_font_markup = _render_font_picker(
+        entries=card.get("clock_fonts"),
+        current=card.get("clock_font"),
+        attribute="data-clock-font-select",
+        label="Clock font",
+        description="Typeface for the big clock.",
+    )
 
     actions: list[str] = []
     if card.get("home_supported"):
@@ -2306,6 +2332,7 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
     {targets_markup}
     {volume_markup}
     {font_markup}
+    {clock_font_markup}
     {actions_markup}
   </div>
 </div>

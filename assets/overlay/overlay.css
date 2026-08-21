@@ -1018,6 +1018,14 @@ body {
   color: var(--overlay-accent-color);
 }
 
+/* The clock gets its own family. It is the one thing on screen rendered at 100px+, where a
+   face picked for legibility in a 14px badge often reads badly, so the two are chosen
+   separately. Falls back to the overlay font when no clock font is set. */
+.overlay-clock__time,
+.overlay-clock__date {
+  font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
+}
+
 .overlay-clock__time {
   font-size: clamp(3.5rem, 8vw, 6.5rem);
   font-weight: 300;

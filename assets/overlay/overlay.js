@@ -477,19 +477,28 @@ window.PulseOverlay.initialize = function() {
     }, 100);
   }
 
+  // The overlay font and the clock font are separate pickers posting separate actions.
+  const FONT_SELECT_ACTIONS = [
+    { attribute: '[data-font-select]', action: 'set_font' },
+    { attribute: '[data-clock-font-select]', action: 'set_clock_font' }
+  ];
+
   const changeHandler = (e) => {
-    const fontSelect = e.target.closest('[data-font-select]');
-    if (!fontSelect) {
+    for (const { attribute, action } of FONT_SELECT_ACTIONS) {
+      const select = e.target.closest(attribute);
+      if (!select) {
+        continue;
+      }
+      select.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, font: select.value })
+      }).finally(() => {
+        select.disabled = false;
+      });
       return;
     }
-    fontSelect.disabled = true;
-    fetch(infoEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'set_font', font: fontSelect.value })
-    }).finally(() => {
-      fontSelect.disabled = false;
-    });
   };
   document.addEventListener('change', changeHandler);
 

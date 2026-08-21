@@ -80,6 +80,7 @@ class OverlayHttpServer:
         on_set_brightness: Callable[[int], bool] | None = None,
         get_device_levels: Callable[[], dict[str, Any]] | None = None,
         on_set_font: Callable[[str], bool] | None = None,
+        on_set_clock_font: Callable[[str], bool] | None = None,
         on_set_brightness_target: Callable[[str, int], bool] | None = None,
         on_go_home: Callable[[], bool] | None = None,
         on_reboot: Callable[[], bool] | None = None,
@@ -109,6 +110,7 @@ class OverlayHttpServer:
         self._on_set_brightness = on_set_brightness
         self._get_device_levels = get_device_levels
         self._on_set_font = on_set_font
+        self._on_set_clock_font = on_set_clock_font
         self._on_set_brightness_target = on_set_brightness_target
         self._on_go_home = on_go_home
         self._on_reboot = on_reboot
@@ -205,6 +207,12 @@ class OverlayHttpServer:
             if font_options:
                 payload["fonts"] = font_options
                 payload["font"] = str(device_levels.get("font") or font_options[0])
+        clock_fonts = device_levels.get("clock_fonts")
+        if isinstance(clock_fonts, list):
+            clock_options = [str(name) for name in clock_fonts if str(name).strip()]
+            if clock_options:
+                payload["clock_fonts"] = clock_options
+                payload["clock_font"] = str(device_levels.get("clock_font") or clock_options[0])
         payload["home_supported"] = bool(device_levels.get("home_supported"))
         payload["reboot_supported"] = bool(device_levels.get("reboot_supported"))
         return payload
@@ -712,6 +720,17 @@ html, body {{
                         self.send_error(HTTPStatus.BAD_REQUEST, "Missing font")
                         return
                     if not outer._on_set_font(choice):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Unknown font")
+                        return
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "set_clock_font":
+                    choice = str(data.get("font") or "").strip()
+                    if not choice or not outer._on_set_clock_font:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing font")
+                        return
+                    if not outer._on_set_clock_font(choice):
                         self.send_error(HTTPStatus.BAD_REQUEST, "Unknown font")
                         return
                     change = outer.state.update_info_card(outer._device_controls_payload())
