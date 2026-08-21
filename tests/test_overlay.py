@@ -760,18 +760,21 @@ class ConfigInfoCardTests(unittest.TestCase):
         # The function should handle this gracefully
         self.assertIsInstance(result, str)
 
-    def test_build_config_info_overlay_contains_logo(self) -> None:
-        """Test that the config overlay includes the SVG logo."""
+    def test_build_config_info_overlay_contains_wordmark(self) -> None:
+        """The logo is a CSS wordmark now, not an inline SVG."""
         html = _build_config_info_overlay()
-        self.assertIn("<svg", html)
-        self.assertIn("pulseGradient", html)
-        self.assertIn("GRAYSTORM PULSE", html)
+        self.assertIn("overlay-config-logo__mark", html)
+        self.assertIn("Graystorm", html)
+        self.assertIn("Pulse", html)
+        # The old SVG was mostly empty space above 11px of text; it should not come back.
+        self.assertNotIn("<svg", html)
+        self.assertNotIn("pulseGradient", html)
 
     def test_build_config_info_overlay_has_accessibility_attributes(self) -> None:
-        """Test that the SVG logo has proper accessibility attributes."""
+        """The wordmark still announces itself as one image, not stray styled words."""
         html = _build_config_info_overlay()
         self.assertIn('role="img"', html)
-        self.assertIn('aria-label="Graystorm Pulse logo"', html)
+        self.assertIn('aria-label="Graystorm Pulse"', html)
 
     def test_build_config_info_overlay_contains_about_section(self) -> None:
         """Test that the About section is present."""

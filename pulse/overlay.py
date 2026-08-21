@@ -2085,25 +2085,9 @@ def _build_config_info_overlay() -> str:
   </div>
   <div class="overlay-info-card__body">
     <div class="overlay-config-logo">
-      <svg viewBox="0 0 200 90" xmlns="http://www.w3.org/2000/svg"
-           role="img" aria-label="Graystorm Pulse logo"
-           style="width: 180px; height: auto; margin: 0 auto 1rem; display: block;">
-        <defs>
-          <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1" />
-            <stop offset="50%" style="stop-color:#ffd700;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
-          </linearGradient>
-        </defs>
-        <path d="M 30 30 L 70 30 L 85 10 L 100 50 L 115 30 L 170 30"
-              stroke="url(#pulseGradient)"
-              stroke-width="3"
-              fill="none"
-              stroke-linecap="round"
-              stroke-linejoin="round"/>
-        <text x="100" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold"
-              fill="rgba(255,255,255,0.9)" text-anchor="middle">GRAYSTORM PULSE</text>
-      </svg>
+      <div class="overlay-config-logo__mark" role="img" aria-label="Graystorm Pulse">
+        <span class="overlay-config-logo__gray">Graystorm</span><span class="overlay-config-logo__pulse">Pulse</span>
+      </div>
     </div>
     <div class="overlay-card__actions">
       <button class="overlay-button" data-config-action="show_sounds">

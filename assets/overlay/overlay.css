@@ -1442,9 +1442,49 @@ body {
 }
 
 /* Config About Section */
+/* Typographic wordmark rather than a logo image. The old inline SVG was a 200x90 box
+   holding a heartbeat line and 11px of text, so most of its height was empty and it
+   pushed the actual settings down the card. Type carries the brand in a third of the
+   space, and the gradient keeps the identity. */
 .overlay-config-logo {
   text-align: center;
-  padding: 1rem 0 0.5rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.overlay-config-logo__mark {
+  display: inline-block;
+  font-size: 1.55rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  /* The gradient the old SVG stroke used, so the wordmark reads as the same brand. */
+  background: linear-gradient(100deg, #ff6b35 0%, #ffd700 45%, #00d4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Indent by the tracking, so the letter-spacing on the final glyph doesn't shift the
+     wordmark visually left of center. */
+  padding-left: 0.16em;
+}
+
+/* Weight, not color, separates the two words — they share one gradient sweep, so
+   coloring them apart would break it. */
+.overlay-config-logo__gray {
+  font-weight: 300;
+}
+
+.overlay-config-logo__pulse {
+  font-weight: 800;
+  margin-left: 0.18em;
+}
+
+/* Chromium on the Pi supports background-clip:text; this keeps the wordmark legible
+   anywhere that doesn't rather than rendering it invisible. */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .overlay-config-logo__mark {
+    background: none;
+    color: #ffd700;
+  }
 }
 
 .overlay-config-about {
