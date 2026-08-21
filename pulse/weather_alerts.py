@@ -380,26 +380,37 @@ def _dedupe_by_event(alerts: list[WeatherAlert]) -> list[WeatherAlert]:
     thing is happening to this room, and a display that says "Small Craft Advisory" four
     times is telling you one fact four times.
 
-    Within a group the survivor is the highest severity, then the one that runs latest, so
-    collapsing never shortens the window shown or downgrades what's on screen. The full text
-    of the survivor is kept intact; only the duplicate headers go away.
+    Within a group the survivor is the highest severity, then one that is actually in
+    effect, then the one that runs latest — so collapsing never shortens the window shown,
+    downgrades what's on screen, or swaps in a segment that hasn't started. The full text of
+    the survivor is kept intact; only the duplicate headers go away.
     """
+    now = time.time()
     groups: dict[str, WeatherAlert] = {}
     for alert in alerts:
         key = alert.event.strip().lower()
         incumbent = groups.get(key)
-        if incumbent is None or _dedupe_rank(alert) > _dedupe_rank(incumbent):
+        if incumbent is None or _dedupe_rank(alert, now=now) > _dedupe_rank(incumbent, now=now):
             groups[key] = alert
     return list(groups.values())
 
 
-def _dedupe_rank(alert: WeatherAlert) -> tuple[int, float]:
-    """Severity first, then whichever runs latest — never shorten or downgrade.
+def _dedupe_rank(alert: WeatherAlert, *, now: float) -> tuple[int, int, float]:
+    """Severity, then in-effect-now, then whichever runs latest.
 
-    Uses `ends` ahead of `expires` here, unlike _expiry_epoch: the question is "which of
+    The middle term matters more than it looks. NWS reissues a long-running product as a
+    series of time segments — the Aleutians carry four Small Craft Advisories for one
+    stretch of water, one of which doesn't start until tomorrow morning. Ranking on end
+    time alone would pick that future segment and put "until Sat 17:00" on the wall for
+    weather that hasn't started. Anything already in effect outranks anything that hasn't.
+
+    Uses `ends` ahead of `expires`, unlike _expiry_epoch: the question here is "which of
     these covers the most weather", not "has this bulletin lapsed".
     """
-    return (SEVERITY_RANK.get(alert.severity, 0), _parse_epoch(alert.ends) or _parse_epoch(alert.expires) or 0.0)
+    onset = _parse_epoch(alert.onset)
+    in_effect = 1 if onset is None or onset <= now else 0
+    end = _parse_epoch(alert.ends) or _parse_epoch(alert.expires) or 0.0
+    return (SEVERITY_RANK.get(alert.severity, 0), in_effect, end)
 
 
 def _parse_epoch(raw: str) -> float | None:

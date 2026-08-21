@@ -890,27 +890,38 @@ def _parse_alert_time(raw: Any) -> datetime | None:
         return None
 
 
-def _format_alert_until(alert: dict[str, Any], *, hour12: bool = True) -> str:
-    """Short "until …" phrase for when an alert stops, or "" if NWS gave no time at all.
-
-    Plenty of products carry no `ends` — Special Weather Statements especially, which are
-    short-fuse bulletins where `expires` is the only time given. Those fall back to
-    `expires` under the word "expires" rather than "until", because the two are not the
-    same promise: `ends` is when the weather is expected to stop, `expires` is when the
-    bulletin needs reissuing. Saying which one is on screen keeps the display honest.
-    """
-    ends = _parse_alert_time(alert.get("ends"))
-    verb = "until"
-    if ends is None:
-        ends = _parse_alert_time(alert.get("expires"))
-        verb = "expires"
-    if ends is None:
-        return ""
-    now = datetime.now(ends.tzinfo) if ends.tzinfo else datetime.now()
+def _format_alert_time(when: datetime, verb: str, *, hour12: bool) -> str:
+    now = datetime.now(when.tzinfo) if when.tzinfo else datetime.now()
     time_format = "%-I:%M %p" if hour12 else "%H:%M"
-    if ends.date() == now.date():
-        return f"{verb} {ends.strftime(time_format)}"
-    return f"{verb} {ends.strftime('%a')} {ends.strftime(time_format)}"
+    if when.date() == now.date():
+        return f"{verb} {when.strftime(time_format)}"
+    return f"{verb} {when.strftime('%a')} {when.strftime(time_format)}"
+
+
+def _format_alert_until(alert: dict[str, Any], *, hour12: bool = True) -> str:
+    """Short time phrase for an alert, or "" if NWS gave no usable time at all.
+
+    Three cases, each with its own verb, because they are three different promises:
+    - "from ..." when the alert hasn't started yet. NWS keeps not-yet-effective products in
+      the active feed, and captioning one "until Sat 17:00" would put an end time on the
+      wall for weather that hasn't begun.
+    - "until ..." from `ends`, when the weather is expected to stop.
+    - "expires ..." from `expires`, for the short-fuse products (Special Weather Statements
+      especially) that carry no `ends`. That is when the bulletin lapses, not when the
+      weather does, and saying which one is on screen keeps the display honest.
+    """
+    onset = _parse_alert_time(alert.get("onset"))
+    if onset is not None:
+        now = datetime.now(onset.tzinfo) if onset.tzinfo else datetime.now()
+        if onset > now:
+            return _format_alert_time(onset, "from", hour12=hour12)
+    ends = _parse_alert_time(alert.get("ends"))
+    if ends is not None:
+        return _format_alert_time(ends, "until", hour12=hour12)
+    expires = _parse_alert_time(alert.get("expires"))
+    if expires is not None:
+        return _format_alert_time(expires, "expires", hour12=hour12)
+    return ""
 
 
 def _weather_alert_label(alert: dict[str, Any]) -> str:

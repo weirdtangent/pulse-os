@@ -210,6 +210,16 @@ def test_dedupe_keeps_the_longest_running_of_equal_severity(feed):
     assert [alert.id for alert in _client().fetch()] == ["long"]
 
 
+def test_dedupe_prefers_a_segment_already_in_effect(feed):
+    """NWS reissues long products as time segments; tomorrow's must not win on end time."""
+    feed.features = [
+        _feature("today", "Flood Warning", severity="Severe", ends=_iso(300)),
+        _feature("tomorrow", "Flood Warning", severity="Severe", ends=_iso(2000)),
+    ]
+    feed.features[1]["properties"]["onset"] = _iso(1200)  # hasn't started yet
+    assert [alert.id for alert in _client().fetch()] == ["today"]
+
+
 def test_dedupe_leaves_different_products_alone(feed):
     feed.features = [
         _feature("a", "Tornado Warning", severity="Extreme"),

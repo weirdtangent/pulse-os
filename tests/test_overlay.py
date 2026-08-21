@@ -1320,6 +1320,15 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         self.assertEqual(body.count("until "), 2)  # banner and card, both 12-hour
         self.assertTrue("AM" in body or "PM" in body)
 
+    def test_future_onset_says_from_not_until(self) -> None:
+        """NWS keeps not-yet-effective products in the active feed."""
+        onset = (datetime.now(UTC) + timedelta(hours=14)).isoformat()
+        ends = (datetime.now(UTC) + timedelta(hours=26)).isoformat()
+        alert = self._alert(onset=onset, ends=ends)
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("from ", body)
+        self.assertNotIn("until ", body)
+
     def test_no_time_phrase_when_nws_gives_neither(self) -> None:
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
         self.assertNotIn("overlay-weather-banner__until", body)
