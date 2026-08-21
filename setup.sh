@@ -635,8 +635,16 @@ CORE_PIP_PACKAGES=(httpx openlocationcode websockets)
 ASSISTANT_PIP_PACKAGES=(wyoming recurring-ical-events)
 
 # Versions come from uv.lock via this generated constraints file rather than from pip's
-# resolver, so the fleet runs what CI tests. Passed with -c: it pins whatever is installed
-# without installing anything itself, leaving the apt-provided packages alone.
+# resolver, so the fleet runs what CI tests. Passed with -c: a constraints file pins what
+# gets installed without itself adding anything to the install set, which is why this is
+# not a requirements file — that would pull pip copies of the six packages the fleet takes
+# from apt (config/apt/manual-packages.txt).
+#
+# It does NOT mean apt's copies always win. When something pip installs requires an
+# apt-provided package at a version apt doesn't satisfy, pip puts its own copy in the user
+# site and that shadows apt: icalendar is exactly this case, resolving to the pip 7.2.2
+# copy on a device that also has python3-icalendar 6.0.1. Untouched apt packages keep
+# Debian's version only because nothing being installed asked for a different one.
 DEVICE_CONSTRAINTS="$REPO_DIR/config/device-constraints.txt"
 
 pip_install_packages() {
@@ -663,14 +671,19 @@ install_device_python_deps() {
         sudo apt install -y python3-pip
     fi
 
+    # No "|| true" here, unlike the assistant set below: the listener imports all of these
+    # at module scope, so finishing setup without them leaves a display that cannot start.
+    # set -e aborts here instead, which surfaces the failure while the old services are
+    # still running rather than after they have been restarted into a broken checkout.
     log "Ensuring core Python packages are installed for the pulse user…"
-    pip_install_packages "core" "${CORE_PIP_PACKAGES[@]}" || true
+    pip_install_packages "core" "${CORE_PIP_PACKAGES[@]}"
 
     if [ "${PULSE_VOICE_ASSISTANT:-false}" != "true" ]; then
         log "Voice assistant disabled; skipping its extra Python packages."
         return
     fi
 
+    # Warn and continue: without these the assistant is degraded, but the kiosk still runs.
     log "Ensuring voice assistant Python packages are installed for the pulse user…"
     pip_install_packages "voice assistant" "${ASSISTANT_PIP_PACKAGES[@]}" || true
 }
