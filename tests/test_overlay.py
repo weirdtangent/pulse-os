@@ -1,22 +1,29 @@
 from __future__ import annotations
 
+import dataclasses
 import re
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from pulse.overlay import (
+    KEY_LIBRARIES,
     ClockConfig,
     OverlaySnapshot,
     OverlayStateManager,
     OverlayTheme,
     _build_config_info_overlay,
+    _build_device_controls_info_overlay,
     _build_help_info_overlay,
     _build_now_playing_card,
+    _copyright_years,
     _get_library_versions,
+    _theme_css,
     parse_clock_config,
     render_overlay_html,
 )
+from pulse.overlay_assets import OVERLAY_JS
 from pulse.weather_alerts import BANNER_ALWAYS
 
 
@@ -757,18 +764,21 @@ class ConfigInfoCardTests(unittest.TestCase):
         # The function should handle this gracefully
         self.assertIsInstance(result, str)
 
-    def test_build_config_info_overlay_contains_logo(self) -> None:
-        """Test that the config overlay includes the SVG logo."""
+    def test_build_config_info_overlay_contains_wordmark(self) -> None:
+        """The logo is a CSS wordmark now, not an inline SVG."""
         html = _build_config_info_overlay()
-        self.assertIn("<svg", html)
-        self.assertIn("pulseGradient", html)
-        self.assertIn("GRAYSTORM PULSE", html)
+        self.assertIn("overlay-config-logo__mark", html)
+        self.assertIn("Graystorm", html)
+        self.assertIn("Pulse", html)
+        # The old SVG was mostly empty space above 11px of text; it should not come back.
+        self.assertNotIn("<svg", html)
+        self.assertNotIn("pulseGradient", html)
 
     def test_build_config_info_overlay_has_accessibility_attributes(self) -> None:
-        """Test that the SVG logo has proper accessibility attributes."""
+        """The wordmark still announces itself as one image, not stray styled words."""
         html = _build_config_info_overlay()
         self.assertIn('role="img"', html)
-        self.assertIn('aria-label="Graystorm Pulse logo"', html)
+        self.assertIn('aria-label="Graystorm Pulse"', html)
 
     def test_build_config_info_overlay_contains_about_section(self) -> None:
         """Test that the About section is present."""
@@ -1069,6 +1079,235 @@ class NowPlayingAlbumArtRenderTests(NowPlayingCardTests):
         self.assertIsNotNone(result)
         _, html = result  # type: ignore[misc]
         self.assertNotIn("overlay-now-playing__art", html)
+
+
+class ConfigCardAboutTests(unittest.TestCase):
+    """The About box holds two things that rot silently if nobody looks."""
+
+    def test_key_libraries_are_all_still_declared_dependencies(self) -> None:
+        """A dropped or renamed package renders as a bare name with no version, silently."""
+        import tomllib
+
+        from pulse.overlay import KEY_LIBRARIES
+
+        root = Path(__file__).resolve().parent.parent
+        with (root / "pyproject.toml").open("rb") as handle:
+            project = tomllib.load(handle)["project"]
+        declared = {
+            re.split(r"[\[><=!~;\s]", dep, maxsplit=1)[0].strip().lower() for dep in project.get("dependencies", [])
+        }
+        undeclared = sorted(lib for lib in KEY_LIBRARIES if lib.lower() not in declared)
+        self.assertEqual(undeclared, [], f"config card lists non-dependencies: {undeclared}")
+
+    def test_key_libraries_all_resolve_to_a_version(self) -> None:
+        html = _build_config_info_overlay()
+        for lib in KEY_LIBRARIES:
+            # Rendered as "name x.y.z"; a bare name means the lookup failed.
+            self.assertRegex(html, rf"{re.escape(lib)} \d")
+
+    def test_copyright_runs_through_the_current_year(self) -> None:
+        """The hardcoded year went stale the moment 2026 arrived."""
+        self.assertEqual(_copyright_years(datetime(2025, 6, 1, tzinfo=UTC)), "2025")
+        self.assertEqual(_copyright_years(datetime(2026, 8, 21, tzinfo=UTC)), "2025-2026")
+        self.assertEqual(_copyright_years(datetime(2031, 1, 1, tzinfo=UTC)), "2025-2031")
+        self.assertIn(f"&copy; {_copyright_years()} ", _build_config_info_overlay())
+
+
+class DeviceControlsCardTests(unittest.TestCase):
+    """Controls the device already exposed over MQTT but had no on-screen equivalent."""
+
+    def _card(self, **overrides) -> dict:
+        card = {
+            "brightness_supported": True,
+            "volume_supported": True,
+            "brightness": 70,
+            "volume": 45,
+            "day_brightness": 85,
+            "night_brightness": 25,
+            "fonts": ["System default", "Inter", "JetBrains Mono"],
+            "font": "Inter",
+            "home_supported": True,
+            "reboot_supported": True,
+        }
+        card.update(overrides)
+        return card
+
+    def test_renders_day_and_night_targets(self) -> None:
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn('data-control-slider="day_brightness"', html)
+        self.assertIn('data-control-slider="night_brightness"', html)
+        self.assertIn("Day target", html)
+        self.assertIn("Night target", html)
+
+    def test_targets_hidden_when_the_display_has_no_backlight(self) -> None:
+        """A display with no backlight can't act on a schedule; the control would be dead."""
+        html = _build_device_controls_info_overlay(
+            self._card(brightness_supported=False, day_brightness=None, night_brightness=None)
+        )
+        self.assertNotIn('data-control-slider="day_brightness"', html)
+
+    def test_font_select_marks_the_current_font(self) -> None:
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn("data-font-select", html)
+        inter = re.search(r"<option value=\"Inter\"[^>]*>", html)
+        self.assertIsNotNone(inter)
+        self.assertIn("selected", inter.group(0))  # type: ignore[union-attr]
+        self.assertIn("JetBrains Mono", html)
+
+    def test_font_options_preview_in_their_own_face(self) -> None:
+        html = _build_device_controls_info_overlay(self._card(fonts=["System default", "DejaVu Sans"]))
+        self.assertIn("style=\"font-family: 'DejaVu Sans', sans-serif\"", html)
+        # "System default" is a sentinel, not a font, so it has nothing to preview.
+        self.assertNotIn("font-family: 'System default'", html)
+
+    def test_font_names_with_css_punctuation_get_no_preview(self) -> None:
+        """Names come from fontconfig, so they are not trusted input for a style attribute."""
+        hostile = "ev'il\"; } body {"
+        html = _build_device_controls_info_overlay(self._card(fonts=["ok", hostile], font="ok"))
+        options = re.findall(r"<option[^>]*>", html)
+        hostile_option = next(opt for opt in options if "ev" in opt)
+        # Rendered as a choice, but with no style attribute to break out of.
+        self.assertNotIn("style=", hostile_option)
+        safe_option = next(opt for opt in options if 'value="ok"' in opt)
+        self.assertIn("font-family: 'ok'", safe_option)
+
+    def test_clock_font_picker_is_separate_from_the_overlay_font(self) -> None:
+        """The clock is rendered at 100px+; a face picked for a 14px badge often looks wrong."""
+        html = _build_device_controls_info_overlay(
+            self._card(clock_fonts=["Same as overlay", "Liberation Sans"], clock_font="Liberation Sans")
+        )
+        self.assertIn("data-clock-font-select", html)
+        self.assertIn("data-font-select", html)
+        clock_block = html.split("data-clock-font-select", 1)[1].split("</select>", 1)[0]
+        self.assertIn('value="Liberation Sans" ', clock_block)
+        self.assertIn("selected", clock_block)
+
+    def test_clock_font_picker_absent_without_options(self) -> None:
+        html = _build_device_controls_info_overlay(self._card(clock_fonts=[]))
+        self.assertNotIn("data-clock-font-select", html)
+
+    def test_no_font_select_without_options(self) -> None:
+        html = _build_device_controls_info_overlay(self._card(fonts=[]))
+        self.assertNotIn("data-font-select", html)
+
+    def test_home_and_reboot_buttons_are_gated_on_support(self) -> None:
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn('data-config-action="go_home"', html)
+        self.assertIn("data-reboot-button", html)
+        bare = _build_device_controls_info_overlay(self._card(home_supported=False, reboot_supported=False))
+        self.assertNotIn('data-config-action="go_home"', bare)
+        self.assertNotIn("data-reboot-button", bare)
+
+    def test_reboot_button_carries_a_confirm_step(self) -> None:
+        """A stray touch on a wall display must not be able to restart the room."""
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn("data-confirm-label", html)
+
+    def test_change_listener_is_cleaned_up_on_reinit(self) -> None:
+        """initialize() runs on every refresh, so a listener it adds must also be removed."""
+        self.assertIn("root.addEventListener('change', changeHandler)", OVERLAY_JS)
+        self.assertIn("oldRoot.removeEventListener('change', changeHandler)", OVERLAY_JS)
+        # Registered for cleanup alongside the click/input handlers.
+        registry = OVERLAY_JS.split("PulseOverlay.eventHandlers = {", 1)[1].split("}", 1)[0]
+        self.assertIn("changeHandler", registry)
+        # Never on document: that survives re-init and accumulates a copy per refresh.
+        self.assertNotIn("document.addEventListener('change'", OVERLAY_JS)
+
+    def test_failed_reboot_request_disarms_the_button(self) -> None:
+        """Left armed, the next single tap would reboot with no confirmation at all."""
+        catch_block = OVERLAY_JS.split("action: 'reboot_device'", 1)[1].split("return;", 1)[0]
+        self.assertIn("dataset.armed = 'false'", catch_block)
+        self.assertIn("overlay-button--armed", catch_block)
+
+    def test_every_slider_kind_maps_to_its_own_action(self) -> None:
+        """The mapping was a ternary defaulting to set_volume, so a new slider changed the
+        volume instead of what it said. Every rendered kind must have an explicit action."""
+        html = _build_device_controls_info_overlay(self._card())
+        kinds = set(re.findall(r'data-control-slider="([^"]+)"', html))
+        self.assertTrue(kinds)
+        js = OVERLAY_JS.split("DEVICE_CONTROL_ACTIONS = {", 1)[1].split("}", 1)[0]
+        unmapped = sorted(kind for kind in kinds if f"{kind}:" not in js)
+        self.assertEqual(unmapped, [], f"sliders with no explicit action: {unmapped}")
+
+
+class OverlayThemeConstructionTests(unittest.TestCase):
+    def test_theme_is_built_in_exactly_one_place(self) -> None:
+        """Two construction sites meant every new theme field had to be added twice.
+
+        It wasn't: the font-change path rebuilt OverlayTheme without the weather-alert
+        fields, so choosing a font silently reset the banner mode to its default.
+        """
+        listener = Path(__file__).resolve().parent.parent / "bin" / "kiosk-mqtt-listener.py"
+        sites = listener.read_text().count("OverlayTheme(")
+        self.assertEqual(sites, 1, f"OverlayTheme built in {sites} places; keep it to one builder")
+
+    def test_every_theme_field_is_passed_by_the_builder(self) -> None:
+        listener = Path(__file__).resolve().parent.parent / "bin" / "kiosk-mqtt-listener.py"
+        # Balance the parens rather than splitting on the first ")": argument values are
+        # themselves calls (clock_font_family=self._resolve_clock_font_stack()), so a naive
+        # split truncates the argument list and the check silently passes on a short body.
+        tail = listener.read_text().split("OverlayTheme(", 1)[1]
+        depth, end = 1, len(tail)
+        for index, char in enumerate(tail):
+            depth += (char == "(") - (char == ")")
+            if depth == 0:
+                end = index
+                break
+        body = tail[:end]
+        missing = sorted(f.name for f in dataclasses.fields(OverlayTheme) if f"{f.name}=" not in body)
+        self.assertEqual(missing, [], f"theme fields never set by the builder: {missing}")
+
+
+class ClockFontThemeTests(unittest.TestCase):
+    def _theme(self, **kw) -> OverlayTheme:
+        base = dict(
+            ambient_background="rgba(0,0,0,0.3)",
+            alert_background="rgba(0,0,0,0.6)",
+            text_color="#FFF",
+            accent_color="#88C0D0",
+            font_family='"Nimbus Sans"',
+        )
+        base.update(kw)
+        return OverlayTheme(**base)  # type: ignore[arg-type]
+
+    def test_clock_font_falls_back_to_the_overlay_font(self) -> None:
+        css = _theme_css(self._theme())
+        self.assertIn('--overlay-clock-font-family: "Nimbus Sans"', css)
+
+    def test_clock_font_overrides_independently(self) -> None:
+        css = _theme_css(self._theme(clock_font_family='"Liberation Sans"'))
+        self.assertIn('--overlay-clock-font-family: "Liberation Sans"', css)
+        self.assertIn('--overlay-font-family: "Nimbus Sans"', css)
+
+    def test_clock_markup_consumes_the_clock_variable(self) -> None:
+        """The variable is pointless if nothing reads it."""
+        html = render_overlay_html(
+            OverlaySnapshot(
+                version=1,
+                clocks=(ClockConfig("clock0", "Local", None),),
+                now_playing="",
+                now_playing_state="",
+                now_playing_image="",
+                timers=(),
+                alarms=(),
+                reminders=(),
+                calendar_events=(),
+                active_alarm=None,
+                active_timer=None,
+                active_reminder=None,
+                notifications=(),
+                timer_positions={},
+                info_card=None,
+                last_reason="test",
+                generated_at=0.0,
+                schedule_snapshot=None,
+                earmuffs_enabled=False,
+                update_available=False,
+            ),
+            self._theme(clock_font_family='"Liberation Sans"'),
+        )
+        styles = html.split("</style>", 1)[0]
+        self.assertIn("var(--overlay-clock-font-family", styles)
 
 
 class WeatherAlertOverlayTests(OverlayRenderTests):

@@ -106,7 +106,9 @@ class OverlayConfig:
     accent_color: str
     show_notification_bar: bool
     clock_24h: bool
-    font_family: str
+    font_family: str  # configured default stack; never rewritten by a pick
+    font_choice: str  # overlay font picked on-screen or from HA ("" = use the default)
+    clock_font_choice: str  # clock font picked separately ("" = follow the overlay font)
     auth_token: str | None
     ticker_enabled: bool
     ticker_symbols: tuple[str, ...]
@@ -295,6 +297,10 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
 ]
 
 OVERLAY_FONT_DEFAULT_OPTION = "System default"
+# The clock's "inherit" choice, distinct from the overlay's "System default".
+OVERLAY_CLOCK_FONT_DEFAULT_OPTION = "Same as overlay"
+# Sentinel so _resolve_font_stack can tell "no argument" from an explicit None.
+_UNSET = object()
 FONT_DETECT_TIMEOUT_SECONDS = 6
 
 
@@ -310,12 +316,50 @@ def _quote_font_name(name: str) -> str:
     return f'"{escaped}"' if escaped else ""
 
 
+# A CSS stack that ends in a real family and no generic has nowhere to go if that family
+# is missing: the browser drops to its own default, which is not the same thing on every
+# platform. PULSE_OVERLAY_FONT_FAMILY is normally a bare name ("Inter"), and the shipped
+# default names a font that is not installed on a Pi, so the display quietly rendered in
+# Chromium's fallback rather than anything anyone chose.
+_CSS_GENERIC_FAMILIES = ("sans-serif", "serif", "monospace", "cursive", "fantasy", "system-ui")
+
+
+def _with_generic_fallback(font_stack: str) -> str:
+    stack = (font_stack or "").strip() or DEFAULT_FONT_STACK
+    # Compare whole entries, not substrings: "DejaVu Serif" contains "serif", so a
+    # substring test reads a real family as a generic and skips the fallback that family
+    # needs. Split on commas and strip quotes so only an actual generic entry counts.
+    entries = {entry.strip().strip("\"'").lower() for entry in stack.split(",")}
+    if entries & set(_CSS_GENERIC_FAMILIES):
+        return stack
+    return f'{stack}, sans-serif, "Noto Color Emoji"'
+
+
 def _extract_primary_font(font_stack: str) -> str | None:
     for token in font_stack.split(","):
         candidate = _normalize_font_name(token)
         if candidate:
             return candidate
     return None
+
+
+# Families fontconfig reports that are not usable as a UI typeface: symbol, dingbat, math,
+# and emoji sets. Picking one renders the overlay as gibberish, and on a 720px kiosk every
+# extra entry pushes the font list further up the screen. Text faces are all kept, including
+# the URW/Nimbus clones — those are perfectly good choices, just unfashionable ones.
+_NON_TEXT_FONT_FAMILIES = {
+    "d050000l",  # URW Dingbats
+    "standard symbols ps",
+    "dejavu math tex gyre",
+    "noto color emoji",
+    "noto emoji",
+    "droid sans fallback",  # CJK fallback, not a display face
+    "z003",  # URW Chancery, a script face that is unreadable at overlay sizes
+}
+
+
+def _is_non_text_font(name: str) -> bool:
+    return name.strip().casefold() in _NON_TEXT_FONT_FAMILIES
 
 
 def _detect_installed_fonts() -> list[str]:
@@ -479,7 +523,13 @@ def load_config() -> EnvConfig:
     )
     if resolved and resolved.timezone:
         overlay_clock_spec = f"{resolved.timezone}={friendly_name}"
-    overlay_font_stack = (os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip() or DEFAULT_FONT_STACK
+    overlay_font_stack = _with_generic_fallback((os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip())
+    # Separate from the stack above on purpose: PULSE_OVERLAY_FONT_FAMILY is the configured
+    # default and is never rewritten, so "System default" always means the same thing and a
+    # font picked on-screen can always be undone. The two used to share one variable, which
+    # meant the first pick destroyed the default permanently.
+    overlay_font_choice = (os.environ.get("PULSE_OVERLAY_FONT") or "").strip()
+    overlay_clock_font_choice = (os.environ.get("PULSE_OVERLAY_CLOCK_FONT") or "").strip()
     overlay_clocks = parse_clock_config(
         overlay_clock_spec,
         default_label=friendly_name,
@@ -502,6 +552,8 @@ def load_config() -> EnvConfig:
         show_notification_bar=parse_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
         clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
         font_family=overlay_font_stack,
+        font_choice=overlay_font_choice,
+        clock_font_choice=overlay_clock_font_choice,
         auth_token=(os.environ.get("PULSE_OVERLAY_AUTH_TOKEN") or "").strip() or None,
         ticker_enabled=parse_bool(os.environ.get("PULSE_TICKER_ENABLED"), False),
         ticker_symbols=tuple(parse_symbols(os.environ.get("PULSE_TICKER_SYMBOLS")) or ["^SPX", "^DJI", "^NDX"]),
@@ -779,8 +831,12 @@ class KioskMqttListener:
         self._overlay_http: OverlayHttpServer | None = None
         self._overlay_topic_handlers: dict[str, Any] = {}
         self._default_font_stack = (self.overlay_config.font_family or DEFAULT_FONT_STACK).strip() or DEFAULT_FONT_STACK
-        self._overlay_font_override: str | None = None
-        self._current_font_stack = self._default_font_stack
+        self._overlay_font_override: str | None = self.overlay_config.font_choice or None
+        self._overlay_clock_font_override: str | None = self.overlay_config.clock_font_choice or None
+        # Fold the saved pick in at startup. These used to be the same config variable, so
+        # the stack already contained the choice; now that they are separate, the override
+        # has to be resolved here or a picked font is forgotten on every restart.
+        self._current_font_stack = self._resolve_font_stack()
         self._font_options: list[str] = []
         self._font_option_set: set[str] = set()
         self._refresh_font_options()
@@ -828,20 +884,7 @@ class KioskMqttListener:
                 self.log("weather-alerts: enabled but PULSE_LOCATION did not resolve — alerts disabled")
             if self._weather_alert_client and self.overlay_config.weather_alerts_sound:
                 self._weather_alert_sound_path = self._resolve_weather_alert_sound()
-            self._overlay_theme = OverlayTheme(
-                ambient_background=self.overlay_config.ambient_background,
-                alert_background=self.overlay_config.alert_background,
-                text_color=self.overlay_config.text_color,
-                accent_color=self.overlay_config.accent_color,
-                show_notification_bar=self.overlay_config.show_notification_bar,
-                font_family=self._current_font_stack,
-                show_ticker=self.overlay_config.ticker_enabled,
-                ticker_scroll_speed=self.overlay_config.ticker_speed,
-                ticker_emoji=self.overlay_config.ticker_emoji,
-                ticker_label_mode=self.overlay_config.ticker_label_mode,
-                weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
-                weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
-            )
+            self._overlay_theme = self._build_overlay_theme(self._current_font_stack)
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
                 self.assistant_topics.alarms_active: lambda payload: self._handle_overlay_active_event(
@@ -888,6 +931,11 @@ class KioskMqttListener:
                 on_set_volume=self._handle_overlay_volume_request,
                 on_set_brightness=self._handle_overlay_brightness_request,
                 get_device_levels=self._collect_device_control_snapshot,
+                on_set_font=self._handle_overlay_set_font,
+                on_set_clock_font=self._handle_overlay_set_clock_font,
+                on_set_brightness_target=self._handle_overlay_set_brightness_target,
+                on_go_home=self._handle_overlay_go_home,
+                on_reboot=self._handle_overlay_reboot,
                 on_media_control=self._handle_overlay_media_control,
             )
 
@@ -1301,7 +1349,49 @@ class KioskMqttListener:
             "volume_supported": True,
             "brightness": brightness,
             "brightness_supported": self._brightness_supported,
+            # Everything below already exists as a Home Assistant entity; the card just had
+            # no on-screen equivalent, which is backwards for a touchscreen on a wall.
+            "day_brightness": self._day_brightness,
+            "night_brightness": self._night_brightness,
+            "fonts": list(self._font_options),
+            "font": self._overlay_font_override or OVERLAY_FONT_DEFAULT_OPTION,
+            "clock_fonts": [OVERLAY_CLOCK_FONT_DEFAULT_OPTION, *self._font_options[1:]],
+            "clock_font": self._overlay_clock_font_override or OVERLAY_CLOCK_FONT_DEFAULT_OPTION,
+            "home_supported": bool(self.config.pulse_url),
+            "reboot_supported": True,
         }
+
+    def _handle_overlay_set_clock_font(self, choice: str) -> bool:
+        if choice != OVERLAY_CLOCK_FONT_DEFAULT_OPTION and choice not in self._font_option_set:
+            self.log(f"overlay-clock-font: '{choice}' is not an available font")
+            return False
+        self.handle_overlay_clock_font(choice.encode())
+        return True
+
+    def _handle_overlay_set_font(self, choice: str) -> bool:
+        """Reuse the MQTT font handler so the display and Home Assistant can't diverge."""
+        if choice != OVERLAY_FONT_DEFAULT_OPTION and choice not in self._font_option_set:
+            self.log(f"overlay-font: '{choice}' is not an available font")
+            return False
+        self.handle_overlay_font(choice.encode())
+        return True
+
+    def _handle_overlay_set_brightness_target(self, kind: str, value: int) -> bool:
+        payload = str(value).encode()
+        if kind == "day":
+            self.handle_day_brightness(payload)
+        else:
+            self.handle_night_brightness(payload)
+        return True
+
+    def _handle_overlay_go_home(self) -> bool:
+        self.handle_home()
+        return True
+
+    def _handle_overlay_reboot(self) -> bool:
+        self.log("reboot: requested from the device controls card")
+        self.handle_reboot()
+        return True
 
     def _collect_now_playing_text(self) -> tuple[str, str, str]:
         """Return (display_text, ha_state, image_data_uri) for the media player."""
@@ -1388,13 +1478,49 @@ class KioskMqttListener:
         )
         self._safe_publish(client, self.config.topics.overlay_refresh, payload, qos=0, retain=False)
 
-    def _resolve_font_stack(self) -> str:
+    def _resolve_font_stack(self, override: str | None = _UNSET) -> str:  # type: ignore[assignment]
+        """Build a CSS stack: the chosen face first, then the configured default behind it.
+
+        The default always stays on the tail so a face missing its glyphs (or missing
+        entirely) still lands somewhere sensible rather than on the browser's generic.
+        """
+        chosen = self._overlay_font_override if override is _UNSET else override
         base_stack = self._default_font_stack or DEFAULT_FONT_STACK
-        if self._overlay_font_override:
-            quoted = _quote_font_name(self._overlay_font_override)
+        if chosen:
+            quoted = _quote_font_name(chosen)
             if quoted:
                 return f"{quoted}, {base_stack}" if base_stack else quoted
         return base_stack or DEFAULT_FONT_STACK
+
+    def _resolve_clock_font_stack(self) -> str:
+        """The clock's stack, or "" when it should just inherit the overlay font."""
+        if not self._overlay_clock_font_override:
+            return ""
+        return self._resolve_font_stack(self._overlay_clock_font_override)
+
+    def _build_overlay_theme(self, font_stack: str) -> OverlayTheme:
+        """Single construction site for OverlayTheme.
+
+        It used to be built in two places — once at startup and again whenever the font
+        changed — which meant every new theme field had to be added twice or a font change
+        would silently reset it to the dataclass default. That is exactly what happened to
+        the weather-alert fields.
+        """
+        return OverlayTheme(
+            ambient_background=self.overlay_config.ambient_background,
+            alert_background=self.overlay_config.alert_background,
+            text_color=self.overlay_config.text_color,
+            accent_color=self.overlay_config.accent_color,
+            show_notification_bar=self.overlay_config.show_notification_bar,
+            font_family=font_stack,
+            clock_font_family=self._resolve_clock_font_stack(),
+            show_ticker=self.overlay_config.ticker_enabled,
+            ticker_scroll_speed=self.overlay_config.ticker_speed,
+            ticker_emoji=self.overlay_config.ticker_emoji,
+            ticker_label_mode=self.overlay_config.ticker_label_mode,
+            weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
+            weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
+        )
 
     def _apply_overlay_font_choice(self, reason: str) -> None:
         new_stack = self._resolve_font_stack()
@@ -1403,18 +1529,7 @@ class KioskMqttListener:
         self._current_font_stack = new_stack
         if not self.overlay_config.enabled:
             return
-        self._overlay_theme = OverlayTheme(
-            ambient_background=self.overlay_config.ambient_background,
-            alert_background=self.overlay_config.alert_background,
-            text_color=self.overlay_config.text_color,
-            accent_color=self.overlay_config.accent_color,
-            show_notification_bar=self.overlay_config.show_notification_bar,
-            font_family=new_stack,
-            show_ticker=self.overlay_config.ticker_enabled,
-            ticker_scroll_speed=self.overlay_config.ticker_speed,
-            ticker_emoji=self.overlay_config.ticker_emoji,
-            ticker_label_mode=self.overlay_config.ticker_label_mode,
-        )
+        self._overlay_theme = self._build_overlay_theme(new_stack)
         if self._overlay_http:
             self._overlay_http.theme = self._overlay_theme
         if self.overlay_state:
@@ -1432,9 +1547,12 @@ class KioskMqttListener:
         )
 
     def _refresh_font_options(self) -> None:
-        fonts = _detect_installed_fonts()
+        fonts = [name for name in _detect_installed_fonts() if not _is_non_text_font(name)]
+        # Only add the configured default's primary if it is actually installed. The shipped
+        # default names "Inter", which is not on the Pi, so it appeared in the picker as a
+        # selectable font that silently rendered as something else entirely.
         primary = _extract_primary_font(self._default_font_stack)
-        if primary:
+        if primary and any(primary.casefold() == name.casefold() for name in fonts):
             fonts.append(primary)
         dedup: dict[str, str] = {}
         for name in fonts:
@@ -2481,10 +2599,38 @@ class KioskMqttListener:
         self.log(f"overlay-font: set to '{label}'")
         self._publish_overlay_font_state(None)
         self._apply_overlay_font_choice(reason="font")
-        # Persist the font choice to config
-        # If "System default", persist the default stack; otherwise persist the selected font
-        config_value = normalized_choice if normalized_choice else self._default_font_stack
-        persist_preference("overlay_font", config_value)
+        # Persisted to PULSE_OVERLAY_FONT, not PULSE_OVERLAY_FONT_FAMILY. Writing the pick
+        # over the configured default used to destroy it: "System default" drifted to mean
+        # whatever was picked last, and a default naming a font that isn't installed (the
+        # shipped "Inter") vanished from the list the moment anything else was chosen.
+        # Empty clears the override and restores the configured default.
+        persist_preference("overlay_font", normalized_choice or "")
+
+    def handle_overlay_clock_font(self, payload: bytes) -> None:
+        """Handle clock font selection. Empty/"Same as overlay" makes the clock inherit."""
+        choice = payload.decode("utf-8", errors="ignore").strip()
+        normalized_choice: str | None
+        if not choice or choice == OVERLAY_CLOCK_FONT_DEFAULT_OPTION:
+            normalized_choice = None
+        elif choice not in self._font_option_set:
+            self.log(f"overlay-clock-font: '{choice}' is not an available font")
+            return
+        else:
+            normalized_choice = choice
+        if normalized_choice == self._overlay_clock_font_override:
+            return
+        self._overlay_clock_font_override = normalized_choice
+        self.log(f"overlay-clock-font: set to '{choice or OVERLAY_CLOCK_FONT_DEFAULT_OPTION}'")
+        # The clock stack lives outside _current_font_stack, so nudge the theme directly
+        # rather than going through the overlay-font path, which short-circuits when the
+        # overlay stack itself hasn't changed.
+        if self.overlay_config.enabled:
+            self._overlay_theme = self._build_overlay_theme(self._current_font_stack)
+            if self._overlay_http:
+                self._overlay_http.theme = self._overlay_theme
+            if self.overlay_state:
+                self._emit_overlay_refresh(self.overlay_state.snapshot().version, "clock_font")
+        persist_preference("overlay_clock_font", normalized_choice or "")
 
     def _run_step(self, description: str, command: list[str], cwd: str | None) -> bool:
         display_cmd = " ".join(command)

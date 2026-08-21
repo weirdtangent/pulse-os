@@ -49,6 +49,8 @@ from pulse.weather_alerts import BANNER_ALWAYS, TIER_RANK, banner_active
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
 DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
+# Mirrors the sentinel the listener publishes for the Home Assistant font select.
+OVERLAY_FONT_DEFAULT_OPTION = "System default"
 WEATHER_ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "weather" / "icons"
 
 
@@ -437,6 +439,24 @@ class OverlayStateManager:
                 volume_value = _coerce_percent(card.get("volume"))
                 if volume_supported and volume_value is not None:
                     normalized["volume"] = volume_value
+                for key in ("day_brightness", "night_brightness"):
+                    target = _coerce_percent(card.get(key))
+                    if brightness_supported and target is not None:
+                        normalized[key] = target
+                fonts_payload = card.get("fonts")
+                if isinstance(fonts_payload, list):
+                    fonts = [str(name) for name in fonts_payload if str(name).strip()]
+                    if fonts:
+                        normalized["fonts"] = fonts
+                        normalized["font"] = str(card.get("font") or fonts[0])
+                clock_fonts_payload = card.get("clock_fonts")
+                if isinstance(clock_fonts_payload, list):
+                    clock_fonts = [str(name) for name in clock_fonts_payload if str(name).strip()]
+                    if clock_fonts:
+                        normalized["clock_fonts"] = clock_fonts
+                        normalized["clock_font"] = str(card.get("clock_font") or clock_fonts[0])
+                normalized["home_supported"] = bool(card.get("home_supported"))
+                normalized["reboot_supported"] = bool(card.get("reboot_supported"))
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
@@ -620,6 +640,9 @@ class OverlayTheme:
     ticker_label_mode: str = "auto"  # "name" | "ticker" | "auto" (name for indices, symbol otherwise)
     # Minutes a brand-new weather alert gets a banner before collapsing to the pill.
     # 0 disables banners entirely; the pill still carries every active alert.
+    # Empty means the clock inherits font_family. The clock is the one element rendered
+    # at 100px+, where a face chosen to be legible in a 14px badge often looks wrong.
+    clock_font_family: str = ""
     weather_alert_banner_minutes: int = BANNER_ALWAYS
     # Seconds each alert holds the banner when several are active; 0 shows only the most
     # urgent. Floor of 5s is enforced client-side.
@@ -1269,6 +1292,7 @@ def _theme_css(theme: OverlayTheme) -> str:
         f"  --overlay-alert-bg: {theme.alert_background};\n"
         f"  --overlay-accent-color: {theme.accent_color};\n"
         f"  --overlay-font-family: {theme.font_family};\n"
+        f"  --overlay-clock-font-family: {theme.clock_font_family or theme.font_family};\n"
         "}"
     )
 
@@ -1913,10 +1937,28 @@ def _build_update_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) 
 """.strip()
 
 
+# The project's first published year. The card renders this through the current year, so
+# the notice stops going stale every January the way the hardcoded "2025" did.
+COPYRIGHT_START_YEAR = 2025
+
+# Curated subset shown on the config card — deliberately not every dependency, which
+# wouldn't fit. Names must stay in step with pyproject's runtime dependencies: a dropped or
+# renamed package renders here as a bare name with no version, silently, which is why
+# tests/test_overlay.py asserts each one is still declared.
+KEY_LIBRARIES = ("astral", "httpx", "icalendar", "paho-mqtt", "websockets", "wyoming")
+
+
+def _copyright_years(now: datetime | None = None) -> str:
+    current = (now or datetime.now()).year
+    if current <= COPYRIGHT_START_YEAR:
+        return str(COPYRIGHT_START_YEAR)
+    return f"{COPYRIGHT_START_YEAR}-{current}"
+
+
 def _get_library_versions() -> str:
     """Get versions of key libraries, formatted for display."""
-    libraries = ["astral", "httpx", "icalendar", "paho-mqtt", "websockets", "wyoming"]
     versions = []
+    libraries = KEY_LIBRARIES
     for lib in libraries:
         try:
             ver = get_package_version(lib)
@@ -2057,6 +2099,7 @@ def _build_help_info_overlay() -> str:
 
 def _build_config_info_overlay() -> str:
     library_versions = _get_library_versions()
+    copyright_years = _copyright_years()
     safe_version = html_escape(__version__)
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--config">
@@ -2066,25 +2109,9 @@ def _build_config_info_overlay() -> str:
   </div>
   <div class="overlay-info-card__body">
     <div class="overlay-config-logo">
-      <svg viewBox="0 0 200 90" xmlns="http://www.w3.org/2000/svg"
-           role="img" aria-label="Graystorm Pulse logo"
-           style="width: 180px; height: auto; margin: 0 auto 1rem; display: block;">
-        <defs>
-          <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1" />
-            <stop offset="50%" style="stop-color:#ffd700;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
-          </linearGradient>
-        </defs>
-        <path d="M 30 30 L 70 30 L 85 10 L 100 50 L 115 30 L 170 30"
-              stroke="url(#pulseGradient)"
-              stroke-width="3"
-              fill="none"
-              stroke-linecap="round"
-              stroke-linejoin="round"/>
-        <text x="100" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold"
-              fill="rgba(255,255,255,0.9)" text-anchor="middle">GRAYSTORM PULSE</text>
-      </svg>
+      <div class="overlay-config-logo__mark" role="img" aria-label="Graystorm Pulse">
+        <span class="overlay-config-logo__gray">Graystorm</span><span class="overlay-config-logo__pulse">Pulse</span>
+      </div>
     </div>
     <div class="overlay-card__actions">
       <button class="overlay-button" data-config-action="show_sounds">
@@ -2102,7 +2129,7 @@ def _build_config_info_overlay() -> str:
       </div>
       <div class="overlay-config-about__section">
         <div class="overlay-config-about__label">License</div>
-        <div class="overlay-config-about__value">MIT License &copy; 2025 Jeffrey Culverhouse</div>
+        <div class="overlay-config-about__value">MIT License &copy; {copyright_years} Jeffrey Culverhouse</div>
       </div>
       <div class="overlay-config-about__section">
         <div class="overlay-config-about__label">Key Libraries</div>
@@ -2114,6 +2141,21 @@ def _build_config_info_overlay() -> str:
   </div>
 </div>
 """.strip()
+
+
+# Font names come from fontconfig on the device, so they are not trusted input for a style
+# attribute. Anything carrying CSS punctuation is rendered without a preview rather than
+# escaped and hoped for — the preview is a nicety, breaking out of the attribute is not.
+_UNSAFE_FONT_CHARS = set("\"';{}\\<>()")
+
+
+def _css_font_style(name: str) -> str:
+    """A style attribute previewing this font, or "" when the name can't be shown safely."""
+    cleaned = name.strip()
+    # "System default" is a sentinel, not a font, so it has nothing to preview.
+    if not cleaned or cleaned == OVERLAY_FONT_DEFAULT_OPTION or _UNSAFE_FONT_CHARS & set(cleaned):
+        return ""
+    return f" style=\"font-family: '{html_escape(cleaned, quote=True)}', sans-serif\""
 
 
 def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
@@ -2193,18 +2235,105 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
         step=5,
     )
 
+    # The day/night targets are what the sunrise/sunset automation drives toward, as
+    # opposed to the live backlight above them, so they sit together under brightness.
+    targets_markup = ""
+    day_value = _coerce_percent(card.get("day_brightness"))
+    night_value = _coerce_percent(card.get("night_brightness"))
+    if brightness_supported and (day_value is not None or night_value is not None):
+        targets_markup = (
+            '<div class="overlay-control-group">'
+            '<div class="overlay-control-group__title">Automatic brightness targets</div>'
+            + _render_control(
+                kind="day_brightness",
+                label="Day target",
+                description="Backlight level the sunrise schedule aims for.",
+                supported=True,
+                value=day_value,
+            )
+            + _render_control(
+                kind="night_brightness",
+                label="Night target",
+                description="Backlight level the sunset schedule aims for.",
+                supported=True,
+                value=night_value,
+            )
+            + "</div>"
+        )
+
+    def _render_font_picker(*, entries: Any, current: Any, attribute: str, label: str, description: str) -> str:
+        if not isinstance(entries, list) or not entries:
+            return ""
+        current_font = str(current or entries[0])
+        options = "".join(
+            f'<option value="{html_escape(str(name), quote=True)}"{_css_font_style(str(name))}'
+            f"{' selected' if str(name) == current_font else ''}>{html_escape(str(name))}</option>"
+            for name in entries
+        )
+        return f"""
+  <div class="overlay-control">
+    <div class="overlay-control__header">
+      <div>
+        <div class="overlay-control__label">{html_escape(label)}</div>
+        <div class="overlay-control__description">{html_escape(description)}</div>
+      </div>
+    </div>
+    <select class="overlay-control__select" {attribute} size="6"
+            aria-label="{html_escape(label, quote=True)}"{_css_font_style(current_font)}>
+      {options}
+    </select>
+  </div>
+""".strip()
+
+    # Two pickers, because the clock is the one element rendered at 100px+ and a face
+    # chosen to stay legible in a 14px badge often looks wrong that large.
+    font_markup = _render_font_picker(
+        entries=card.get("fonts"),
+        current=card.get("font"),
+        attribute="data-font-select",
+        label="Overlay font",
+        description="Typeface for everything except the clock.",
+    )
+    clock_font_markup = _render_font_picker(
+        entries=card.get("clock_fonts"),
+        current=card.get("clock_font"),
+        attribute="data-clock-font-select",
+        label="Clock font",
+        description="Typeface for the big clock.",
+    )
+
+    actions: list[str] = []
+    if card.get("home_supported"):
+        actions.append(
+            '<button class="overlay-button overlay-button--ghost" data-config-action="go_home">'
+            '<span aria-hidden="true">\U0001f3e0</span> Go home</button>'
+        )
+    if card.get("reboot_supported"):
+        # Two taps on purpose: this card is a touchscreen on a wall, and a single stray
+        # press should never be able to restart the room. The JS arms it, then fires.
+        actions.append(
+            '<button class="overlay-button overlay-button--danger" data-reboot-button '
+            'data-confirm-label="Tap again to reboot">'
+            '<span aria-hidden="true">\u21bb</span> Reboot</button>'
+        )
+    actions_markup = f'<div class="overlay-device-actions">{"".join(actions)}</div>' if actions else ""
+
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--device">
   <div class="overlay-info-card__header">
     <div>
       <div class="overlay-info-card__title">Device controls</div>
-      <div class="overlay-info-card__subtitle">Manual brightness and volume.</div>
+      <div class="overlay-info-card__subtitle">Brightness, volume, font, and power.</div>
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close device controls">&times;</button>
   </div>
   <div class="overlay-info-card__body overlay-device-controls">
     {brightness_markup}
+    {targets_markup}
     {volume_markup}
+    {font_markup}
+    {clock_font_markup}
+    {actions_markup}
   </div>
 </div>
 """.strip()

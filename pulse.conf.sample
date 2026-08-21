@@ -74,6 +74,17 @@ PULSE_OVERLAY_ALLOWED_ORIGINS="*"
 # Fallback fonts are appended automatically if not provided.
 PULSE_OVERLAY_FONT_FAMILY="Inter"
 
+# PULSE_OVERLAY_FONT — the font picked on the display (Config → Device controls) or from
+# Home Assistant. Separate from the default above, which is never rewritten: that way
+# "System default" always means the same thing and any pick can be undone. Leave empty to
+# use the default. Only fonts actually installed on the device are offered.
+PULSE_OVERLAY_FONT=""
+
+# PULSE_OVERLAY_CLOCK_FONT — font for the big clock only. The clock is the one element
+# rendered at 100px+, where a face chosen to stay legible in a 14px badge often looks
+# wrong, so it is picked separately. Leave empty for the clock to follow PULSE_OVERLAY_FONT.
+PULSE_OVERLAY_CLOCK_FONT=""
+
 # PULSE_OVERLAY_AMBIENT_BG — CSS color for persistent cards (clocks, now playing).
 PULSE_OVERLAY_AMBIENT_BG="rgba(0, 0, 0, 0.32)"
 

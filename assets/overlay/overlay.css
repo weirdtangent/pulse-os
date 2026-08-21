@@ -444,6 +444,79 @@ body {
   position: relative;
 }
 
+/* Grouped targets (day/night) sit under the live brightness slider they belong to. */
+.overlay-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.overlay-control-group__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+/* Rendered as an inline listbox (size=6), not a dropdown. A native popup holding every
+   installed font is taller than a 720px kiosk screen, so it opens against the top edge
+   and covers the display; this keeps the list inside the card and scrolls it instead. */
+.overlay-control__select {
+  width: 100%;
+  padding: 0.35rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--overlay-accent-color) transparent;
+}
+
+.overlay-control__select option {
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.45rem;
+  /* Touch targets: this is a finger on a wall display, not a mouse. */
+  min-height: 2rem;
+  background: transparent;
+  color: inherit;
+}
+
+.overlay-control__select option:checked {
+  background: var(--overlay-accent-color);
+  color: #10233a;
+  font-weight: 600;
+}
+
+.overlay-device-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.overlay-device-actions .overlay-button {
+  flex: 1 1 auto;
+}
+
+/* Reboot is destructive enough to look it, but only shouts once armed — an always-red
+   button on a wall display becomes wallpaper. */
+.overlay-button--danger {
+  border-color: rgba(220, 50, 47, 0.6);
+}
+
+.overlay-button--danger.overlay-button--armed {
+  background: #dc322f;
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .overlay-device-controls {
   display: flex;
   flex-direction: column;
@@ -488,7 +561,11 @@ body {
   gap: 0.6rem;
 }
 
+/* Sliders are horizontal, and this is a touchscreen: pan-y hands vertical drags to the
+   scroller so a finger swiping down a long card scrolls it instead of dragging whichever
+   slider it happened to cross. Without this, scrolling changed the brightness. */
 .overlay-control__slider {
+  touch-action: pan-y;
   flex: 1;
   accent-color: var(--overlay-accent-color);
 }
@@ -939,6 +1016,14 @@ body {
   letter-spacing: 0.08em;
   margin-bottom: 0.25rem;
   color: var(--overlay-accent-color);
+}
+
+/* The clock gets its own family. It is the one thing on screen rendered at 100px+, where a
+   face picked for legibility in a 14px badge often reads badly, so the two are chosen
+   separately. Falls back to the overlay font when no clock font is set. */
+.overlay-clock__time,
+.overlay-clock__date {
+  font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
 }
 
 .overlay-clock__time {
@@ -1442,9 +1527,49 @@ body {
 }
 
 /* Config About Section */
+/* Typographic wordmark rather than a logo image. The old inline SVG was a 200x90 box
+   holding a heartbeat line and 11px of text, so most of its height was empty and it
+   pushed the actual settings down the card. Type carries the brand in a third of the
+   space, and the gradient keeps the identity. */
 .overlay-config-logo {
   text-align: center;
-  padding: 1rem 0 0.5rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.overlay-config-logo__mark {
+  display: inline-block;
+  font-size: 1.55rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  /* The gradient the old SVG stroke used, so the wordmark reads as the same brand. */
+  background: linear-gradient(100deg, #ff6b35 0%, #ffd700 45%, #00d4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Indent by the tracking, so the letter-spacing on the final glyph doesn't shift the
+     wordmark visually left of center. */
+  padding-left: 0.16em;
+}
+
+/* Weight, not color, separates the two words — they share one gradient sweep, so
+   coloring them apart would break it. */
+.overlay-config-logo__gray {
+  font-weight: 300;
+}
+
+.overlay-config-logo__pulse {
+  font-weight: 800;
+  margin-left: 0.18em;
+}
+
+/* Chromium on the Pi supports background-clip:text; this keeps the wordmark legible
+   anywhere that doesn't rather than rendering it invisible. */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .overlay-config-logo__mark {
+    background: none;
+    color: #ffd700;
+  }
 }
 
 .overlay-config-about {

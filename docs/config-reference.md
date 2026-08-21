@@ -37,7 +37,9 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_PORT` | `8800` | TCP port serving `/overlay`. |
 | `PULSE_OVERLAY_BIND` | `127.0.0.1` | Bind address for the overlay server (use `0.0.0.0` to allow remote access). |
 | `PULSE_OVERLAY_ALLOWED_ORIGINS` | `*` | Comma-separated CORS allow list for overlay requests. |
-| `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Primary overlay font (fallback stack added automatically). |
+| `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Configured default font stack, used when nothing is picked. Never rewritten by a pick, so "System default" keeps its meaning. |
+| `PULSE_OVERLAY_FONT` | *(empty)* | Font picked from [Device controls](#on-screen-device-controls) or Home Assistant. Empty = use the default above. |
+| `PULSE_OVERLAY_CLOCK_FONT` | *(empty)* | Font for the big clock only. Empty = follow the overlay font. |
 | `PULSE_OVERLAY_AMBIENT_BG` | `rgba(0, 0, 0, 0.32)` | Background color for ambient cards. |
 | `PULSE_OVERLAY_ALERT_BG` | `rgba(0, 0, 0, 0.65)` | Background color for alert cards. |
 | `PULSE_OVERLAY_TEXT_COLOR` | `#FFFFFF` | Overlay text color. |
@@ -227,8 +229,8 @@ listening off and is not a mute.
 | `PULSE_LOCATION` | *(empty)* | Preferred location string for weather, [weather alerts](#weather-alerts), and sunrise/sunset (`lat,lon`, ZIP, `City, ST`, plus code, or what3words). |
 | `PULSE_LANGUAGE` | `en` | Default language for assistant, news, and weather. |
 | `PULSE_DAY_NIGHT_AUTO` | `true` | Sunrise/sunset-driven backlight changes. |
-| `PULSE_DAY_BRIGHTNESS` | `85` | Daytime brightness target (%) used by sunrise/sunset automation. |
-| `PULSE_NIGHT_BRIGHTNESS` | `25` | Nighttime brightness target (%) used by sunrise/sunset automation. |
+| `PULSE_DAY_BRIGHTNESS` | `85` | Daytime brightness target (%) used by sunrise/sunset automation. Also settable from [Device controls](#on-screen-device-controls) on the display. |
+| `PULSE_NIGHT_BRIGHTNESS` | `25` | Nighttime brightness target (%) used by sunrise/sunset automation. Also settable from [Device controls](#on-screen-device-controls) on the display. |
 | `PULSE_TWILIGHT_MODE` | `OFFICIAL` | Twilight definition (`OFFICIAL`, `CIVIL`, `NAUTICAL`, `ASTRONOMICAL`). |
 | `PULSE_BACKLIGHT_DEVICE` | `/sys/class/backlight/11-0045` | Backlight device path (auto-detect if unset). |
 | `PULSE_VOLUME_TEST_SOUND` | `true` | Plays a short “thump” after MQTT volume changes. |
@@ -237,6 +239,43 @@ listening off and is not a mute.
 | `PULSE_SPEAKER_ALERT` | `true` | Shows a notification-bar badge while the configured speaker is unreachable. |
 | `PULSE_SPEAKER_SINK` | *(empty)* | Substring of the expected wired sink name (`pactl list sinks short`) to watch on non-Bluetooth displays. |
 | `PULSE_SPEAKER_INTERVAL` | `60` | Seconds between speaker reachability checks (minimum 15). |
+
+### On-screen device controls
+
+Tapping **Config → Device controls** on the display opens the settings below without
+needing Home Assistant, which matters for a touchscreen hanging on a wall. Everything here
+reuses the same handlers as the MQTT entities, so the screen and Home Assistant cannot
+drift apart.
+
+| Control | What it changes | Persisted? |
+| --- | --- | --- |
+| Brightness | The backlight, right now | No — the sunrise/sunset schedule overwrites it. Set the targets below to make it stick |
+| Day / night targets | `PULSE_DAY_BRIGHTNESS` / `PULSE_NIGHT_BRIGHTNESS` | Yes, to `pulse.conf` and the generated backlight conf |
+| Volume | The audio sink, right now | No — left to the audio stack |
+| Overlay font | `PULSE_OVERLAY_FONT` | Yes, to `pulse.conf` |
+| Clock font | `PULSE_OVERLAY_CLOCK_FONT` | Yes, to `pulse.conf` |
+| Go home | Navigates back to `PULSE_URL` | n/a |
+| Reboot | Safe reboot | n/a — armed by the first tap, fired by the second, and disarms itself after five seconds so a stray touch can't restart the room |
+
+Persisted values survive both a reboot and an update: `setup.sh` merges new template
+variables into `pulse.conf` on every update while preserving what is already set.
+
+There are two font pickers: one for the clock and one for everything else. The clock is
+the only element rendered at 100px+, where a face chosen to stay legible in a 14px badge
+often looks wrong, so the two are chosen separately; leaving the clock on "Same as overlay"
+makes it follow the other. Picking a font writes `PULSE_OVERLAY_FONT` (or
+`PULSE_OVERLAY_CLOCK_FONT`) and never touches `PULSE_OVERLAY_FONT_FAMILY`, so "System
+default" always means the configured default and any pick can be undone.
+
+Both lists show the families actually installed on that Pi, each previewed in its own
+face, with symbol, dingbat, math, and emoji families filtered out — they render the overlay
+as gibberish if chosen. It is an inline scrolling list rather than a dropdown on purpose: a
+popup holding every installed font is taller than a 720px kiosk screen, so it opens against
+the top edge and covers the display. Changing the font re-renders the overlay immediately;
+there is no save step.
+
+The day/night targets are hidden entirely on a display with no backlight, since it cannot
+act on a schedule.
 
 ### Speaker-offline badge
 

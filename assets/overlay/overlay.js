@@ -45,11 +45,14 @@ window.PulseOverlay.initialize = function() {
   }
 
   if (window.PulseOverlay.eventHandlers) {
-    const { clickHandler, inputHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
+    const { clickHandler, inputHandler, changeHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
     const oldRoot = window.PulseOverlay.eventHandlers.root;
     if (oldRoot) {
       oldRoot.removeEventListener('click', clickHandler);
       oldRoot.removeEventListener('input', inputHandler);
+      if (changeHandler) {
+        oldRoot.removeEventListener('change', changeHandler);
+      }
     }
     if (resizeHandler) {
       window.removeEventListener('resize', resizeHandler);
@@ -110,8 +113,21 @@ window.PulseOverlay.initialize = function() {
     }
   };
 
+  // Explicit map rather than a ternary. This was `kind === 'brightness' ? ... : 'set_volume'`,
+  // which silently routes every unknown slider to the volume endpoint — so adding the
+  // day/night brightness targets would have made those sliders change the volume instead.
+  const DEVICE_CONTROL_ACTIONS = {
+    brightness: 'set_brightness',
+    volume: 'set_volume',
+    day_brightness: 'set_day_brightness',
+    night_brightness: 'set_night_brightness'
+  };
+
   const sendDeviceControl = (kind, value) => {
-    const action = kind === 'brightness' ? 'set_brightness' : 'set_volume';
+    const action = DEVICE_CONTROL_ACTIONS[kind];
+    if (!action) {
+      return Promise.resolve();
+    }
     return fetch(infoEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -367,7 +383,11 @@ window.PulseOverlay.initialize = function() {
                            !wrapper.classList.contains('overlay-info-card__text-wrapper');
 
       if (needsWrapper) {
-        // Create wrapper if needed
+        // Moving an element to a new parent resets its scrollTop, and the refresh loop
+        // re-renders the card (losing the wrapper) on every state change, so this ran
+        // again each time and snapped anyone reading a long card back to the top ~100ms
+        // after they scrolled. Capture the offset across the re-parent and put it back.
+        const preservedScroll = scrollableElement.scrollTop;
         wrapper = document.createElement('div');
         if (scrollableElement.classList.contains('overlay-info-card__body')) {
           wrapper.className = 'overlay-info-card__body-wrapper';
@@ -376,6 +396,9 @@ window.PulseOverlay.initialize = function() {
         }
         scrollableElement.parentElement.insertBefore(wrapper, scrollableElement);
         wrapper.appendChild(scrollableElement);
+        if (preservedScroll > 0) {
+          scrollableElement.scrollTop = preservedScroll;
+        }
       }
 
       // Create arrows if they don't exist
@@ -457,6 +480,30 @@ window.PulseOverlay.initialize = function() {
     }, 100);
   }
 
+  // The overlay font and the clock font are separate pickers posting separate actions.
+  const FONT_SELECT_ACTIONS = [
+    { attribute: '[data-font-select]', action: 'set_font' },
+    { attribute: '[data-clock-font-select]', action: 'set_clock_font' }
+  ];
+
+  const changeHandler = (e) => {
+    for (const { attribute, action } of FONT_SELECT_ACTIONS) {
+      const select = e.target.closest(attribute);
+      if (!select) {
+        continue;
+      }
+      select.disabled = true;
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, font: select.value })
+      }).finally(() => {
+        select.disabled = false;
+      });
+      return;
+    }
+  };
+
   // Handle stop timer button clicks
   const clickHandler = (e) => {
     const closeCardButton = e.target.closest('[data-info-card-close]');
@@ -504,6 +551,48 @@ window.PulseOverlay.initialize = function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }).finally(resetOpacity);
+      return;
+    }
+
+    // Reboot is armed by the first tap and fires on the second. This card is a
+    // touchscreen on a wall; one stray press must not be able to restart the room.
+    const rebootButton = e.target.closest('[data-reboot-button]');
+    if (rebootButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (rebootButton.dataset.armed !== 'true') {
+        rebootButton.dataset.armed = 'true';
+        rebootButton.dataset.idleLabel = rebootButton.innerHTML;
+        rebootButton.textContent = rebootButton.getAttribute('data-confirm-label') || 'Tap again to confirm';
+        rebootButton.classList.add('overlay-button--armed');
+        // Disarm on its own, so a card left open doesn't sit armed indefinitely.
+        window.clearTimeout(rebootButton._disarm);
+        rebootButton._disarm = window.setTimeout(() => {
+          rebootButton.dataset.armed = 'false';
+          rebootButton.classList.remove('overlay-button--armed');
+          if (rebootButton.dataset.idleLabel) {
+            rebootButton.innerHTML = rebootButton.dataset.idleLabel;
+          }
+        }, 5000);
+        return;
+      }
+      window.clearTimeout(rebootButton._disarm);
+      rebootButton.disabled = true;
+      rebootButton.textContent = 'Rebooting…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reboot_device' })
+      }).catch(() => {
+        // Disarm fully on failure. Leaving it armed meant the next single tap would
+        // reboot with no confirmation at all, which is the opposite of the point.
+        rebootButton.disabled = false;
+        rebootButton.dataset.armed = 'false';
+        rebootButton.classList.remove('overlay-button--armed');
+        if (rebootButton.dataset.idleLabel) {
+          rebootButton.innerHTML = rebootButton.dataset.idleLabel;
+        }
+      });
       return;
     }
 
@@ -866,12 +955,14 @@ window.PulseOverlay.initialize = function() {
   // Attach event listeners
   root.addEventListener('click', clickHandler);
   root.addEventListener('input', inputHandler);
+  root.addEventListener('change', changeHandler);
 
   // Store handler references for cleanup on next initialization
   window.PulseOverlay.eventHandlers = {
     root,
     clickHandler,
     inputHandler,
+    changeHandler,
     resizeHandler
   };
 })();

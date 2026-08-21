@@ -79,6 +79,11 @@ class OverlayHttpServer:
         on_set_volume: Callable[[int], bool] | None = None,
         on_set_brightness: Callable[[int], bool] | None = None,
         get_device_levels: Callable[[], dict[str, Any]] | None = None,
+        on_set_font: Callable[[str], bool] | None = None,
+        on_set_clock_font: Callable[[str], bool] | None = None,
+        on_set_brightness_target: Callable[[str, int], bool] | None = None,
+        on_go_home: Callable[[], bool] | None = None,
+        on_reboot: Callable[[], bool] | None = None,
         on_media_control: Callable[[str], None] | None = None,
     ) -> None:
         self.state = state
@@ -104,6 +109,11 @@ class OverlayHttpServer:
         self._on_set_volume = on_set_volume
         self._on_set_brightness = on_set_brightness
         self._get_device_levels = get_device_levels
+        self._on_set_font = on_set_font
+        self._on_set_clock_font = on_set_clock_font
+        self._on_set_brightness_target = on_set_brightness_target
+        self._on_go_home = on_go_home
+        self._on_reboot = on_reboot
         self._on_media_control = on_media_control
         self._sound_settings = SoundSettings.with_defaults(
             custom_dir=(Path(sounds_dir).expanduser() if (sounds_dir := os.environ.get("PULSE_SOUNDS_DIR")) else None),
@@ -185,6 +195,26 @@ class OverlayHttpServer:
             payload["brightness"] = max(0, min(100, int(brightness_value)))
         if volume_supported and isinstance(volume_value, int | float):
             payload["volume"] = max(0, min(100, int(volume_value)))
+        for key in ("day_brightness", "night_brightness"):
+            target = device_levels.get(key)
+            # Gated on brightness_supported: a display with no backlight can't act on a
+            # day/night schedule, so offering to set one would be a dead control.
+            if brightness_supported and isinstance(target, int | float):
+                payload[key] = max(0, min(100, int(target)))
+        fonts = device_levels.get("fonts")
+        if isinstance(fonts, list):
+            font_options = [str(name) for name in fonts if str(name).strip()]
+            if font_options:
+                payload["fonts"] = font_options
+                payload["font"] = str(device_levels.get("font") or font_options[0])
+        clock_fonts = device_levels.get("clock_fonts")
+        if isinstance(clock_fonts, list):
+            clock_options = [str(name) for name in clock_fonts if str(name).strip()]
+            if clock_options:
+                payload["clock_fonts"] = clock_options
+                payload["clock_font"] = str(device_levels.get("clock_font") or clock_options[0])
+        payload["home_supported"] = bool(device_levels.get("home_supported"))
+        payload["reboot_supported"] = bool(device_levels.get("reboot_supported"))
         return payload
 
     def _render_framed_overlay(self, target_url: str) -> str:
@@ -287,6 +317,29 @@ html, body {{
   let errorCount = 0;
   const MAX_ERRORS = 5;
 
+  // Only --overlay-* custom properties are copied; the rest of the stylesheet is static
+  // and identical between renders, so replacing it wholesale would be churn for nothing.
+  // Parsed by hand rather than with a regex: this whole script lives inside a Python
+  // f-string, where every brace and backslash has to be doubled, and a regex full of them
+  // is a trap for the next person editing it.
+  function applyThemeVariables(doc) {{
+    const style = doc.querySelector('style');
+    if (!style) return;
+    const text = style.textContent || '';
+    const rootAt = text.indexOf(':root');
+    if (rootAt < 0) return;
+    const open = text.indexOf('{{', rootAt);
+    const close = text.indexOf('}}', open);
+    if (open < 0 || close < 0) return;
+    text.slice(open + 1, close).split(';').forEach((declaration) => {{
+      const colon = declaration.indexOf(':');
+      if (colon < 0) return;
+      const name = declaration.slice(0, colon).trim();
+      if (name.indexOf('--overlay-') !== 0) return;
+      document.documentElement.style.setProperty(name, declaration.slice(colon + 1).trim());
+    }});
+  }}
+
   async function refreshOverlay() {{
     try {{
       const response = await fetch('/overlay', {{
@@ -320,6 +373,17 @@ html, body {{
         console.log(`Overlay updated (v${{currentVersion}} -> v${{newVersion}})`);
         currentVersion = newVersion;
 
+        // Remember where the open card was scrolled to. Replacing the DOM resets
+        // scrollTop, so any state change while somebody is reading a long card snapped
+        // them back to the top -- most often their own scrolling did it, because a finger
+        // dragged down the card crosses the sliders and nudges one.
+        const previousCard = overlayContainer.querySelector('.overlay-info-card');
+        const previousBody = overlayContainer.querySelector('.overlay-info-card__body');
+        const previousScroll = previousBody ? previousBody.scrollTop : 0;
+        // Keyed on the card's classes so switching to a different card still opens at the
+        // top; only the same card being re-rendered underneath you keeps its place.
+        const previousCardKey = previousCard ? previousCard.className : '';
+
         // Replace overlay content without touching the iframe
         while (overlayContainer.firstChild) {{
           overlayContainer.removeChild(overlayContainer.firstChild);
@@ -327,6 +391,20 @@ html, body {{
 
         // Append the entire pulse-overlay-root element to preserve its CSS classes and structure
         overlayContainer.appendChild(newRoot);
+
+        // Carry over the theme custom properties. This loop swaps body markup only and
+        // never touches the page's <style>, so a theme change served by the backend --
+        // picking a new font, most visibly -- was rendered into HTML nobody read, and the
+        // display kept its boot-time font until the page happened to reload. Copying just
+        // the :root --overlay-* declarations onto the element's inline style is enough:
+        // they are the whole of what the theme controls, and inline wins over the sheet.
+        applyThemeVariables(doc);
+
+        const nextCard = overlayContainer.querySelector('.overlay-info-card');
+        const nextBody = overlayContainer.querySelector('.overlay-info-card__body');
+        if (nextBody && previousScroll > 0 && nextCard && nextCard.className === previousCardKey) {{
+          nextBody.scrollTop = previousScroll;
+        }}
 
         // Update data-version attribute on the container (used by polling)
         overlayContainer.dataset.version = newVersion;
@@ -636,6 +714,58 @@ html, body {{
                     change = outer.state.update_info_card(outer._device_controls_payload())
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                elif action == "set_font":
+                    choice = str(data.get("font") or "").strip()
+                    if not choice or not outer._on_set_font:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing font")
+                        return
+                    if not outer._on_set_font(choice):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Unknown font")
+                        return
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "set_clock_font":
+                    choice = str(data.get("font") or "").strip()
+                    if not choice or not outer._on_set_clock_font:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing font")
+                        return
+                    if not outer._on_set_clock_font(choice):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Unknown font")
+                        return
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action in {"set_day_brightness", "set_night_brightness"}:
+                    kind = "day" if action == "set_day_brightness" else "night"
+                    try:
+                        target_value = max(0, min(100, int(float(data.get("value")))))  # type: ignore[arg-type]
+                    except (TypeError, ValueError):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing or invalid value")
+                        return
+                    if not outer._on_set_brightness_target:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Brightness targets unavailable")
+                        return
+                    outer._on_set_brightness_target(kind, target_value)
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "go_home":
+                    if not outer._on_go_home:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Home navigation unavailable")
+                        return
+                    outer._on_go_home()
+                    change = outer.state.update_info_card(None)
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "reboot_device":
+                    # The confirm step lives in the card (two taps); by the time this
+                    # arrives the user has already said yes twice.
+                    if not outer._on_reboot:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Reboot unavailable")
+                        return
+                    self._log("overlay: reboot requested from device controls")
+                    outer._on_reboot()
                 elif action == "toggle_earmuffs":
                     self._log("overlay: toggle_earmuffs requested")
                     if not outer._on_toggle_earmuffs:
