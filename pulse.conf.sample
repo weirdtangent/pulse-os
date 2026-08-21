@@ -181,6 +181,9 @@ PULSE_TICKER_STALE_AFTER="300"
 # The design assumption is that alerts last a long time (a winter storm warning can run
 # for days), so the permanent element is a small pill and the banner removes itself.
 
+# REQUIRES PULSE_LOCATION (further down this file). Alerts are looked up by coordinate;
+# if PULSE_LOCATION doesn't resolve, the feature logs once at startup and stays off.
+
 # PULSE_WEATHER_ALERTS_ENABLED — master switch (default off).
 PULSE_WEATHER_ALERTS_ENABLED="false"
 
@@ -280,8 +283,8 @@ PULSE_TELEMETRY_INTERVAL_SECONDS=15
 # Device Preferences & Toggles
 # ============================================================================
 
-# PULSE_LOCATION — location string for weather, sunrise/sunset brightness control, etc
-# (lat,lon | ZIP | "City, ST" | plus code | what3words)
+# PULSE_LOCATION — location string for weather, weather alerts, sunrise/sunset brightness
+# control, etc (lat,lon | ZIP | "City, ST" | plus code | what3words)
 PULSE_LOCATION=""
 
 # PULSE_DAY_BRIGHTNESS — daytime brightness target (%) for sunrise/sunset automation.

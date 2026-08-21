@@ -117,10 +117,17 @@ Notes:
 
 ## Weather alerts
 
-An optional pill on the notification bar that appears whenever the National Weather
-Service has an active alert covering `PULSE_LOCATION`, plus a one-shot banner for the
-first few minutes of a brand-new alert. Tapping either opens a card with the full NWS
-description and instructions.
+> **Requires `PULSE_LOCATION`.** Alerts are looked up by coordinate, so this feature is
+> entirely dependent on that setting resolving to a lat/long — it accepts `lat,lon`
+> directly, or a ZIP, `City, ST`, plus code, or what3words string that it resolves once at
+> startup. If it doesn't resolve, the alerts thread logs `weather-alerts: enabled but
+> PULSE_LOCATION did not resolve — alerts disabled` and stays off rather than guessing at
+> a location. Nothing else needs configuring: there is no API key.
+
+A banner across the top of the display whenever the National Weather Service has an active
+alert covering `PULSE_LOCATION`, with a compact pill on the notification bar as the
+alternative presentation. Tapping either opens a card with the full NWS description and
+instructions.
 
 Alerts are long-lived — a winter storm warning routinely runs for days — so nothing here
 covers content. The banner is a single row above the notification bar carrying the event
@@ -188,9 +195,6 @@ Only watches and warnings get a colored pill; advisories and statements keep the
 badge background and rely on the ⚠ glyph. Painting every Special Weather Statement amber
 would spend the display's alarm vocabulary on "it might get windy".
 
-Requires `PULSE_LOCATION` to resolve to coordinates. If it doesn't, the feature logs once
-at startup and stays off rather than guessing.
-
 The chime fires on the arrival of an alert ID this kiosk hasn't seen before — one chime
 per poll however many products arrive together — and never on the first poll after a
 restart, so a display rebooted mid-storm doesn't re-announce a warning everyone has been
@@ -220,7 +224,7 @@ listening off and is not a mute.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_LOCATION` | *(empty)* | Preferred location string for weather and sunrise/sunset (`lat,lon`, ZIP, `City, ST`, plus code, or what3words). |
+| `PULSE_LOCATION` | *(empty)* | Preferred location string for weather, [weather alerts](#weather-alerts), and sunrise/sunset (`lat,lon`, ZIP, `City, ST`, plus code, or what3words). |
 | `PULSE_LANGUAGE` | `en` | Default language for assistant, news, and weather. |
 | `PULSE_DAY_NIGHT_AUTO` | `true` | Sunrise/sunset-driven backlight changes. |
 | `PULSE_DAY_BRIGHTNESS` | `85` | Daytime brightness target (%) used by sunrise/sunset automation. |

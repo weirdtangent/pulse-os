@@ -19,12 +19,7 @@
 
 <p align="center">
   <img src="assets/screenshots/pulse-weather-alert.jpg" alt="Weather alert banner across the top of the display" width="80%" /><br />
-  <em>Weather alerts — active National Weather Service alerts ride a single unobtrusive strip that names the hazard, not just the product, so a multi-day warning never covers the display</em>
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/pulse-weather-alert-card.jpg" alt="Weather alert detail card with the full NWS bulletin" width="80%" /><br />
-  <em>Tap the banner for the full NWS bulletin — description, affected area, and the preparedness instructions called out</em>
+  <em>Weather alerts — active National Weather Service alerts on one unobtrusive strip that names the hazard, not just the product, with the full bulletin a tap away</em>
 </p>
 
 # Pulse Kiosk v1 — Complete Setup Guide
@@ -38,6 +33,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - Hardened Chromium kiosk with watchdogs, self-healing restarts, and MQTT “home/update/reboot” buttons targeted at photo-frame style Lovelace dashboards.
 - Overlay timeline that keeps alarms, timers, reminders, calendar events, now-playing info, and badge-driven info cards in sync with the backend scheduler.
 - Optional scrolling stock ticker across the bottom of the overlay — major indices plus any symbols you configure, fetched on-device from Yahoo (or a licensed Finnhub key), with per-device toggle, adaptive polling, and name/ticker/auto labels. See [config-reference](docs/config-reference.md#stock-ticker).
+- Optional National Weather Service alerts for the display's location — one unobtrusive strip naming the hazard (“Wind gusts up to 40 mph”) rather than just the product, rotating when several are active, with tier/severity filters, an optional arrival chime, and the full bulletin a tap away. US-only; needs `PULSE_LOCATION`. See [config-reference](docs/config-reference.md#weather-alerts).
 - Full alarm/timer/reminder scheduler (manual UI, MQTT, or voice shortcuts) plus remote completion/delay actions from the overlay itself.
 - Local ICS/WebCal polling with RRULE expansion for recurring events, multi-`VALARM` support, “declined” attendee detection, on-screen calendar cards, and auto-suppressed pop-ups for meetings you said “No” to.
 - Optional Wyoming voice stack (wake word, Whisper STT, Piper TTS) with shortcut intents for news/weather/sports and LLM routing between 6 providers: OpenAI, Gemini, Anthropic Claude, Groq, Mistral AI, and OpenRouter.
