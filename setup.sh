@@ -625,23 +625,54 @@ install_packages() {
     sudo apt autoremove -y
 }
 
-install_voice_assistant_python_deps() {
-    if [ "${PULSE_VOICE_ASSISTANT:-false}" != "true" ]; then
-        log "Voice assistant disabled; skipping Python dependency install."
-        return
-    fi
+# Packages the kiosk itself needs, whether or not the voice assistant is enabled.
+# bin/kiosk-mqtt-listener.py imports all three at module scope (httpx via
+# location_resolver/weather_alerts/stock_ticker, websockets via home_assistant), so a
+# display with PULSE_VOICE_ASSISTANT=false and no pip deps could not start the listener
+# at all. These used to sit behind the voice-assistant guard.
+CORE_PIP_PACKAGES=(httpx openlocationcode websockets)
+# Only reachable through the assistant.
+ASSISTANT_PIP_PACKAGES=(wyoming recurring-ical-events)
 
+# Versions come from uv.lock via this generated constraints file rather than from pip's
+# resolver, so the fleet runs what CI tests. Passed with -c: it pins whatever is installed
+# without installing anything itself, leaving the apt-provided packages alone.
+DEVICE_CONSTRAINTS="$REPO_DIR/config/device-constraints.txt"
+
+pip_install_packages() {
+    local label="$1"
+    shift
+    local constraint_args=()
+    if [ -f "$DEVICE_CONSTRAINTS" ]; then
+        constraint_args=(-c "$DEVICE_CONSTRAINTS")
+    else
+        log "Warning: $DEVICE_CONSTRAINTS missing; installing $label without version pins."
+    fi
+    if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
+        --user --upgrade --disable-pip-version-check --break-system-packages \
+        "${constraint_args[@]}" "$@"; then
+        log "Warning: failed to install $label Python packages via pip."
+        return 1
+    fi
+    return 0
+}
+
+install_device_python_deps() {
     if ! python3 -m pip --version >/dev/null 2>&1; then
-        log "python3-pip not detected; installing so we can fetch Wyoming client…"
+        log "python3-pip not detected; installing so we can fetch Python packages…"
         sudo apt install -y python3-pip
     fi
 
-    log "Ensuring Python packages for the voice assistant are installed for the pulse user…"
-    if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
-        --user --upgrade --disable-pip-version-check --break-system-packages \
-        wyoming httpx openlocationcode websockets recurring-ical-events; then
-        log "Warning: failed to install Python packages via pip (voice assistant may not start)."
+    log "Ensuring core Python packages are installed for the pulse user…"
+    pip_install_packages "core" "${CORE_PIP_PACKAGES[@]}" || true
+
+    if [ "${PULSE_VOICE_ASSISTANT:-false}" != "true" ]; then
+        log "Voice assistant disabled; skipping its extra Python packages."
+        return
     fi
+
+    log "Ensuring voice assistant Python packages are installed for the pulse user…"
+    pip_install_packages "voice assistant" "${ASSISTANT_PIP_PACKAGES[@]}" || true
 }
 
 ensure_snapclient_package() {
@@ -1806,7 +1837,7 @@ main() {
     configure_device_identity "$location"
     configure_display_stack
     install_packages
-    install_voice_assistant_python_deps
+    install_device_python_deps
     setup_user_dirs
     generate_sound_files
     link_home_files
