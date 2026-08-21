@@ -185,10 +185,6 @@ body {
   flex-shrink: 0;
 }
 
-.overlay-weather-banner--hidden {
-  display: none;
-}
-
 .overlay-weather-banner {
   display: flex;
   align-items: baseline;
@@ -202,6 +198,13 @@ body {
   cursor: pointer;
   user-select: none;
   font-size: 1.05rem;
+}
+
+/* Compound selector on purpose: a bare .overlay-weather-banner--hidden loses to the
+   .overlay-weather-banner { display: flex } above it on source order, and every banner
+   renders at once. */
+.overlay-weather-banner.overlay-weather-banner--hidden {
+  display: none;
 }
 
 .overlay-weather-banner--warning {

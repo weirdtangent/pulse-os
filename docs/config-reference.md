@@ -166,6 +166,13 @@ Warning are different things. Set both. Alerts that state *no* severity are alwa
 | `PULSE_SOUND_WEATHER_ALERT` | `notify-two-tone` | Which sound that is — any library id or a path to a `.wav`/`.ogg`. |
 | `PULSE_WEATHER_ALERTS_CONTACT` | repo URL | Email or URL sent in the NWS-required `User-Agent`. |
 
+Repeats of one product covering the same point are collapsed to a single alert. NWS
+issues one alert per zone, county, or river gauge, so a location routinely sits under
+four Small Craft Advisories or eight Flood Warnings at once — every one of which is the
+same fact about the same room. The survivor is the most severe of the group, then the one
+that runs latest, so collapsing never shortens the window shown or downgrades what's on
+screen. Genuinely different products are never merged.
+
 Only watches and warnings get a colored pill; advisories and statements keep the neutral
 badge background and rely on the ⚠ glyph. Painting every Special Weather Statement amber
 would spend the display's alarm vocabulary on "it might get windy".

@@ -178,8 +178,44 @@ def test_request_carries_point_status_and_contact(feed):
 
 
 def test_max_alerts_caps_the_list(feed):
-    feed.features = [_feature(f"a{i}", "Tornado Warning", severity="Extreme") for i in range(wa.MAX_ALERTS + 3)]
+    # Distinct event names, or the dedupe below would collapse them first.
+    feed.features = [_feature(f"a{i}", f"Flood {i} Warning", severity="Extreme") for i in range(wa.MAX_ALERTS + 3)]
     assert len(_client().fetch()) == wa.MAX_ALERTS
+
+
+# -- de-duplication -----------------------------------------------------------
+
+
+def test_repeats_of_one_product_collapse_to_a_single_alert(feed):
+    """A point can sit under four Small Craft Advisories for four adjacent zones."""
+    feed.features = [_feature(f"z{i}", "Flood Warning", severity="Severe") for i in range(4)]
+    alerts = _client().fetch()
+    assert [alert.event for alert in alerts] == ["Flood Warning"]
+
+
+def test_dedupe_keeps_the_most_severe_of_the_group(feed):
+    feed.features = [
+        _feature("mild", "Flood Warning", severity="Moderate"),
+        _feature("bad", "Flood Warning", severity="Extreme"),
+    ]
+    assert [alert.id for alert in _client(min_severity="moderate").fetch()] == ["bad"]
+
+
+def test_dedupe_keeps_the_longest_running_of_equal_severity(feed):
+    """Collapsing must never shorten the window the display shows."""
+    feed.features = [
+        _feature("short", "Flood Warning", severity="Severe", ends=_iso(30)),
+        _feature("long", "Flood Warning", severity="Severe", ends=_iso(600)),
+    ]
+    assert [alert.id for alert in _client().fetch()] == ["long"]
+
+
+def test_dedupe_leaves_different_products_alone(feed):
+    feed.features = [
+        _feature("a", "Tornado Warning", severity="Extreme"),
+        _feature("b", "Flood Warning", severity="Severe"),
+    ]
+    assert len(_client().fetch()) == 2
 
 
 # -- first-seen bookkeeping ---------------------------------------------------

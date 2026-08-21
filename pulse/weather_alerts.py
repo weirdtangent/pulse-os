@@ -297,6 +297,7 @@ class WeatherAlertClient:
         with self._lock:
             self._first_seen = {key: value for key, value in self._first_seen.items() if key in seen_ids}
 
+        alerts = _dedupe_by_event(alerts)
         alerts.sort(key=_sort_key)
         trimmed = alerts[:MAX_ALERTS]
         if len(alerts) > MAX_ALERTS:
@@ -367,6 +368,51 @@ class WeatherAlertClient:
             expires=str(properties.get("expires") or "").strip(),
             first_seen=first_seen,
         )
+
+
+def _dedupe_by_event(alerts: list[WeatherAlert]) -> list[WeatherAlert]:
+    """Collapse repeats of the same product covering this point down to one.
+
+    NWS issues one alert per zone, county, or river segment, so a single location routinely
+    sits under several copies of the same product at once — four Small Craft Advisories for
+    four adjacent marine zones, eight Flood Warnings for eight river gauges. Every alert in
+    this list already covers the kiosk's coordinates, so same event name here means the same
+    thing is happening to this room, and a display that says "Small Craft Advisory" four
+    times is telling you one fact four times.
+
+    Within a group the survivor is the highest severity, then the one that runs latest, so
+    collapsing never shortens the window shown or downgrades what's on screen. The full text
+    of the survivor is kept intact; only the duplicate headers go away.
+    """
+    groups: dict[str, WeatherAlert] = {}
+    for alert in alerts:
+        key = alert.event.strip().lower()
+        incumbent = groups.get(key)
+        if incumbent is None or _dedupe_rank(alert) > _dedupe_rank(incumbent):
+            groups[key] = alert
+    return list(groups.values())
+
+
+def _dedupe_rank(alert: WeatherAlert) -> tuple[int, float]:
+    """Severity first, then whichever runs latest — never shorten or downgrade.
+
+    Uses `ends` ahead of `expires` here, unlike _expiry_epoch: the question is "which of
+    these covers the most weather", not "has this bulletin lapsed".
+    """
+    return (SEVERITY_RANK.get(alert.severity, 0), _parse_epoch(alert.ends) or _parse_epoch(alert.expires) or 0.0)
+
+
+def _parse_epoch(raw: str) -> float | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
 
 
 def _sort_key(alert: WeatherAlert) -> tuple[int, int, float]:
