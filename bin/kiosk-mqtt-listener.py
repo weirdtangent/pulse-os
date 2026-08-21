@@ -888,6 +888,10 @@ class KioskMqttListener:
                 on_set_volume=self._handle_overlay_volume_request,
                 on_set_brightness=self._handle_overlay_brightness_request,
                 get_device_levels=self._collect_device_control_snapshot,
+                on_set_font=self._handle_overlay_set_font,
+                on_set_brightness_target=self._handle_overlay_set_brightness_target,
+                on_go_home=self._handle_overlay_go_home,
+                on_reboot=self._handle_overlay_reboot,
                 on_media_control=self._handle_overlay_media_control,
             )
 
@@ -1301,7 +1305,40 @@ class KioskMqttListener:
             "volume_supported": True,
             "brightness": brightness,
             "brightness_supported": self._brightness_supported,
+            # Everything below already exists as a Home Assistant entity; the card just had
+            # no on-screen equivalent, which is backwards for a touchscreen on a wall.
+            "day_brightness": self._day_brightness,
+            "night_brightness": self._night_brightness,
+            "fonts": list(self._font_options),
+            "font": self._overlay_font_override or OVERLAY_FONT_DEFAULT_OPTION,
+            "home_supported": bool(self.config.pulse_url),
+            "reboot_supported": True,
         }
+
+    def _handle_overlay_set_font(self, choice: str) -> bool:
+        """Reuse the MQTT font handler so the display and Home Assistant can't diverge."""
+        if choice != OVERLAY_FONT_DEFAULT_OPTION and choice not in self._font_option_set:
+            self.log(f"overlay-font: '{choice}' is not an available font")
+            return False
+        self.handle_overlay_font(choice.encode())
+        return True
+
+    def _handle_overlay_set_brightness_target(self, kind: str, value: int) -> bool:
+        payload = str(value).encode()
+        if kind == "day":
+            self.handle_day_brightness(payload)
+        else:
+            self.handle_night_brightness(payload)
+        return True
+
+    def _handle_overlay_go_home(self) -> bool:
+        self.handle_home()
+        return True
+
+    def _handle_overlay_reboot(self) -> bool:
+        self.log("reboot: requested from the device controls card")
+        self.handle_reboot()
+        return True
 
     def _collect_now_playing_text(self) -> tuple[str, str, str]:
         """Return (display_text, ha_state, image_data_uri) for the media player."""

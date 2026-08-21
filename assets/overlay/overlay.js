@@ -110,8 +110,21 @@ window.PulseOverlay.initialize = function() {
     }
   };
 
+  // Explicit map rather than a ternary. This was `kind === 'brightness' ? ... : 'set_volume'`,
+  // which silently routes every unknown slider to the volume endpoint — so adding the
+  // day/night brightness targets would have made those sliders change the volume instead.
+  const DEVICE_CONTROL_ACTIONS = {
+    brightness: 'set_brightness',
+    volume: 'set_volume',
+    day_brightness: 'set_day_brightness',
+    night_brightness: 'set_night_brightness'
+  };
+
   const sendDeviceControl = (kind, value) => {
-    const action = kind === 'brightness' ? 'set_brightness' : 'set_volume';
+    const action = DEVICE_CONTROL_ACTIONS[kind];
+    if (!action) {
+      return Promise.resolve();
+    }
     return fetch(infoEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -457,6 +470,22 @@ window.PulseOverlay.initialize = function() {
     }, 100);
   }
 
+  const changeHandler = (e) => {
+    const fontSelect = e.target.closest('[data-font-select]');
+    if (!fontSelect) {
+      return;
+    }
+    fontSelect.disabled = true;
+    fetch(infoEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_font', font: fontSelect.value })
+    }).finally(() => {
+      fontSelect.disabled = false;
+    });
+  };
+  document.addEventListener('change', changeHandler);
+
   // Handle stop timer button clicks
   const clickHandler = (e) => {
     const closeCardButton = e.target.closest('[data-info-card-close]');
@@ -504,6 +533,41 @@ window.PulseOverlay.initialize = function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }).finally(resetOpacity);
+      return;
+    }
+
+    // Reboot is armed by the first tap and fires on the second. This card is a
+    // touchscreen on a wall; one stray press must not be able to restart the room.
+    const rebootButton = e.target.closest('[data-reboot-button]');
+    if (rebootButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (rebootButton.dataset.armed !== 'true') {
+        rebootButton.dataset.armed = 'true';
+        rebootButton.dataset.idleLabel = rebootButton.innerHTML;
+        rebootButton.textContent = rebootButton.getAttribute('data-confirm-label') || 'Tap again to confirm';
+        rebootButton.classList.add('overlay-button--armed');
+        // Disarm on its own, so a card left open doesn't sit armed indefinitely.
+        window.clearTimeout(rebootButton._disarm);
+        rebootButton._disarm = window.setTimeout(() => {
+          rebootButton.dataset.armed = 'false';
+          rebootButton.classList.remove('overlay-button--armed');
+          if (rebootButton.dataset.idleLabel) {
+            rebootButton.innerHTML = rebootButton.dataset.idleLabel;
+          }
+        }, 5000);
+        return;
+      }
+      window.clearTimeout(rebootButton._disarm);
+      rebootButton.disabled = true;
+      rebootButton.textContent = 'Rebooting…';
+      fetch(infoEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reboot_device' })
+      }).catch(() => {
+        rebootButton.disabled = false;
+      });
       return;
     }
 

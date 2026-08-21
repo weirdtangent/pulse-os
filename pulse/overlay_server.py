@@ -79,6 +79,10 @@ class OverlayHttpServer:
         on_set_volume: Callable[[int], bool] | None = None,
         on_set_brightness: Callable[[int], bool] | None = None,
         get_device_levels: Callable[[], dict[str, Any]] | None = None,
+        on_set_font: Callable[[str], bool] | None = None,
+        on_set_brightness_target: Callable[[str, int], bool] | None = None,
+        on_go_home: Callable[[], bool] | None = None,
+        on_reboot: Callable[[], bool] | None = None,
         on_media_control: Callable[[str], None] | None = None,
     ) -> None:
         self.state = state
@@ -104,6 +108,10 @@ class OverlayHttpServer:
         self._on_set_volume = on_set_volume
         self._on_set_brightness = on_set_brightness
         self._get_device_levels = get_device_levels
+        self._on_set_font = on_set_font
+        self._on_set_brightness_target = on_set_brightness_target
+        self._on_go_home = on_go_home
+        self._on_reboot = on_reboot
         self._on_media_control = on_media_control
         self._sound_settings = SoundSettings.with_defaults(
             custom_dir=(Path(sounds_dir).expanduser() if (sounds_dir := os.environ.get("PULSE_SOUNDS_DIR")) else None),
@@ -185,6 +193,20 @@ class OverlayHttpServer:
             payload["brightness"] = max(0, min(100, int(brightness_value)))
         if volume_supported and isinstance(volume_value, int | float):
             payload["volume"] = max(0, min(100, int(volume_value)))
+        for key in ("day_brightness", "night_brightness"):
+            target = device_levels.get(key)
+            # Gated on brightness_supported: a display with no backlight can't act on a
+            # day/night schedule, so offering to set one would be a dead control.
+            if brightness_supported and isinstance(target, int | float):
+                payload[key] = max(0, min(100, int(target)))
+        fonts = device_levels.get("fonts")
+        if isinstance(fonts, list):
+            font_options = [str(name) for name in fonts if str(name).strip()]
+            if font_options:
+                payload["fonts"] = font_options
+                payload["font"] = str(device_levels.get("font") or font_options[0])
+        payload["home_supported"] = bool(device_levels.get("home_supported"))
+        payload["reboot_supported"] = bool(device_levels.get("reboot_supported"))
         return payload
 
     def _render_framed_overlay(self, target_url: str) -> str:
@@ -636,6 +658,47 @@ html, body {{
                     change = outer.state.update_info_card(outer._device_controls_payload())
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                elif action == "set_font":
+                    choice = str(data.get("font") or "").strip()
+                    if not choice or not outer._on_set_font:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing font")
+                        return
+                    if not outer._on_set_font(choice):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Unknown font")
+                        return
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action in {"set_day_brightness", "set_night_brightness"}:
+                    kind = "day" if action == "set_day_brightness" else "night"
+                    try:
+                        target_value = max(0, min(100, int(float(data.get("value")))))  # type: ignore[arg-type]
+                    except (TypeError, ValueError):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing or invalid value")
+                        return
+                    if not outer._on_set_brightness_target:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Brightness targets unavailable")
+                        return
+                    outer._on_set_brightness_target(kind, target_value)
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "go_home":
+                    if not outer._on_go_home:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Home navigation unavailable")
+                        return
+                    outer._on_go_home()
+                    change = outer.state.update_info_card(None)
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "reboot_device":
+                    # The confirm step lives in the card (two taps); by the time this
+                    # arrives the user has already said yes twice.
+                    if not outer._on_reboot:
+                        self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Reboot unavailable")
+                        return
+                    self._log("overlay: reboot requested from device controls")
+                    outer._on_reboot()
                 elif action == "toggle_earmuffs":
                     self._log("overlay: toggle_earmuffs requested")
                     if not outer._on_toggle_earmuffs:

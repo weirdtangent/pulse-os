@@ -444,6 +444,59 @@ body {
   position: relative;
 }
 
+/* Grouped targets (day/night) sit under the live brightness slider they belong to. */
+.overlay-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.overlay-control-group__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.overlay-control__select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.overlay-device-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.overlay-device-actions .overlay-button {
+  flex: 1 1 auto;
+}
+
+/* Reboot is destructive enough to look it, but only shouts once armed — an always-red
+   button on a wall display becomes wallpaper. */
+.overlay-button--danger {
+  border-color: rgba(220, 50, 47, 0.6);
+}
+
+.overlay-button--danger.overlay-button--armed {
+  background: #dc322f;
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .overlay-device-controls {
   display: flex;
   flex-direction: column;

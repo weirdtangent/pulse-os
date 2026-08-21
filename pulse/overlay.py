@@ -49,6 +49,8 @@ from pulse.weather_alerts import BANNER_ALWAYS, TIER_RANK, banner_active
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
 DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
+# Mirrors the sentinel the listener publishes for the Home Assistant font select.
+OVERLAY_FONT_DEFAULT_OPTION = "System default"
 WEATHER_ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "weather" / "icons"
 
 
@@ -437,6 +439,18 @@ class OverlayStateManager:
                 volume_value = _coerce_percent(card.get("volume"))
                 if volume_supported and volume_value is not None:
                     normalized["volume"] = volume_value
+                for key in ("day_brightness", "night_brightness"):
+                    target = _coerce_percent(card.get(key))
+                    if brightness_supported and target is not None:
+                        normalized[key] = target
+                fonts_payload = card.get("fonts")
+                if isinstance(fonts_payload, list):
+                    fonts = [str(name) for name in fonts_payload if str(name).strip()]
+                    if fonts:
+                        normalized["fonts"] = fonts
+                        normalized["font"] = str(card.get("font") or fonts[0])
+                normalized["home_supported"] = bool(card.get("home_supported"))
+                normalized["reboot_supported"] = bool(card.get("reboot_supported"))
             if not normalized:
                 normalized = None
         signature = _signature(normalized)
@@ -2119,6 +2133,21 @@ def _build_config_info_overlay() -> str:
 """.strip()
 
 
+# Font names come from fontconfig on the device, so they are not trusted input for a style
+# attribute. Anything carrying CSS punctuation is rendered without a preview rather than
+# escaped and hoped for — the preview is a nicety, breaking out of the attribute is not.
+_UNSAFE_FONT_CHARS = set("\"';{}\\<>()")
+
+
+def _css_font_style(name: str) -> str:
+    """A style attribute previewing this font, or "" when the name can't be shown safely."""
+    cleaned = name.strip()
+    # "System default" is a sentinel, not a font, so it has nothing to preview.
+    if not cleaned or cleaned == OVERLAY_FONT_DEFAULT_OPTION or _UNSAFE_FONT_CHARS & set(cleaned):
+        return ""
+    return f" style=\"font-family: '{html_escape(cleaned, quote=True)}', sans-serif\""
+
+
 def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
     brightness_supported = bool(card.get("brightness_supported"))
     volume_supported = bool(card.get("volume_supported", True))
@@ -2196,18 +2225,87 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
         step=5,
     )
 
+    # The day/night targets are what the sunrise/sunset automation drives toward, as
+    # opposed to the live backlight above them, so they sit together under brightness.
+    targets_markup = ""
+    day_value = _coerce_percent(card.get("day_brightness"))
+    night_value = _coerce_percent(card.get("night_brightness"))
+    if brightness_supported and (day_value is not None or night_value is not None):
+        targets_markup = (
+            '<div class="overlay-control-group">'
+            '<div class="overlay-control-group__title">Automatic brightness targets</div>'
+            + _render_control(
+                kind="day_brightness",
+                label="Day target",
+                description="Backlight level the sunrise schedule aims for.",
+                supported=True,
+                value=day_value,
+            )
+            + _render_control(
+                kind="night_brightness",
+                label="Night target",
+                description="Backlight level the sunset schedule aims for.",
+                supported=True,
+                value=night_value,
+            )
+            + "</div>"
+        )
+
+    fonts = card.get("fonts")
+    font_markup = ""
+    if isinstance(fonts, list) and fonts:
+        current_font = str(card.get("font") or fonts[0])
+        options = "".join(
+            f'<option value="{html_escape(str(name), quote=True)}"{_css_font_style(str(name))}'
+            f"{' selected' if str(name) == current_font else ''}>{html_escape(str(name))}</option>"
+            for name in fonts
+        )
+        select_style = _css_font_style(current_font)
+        font_markup = f"""
+  <div class="overlay-control">
+    <div class="overlay-control__header">
+      <div>
+        <div class="overlay-control__label">Overlay font</div>
+        <div class="overlay-control__description">Typeface used across the overlay.</div>
+      </div>
+    </div>
+    <select class="overlay-control__select" data-font-select aria-label="Overlay font"{select_style}>
+      {options}
+    </select>
+  </div>
+""".strip()
+
+    actions: list[str] = []
+    if card.get("home_supported"):
+        actions.append(
+            '<button class="overlay-button overlay-button--ghost" data-config-action="go_home">'
+            '<span aria-hidden="true">\U0001f3e0</span> Go home</button>'
+        )
+    if card.get("reboot_supported"):
+        # Two taps on purpose: this card is a touchscreen on a wall, and a single stray
+        # press should never be able to restart the room. The JS arms it, then fires.
+        actions.append(
+            '<button class="overlay-button overlay-button--danger" data-reboot-button '
+            'data-confirm-label="Tap again to reboot">'
+            '<span aria-hidden="true">\u21bb</span> Reboot</button>'
+        )
+    actions_markup = f'<div class="overlay-device-actions">{"".join(actions)}</div>' if actions else ""
+
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--device">
   <div class="overlay-info-card__header">
     <div>
       <div class="overlay-info-card__title">Device controls</div>
-      <div class="overlay-info-card__subtitle">Manual brightness and volume.</div>
+      <div class="overlay-info-card__subtitle">Brightness, volume, font, and power.</div>
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close device controls">&times;</button>
   </div>
   <div class="overlay-info-card__body overlay-device-controls">
     {brightness_markup}
+    {targets_markup}
     {volume_markup}
+    {font_markup}
+    {actions_markup}
   </div>
 </div>
 """.strip()

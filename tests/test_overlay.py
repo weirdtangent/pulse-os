@@ -13,6 +13,7 @@ from pulse.overlay import (
     OverlayStateManager,
     OverlayTheme,
     _build_config_info_overlay,
+    _build_device_controls_info_overlay,
     _build_help_info_overlay,
     _build_now_playing_card,
     _copyright_years,
@@ -20,6 +21,7 @@ from pulse.overlay import (
     parse_clock_config,
     render_overlay_html,
 )
+from pulse.overlay_assets import OVERLAY_JS
 from pulse.weather_alerts import BANNER_ALWAYS
 
 
@@ -1107,6 +1109,92 @@ class ConfigCardAboutTests(unittest.TestCase):
         self.assertEqual(_copyright_years(datetime(2026, 8, 21, tzinfo=UTC)), "2025-2026")
         self.assertEqual(_copyright_years(datetime(2031, 1, 1, tzinfo=UTC)), "2025-2031")
         self.assertIn(f"&copy; {_copyright_years()} ", _build_config_info_overlay())
+
+
+class DeviceControlsCardTests(unittest.TestCase):
+    """Controls the device already exposed over MQTT but had no on-screen equivalent."""
+
+    def _card(self, **overrides) -> dict:
+        card = {
+            "brightness_supported": True,
+            "volume_supported": True,
+            "brightness": 70,
+            "volume": 45,
+            "day_brightness": 85,
+            "night_brightness": 25,
+            "fonts": ["System default", "Inter", "JetBrains Mono"],
+            "font": "Inter",
+            "home_supported": True,
+            "reboot_supported": True,
+        }
+        card.update(overrides)
+        return card
+
+    def test_renders_day_and_night_targets(self) -> None:
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn('data-control-slider="day_brightness"', html)
+        self.assertIn('data-control-slider="night_brightness"', html)
+        self.assertIn("Day target", html)
+        self.assertIn("Night target", html)
+
+    def test_targets_hidden_when_the_display_has_no_backlight(self) -> None:
+        """A display with no backlight can't act on a schedule; the control would be dead."""
+        html = _build_device_controls_info_overlay(
+            self._card(brightness_supported=False, day_brightness=None, night_brightness=None)
+        )
+        self.assertNotIn('data-control-slider="day_brightness"', html)
+
+    def test_font_select_marks_the_current_font(self) -> None:
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn("data-font-select", html)
+        inter = re.search(r"<option value=\"Inter\"[^>]*>", html)
+        self.assertIsNotNone(inter)
+        self.assertIn("selected", inter.group(0))  # type: ignore[union-attr]
+        self.assertIn("JetBrains Mono", html)
+
+    def test_font_options_preview_in_their_own_face(self) -> None:
+        html = _build_device_controls_info_overlay(self._card(fonts=["System default", "DejaVu Sans"]))
+        self.assertIn("style=\"font-family: 'DejaVu Sans', sans-serif\"", html)
+        # "System default" is a sentinel, not a font, so it has nothing to preview.
+        self.assertNotIn("font-family: 'System default'", html)
+
+    def test_font_names_with_css_punctuation_get_no_preview(self) -> None:
+        """Names come from fontconfig, so they are not trusted input for a style attribute."""
+        hostile = "ev'il\"; } body {"
+        html = _build_device_controls_info_overlay(self._card(fonts=["ok", hostile], font="ok"))
+        options = re.findall(r"<option[^>]*>", html)
+        hostile_option = next(opt for opt in options if "ev" in opt)
+        # Rendered as a choice, but with no style attribute to break out of.
+        self.assertNotIn("style=", hostile_option)
+        safe_option = next(opt for opt in options if 'value="ok"' in opt)
+        self.assertIn("font-family: 'ok'", safe_option)
+
+    def test_no_font_select_without_options(self) -> None:
+        html = _build_device_controls_info_overlay(self._card(fonts=[]))
+        self.assertNotIn("data-font-select", html)
+
+    def test_home_and_reboot_buttons_are_gated_on_support(self) -> None:
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn('data-config-action="go_home"', html)
+        self.assertIn("data-reboot-button", html)
+        bare = _build_device_controls_info_overlay(self._card(home_supported=False, reboot_supported=False))
+        self.assertNotIn('data-config-action="go_home"', bare)
+        self.assertNotIn("data-reboot-button", bare)
+
+    def test_reboot_button_carries_a_confirm_step(self) -> None:
+        """A stray touch on a wall display must not be able to restart the room."""
+        html = _build_device_controls_info_overlay(self._card())
+        self.assertIn("data-confirm-label", html)
+
+    def test_every_slider_kind_maps_to_its_own_action(self) -> None:
+        """The mapping was a ternary defaulting to set_volume, so a new slider changed the
+        volume instead of what it said. Every rendered kind must have an explicit action."""
+        html = _build_device_controls_info_overlay(self._card())
+        kinds = set(re.findall(r'data-control-slider="([^"]+)"', html))
+        self.assertTrue(kinds)
+        js = OVERLAY_JS.split("DEVICE_CONTROL_ACTIONS = {", 1)[1].split("}", 1)[0]
+        unmapped = sorted(kind for kind in kinds if f"{kind}:" not in js)
+        self.assertEqual(unmapped, [], f"sliders with no explicit action: {unmapped}")
 
 
 class WeatherAlertOverlayTests(OverlayRenderTests):
