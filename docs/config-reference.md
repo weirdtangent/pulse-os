@@ -166,6 +166,17 @@ Warning are different things. Set both. Alerts that state *no* severity are alwa
 | `PULSE_SOUND_WEATHER_ALERT` | `notify-two-tone` | Which sound that is — any library id or a path to a `.wav`/`.ogg`. |
 | `PULSE_WEATHER_ALERTS_CONTACT` | repo URL | Email or URL sent in the NWS-required `User-Agent`. |
 
+Where NWS gives one, the banner carries a short caption saying what the alert is actually
+about — "Rip Current Statement · Dangerous rip currents expected", "Small Craft Advisory ·
+Northwest winds 10 to 20 kt". NWS writes that line four different ways depending on which
+desk issued the product (`* WHAT...`, `HAZARD...`, star-bulleted `* WINDS...` fields, or a
+`.TODAY...` marine period line), so the caption tries each in turn. Across a nationwide
+sample of 259 active alerts, about 80% got one. The rest — free-prose Air Quality Alerts,
+tropical headlines in block capitals — show the event name alone, which is deliberate:
+only structured fields are used, and a caption that would run past one short phrase is
+dropped rather than truncated, because half a sentence trailing into an ellipsis costs a
+reader more than no caption at all.
+
 Repeats of one product covering the same point are collapsed to a single alert. NWS
 issues one alert per zone, county, or river gauge, so a location routinely sits under
 four Small Craft Advisories or eight Flood Warnings at once — every one of which is the

@@ -28,6 +28,7 @@ import base64
 import copy
 import hashlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -928,33 +929,125 @@ def _weather_alert_label(alert: dict[str, Any]) -> str:
     return str(alert.get("event") or "Weather alert").strip() or "Weather alert"
 
 
-# NWS bulletins carry a machine-ish tag block inside the prose — "HAZARD...Wind gusts up
-# to 40 mph." — which is the one line that says what is actually going to happen. Without
-# it the banner can only repeat the product name, and "Special Weather Statement" tells a
-# passing reader nothing.
-_HAZARD_TAG = "HAZARD..."
-# Long enough for the real ones ("Ping pong ball size hail and 60 mph wind gusts") and
-# short enough that the banner stays a single line on a 1280px display.
-_HAZARD_MAX_CHARS = 90
+# NWS writes the "what is actually going to happen" line four different ways depending on
+# which desk issued the product, so pulling a descriptor out means trying each in turn.
+# Counts below are from one nationwide sample of 259 active alerts.
+#
+#   WHAT...        the modern watch/warning/advisory format          (128 of 259)
+#   HAZARD...      the convective format (thunderstorm, tornado)     (2, but the ones
+#                                                                     that matter most)
+#   * WINDS...     star-bulleted fields, used by the fire-weather desks
+#   .TODAY...      the marine period line, used by coastal forecasts
+#
+# Anything else — free-prose Air Quality Alerts, tropical headlines in block capitals —
+# has no machine-readable descriptor, and those get the event name alone rather than a
+# mangled guess.
+_DETAIL_TAGS = ("WHAT...", "HAZARD...")
+# Bookkeeping bullets, not weather. "Timing"/"When" would only repeat the until/from
+# phrase already on the row, and the rest push the useful bullet off the banner.
+_BULLET_SKIP = {
+    "affected area",
+    "changes",
+    "where",
+    "when",
+    "timing",
+    "impacts",
+    "impact",
+    "view",
+    "additional details",
+    "precautionary/preparedness actions",
+}
+# Bullets whose label adds nothing: "What: Dangerous rip currents expected" reads worse
+# than "Dangerous rip currents expected", and the label costs a third of the row.
+_BULLET_BARE = {"what", "hazard"}
+_BULLET_RE = re.compile(r"^\*\s*([A-Za-z][A-Za-z /]{2,30})\.\.\.\s*(.+)$", re.DOTALL)
+# ".TODAY...W wind 25 kt. Seas 10 ft." — the first period of a coastal waters forecast.
+_PERIOD_RE = re.compile(r"^\.([A-Z][A-Z0-9 ]*)\.\.\.\s*(.*)$")
+# Roomy enough for the real ones ("Dangerously hot conditions with temperatures up to
+# 112" is 63) and tight enough to stay a glanceable phrase rather than a paragraph.
+_DETAIL_MAX_CHARS = 70
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+")
 
 
-def _weather_alert_hazard(alert: dict[str, Any]) -> str:
-    """The alert's HAZARD line, or "" when the bulletin has no tag block.
+def _tidy_detail(text: str) -> str:
+    """First sentence only, trimmed — or "" if even that is too long to be glanceable.
 
-    Only the tagged line is used. Falling back to the first sentence of the description
-    would put "At 1121 AM EDT, Doppler radar was tracking strong thunderstorms along a
-    line extending from..." on the banner, which is worse than saying nothing.
+    Bailing out beats truncating. This is a caption read from across a room, and half a
+    sentence trailing into an ellipsis costs a reader more than the event name alone. Plenty
+    of products have no short way to say what they are, and those simply don't get a caption.
     """
-    for paragraph in _nws_paragraphs(str(alert.get("description") or "")):
-        if not paragraph.startswith(_HAZARD_TAG):
-            continue
-        hazard = paragraph[len(_HAZARD_TAG) :].strip().rstrip(".")
-        if not hazard:
-            return ""
-        if len(hazard) > _HAZARD_MAX_CHARS:
-            hazard = hazard[: _HAZARD_MAX_CHARS - 1].rstrip() + "\u2026"
-        return hazard
+    collapsed = " ".join(text.split()).strip()
+    if not collapsed:
+        return ""
+    detail = _SENTENCE_END_RE.split(collapsed)[0].strip().rstrip(".")
+    if not detail or len(detail) > _DETAIL_MAX_CHARS:
+        return ""
+    return detail
+
+
+def _detail_from_tags(paragraphs: list[str]) -> str:
+    for tag in _DETAIL_TAGS:
+        for paragraph in paragraphs:
+            if paragraph.startswith(tag):
+                detail = _tidy_detail(paragraph[len(tag) :])
+                if detail:
+                    return detail
     return ""
+
+
+def _detail_from_bullets(paragraphs: list[str]) -> str:
+    """First substantive "* LABEL...value" bullet, rendered as "Label: value"."""
+    for paragraph in paragraphs:
+        match = _BULLET_RE.match(paragraph)
+        if not match:
+            continue
+        label = " ".join(match.group(1).split()).strip()
+        if label.lower() in _BULLET_SKIP:
+            continue
+        value = _tidy_detail(match.group(2))
+        if not value:
+            continue
+        if label.lower() in _BULLET_BARE:
+            return value
+        # Budget the label into the same row, so "Winds: ..." can't push past one line.
+        return _tidy_detail(f"{label.title()}: {value}")
+    return ""
+
+
+def _detail_from_marine_period(description: str) -> str:
+    """The first period of a coastal waters forecast (".TODAY...W wind 25 kt. Seas 10 ft.").
+
+    Read off raw lines rather than paragraphs: the period lines run consecutively with no
+    blank line between them, so paragraph-joining would glue the whole week into one string.
+    A single period's text can still wrap, so continuation lines are gathered until the next
+    period starts.
+    """
+    collected: list[str] = []
+    for line in (description or "").split("\n"):
+        match = _PERIOD_RE.match(line.strip())
+        if match:
+            if collected:
+                break
+            collected.append(match.group(2))
+        elif collected:
+            if not line.strip():
+                break
+            collected.append(line.strip())
+    return _tidy_detail(" ".join(collected))
+
+
+def _weather_alert_detail(alert: dict[str, Any]) -> str:
+    """One line saying what the alert is actually about, or "" when NWS gave nothing usable.
+
+    "Small Craft Advisory" or "Special Weather Statement" alone tells a passing reader
+    nothing; "Wind gusts up to 40 mph" is the part worth reading from across the room.
+    Only structured fields are used — falling back to the first sentence of the prose would
+    put "At 1121 AM EDT, Doppler radar was tracking storms along a line extending from..."
+    on the banner, which is worse than saying nothing.
+    """
+    description = str(alert.get("description") or "")
+    paragraphs = _nws_paragraphs(description)
+    return _detail_from_tags(paragraphs) or _detail_from_bullets(paragraphs) or _detail_from_marine_period(description)
 
 
 def _banner_worthy_alerts(snapshot: OverlaySnapshot, theme: OverlayTheme) -> list[dict[str, Any]]:
@@ -1052,8 +1145,8 @@ def _render_weather_alert_banner(
     label = html_escape(_weather_alert_label(alert))
     until = _format_alert_until(alert, hour12=hour12)
     until_html = f'<span class="overlay-weather-banner__until">{html_escape(until)}</span>' if until else ""
-    hazard = _weather_alert_hazard(alert)
-    hazard_html = f'<span class="overlay-weather-banner__hazard">{html_escape(hazard)}</span>' if hazard else ""
+    detail = _weather_alert_detail(alert)
+    detail_html = f'<span class="overlay-weather-banner__detail">{html_escape(detail)}</span>' if detail else ""
     # "2 of 3" rather than "+2": with the strip rotating, a position reads as a place in a
     # sequence, which is what it is, and it tells you the rotation isn't stuck.
     count_html = f'<span class="overlay-weather-banner__count">{position + 1} of {total}</span>' if total > 1 else ""
@@ -1067,7 +1160,7 @@ def _render_weather_alert_banner(
         f'data-alert-index="{position}">'
         f'<span class="overlay-weather-banner__icon" aria-hidden="true">{icon}</span>'
         f'<span class="overlay-weather-banner__event">{label}</span>'
-        f"{count_html}{hazard_html}{until_html}"
+        f"{count_html}{detail_html}{until_html}"
         "</div>"
     )
 

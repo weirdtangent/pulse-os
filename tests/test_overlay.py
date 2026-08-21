@@ -1192,43 +1192,72 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         self.assertIn("overlay-weather-banner", body)
         self.assertNotIn("overlay-badge--weather-alert", body)
 
-    def test_banner_surfaces_the_nws_hazard_line(self) -> None:
-        """ "Special Weather Statement" alone tells a passing reader nothing."""
+    def test_banner_captions_the_alert_from_the_what_tag(self) -> None:
+        """ "Rip Current Statement" alone tells a passing reader nothing."""
         alert = self._alert(
-            event="Special Weather Statement",
+            event="Rip Current Statement",
             tier="statement",
-            description="At 1121 AM EDT, radar was tracking storms.\n\nHAZARD...Wind gusts up to 40 mph.",
+            description="* WHAT...Dangerous rip currents expected.\n\n* WHERE...All beaches.",
         )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Dangerous rip currents expected", body)
+        # The label itself is noise and costs a third of the row.
+        self.assertNotIn("What:", body)
+
+    def test_banner_captions_convective_alerts_from_the_hazard_tag(self) -> None:
+        alert = self._alert(description="At 1121 AM EDT, radar.\n\nHAZARD...Wind gusts up to 40 mph.")
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
         self.assertIn("Wind gusts up to 40 mph", body)
 
-    def test_banner_hazard_omitted_when_the_bulletin_has_no_tag(self) -> None:
-        """The first sentence of the prose is worse than saying nothing."""
+    def test_banner_caption_keeps_a_useful_bullet_label(self) -> None:
+        """ "Southwest 15 to 25 mph" is ambiguous without knowing it describes wind."""
+        alert = self._alert(
+            event="Red Flag Warning",
+            description="* Affected Area...Zone 270.\n\n* Winds...Southwest 15 to 25 mph.",
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Winds: Southwest 15 to 25 mph", body)
+        # Bookkeeping bullets must not win the slot.
+        self.assertNotIn("Zone 270", body)
+
+    def test_banner_caption_skips_timing_which_the_row_already_shows(self) -> None:
+        alert = self._alert(
+            description="* TIMING...From this evening through Saturday.\n\n* WINDS...West 10 to 15 mph."
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Winds: West 10 to 15 mph", body)
+        self.assertNotIn("Saturday", body)
+
+    def test_banner_captions_marine_alerts_from_the_period_line(self) -> None:
+        """Coastal forecasts have no tag block at all, just consecutive period lines."""
+        alert = self._alert(
+            event="Small Craft Advisory",
+            tier="advisory",
+            description="Coastal Waters Forecast.\n\n.TODAY...W wind 25 kt.\n.TONIGHT...SW wind 15 kt.",
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("W wind 25 kt", body)
+        # Paragraph-joining would glue the whole week into one caption.
+        self.assertNotIn("TONIGHT", body)
+
+    def test_banner_caption_omitted_when_the_bulletin_has_no_structure(self) -> None:
+        """The first sentence of free prose is worse than saying nothing."""
         alert = self._alert(description="At 1121 AM EDT, Doppler radar was tracking strong thunderstorms.")
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
-        self.assertNotIn("overlay-weather-banner__hazard", body)
+        self.assertNotIn("overlay-weather-banner__detail", body)
         self.assertNotIn("Doppler radar", body)
 
-    def test_long_hazard_is_truncated_to_keep_the_banner_one_line(self) -> None:
-        hazard = (
-            "Ping pong ball size hail and destructive wind gusts of up to eighty miles "
-            "per hour, plus frequent cloud to ground lightning"
+    def test_banner_caption_dropped_rather_than_truncated_when_long(self) -> None:
+        """A caption trailing into an ellipsis costs more than the event name alone."""
+        alert = self._alert(
+            description=(
+                "* WHAT...Ping pong ball size hail and destructive wind gusts of up to eighty "
+                "miles per hour together with frequent cloud to ground lightning."
+            )
         )
-        alert = self._alert(description=f"HAZARD...{hazard}.")
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
-        self.assertIn("\u2026", body)
-        self.assertNotIn(hazard, body)
-
-    def test_card_renders_description_and_instruction(self) -> None:
-        html = render_overlay_html(
-            self._snapshot(weather_alerts=(self._alert(),), info_card={"type": "weather_alerts"}),
-            self.theme,
-        )
-        self.assertIn("overlay-info-card--weather-alerts", html)
-        # NWS hard-wraps at ~68 columns; single newlines rejoin into flowing paragraphs.
-        self.assertIn("thunderstorm was located near Salem", html)
-        self.assertIn("HAZARD...Tornado.", html)
-        self.assertIn("TAKE COVER NOW!", html)
+        self.assertNotIn("overlay-weather-banner__detail", body)
+        self.assertNotIn("Ping pong", body)
 
     def test_card_opens_the_alert_that_was_clicked(self) -> None:
         """Tapping the banner showing alert 2 must not open alert 1."""

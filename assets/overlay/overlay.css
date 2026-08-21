@@ -252,7 +252,7 @@ body {
   text-overflow: ellipsis;
 }
 
-.overlay-weather-banner__hazard::before {
+.overlay-weather-banner__detail::before {
   content: "· ";
   opacity: 0.6;
 }
