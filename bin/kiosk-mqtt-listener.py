@@ -316,6 +316,22 @@ def _quote_font_name(name: str) -> str:
     return f'"{escaped}"' if escaped else ""
 
 
+# A CSS stack that ends in a real family and no generic has nowhere to go if that family
+# is missing: the browser drops to its own default, which is not the same thing on every
+# platform. PULSE_OVERLAY_FONT_FAMILY is normally a bare name ("Inter"), and the shipped
+# default names a font that is not installed on a Pi, so the display quietly rendered in
+# Chromium's fallback rather than anything anyone chose.
+_CSS_GENERIC_FAMILIES = ("sans-serif", "serif", "monospace", "cursive", "fantasy", "system-ui")
+
+
+def _with_generic_fallback(font_stack: str) -> str:
+    stack = (font_stack or "").strip() or DEFAULT_FONT_STACK
+    lowered = stack.lower()
+    if any(generic in lowered for generic in _CSS_GENERIC_FAMILIES):
+        return stack
+    return f'{stack}, sans-serif, "Noto Color Emoji"'
+
+
 def _extract_primary_font(font_stack: str) -> str | None:
     for token in font_stack.split(","):
         candidate = _normalize_font_name(token)
@@ -504,7 +520,7 @@ def load_config() -> EnvConfig:
     )
     if resolved and resolved.timezone:
         overlay_clock_spec = f"{resolved.timezone}={friendly_name}"
-    overlay_font_stack = (os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip() or DEFAULT_FONT_STACK
+    overlay_font_stack = _with_generic_fallback((os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip())
     # Separate from the stack above on purpose: PULSE_OVERLAY_FONT_FAMILY is the configured
     # default and is never rewritten, so "System default" always means the same thing and a
     # font picked on-screen can always be undone. The two used to share one variable, which
@@ -814,7 +830,10 @@ class KioskMqttListener:
         self._default_font_stack = (self.overlay_config.font_family or DEFAULT_FONT_STACK).strip() or DEFAULT_FONT_STACK
         self._overlay_font_override: str | None = self.overlay_config.font_choice or None
         self._overlay_clock_font_override: str | None = self.overlay_config.clock_font_choice or None
-        self._current_font_stack = self._default_font_stack
+        # Fold the saved pick in at startup. These used to be the same config variable, so
+        # the stack already contained the choice; now that they are separate, the override
+        # has to be resolved here or a picked font is forgotten on every restart.
+        self._current_font_stack = self._resolve_font_stack()
         self._font_options: list[str] = []
         self._font_option_set: set[str] = set()
         self._refresh_font_options()
