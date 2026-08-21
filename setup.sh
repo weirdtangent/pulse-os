@@ -625,23 +625,67 @@ install_packages() {
     sudo apt autoremove -y
 }
 
-install_voice_assistant_python_deps() {
-    if [ "${PULSE_VOICE_ASSISTANT:-false}" != "true" ]; then
-        log "Voice assistant disabled; skipping Python dependency install."
-        return
-    fi
+# Packages the kiosk itself needs, whether or not the voice assistant is enabled.
+# bin/kiosk-mqtt-listener.py imports all three at module scope (httpx via
+# location_resolver/weather_alerts/stock_ticker, websockets via home_assistant), so a
+# display with PULSE_VOICE_ASSISTANT=false and no pip deps could not start the listener
+# at all. These used to sit behind the voice-assistant guard.
+CORE_PIP_PACKAGES=(httpx openlocationcode websockets)
+# Only reachable through the assistant.
+ASSISTANT_PIP_PACKAGES=(wyoming recurring-ical-events)
 
+# Versions come from uv.lock via this generated constraints file rather than from pip's
+# resolver, so the fleet runs what CI tests. Passed with -c: a constraints file pins what
+# gets installed without itself adding anything to the install set, which is why this is
+# not a requirements file — that would pull pip copies of the six packages the fleet takes
+# from apt (config/apt/manual-packages.txt).
+#
+# It does NOT mean apt's copies always win. When something pip installs requires an
+# apt-provided package at a version apt doesn't satisfy, pip puts its own copy in the user
+# site and that shadows apt: icalendar is exactly this case, resolving to the pip 7.2.2
+# copy on a device that also has python3-icalendar 6.0.1. Untouched apt packages keep
+# Debian's version only because nothing being installed asked for a different one.
+DEVICE_CONSTRAINTS="$REPO_DIR/config/device-constraints.txt"
+
+pip_install_packages() {
+    local label="$1"
+    shift
+    local constraint_args=()
+    if [ -f "$DEVICE_CONSTRAINTS" ]; then
+        constraint_args=(-c "$DEVICE_CONSTRAINTS")
+    else
+        log "Warning: $DEVICE_CONSTRAINTS missing; installing $label without version pins."
+    fi
+    if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
+        --user --upgrade --disable-pip-version-check --break-system-packages \
+        "${constraint_args[@]}" "$@"; then
+        log "Warning: failed to install $label Python packages via pip."
+        return 1
+    fi
+    return 0
+}
+
+install_device_python_deps() {
     if ! python3 -m pip --version >/dev/null 2>&1; then
-        log "python3-pip not detected; installing so we can fetch Wyoming client…"
+        log "python3-pip not detected; installing so we can fetch Python packages…"
         sudo apt install -y python3-pip
     fi
 
-    log "Ensuring Python packages for the voice assistant are installed for the pulse user…"
-    if ! sudo -H -u "$PULSE_USER" python3 -m pip install \
-        --user --upgrade --disable-pip-version-check --break-system-packages \
-        wyoming httpx openlocationcode websockets recurring-ical-events; then
-        log "Warning: failed to install Python packages via pip (voice assistant may not start)."
+    # No "|| true" here, unlike the assistant set below: the listener imports all of these
+    # at module scope, so finishing setup without them leaves a display that cannot start.
+    # set -e aborts here instead, which surfaces the failure while the old services are
+    # still running rather than after they have been restarted into a broken checkout.
+    log "Ensuring core Python packages are installed for the pulse user…"
+    pip_install_packages "core" "${CORE_PIP_PACKAGES[@]}"
+
+    if [ "${PULSE_VOICE_ASSISTANT:-false}" != "true" ]; then
+        log "Voice assistant disabled; skipping its extra Python packages."
+        return
     fi
+
+    # Warn and continue: without these the assistant is degraded, but the kiosk still runs.
+    log "Ensuring voice assistant Python packages are installed for the pulse user…"
+    pip_install_packages "voice assistant" "${ASSISTANT_PIP_PACKAGES[@]}" || true
 }
 
 ensure_snapclient_package() {
@@ -1806,7 +1850,7 @@ main() {
     configure_device_identity "$location"
     configure_display_stack
     install_packages
-    install_voice_assistant_python_deps
+    install_device_python_deps
     setup_user_dirs
     generate_sound_files
     link_home_files
