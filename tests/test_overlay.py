@@ -1230,6 +1230,59 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         self.assertIn("HAZARD...Tornado.", html)
         self.assertIn("TAKE COVER NOW!", html)
 
+    def test_card_opens_the_alert_that_was_clicked(self) -> None:
+        """Tapping the banner showing alert 2 must not open alert 1."""
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts", "index": 1}),
+                self.theme,
+            )
+        )
+        self.assertIn("Flood Watch", body)
+        self.assertIn("2 of 2", body)
+        # One alert at a time — eight NWS bulletins in one card is a scroll nobody reads.
+        self.assertNotIn('overlay-alert__event">Tornado Warning', body)
+
+    def test_each_banner_carries_its_own_index(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme()))
+        self.assertIn('data-alert-index="0"', body)
+        self.assertIn('data-alert-index="1"', body)
+
+    def test_card_nav_wraps_at_both_ends(self) -> None:
+        alerts = tuple(self._alert(id=str(n), event=f"Alert {n}") for n in range(3))
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts", "index": 0}),
+                self.theme,
+            )
+        )
+        self.assertIn("overlay-alert-nav", body)
+        # Prev from the first wraps to the last rather than offering a dead button.
+        self.assertIn('data-alert-index="2"', body)
+        self.assertIn('data-alert-index="1"', body)
+
+    def test_card_index_past_the_end_clamps(self) -> None:
+        """Alerts expire while a card is open; a stale index must not jump to the top."""
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts", "index": 9}),
+                self.theme,
+            )
+        )
+        self.assertIn("Flood Watch", body)
+
+    def test_single_alert_card_has_no_nav(self) -> None:
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=(self._alert(),), info_card={"type": "weather_alerts"}),
+                self.theme,
+            )
+        )
+        self.assertNotIn("overlay-alert-nav", body)
+
     def test_card_reads_live_alerts_not_the_card_payload(self) -> None:
         """An open card must track the poll rather than freeze at tap time."""
         html = render_overlay_html(

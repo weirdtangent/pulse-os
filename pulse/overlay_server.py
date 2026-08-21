@@ -569,9 +569,14 @@ html, body {{
                         outer._on_state_change(change)
                     self._log(f"overlay: calendar info card updated (changed={change.changed})")
                 elif action == "show_weather_alerts":
-                    # No payload: the card builder reads the live alert list off the
-                    # snapshot, so an open card tracks the poll instead of freezing.
-                    change = outer.state.update_info_card({"type": "weather_alerts"})
+                    # Only the index travels: the card builder reads the live alert list
+                    # off the snapshot, so an open card tracks the poll instead of
+                    # freezing at whatever was active when somebody tapped.
+                    try:
+                        alert_index = max(0, int(data.get("index") or 0))
+                    except (TypeError, ValueError):
+                        alert_index = 0
+                    change = outer.state.update_info_card({"type": "weather_alerts", "index": alert_index})
                     if outer._on_state_change:
                         outer._on_state_change(change)
                 elif action == "show_help":

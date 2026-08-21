@@ -261,6 +261,33 @@ body {
   font-size: 0.9em;
 }
 
+/* Prev/next for the alert card. One alert at a time beats a stack: a coastal point can
+   sit under half a dozen simultaneous products, and eight bulletins in one card is a
+   scroll nobody reads. */
+.overlay-alert-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding-top: 0.9rem;
+  margin-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.overlay-alert-nav__button {
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95rem;
+  transition: background 0.2s ease;
+}
+
+.overlay-alert-nav__button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 /* Alert detail card — the thing behind a tap on the pill or the banner. */
 .overlay-alerts {
   display: flex;

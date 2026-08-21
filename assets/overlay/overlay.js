@@ -492,10 +492,17 @@ window.PulseOverlay.initialize = function() {
       const resetOpacity = () => {
         badgeButton.style.opacity = '';
       };
+      // Weather-alert banners and the card's prev/next carry which alert they mean, so
+      // clicking the one on screen opens that one rather than always the most urgent.
+      const payload = { action };
+      const alertIndex = badgeButton.getAttribute('data-alert-index');
+      if (alertIndex !== null) {
+        payload.index = parseInt(alertIndex, 10) || 0;
+      }
       fetch(infoEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify(payload)
       }).finally(resetOpacity);
       return;
     }

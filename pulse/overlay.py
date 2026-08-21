@@ -361,6 +361,11 @@ class OverlayStateManager:
                 events_list = [copy.deepcopy(item) for item in events_payload if isinstance(item, dict)]
                 if events_list:
                     normalized["events"] = events_list
+            if card_type == "weather_alerts":
+                try:
+                    normalized["index"] = max(0, int(card.get("index") or 0))
+                except (TypeError, ValueError):
+                    normalized["index"] = 0
             if card_type == "weather":
                 days_payload = card.get("days")
                 if isinstance(days_payload, list):
@@ -984,7 +989,7 @@ def _build_weather_alert_pill(snapshot: OverlaySnapshot, theme: OverlayTheme) ->
     return (
         f'<span class="overlay-badge overlay-badge--weather-alert overlay-badge--weather-alert-{tier}" '
         f'role="button" tabindex="0" data-badge-action="show_weather_alerts" '
-        f'aria-label="{detail}" title="{detail}">'
+        f'data-alert-index="0" aria-label="{detail}" title="{detail}">'
         f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
         f"<span>{html_escape(label)}</span>"
         "</span>"
@@ -1047,7 +1052,8 @@ def _render_weather_alert_banner(
     icon = ICON_MAP.get("weather_alert", "&#9679;")
     return (
         f'<div class="{" ".join(classes)}" '
-        f'role="button" tabindex="0" data-badge-action="show_weather_alerts">'
+        f'role="button" tabindex="0" data-badge-action="show_weather_alerts" '
+        f'data-alert-index="{position}">'
         f'<span class="overlay-weather-banner__icon" aria-hidden="true">{icon}</span>'
         f'<span class="overlay-weather-banner__event">{label}</span>'
         f"{count_html}{hazard_html}{until_html}"
@@ -1553,7 +1559,7 @@ def _build_info_overlay(snapshot: OverlaySnapshot, *, hour12: bool = True) -> st
     if card_type == "weather":
         return _build_weather_info_overlay(snapshot, card)
     if card_type == "weather_alerts":
-        return _build_weather_alerts_info_overlay(snapshot, hour12=hour12)
+        return _build_weather_alerts_info_overlay(snapshot, card, hour12=hour12)
     if card_type == "update":
         return _build_update_info_overlay(snapshot, card)
     if card_type == "lights":
@@ -2341,8 +2347,19 @@ def _nws_paragraphs(text: str) -> list[str]:
     return paragraphs
 
 
-def _build_weather_alerts_info_overlay(snapshot: OverlaySnapshot, *, hour12: bool = True) -> str:
-    """Full detail for every active alert — the thing behind the pill and the banner.
+def _build_weather_alerts_info_overlay(
+    snapshot: OverlaySnapshot,
+    card: dict[str, Any],
+    *,
+    hour12: bool = True,
+) -> str:
+    """Full detail for ONE alert, with prev/next when several are active.
+
+    Deliberately not a stacked list: a coastal point can sit under half a dozen products
+    at once, and eight NWS bulletins in one card is a scroll nobody reads. The banner is
+    already showing one alert at a time, so tapping it opens that one — the index rides
+    along on the click (see data-alert-index) rather than always landing on the most
+    urgent one.
 
     Reads the alerts off the snapshot rather than off the card payload, so a card left
     open through a poll picks up new alerts and drops expired ones instead of freezing
@@ -2351,43 +2368,51 @@ def _build_weather_alerts_info_overlay(snapshot: OverlaySnapshot, *, hour12: boo
     alerts = [item for item in (snapshot.weather_alerts or ()) if isinstance(item, dict)]
     if not alerts:
         body = '<div class="overlay-info-card__empty">No active weather alerts.</div>'
-        subtitle = ""
+        subtitle_html = ""
+        nav_html = ""
     else:
-        subtitle = f"{len(alerts)} active" if len(alerts) > 1 else ""
-        sections: list[str] = []
-        for alert in alerts:
-            tier = str(alert.get("tier") or "statement").strip().lower()
-            if tier not in TIER_RANK:
-                tier = "statement"
-            event = html_escape(_weather_alert_label(alert))
-            until = _format_alert_until(alert, hour12=hour12)
-            meta_parts = [part for part in (str(alert.get("sender") or "").strip(), until) if part]
-            meta_html = (
-                f'<div class="overlay-alert__meta">{html_escape(" · ".join(meta_parts))}</div>' if meta_parts else ""
-            )
-            area = str(alert.get("area") or "").strip()
-            area_html = f'<div class="overlay-alert__area">{html_escape(area)}</div>' if area else ""
-            description_html = "".join(
-                f"<p>{html_escape(paragraph)}</p>" for paragraph in _nws_paragraphs(str(alert.get("description") or ""))
-            )
-            instruction_paragraphs = _nws_paragraphs(str(alert.get("instruction") or ""))
-            instruction_html = (
-                '<div class="overlay-alert__instruction">'
-                + "".join(f"<p>{html_escape(paragraph)}</p>" for paragraph in instruction_paragraphs)
-                + "</div>"
-                if instruction_paragraphs
-                else ""
-            )
-            sections.append(
-                f'<div class="overlay-alert overlay-alert--{tier}">'
-                f'<div class="overlay-alert__event">{event}</div>'
-                f"{meta_html}{area_html}"
-                f'<div class="overlay-alert__body">{description_html}</div>'
-                f"{instruction_html}"
-                "</div>"
-            )
-        body = '<div class="overlay-alerts">' + "".join(sections) + "</div>"
-    subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+        try:
+            index = int(card.get("index") or 0)
+        except (TypeError, ValueError):
+            index = 0
+        # Clamped, not wrapped: alerts expire while a card is open, and an index pointing
+        # past the end should land on the last one rather than silently jump to the first.
+        index = max(0, min(index, len(alerts) - 1))
+        alert = alerts[index]
+        total = len(alerts)
+
+        tier = str(alert.get("tier") or "statement").strip().lower()
+        if tier not in TIER_RANK:
+            tier = "statement"
+        until = _format_alert_until(alert, hour12=hour12)
+        meta_parts = [part for part in (str(alert.get("sender") or "").strip(), until) if part]
+        meta_html = (
+            f'<div class="overlay-alert__meta">{html_escape(" · ".join(meta_parts))}</div>' if meta_parts else ""
+        )
+        area = str(alert.get("area") or "").strip()
+        area_html = f'<div class="overlay-alert__area">{html_escape(area)}</div>' if area else ""
+        description_html = "".join(
+            f"<p>{html_escape(paragraph)}</p>" for paragraph in _nws_paragraphs(str(alert.get("description") or ""))
+        )
+        instruction_paragraphs = _nws_paragraphs(str(alert.get("instruction") or ""))
+        instruction_html = (
+            '<div class="overlay-alert__instruction">'
+            + "".join(f"<p>{html_escape(paragraph)}</p>" for paragraph in instruction_paragraphs)
+            + "</div>"
+            if instruction_paragraphs
+            else ""
+        )
+        body = (
+            f'<div class="overlay-alert overlay-alert--{tier}">'
+            f'<div class="overlay-alert__event">{html_escape(_weather_alert_label(alert))}</div>'
+            f"{meta_html}{area_html}"
+            f'<div class="overlay-alert__body">{description_html}</div>'
+            f"{instruction_html}"
+            "</div>"
+        )
+        subtitle = f"{index + 1} of {total}" if total > 1 else ""
+        subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+        nav_html = _build_weather_alert_nav(index, total) if total > 1 else ""
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--weather-alerts">
   <div class="overlay-info-card__header">
@@ -2400,8 +2425,29 @@ def _build_weather_alerts_info_overlay(snapshot: OverlaySnapshot, *, hour12: boo
   <div class="overlay-info-card__body">
     {body}
   </div>
+  {nav_html}
 </div>
 """.strip()
+
+
+def _build_weather_alert_nav(index: int, total: int) -> str:
+    """Prev/next for the alert card.
+
+    Wraps rather than disabling at the ends: stepping off a short ring and finding a dead
+    button reads as broken, and with two alerts either button should just show the other.
+    """
+    previous_index = (index - 1) % total
+    next_index = (index + 1) % total
+    return (
+        '<div class="overlay-alert-nav">'
+        '<span class="overlay-alert-nav__button" role="button" tabindex="0" '
+        f'data-badge-action="show_weather_alerts" data-alert-index="{previous_index}" '
+        'aria-label="Previous alert">&#8249; Prev</span>'
+        '<span class="overlay-alert-nav__button" role="button" tabindex="0" '
+        f'data-badge-action="show_weather_alerts" data-alert-index="{next_index}" '
+        'aria-label="Next alert">Next &#8250;</span>'
+        "</div>"
+    )
 
 
 def _build_lights_info_overlay(card: dict[str, Any]) -> str:
