@@ -309,6 +309,29 @@ html, body {{
   let errorCount = 0;
   const MAX_ERRORS = 5;
 
+  // Only --overlay-* custom properties are copied; the rest of the stylesheet is static
+  // and identical between renders, so replacing it wholesale would be churn for nothing.
+  // Parsed by hand rather than with a regex: this whole script lives inside a Python
+  // f-string, where every brace and backslash has to be doubled, and a regex full of them
+  // is a trap for the next person editing it.
+  function applyThemeVariables(doc) {{
+    const style = doc.querySelector('style');
+    if (!style) return;
+    const text = style.textContent || '';
+    const rootAt = text.indexOf(':root');
+    if (rootAt < 0) return;
+    const open = text.indexOf('{{', rootAt);
+    const close = text.indexOf('}}', open);
+    if (open < 0 || close < 0) return;
+    text.slice(open + 1, close).split(';').forEach((declaration) => {{
+      const colon = declaration.indexOf(':');
+      if (colon < 0) return;
+      const name = declaration.slice(0, colon).trim();
+      if (name.indexOf('--overlay-') !== 0) return;
+      document.documentElement.style.setProperty(name, declaration.slice(colon + 1).trim());
+    }});
+  }}
+
   async function refreshOverlay() {{
     try {{
       const response = await fetch('/overlay', {{
@@ -349,6 +372,14 @@ html, body {{
 
         // Append the entire pulse-overlay-root element to preserve its CSS classes and structure
         overlayContainer.appendChild(newRoot);
+
+        // Carry over the theme custom properties. This loop swaps body markup only and
+        // never touches the page's <style>, so a theme change served by the backend --
+        // picking a new font, most visibly -- was rendered into HTML nobody read, and the
+        // display kept its boot-time font until the page happened to reload. Copying just
+        // the :root --overlay-* declarations onto the element's inline style is enough:
+        // they are the whole of what the theme controls, and inline wins over the sheet.
+        applyThemeVariables(doc);
 
         // Update data-version attribute on the container (used by polling)
         overlayContainer.dataset.version = newVersion;

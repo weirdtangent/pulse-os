@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import re
 import time
 import unittest
@@ -1195,6 +1196,24 @@ class DeviceControlsCardTests(unittest.TestCase):
         js = OVERLAY_JS.split("DEVICE_CONTROL_ACTIONS = {", 1)[1].split("}", 1)[0]
         unmapped = sorted(kind for kind in kinds if f"{kind}:" not in js)
         self.assertEqual(unmapped, [], f"sliders with no explicit action: {unmapped}")
+
+
+class OverlayThemeConstructionTests(unittest.TestCase):
+    def test_theme_is_built_in_exactly_one_place(self) -> None:
+        """Two construction sites meant every new theme field had to be added twice.
+
+        It wasn't: the font-change path rebuilt OverlayTheme without the weather-alert
+        fields, so choosing a font silently reset the banner mode to its default.
+        """
+        listener = Path(__file__).resolve().parent.parent / "bin" / "kiosk-mqtt-listener.py"
+        sites = listener.read_text().count("OverlayTheme(")
+        self.assertEqual(sites, 1, f"OverlayTheme built in {sites} places; keep it to one builder")
+
+    def test_every_theme_field_is_passed_by_the_builder(self) -> None:
+        listener = Path(__file__).resolve().parent.parent / "bin" / "kiosk-mqtt-listener.py"
+        body = listener.read_text().split("OverlayTheme(", 1)[1].split(")", 1)[0]
+        missing = sorted(f.name for f in dataclasses.fields(OverlayTheme) if f"{f.name}=" not in body)
+        self.assertEqual(missing, [], f"theme fields never set by the builder: {missing}")
 
 
 class WeatherAlertOverlayTests(OverlayRenderTests):

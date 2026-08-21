@@ -847,20 +847,7 @@ class KioskMqttListener:
                 self.log("weather-alerts: enabled but PULSE_LOCATION did not resolve — alerts disabled")
             if self._weather_alert_client and self.overlay_config.weather_alerts_sound:
                 self._weather_alert_sound_path = self._resolve_weather_alert_sound()
-            self._overlay_theme = OverlayTheme(
-                ambient_background=self.overlay_config.ambient_background,
-                alert_background=self.overlay_config.alert_background,
-                text_color=self.overlay_config.text_color,
-                accent_color=self.overlay_config.accent_color,
-                show_notification_bar=self.overlay_config.show_notification_bar,
-                font_family=self._current_font_stack,
-                show_ticker=self.overlay_config.ticker_enabled,
-                ticker_scroll_speed=self.overlay_config.ticker_speed,
-                ticker_emoji=self.overlay_config.ticker_emoji,
-                ticker_label_mode=self.overlay_config.ticker_label_mode,
-                weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
-                weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
-            )
+            self._overlay_theme = self._build_overlay_theme(self._current_font_stack)
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
                 self.assistant_topics.alarms_active: lambda payload: self._handle_overlay_active_event(
@@ -1452,6 +1439,29 @@ class KioskMqttListener:
                 return f"{quoted}, {base_stack}" if base_stack else quoted
         return base_stack or DEFAULT_FONT_STACK
 
+    def _build_overlay_theme(self, font_stack: str) -> OverlayTheme:
+        """Single construction site for OverlayTheme.
+
+        It used to be built in two places — once at startup and again whenever the font
+        changed — which meant every new theme field had to be added twice or a font change
+        would silently reset it to the dataclass default. That is exactly what happened to
+        the weather-alert fields.
+        """
+        return OverlayTheme(
+            ambient_background=self.overlay_config.ambient_background,
+            alert_background=self.overlay_config.alert_background,
+            text_color=self.overlay_config.text_color,
+            accent_color=self.overlay_config.accent_color,
+            show_notification_bar=self.overlay_config.show_notification_bar,
+            font_family=font_stack,
+            show_ticker=self.overlay_config.ticker_enabled,
+            ticker_scroll_speed=self.overlay_config.ticker_speed,
+            ticker_emoji=self.overlay_config.ticker_emoji,
+            ticker_label_mode=self.overlay_config.ticker_label_mode,
+            weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
+            weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
+        )
+
     def _apply_overlay_font_choice(self, reason: str) -> None:
         new_stack = self._resolve_font_stack()
         if new_stack == self._current_font_stack:
@@ -1459,18 +1469,7 @@ class KioskMqttListener:
         self._current_font_stack = new_stack
         if not self.overlay_config.enabled:
             return
-        self._overlay_theme = OverlayTheme(
-            ambient_background=self.overlay_config.ambient_background,
-            alert_background=self.overlay_config.alert_background,
-            text_color=self.overlay_config.text_color,
-            accent_color=self.overlay_config.accent_color,
-            show_notification_bar=self.overlay_config.show_notification_bar,
-            font_family=new_stack,
-            show_ticker=self.overlay_config.ticker_enabled,
-            ticker_scroll_speed=self.overlay_config.ticker_speed,
-            ticker_emoji=self.overlay_config.ticker_emoji,
-            ticker_label_mode=self.overlay_config.ticker_label_mode,
-        )
+        self._overlay_theme = self._build_overlay_theme(new_stack)
         if self._overlay_http:
             self._overlay_http.theme = self._overlay_theme
         if self.overlay_state:
