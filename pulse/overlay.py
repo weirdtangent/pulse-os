@@ -1913,10 +1913,28 @@ def _build_update_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any]) 
 """.strip()
 
 
+# The project's first published year. The card renders this through the current year, so
+# the notice stops going stale every January the way the hardcoded "2025" did.
+COPYRIGHT_START_YEAR = 2025
+
+# Curated subset shown on the config card — deliberately not every dependency, which
+# wouldn't fit. Names must stay in step with pyproject's runtime dependencies: a dropped or
+# renamed package renders here as a bare name with no version, silently, which is why
+# tests/test_overlay.py asserts each one is still declared.
+KEY_LIBRARIES = ("astral", "httpx", "icalendar", "paho-mqtt", "websockets", "wyoming")
+
+
+def _copyright_years(now: datetime | None = None) -> str:
+    current = (now or datetime.now()).year
+    if current <= COPYRIGHT_START_YEAR:
+        return str(COPYRIGHT_START_YEAR)
+    return f"{COPYRIGHT_START_YEAR}-{current}"
+
+
 def _get_library_versions() -> str:
     """Get versions of key libraries, formatted for display."""
-    libraries = ["astral", "httpx", "icalendar", "paho-mqtt", "websockets", "wyoming"]
     versions = []
+    libraries = KEY_LIBRARIES
     for lib in libraries:
         try:
             ver = get_package_version(lib)
@@ -2057,6 +2075,7 @@ def _build_help_info_overlay() -> str:
 
 def _build_config_info_overlay() -> str:
     library_versions = _get_library_versions()
+    copyright_years = _copyright_years()
     safe_version = html_escape(__version__)
     return f"""
 <div class="overlay-card overlay-info-card overlay-info-card--config">
@@ -2102,7 +2121,7 @@ def _build_config_info_overlay() -> str:
       </div>
       <div class="overlay-config-about__section">
         <div class="overlay-config-about__label">License</div>
-        <div class="overlay-config-about__value">MIT License &copy; 2025 Jeffrey Culverhouse</div>
+        <div class="overlay-config-about__value">MIT License &copy; {copyright_years} Jeffrey Culverhouse</div>
       </div>
       <div class="overlay-config-about__section">
         <div class="overlay-config-about__label">Key Libraries</div>

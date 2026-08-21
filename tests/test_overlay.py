@@ -4,8 +4,10 @@ import re
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from pulse.overlay import (
+    KEY_LIBRARIES,
     ClockConfig,
     OverlaySnapshot,
     OverlayStateManager,
@@ -13,6 +15,7 @@ from pulse.overlay import (
     _build_config_info_overlay,
     _build_help_info_overlay,
     _build_now_playing_card,
+    _copyright_years,
     _get_library_versions,
     parse_clock_config,
     render_overlay_html,
@@ -1069,6 +1072,38 @@ class NowPlayingAlbumArtRenderTests(NowPlayingCardTests):
         self.assertIsNotNone(result)
         _, html = result  # type: ignore[misc]
         self.assertNotIn("overlay-now-playing__art", html)
+
+
+class ConfigCardAboutTests(unittest.TestCase):
+    """The About box holds two things that rot silently if nobody looks."""
+
+    def test_key_libraries_are_all_still_declared_dependencies(self) -> None:
+        """A dropped or renamed package renders as a bare name with no version, silently."""
+        import tomllib
+
+        from pulse.overlay import KEY_LIBRARIES
+
+        root = Path(__file__).resolve().parent.parent
+        with (root / "pyproject.toml").open("rb") as handle:
+            project = tomllib.load(handle)["project"]
+        declared = {
+            re.split(r"[\[><=!~;\s]", dep, maxsplit=1)[0].strip().lower() for dep in project.get("dependencies", [])
+        }
+        undeclared = sorted(lib for lib in KEY_LIBRARIES if lib.lower() not in declared)
+        self.assertEqual(undeclared, [], f"config card lists non-dependencies: {undeclared}")
+
+    def test_key_libraries_all_resolve_to_a_version(self) -> None:
+        html = _build_config_info_overlay()
+        for lib in KEY_LIBRARIES:
+            # Rendered as "name x.y.z"; a bare name means the lookup failed.
+            self.assertRegex(html, rf"{re.escape(lib)} \d")
+
+    def test_copyright_runs_through_the_current_year(self) -> None:
+        """The hardcoded year went stale the moment 2026 arrived."""
+        self.assertEqual(_copyright_years(datetime(2025, 6, 1, tzinfo=UTC)), "2025")
+        self.assertEqual(_copyright_years(datetime(2026, 8, 21, tzinfo=UTC)), "2025-2026")
+        self.assertEqual(_copyright_years(datetime(2031, 1, 1, tzinfo=UTC)), "2025-2031")
+        self.assertIn(f"&copy; {_copyright_years()} ", _build_config_info_overlay())
 
 
 class WeatherAlertOverlayTests(OverlayRenderTests):
