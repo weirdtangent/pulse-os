@@ -34,6 +34,7 @@ from pulse.overlay import (
     parse_clock_config,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
+from pulse.sound_library import SoundLibrary
 from pulse.speaker import SpeakerConfig, check_speaker
 from pulse.stock_ticker import (
     TICKER_HOURS_MODES,
@@ -44,6 +45,13 @@ from pulse.stock_ticker import (
     us_market_phase,
 )
 from pulse.utils import parse_bool, parse_int, sanitize_hostname_for_entity_id
+from pulse.weather_alerts import (
+    WeatherAlertClient,
+    parse_banner_minutes,
+    parse_exclusions,
+    parse_min_severity,
+    parse_tiers,
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +119,20 @@ class OverlayConfig:
     ticker_label_mode: str
     ticker_api_key: str | None
     ticker_stale_after: int  # seconds before a quote is marked stale (0 disables)
+    weather_alerts_enabled: bool  # show a pill/banner for active NWS alerts (US only)
+    weather_alerts_tiers: tuple[str, ...]  # subset of warning/watch/advisory/statement
+    weather_alerts_min_severity: str  # NWS severity floor: extreme|severe|moderate|minor|unknown
+    weather_alerts_exclude: tuple[str, ...]  # NWS event names to never show
+    weather_alerts_interval: int  # seconds between polls of api.weather.gov
+    weather_alerts_banner_minutes: int  # BANNER_ALWAYS | 0 = pill only | N minutes
+    weather_alerts_rotate_seconds: int  # seconds per alert when several are active; 0 = top one only
+    weather_alerts_contact: str  # contact string for the NWS-required User-Agent
+    weather_alerts_sound: bool  # chime once when an alert first appears
+    weather_alerts_sound_id: str  # any sound id from the library (or a path to a .wav/.ogg)
+    # Resolved once at startup from PULSE_LOCATION; None when it can't be resolved, which
+    # disables the feature rather than guessing at coordinates.
+    weather_alerts_latitude: float | None
+    weather_alerts_longitude: float | None
     speaker_alert: bool  # show a badge when the configured speaker is unreachable
     speaker_interval: int  # seconds between reachability checks
     # Reused from the Bluetooth autoconnect settings — the badge and bin/bt-autoconnect.sh
@@ -492,6 +514,20 @@ def load_config() -> EnvConfig:
         ticker_label_mode=ticker_label_mode,
         ticker_api_key=(os.environ.get("PULSE_TICKER_API_KEY") or "").strip() or None,
         ticker_stale_after=max(0, parse_int(os.environ.get("PULSE_TICKER_STALE_AFTER"), 300)),
+        weather_alerts_enabled=parse_bool(os.environ.get("PULSE_WEATHER_ALERTS_ENABLED"), False),
+        weather_alerts_tiers=parse_tiers(os.environ.get("PULSE_WEATHER_ALERTS_TIERS")),
+        weather_alerts_min_severity=parse_min_severity(os.environ.get("PULSE_WEATHER_ALERTS_MIN_SEVERITY")),
+        weather_alerts_exclude=parse_exclusions(os.environ.get("PULSE_WEATHER_ALERTS_EXCLUDE")),
+        # Floor of 60s out of courtesy to a free, unauthenticated public API; NWS issues
+        # products on the order of minutes, so polling faster buys nothing.
+        weather_alerts_interval=max(60, parse_int(os.environ.get("PULSE_WEATHER_ALERTS_INTERVAL"), 300)),
+        weather_alerts_banner_minutes=parse_banner_minutes(os.environ.get("PULSE_WEATHER_ALERTS_BANNER_MINUTES")),
+        weather_alerts_rotate_seconds=max(0, parse_int(os.environ.get("PULSE_WEATHER_ALERTS_ROTATE_SECONDS"), 30)),
+        weather_alerts_contact=(os.environ.get("PULSE_WEATHER_ALERTS_CONTACT") or "").strip(),
+        weather_alerts_sound=parse_bool(os.environ.get("PULSE_WEATHER_ALERTS_SOUND"), False),
+        weather_alerts_sound_id=(os.environ.get("PULSE_SOUND_WEATHER_ALERT") or "notify-two-tone").strip(),
+        weather_alerts_latitude=resolved.latitude if resolved else None,
+        weather_alerts_longitude=resolved.longitude if resolved else None,
         speaker_alert=parse_bool(os.environ.get("PULSE_SPEAKER_ALERT"), True),
         # Floor of 15s matches the bt-autoconnect timer cadence; polling faster than the
         # thing doing the reconnecting only burns CPU on a Pi.
@@ -716,6 +752,11 @@ class KioskMqttListener:
         self._ticker_thread: threading.Thread | None = None
         self._ticker_stop_event = threading.Event()
         self._stock_ticker: StockTicker | None = None
+        self._weather_alerts_lock = threading.Lock()
+        self._weather_alerts_thread: threading.Thread | None = None
+        self._weather_alerts_stop_event = threading.Event()
+        self._weather_alert_client: WeatherAlertClient | None = None
+        self._weather_alert_sound_path: Path | None = None
         self._speaker_lock = threading.Lock()
         self._speaker_thread: threading.Thread | None = None
         self._speaker_stop_event = threading.Event()
@@ -769,6 +810,24 @@ class KioskMqttListener:
                     api_key=self.overlay_config.ticker_api_key,
                     log=self.log,
                 )
+            if (
+                self.overlay_config.weather_alerts_enabled
+                and self.overlay_config.weather_alerts_latitude is not None
+                and self.overlay_config.weather_alerts_longitude is not None
+            ):
+                self._weather_alert_client = WeatherAlertClient(
+                    self.overlay_config.weather_alerts_latitude,
+                    self.overlay_config.weather_alerts_longitude,
+                    tiers=self.overlay_config.weather_alerts_tiers,
+                    min_severity=self.overlay_config.weather_alerts_min_severity,
+                    exclude=self.overlay_config.weather_alerts_exclude,
+                    contact=self.overlay_config.weather_alerts_contact,
+                    log=self.log,
+                )
+            elif self.overlay_config.weather_alerts_enabled:
+                self.log("weather-alerts: enabled but PULSE_LOCATION did not resolve — alerts disabled")
+            if self._weather_alert_client and self.overlay_config.weather_alerts_sound:
+                self._weather_alert_sound_path = self._resolve_weather_alert_sound()
             self._overlay_theme = OverlayTheme(
                 ambient_background=self.overlay_config.ambient_background,
                 alert_background=self.overlay_config.alert_background,
@@ -780,6 +839,8 @@ class KioskMqttListener:
                 ticker_scroll_speed=self.overlay_config.ticker_speed,
                 ticker_emoji=self.overlay_config.ticker_emoji,
                 ticker_label_mode=self.overlay_config.ticker_label_mode,
+                weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
+                weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
             )
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
@@ -879,6 +940,108 @@ class KioskMqttListener:
             self._ticker_stop_event.set()
             self._ticker_thread.join(timeout=self.overlay_config.ticker_interval)
             self._ticker_thread = None
+
+    def _resolve_weather_alert_sound(self) -> Path | None:
+        """Resolve PULSE_SOUND_WEATHER_ALERT to a file, once, at startup.
+
+        Resolved with no `kind` filter on purpose: an alert wants attention, so the
+        alarm-family sounds are as valid a choice here as the notification ones, and a
+        path to a custom .wav/.ogg works too. Resolving now rather than per-alert means a
+        typo shows up in the journal at boot instead of during a tornado warning.
+        """
+        sound_id = self.overlay_config.weather_alerts_sound_id
+        try:
+            sounds_dir = os.environ.get("PULSE_SOUNDS_DIR")
+            library = SoundLibrary(custom_dir=Path(sounds_dir).expanduser() if sounds_dir else None)
+            info = library.resolve_sound(sound_id)
+        except Exception as exc:  # nosec B110 - a bad sound must not stop the alerts themselves
+            self.log(f"weather-alerts: sound lookup failed for '{sound_id}': {exc}")
+            return None
+        if not info:
+            self.log(f"weather-alerts: sound '{sound_id}' not found — alerts will be silent")
+            return None
+        self.log(f"weather-alerts: new alerts will play '{info.label}'")
+        return info.path
+
+    def _play_weather_alert_sound(self) -> None:
+        """Chime once for a newly-arrived alert, off the poll thread.
+
+        Not gated on earmuffs: that switch turns the microphone/LLM listening off, it is
+        not a mute, and the other overlay sounds don't check it either.
+        """
+        path = self._weather_alert_sound_path
+        if not path:
+            return
+        threading.Thread(
+            target=audio.play_sound,
+            args=(path,),
+            name="pulse-weather-alert-sound",
+            daemon=True,
+        ).start()
+
+    def start_weather_alerts(self) -> None:
+        if not self._weather_alert_client or not self.overlay_state:
+            return
+        with self._weather_alerts_lock:
+            if self._weather_alerts_thread and self._weather_alerts_thread.is_alive():
+                return
+            self._weather_alerts_stop_event.clear()
+            thread = threading.Thread(target=self._weather_alerts_loop, name="pulse-weather-alerts", daemon=True)
+            self._weather_alerts_thread = thread
+            thread.start()
+
+    def stop_weather_alerts(self) -> None:
+        # Signal + join only; the worker owns its httpx client and closes it in its own
+        # finally, so the client is never closed from another thread mid-fetch.
+        with self._weather_alerts_lock:
+            if not self._weather_alerts_thread:
+                return
+            self._weather_alerts_stop_event.set()
+            self._weather_alerts_thread.join(timeout=self.overlay_config.weather_alerts_interval)
+            self._weather_alerts_thread = None
+
+    def _weather_alerts_loop(self) -> None:
+        client = self._weather_alert_client
+        state = self.overlay_state
+        if not client or not state:
+            return
+        previous_ids: set[str] = set()
+        # The first poll can't distinguish "just issued" from "already running when this
+        # kiosk booted", so it never chimes — a display restarted mid-storm would otherwise
+        # announce a warning everyone has been looking at for two days.
+        first_poll = True
+        try:
+            while not self._weather_alerts_stop_event.is_set():
+                try:
+                    alerts = client.fetch()
+                    payload = [alert.as_dict() for alert in alerts]
+                    current_ids = {alert.id for alert in alerts}
+                    arrived = [alert for alert in alerts if alert.id not in previous_ids]
+                    for alert in arrived:
+                        self.log(f"weather-alerts: {alert.event} ({alert.severity}) from {alert.sender}")
+                    if arrived and not first_poll:
+                        # One chime per poll, not per alert: a squall line can issue three
+                        # products at once and three overlapping chimes is just noise.
+                        self._play_weather_alert_sound()
+                    if previous_ids - current_ids:
+                        self.log(f"weather-alerts: {len(previous_ids - current_ids)} alert(s) cleared")
+                    previous_ids = current_ids
+                    first_poll = False
+                    change = state.set_weather_alerts(
+                        payload,
+                        banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
+                    )
+                    # set_weather_alerts bumps only when the alert set or a banner window
+                    # changes, so a reissued-but-identical alert doesn't reload the photo
+                    # card every poll.
+                    if change.changed:
+                        self._emit_overlay_refresh(change.version, change.reason)
+                except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
+                    self.log(f"weather-alerts: poll loop error: {exc}")
+                if self._weather_alerts_stop_event.wait(self.overlay_config.weather_alerts_interval):
+                    break
+        finally:
+            client.close()
 
     def start_speaker_monitor(self) -> None:
         if not self.overlay_state or not self.overlay_config.speaker_alert:
@@ -2136,6 +2299,7 @@ class KioskMqttListener:
         self.start_update_checker(client)
         self.start_telemetry()
         self.start_ticker()
+        self.start_weather_alerts()
         self.start_speaker_monitor()
         if self.overlay_state:
             # Start the HTTP server BEFORE announcing the boot refresh, otherwise the
@@ -2436,6 +2600,7 @@ def main():
     atexit.register(listener.stop_update_checker)
     atexit.register(listener.stop_telemetry)
     atexit.register(listener.stop_ticker)
+    atexit.register(listener.stop_weather_alerts)
     atexit.register(listener.stop_speaker_monitor)
     atexit.register(listener.stop_overlay_server)
     atexit.register(listener._stop_watchdog)

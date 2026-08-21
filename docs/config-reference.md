@@ -115,6 +115,94 @@ Notes:
   warnings in the logs and a bar that only ever shows cached/last-good values. See
   [troubleshooting.md](troubleshooting.md#stock-ticker).
 
+## Weather alerts
+
+> **Requires `PULSE_LOCATION`.** Alerts are looked up by coordinate, so this feature is
+> entirely dependent on that setting resolving to a lat/long — it accepts `lat,lon`
+> directly, or a ZIP, `City, ST`, plus code, or what3words string that it resolves once at
+> startup. If it doesn't resolve, the alerts thread logs `weather-alerts: enabled but
+> PULSE_LOCATION did not resolve — alerts disabled` and stays off rather than guessing at
+> a location. Nothing else needs configuring: there is no API key.
+
+A banner across the top of the display whenever the National Weather Service has an active
+alert covering `PULSE_LOCATION`, with a compact pill on the notification bar as the
+alternative presentation. Tapping either opens a card with the full NWS description and
+instructions.
+
+Alerts are long-lived — a winter storm warning routinely runs for days — so nothing here
+covers content. The banner is a single row above the notification bar carrying the event
+name, the NWS hazard line, and the end time; by default it stays up for as long as the
+alert is active, and the pill is suppressed while it's there (both at once is the same
+sentence twice). When several alerts are active the banner rotates through them every
+`PULSE_WEATHER_ALERTS_ROTATE_SECONDS` with an "n of N" counter, so the strip is always
+exactly one row tall however many products are running.
+
+Set `PULSE_WEATHER_ALERTS_BANNER_MINUTES` to a number instead and the banner becomes a
+"this just happened" announcement that retires into the pill after N minutes. That window
+is measured from when this kiosk first *saw* the alert rather than from the NWS onset, so
+a display booting mid-storm doesn't re-announce a two-day-old warning and reloading the
+overlay can't resurrect a banner that already expired. NWS mints a new alert ID when a
+watch is upgraded to a warning, so a real escalation gets its own window; the routine
+"extended until 6 AM" reissues carry the same ID and don't.
+
+> **Data source.** [api.weather.gov](https://www.weather.gov/documentation/services-web-api)
+> is a free, unauthenticated US government API — no key, no quota, no ToS grey area. It
+> asks only that clients identify themselves in the `User-Agent`, which is what
+> `PULSE_WEATHER_ALERTS_CONTACT` is for. It is **US-only**: a non-US `PULSE_LOCATION`
+> resolves fine and simply never has alerts. Open-Meteo, which powers the assistant's
+> forecast, has no alerts product at all, so this is a separate client.
+
+Filtering runs on two axes because NWS's own two axes disagree. **Tier** comes from the
+last word of the event name (`Tornado Warning` → warning, `Special Weather Statement` →
+statement) and is how people actually talk about alerts. **Severity** is NWS's own
+Extreme…Minor scale. A Heat Advisory and a Winter Storm Warning are both `Moderate`, so
+severity alone can't separate them; conversely a `Severe`-rated Watch and a `Moderate`
+Warning are different things. Set both. Alerts that state *no* severity are always shown
+— `unknown` is NWS declining to answer, not a low rating.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_WEATHER_ALERTS_ENABLED` | `false` | Master switch for the pill and banner. |
+| `PULSE_WEATHER_ALERTS_TIERS` | `warning,watch` | Comma-separated subset of `warning` (incl. `… Emergency`), `watch`, `advisory` (incl. `… Alert`), `statement`. An unrecognized value falls back to the default rather than to "everything". |
+| `PULSE_WEATHER_ALERTS_MIN_SEVERITY` | `severe` | NWS severity floor: `extreme`, `severe`, `moderate`, `minor`, or `any`. |
+| `PULSE_WEATHER_ALERTS_EXCLUDE` | *(empty)* | Comma-separated NWS event names to never show (e.g. `Heat Advisory,Air Quality Alert`), whatever the filters above allow. |
+| `PULSE_WEATHER_ALERTS_INTERVAL` | `300` | Seconds between polls of api.weather.gov (min 60). |
+| `PULSE_WEATHER_ALERTS_BANNER_MINUTES` | `always` | `always` = banner for the alert's whole life (the pill never shows); `0` = pill only, never a banner; `N` = banner for N minutes, then the pill takes over. |
+| `PULSE_WEATHER_ALERTS_ROTATE_SECONDS` | `30` | Seconds each alert holds the banner when several are active (min 5). `0` shows only the most urgent. |
+| `PULSE_WEATHER_ALERTS_SOUND` | `false` | Play a sound once when an alert first appears. |
+| `PULSE_SOUND_WEATHER_ALERT` | `notify-two-tone` | Which sound that is — any library id or a path to a `.wav`/`.ogg`. |
+| `PULSE_WEATHER_ALERTS_CONTACT` | repo URL | Email or URL sent in the NWS-required `User-Agent`. |
+
+Where NWS gives one, the banner carries a short caption saying what the alert is actually
+about — "Rip Current Statement · Dangerous rip currents expected", "Small Craft Advisory ·
+Northwest winds 10 to 20 kt". NWS writes that line four different ways depending on which
+desk issued the product (`* WHAT...`, `HAZARD...`, star-bulleted `* WINDS...` fields, or a
+`.TODAY...` marine period line), so the caption tries each in turn. Across a nationwide
+sample of 259 active alerts, about 80% got one. The rest — free-prose Air Quality Alerts,
+tropical headlines in block capitals — show the event name alone, which is deliberate:
+only structured fields are used, and a caption that would run past one short phrase is
+dropped rather than truncated, because half a sentence trailing into an ellipsis costs a
+reader more than no caption at all.
+
+Repeats of one product covering the same point are collapsed to a single alert. NWS
+issues one alert per zone, county, or river gauge, so a location routinely sits under
+four Small Craft Advisories or eight Flood Warnings at once — every one of which is the
+same fact about the same room. The survivor is the most severe of the group, then the one
+that runs latest, so collapsing never shortens the window shown or downgrades what's on
+screen. Genuinely different products are never merged.
+
+Only watches and warnings get a colored pill; advisories and statements keep the neutral
+badge background and rely on the ⚠ glyph. Painting every Special Weather Statement amber
+would spend the display's alarm vocabulary on "it might get windy".
+
+The chime fires on the arrival of an alert ID this kiosk hasn't seen before — one chime
+per poll however many products arrive together — and never on the first poll after a
+restart, so a display rebooted mid-storm doesn't re-announce a warning everyone has been
+looking at for two days. Unlike the other `PULSE_SOUND_*` settings it isn't restricted to
+one sound kind, so the attention-getting alarm sounds are selectable alongside the
+notification ones. It is not gated on earmuffs: that switch turns microphone/LLM
+listening off and is not a mute.
+
 ## Telemetry & MQTT
 
 | Key | Default | Description |
@@ -136,7 +224,7 @@ Notes:
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `PULSE_LOCATION` | *(empty)* | Preferred location string for weather and sunrise/sunset (`lat,lon`, ZIP, `City, ST`, plus code, or what3words). |
+| `PULSE_LOCATION` | *(empty)* | Preferred location string for weather, [weather alerts](#weather-alerts), and sunrise/sunset (`lat,lon`, ZIP, `City, ST`, plus code, or what3words). |
 | `PULSE_LANGUAGE` | `en` | Default language for assistant, news, and weather. |
 | `PULSE_DAY_NIGHT_AUTO` | `true` | Sunrise/sunset-driven backlight changes. |
 | `PULSE_DAY_BRIGHTNESS` | `85` | Daytime brightness target (%) used by sunrise/sunset automation. |

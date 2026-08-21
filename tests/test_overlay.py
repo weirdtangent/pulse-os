@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import time
 import unittest
 from datetime import UTC, datetime, timedelta
 
@@ -15,6 +17,7 @@ from pulse.overlay import (
     parse_clock_config,
     render_overlay_html,
 )
+from pulse.weather_alerts import BANNER_ALWAYS
 
 
 class OverlayRenderTests(unittest.TestCase):
@@ -1066,6 +1069,364 @@ class NowPlayingAlbumArtRenderTests(NowPlayingCardTests):
         self.assertIsNotNone(result)
         _, html = result  # type: ignore[misc]
         self.assertNotIn("overlay-now-playing__art", html)
+
+
+class WeatherAlertOverlayTests(OverlayRenderTests):
+    """Pill, banner, and card behavior for active NWS alerts."""
+
+    def _alert(self, **overrides) -> dict:
+        alert = {
+            "id": "urn:oid:test.1",
+            "event": "Tornado Warning",
+            "tier": "warning",
+            "severity": "extreme",
+            "headline": "Tornado Warning issued by NWS Test",
+            "description": "At 1052 AM EDT, a severe thunderstorm was\nlocated near Salem.\n\nHAZARD...Tornado.",
+            "instruction": "TAKE COVER NOW!",
+            "sender": "NWS Test",
+            "area": "Testville",
+            "onset": "",
+            "ends": "",
+            "expires": "",
+            "first_seen": time.time(),
+        }
+        alert.update(overrides)
+        return alert
+
+    @staticmethod
+    def _body(html: str) -> str:
+        """Markup only. The document embeds the whole stylesheet AND overlay.js, both of
+        which name every class, so asserting a class is ABSENT against the full document
+        always fails."""
+        return html.split("</style>", 1)[-1].split("<script", 1)[0]
+
+    def _banner_theme(self, minutes: int = 15, rotate_seconds: int = 30) -> OverlayTheme:
+        return OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+            weather_alert_banner_minutes=minutes,
+            weather_alert_rotate_seconds=rotate_seconds,
+        )
+
+    def test_no_pill_without_alerts(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(), self.theme))
+        self.assertNotIn("overlay-badge--weather-alert", body)
+        self.assertNotIn("overlay-weather-banner", body)
+
+    def test_pill_names_the_most_urgent_alert(self) -> None:
+        # self.theme leaves the banner window at its default, so age the alert past it.
+        aged = self._alert(first_seen=time.time() - 20 * 60)
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(aged,)), self._banner_theme(15)))
+        self.assertIn("overlay-badge--weather-alert-warning", body)
+        self.assertIn("Tornado Warning", body)
+        self.assertIn('data-badge-action="show_weather_alerts"', body)
+
+    def test_pill_counts_the_remaining_alerts(self) -> None:
+        old = time.time() - 20 * 60
+        alerts = (self._alert(first_seen=old), self._alert(id="b", event="Flood Watch", tier="watch", first_seen=old))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme(15)))
+        self.assertIn("Tornado Warning +1", body)
+
+    def test_advisories_get_no_color_class(self) -> None:
+        """Only watches and warnings are colored; an advisory keeps the neutral badge."""
+        alert = self._alert(
+            event="Heat Advisory", tier="advisory", severity="moderate", first_seen=time.time() - 20 * 60
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme(15)))
+        self.assertIn("overlay-badge--weather-alert-advisory", body)
+        self.assertNotIn("overlay-badge--weather-alert-warning", body)
+
+    def test_banner_shows_for_a_new_alert(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertIn("overlay-weather-banner--warning", body)
+
+    def test_banner_gone_once_the_window_passes(self) -> None:
+        aged = self._alert(first_seen=time.time() - 20 * 60)
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(aged,)), self._banner_theme(15)))
+        self.assertNotIn("overlay-weather-banner", body)
+        # ...but the alert itself is still on the bar for its whole life.
+        self.assertIn("overlay-badge--weather-alert", body)
+
+    def test_zero_minutes_disables_the_banner_entirely(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme(0)))
+        self.assertNotIn("overlay-weather-banner", body)
+        self.assertIn("overlay-badge--weather-alert", body)
+
+    def test_banner_suppresses_the_pill_while_it_is_up(self) -> None:
+        """Both at once is the same sentence twice; the pill's job starts when the banner retires."""
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertIn("overlay-weather-banner", body)
+        self.assertNotIn("overlay-badge--weather-alert", body)
+
+    def test_multiple_alerts_rotate_with_a_position_counter(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme()))
+        self.assertIn('data-alert-rotate="30"', body)
+        self.assertIn("1 of 2", body)
+        self.assertIn("2 of 2", body)
+        # Exactly one visible at a time, so the strip stays a single row.
+        self.assertEqual(body.count("overlay-weather-banner--hidden"), 1)
+
+    def test_rotation_off_renders_only_the_most_urgent(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(
+            render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme(rotate_seconds=0))
+        )
+        self.assertNotIn("data-alert-rotate", body)
+        self.assertNotIn("overlay-weather-banner--watch", body)
+        # The counter still says how many the card behind it holds.
+        self.assertIn("1 of 2", body)
+
+    def test_single_alert_has_no_counter(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__count", body)
+
+    def test_always_mode_keeps_the_banner_for_the_alerts_whole_life(self) -> None:
+        """The default: the strip is unobtrusive enough to leave up, so it stays."""
+        ancient = self._alert(first_seen=time.time() - 3 * 24 * 3600)
+        body = self._body(
+            render_overlay_html(self._snapshot(weather_alerts=(ancient,)), self._banner_theme(BANNER_ALWAYS))
+        )
+        self.assertIn("overlay-weather-banner", body)
+        self.assertNotIn("overlay-badge--weather-alert", body)
+
+    def test_banner_captions_the_alert_from_the_what_tag(self) -> None:
+        """ "Rip Current Statement" alone tells a passing reader nothing."""
+        alert = self._alert(
+            event="Rip Current Statement",
+            tier="statement",
+            description="* WHAT...Dangerous rip currents expected.\n\n* WHERE...All beaches.",
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Dangerous rip currents expected", body)
+        # The label itself is noise and costs a third of the row.
+        self.assertNotIn("What:", body)
+
+    def test_banner_captions_convective_alerts_from_the_hazard_tag(self) -> None:
+        alert = self._alert(description="At 1121 AM EDT, radar.\n\nHAZARD...Wind gusts up to 40 mph.")
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Wind gusts up to 40 mph", body)
+
+    def test_banner_caption_keeps_a_useful_bullet_label(self) -> None:
+        """ "Southwest 15 to 25 mph" is ambiguous without knowing it describes wind."""
+        alert = self._alert(
+            event="Red Flag Warning",
+            description="* Affected Area...Zone 270.\n\n* Winds...Southwest 15 to 25 mph.",
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Winds: Southwest 15 to 25 mph", body)
+        # Bookkeeping bullets must not win the slot.
+        self.assertNotIn("Zone 270", body)
+
+    def test_banner_caption_skips_timing_which_the_row_already_shows(self) -> None:
+        alert = self._alert(
+            description="* TIMING...From this evening through Saturday.\n\n* WINDS...West 10 to 15 mph."
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Winds: West 10 to 15 mph", body)
+        self.assertNotIn("Saturday", body)
+
+    def test_banner_captions_marine_alerts_from_the_period_line(self) -> None:
+        """Coastal forecasts have no tag block at all, just consecutive period lines."""
+        alert = self._alert(
+            event="Small Craft Advisory",
+            tier="advisory",
+            description="Coastal Waters Forecast.\n\n.TODAY...W wind 25 kt.\n.TONIGHT...SW wind 15 kt.",
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("W wind 25 kt", body)
+        # Paragraph-joining would glue the whole week into one caption.
+        self.assertNotIn("TONIGHT", body)
+
+    def test_banner_caption_omitted_when_the_bulletin_has_no_structure(self) -> None:
+        """The first sentence of free prose is worse than saying nothing."""
+        alert = self._alert(description="At 1121 AM EDT, Doppler radar was tracking strong thunderstorms.")
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__detail", body)
+        self.assertNotIn("Doppler radar", body)
+
+    def test_banner_caption_dropped_rather_than_truncated_when_long(self) -> None:
+        """A caption trailing into an ellipsis costs more than the event name alone."""
+        alert = self._alert(
+            description=(
+                "* WHAT...Ping pong ball size hail and destructive wind gusts of up to eighty "
+                "miles per hour together with frequent cloud to ground lightning."
+            )
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__detail", body)
+        self.assertNotIn("Ping pong", body)
+
+    def test_every_rendered_alert_class_has_a_style_rule(self) -> None:
+        """A renamed class must not silently lose its styling.
+
+        Renaming __hazard to __detail left one selector behind, and nothing caught it: the
+        caption still looked right because it is capped short enough never to need the
+        width and ellipsis rules it had quietly lost.
+        """
+        alerts = (self._alert(description="* WHAT...Dangerous rip currents expected."),) * 2
+        snapshot = self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts"})
+        html = render_overlay_html(snapshot, self._banner_theme())
+        body = self._body(html)
+        rendered = set(re.findall(r'class="([^"]*)"', body))
+        classes = {
+            cls
+            for group in rendered
+            for cls in group.split()
+            if cls.startswith(("overlay-weather-banner", "overlay-alert"))
+        }
+        self.assertTrue(classes, "expected alert markup to render")
+        styles = html.split("</style>", 1)[0]
+        # Require a BASE rule, not merely the name appearing somewhere: a leftover
+        # `.foo::before` contains `.foo` as a substring, which is exactly how the original
+        # rename slipped through. Reject a match followed by a colon or another name char.
+        missing = sorted(cls for cls in classes if not re.search(rf"\.{re.escape(cls)}(?![\w-])(?!:)", styles))
+        self.assertEqual(missing, [], f"rendered but unstyled: {missing}")
+
+    def test_card_opens_the_alert_that_was_clicked(self) -> None:
+        """Tapping the banner showing alert 2 must not open alert 1."""
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts", "index": 1}),
+                self.theme,
+            )
+        )
+        self.assertIn("Flood Watch", body)
+        self.assertIn("2 of 2", body)
+        # One alert at a time — eight NWS bulletins in one card is a scroll nobody reads.
+        self.assertNotIn('overlay-alert__event">Tornado Warning', body)
+
+    def test_each_banner_carries_its_own_index(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme()))
+        self.assertIn('data-alert-index="0"', body)
+        self.assertIn('data-alert-index="1"', body)
+
+    def test_card_nav_wraps_at_both_ends(self) -> None:
+        alerts = tuple(self._alert(id=str(n), event=f"Alert {n}") for n in range(3))
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts", "index": 0}),
+                self.theme,
+            )
+        )
+        self.assertIn("overlay-alert-nav", body)
+        # Prev from the first wraps to the last rather than offering a dead button.
+        self.assertIn('data-alert-index="2"', body)
+        self.assertIn('data-alert-index="1"', body)
+
+    def test_card_index_past_the_end_clamps(self) -> None:
+        """Alerts expire while a card is open; a stale index must not jump to the top."""
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts", "index": 9}),
+                self.theme,
+            )
+        )
+        self.assertIn("Flood Watch", body)
+
+    def test_single_alert_card_has_no_nav(self) -> None:
+        body = self._body(
+            render_overlay_html(
+                self._snapshot(weather_alerts=(self._alert(),), info_card={"type": "weather_alerts"}),
+                self.theme,
+            )
+        )
+        self.assertNotIn("overlay-alert-nav", body)
+
+    def test_card_reads_live_alerts_not_the_card_payload(self) -> None:
+        """An open card must track the poll rather than freeze at tap time."""
+        html = render_overlay_html(
+            self._snapshot(weather_alerts=(), info_card={"type": "weather_alerts"}),
+            self.theme,
+        )
+        self.assertIn("No active weather alerts.", html)
+
+    def test_until_falls_back_to_expires_with_a_different_verb(self) -> None:
+        """`ends` is when the weather stops; `expires` is when the bulletin lapses."""
+        ends = datetime.now(UTC) + timedelta(hours=1)
+        with_ends = self._alert(ends=ends.isoformat(), expires=ends.isoformat())
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(with_ends,)), self._banner_theme()))
+        self.assertIn("until ", body)
+        self.assertNotIn("expires ", body)
+
+        without_ends = self._alert(ends="", expires=ends.isoformat())
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(without_ends,)), self._banner_theme()))
+        self.assertIn("expires ", body)
+
+    def test_card_and_banner_agree_with_the_device_clock_format(self) -> None:
+        """A 24h display must not get AM/PM smuggled back in via the card."""
+        ends = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+        # Description deliberately free of clock text — the fixture's "1052 AM EDT" prose
+        # is NWS's own wording, not the formatted time this test is about.
+        snapshot = self._snapshot(
+            weather_alerts=(self._alert(ends=ends, description="HAZARD...Tornado."),),
+            info_card={"type": "weather_alerts"},
+        )
+        body = self._body(render_overlay_html(snapshot, self._banner_theme(), clock_hour12=False))
+        self.assertNotIn("AM", body)
+        self.assertNotIn("PM", body)
+
+        body = self._body(render_overlay_html(snapshot, self._banner_theme(), clock_hour12=True))
+        self.assertEqual(body.count("until "), 2)  # banner and card, both 12-hour
+        self.assertTrue("AM" in body or "PM" in body)
+
+    def test_future_onset_says_from_not_until(self) -> None:
+        """NWS keeps not-yet-effective products in the active feed."""
+        onset = (datetime.now(UTC) + timedelta(hours=14)).isoformat()
+        ends = (datetime.now(UTC) + timedelta(hours=26)).isoformat()
+        alert = self._alert(onset=onset, ends=ends)
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("from ", body)
+        self.assertNotIn("until ", body)
+
+    def test_no_time_phrase_when_nws_gives_neither(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__until", body)
+
+
+class WeatherAlertStateTests(unittest.TestCase):
+    def _alert(self, alert_id: str = "a", **overrides) -> dict:
+        alert = {"id": alert_id, "event": "Tornado Warning", "tier": "warning", "first_seen": time.time()}
+        alert.update(overrides)
+        return alert
+
+    def test_first_alert_bumps_the_version(self) -> None:
+        mgr = OverlayStateManager()
+        change = mgr.set_weather_alerts([self._alert()], banner_minutes=15)
+        self.assertTrue(change.changed)
+        self.assertEqual(len(mgr.snapshot().weather_alerts), 1)
+
+    def test_reissued_identical_alert_does_not_bump(self) -> None:
+        """NWS reissues every few minutes; bumping would reload the photo card each time."""
+        mgr = OverlayStateManager()
+        alert = self._alert()
+        mgr.set_weather_alerts([alert], banner_minutes=15)
+        reissued = {**alert, "expires": "2026-08-21T23:00:00-04:00", "description": "updated text"}
+        self.assertFalse(mgr.set_weather_alerts([reissued], banner_minutes=15).changed)
+
+    def test_new_alert_bumps(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.set_weather_alerts([self._alert("a")], banner_minutes=15)
+        self.assertTrue(mgr.set_weather_alerts([self._alert("a"), self._alert("b")], banner_minutes=15).changed)
+
+    def test_banner_expiry_bumps(self) -> None:
+        """The poll that crosses the banner window has to push a refresh."""
+        mgr = OverlayStateManager()
+        fresh = self._alert(first_seen=time.time())
+        mgr.set_weather_alerts([fresh], banner_minutes=15)
+        aged = {**fresh, "first_seen": time.time() - 20 * 60}
+        self.assertTrue(mgr.set_weather_alerts([aged], banner_minutes=15).changed)
+
+    def test_clearing_alerts_bumps(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.set_weather_alerts([self._alert()], banner_minutes=15)
+        self.assertTrue(mgr.set_weather_alerts([], banner_minutes=15).changed)
 
 
 if __name__ == "__main__":

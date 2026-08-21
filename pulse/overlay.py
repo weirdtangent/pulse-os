@@ -28,6 +28,7 @@ import base64
 import copy
 import hashlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -44,6 +45,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pulse import __version__
 from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
+from pulse.weather_alerts import BANNER_ALWAYS, TIER_RANK, banner_active
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
 DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
@@ -87,6 +89,9 @@ class OverlaySnapshot:
     # {"name": str, "kind": "bluetooth"|"wired"} while the configured speaker is
     # unreachable; None whenever it is reachable, unconfigured, or unknown.
     speaker_offline: dict[str, Any] | None = None
+    # Active NWS alerts for this kiosk's location, most urgent first. See
+    # pulse/weather_alerts.py for the shape of each entry.
+    weather_alerts: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -176,6 +181,7 @@ class OverlayStateManager:
         self._update_available = False
         self._ticker: tuple[dict[str, Any], ...] = ()
         self._speaker_offline: dict[str, Any] | None = None
+        self._weather_alerts: tuple[dict[str, Any], ...] = ()
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -195,6 +201,7 @@ class OverlayStateManager:
             "update_available": "",
             "ticker": "",
             "speaker_offline": "",
+            "weather_alerts": "",
         }
 
     @property
@@ -355,6 +362,11 @@ class OverlayStateManager:
                 events_list = [copy.deepcopy(item) for item in events_payload if isinstance(item, dict)]
                 if events_list:
                     normalized["events"] = events_list
+            if card_type == "weather_alerts":
+                try:
+                    normalized["index"] = max(0, int(card.get("index") or 0))
+                except (TypeError, ValueError):
+                    normalized["index"] = 0
             if card_type == "weather":
                 days_payload = card.get("days")
                 if isinstance(days_payload, list):
@@ -486,6 +498,29 @@ class OverlayStateManager:
             self._signatures["speaker_offline"] = signature
             return self._bump("speaker_offline")
 
+    def set_weather_alerts(self, alerts: Sequence[dict[str, Any]], *, banner_minutes: int = 0) -> OverlayChange:
+        """Store the active NWS alerts for this location, most urgent first.
+
+        Signed on the alert IDs plus each one's banner eligibility, NOT on the whole
+        payload: NWS reissues the same alert every few minutes with a nudged `expires`,
+        and signing the full body would bump the overlay version — reloading the photo
+        card — on every one of those no-op updates. What actually changes the display is
+        an alert arriving, leaving, or aging out of its banner window, so those are what
+        this watches. banner_minutes must match the theme's window for the aging-out
+        transition to be caught on the poll that crosses it.
+        """
+        normalized = tuple(copy.deepcopy(item) for item in alerts if isinstance(item, dict))
+        signature = ",".join(
+            f"{item.get('id', '')}:{'b' if banner_active(item, banner_minutes=banner_minutes) else '-'}"
+            for item in normalized
+        )
+        with self._lock:
+            self._weather_alerts = normalized
+            if signature == self._signatures["weather_alerts"]:
+                return OverlayChange(False, self._version, "weather_alerts")
+            self._signatures["weather_alerts"] = signature
+            return self._bump("weather_alerts")
+
     def snapshot(self) -> OverlaySnapshot:
         with self._lock:
             return OverlaySnapshot(
@@ -511,6 +546,7 @@ class OverlayStateManager:
                 update_available=self._update_available,
                 ticker=tuple(dict(item) for item in self._ticker),
                 speaker_offline=copy.deepcopy(self._speaker_offline),
+                weather_alerts=tuple(copy.deepcopy(item) for item in self._weather_alerts),
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -582,6 +618,12 @@ class OverlayTheme:
     ticker_scroll_speed: int = 60  # pixels per second
     ticker_emoji: bool = True
     ticker_label_mode: str = "auto"  # "name" | "ticker" | "auto" (name for indices, symbol otherwise)
+    # Minutes a brand-new weather alert gets a banner before collapsing to the pill.
+    # 0 disables banners entirely; the pill still carries every active alert.
+    weather_alert_banner_minutes: int = BANNER_ALWAYS
+    # Seconds each alert holds the banner when several are active; 0 shows only the most
+    # urgent. Floor of 5s is enforced client-side.
+    weather_alert_rotate_seconds: int = 30
 
 
 CELL_ORDER = (
@@ -628,6 +670,7 @@ ICON_MAP = {
     "sound": "&#127925;",  # 🎵
     "market": "&#128200;",  # 📈
     "speaker_off": "&#128263;",  # 🔇
+    "weather_alert": "&#9888;",  # ⚠
 }
 
 
@@ -833,6 +876,295 @@ def _build_speaker_pill(snapshot: OverlaySnapshot) -> str:
     )
 
 
+def _parse_alert_time(raw: Any) -> datetime | None:
+    """Parse an NWS ISO-8601 timestamp, keeping the offset the issuing office sent.
+
+    That offset is the alert area's local time, which is the only reading that makes
+    sense on a kiosk hanging on a wall in that area — no conversion needed or wanted.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _format_alert_time(when: datetime, verb: str, *, hour12: bool) -> str:
+    now = datetime.now(when.tzinfo) if when.tzinfo else datetime.now()
+    time_format = "%-I:%M %p" if hour12 else "%H:%M"
+    if when.date() == now.date():
+        return f"{verb} {when.strftime(time_format)}"
+    return f"{verb} {when.strftime('%a')} {when.strftime(time_format)}"
+
+
+def _format_alert_until(alert: dict[str, Any], *, hour12: bool = True) -> str:
+    """Short time phrase for an alert, or "" if NWS gave no usable time at all.
+
+    Three cases, each with its own verb, because they are three different promises:
+    - "from ..." when the alert hasn't started yet. NWS keeps not-yet-effective products in
+      the active feed, and captioning one "until Sat 17:00" would put an end time on the
+      wall for weather that hasn't begun.
+    - "until ..." from `ends`, when the weather is expected to stop.
+    - "expires ..." from `expires`, for the short-fuse products (Special Weather Statements
+      especially) that carry no `ends`. That is when the bulletin lapses, not when the
+      weather does, and saying which one is on screen keeps the display honest.
+    """
+    onset = _parse_alert_time(alert.get("onset"))
+    if onset is not None:
+        now = datetime.now(onset.tzinfo) if onset.tzinfo else datetime.now()
+        if onset > now:
+            return _format_alert_time(onset, "from", hour12=hour12)
+    ends = _parse_alert_time(alert.get("ends"))
+    if ends is not None:
+        return _format_alert_time(ends, "until", hour12=hour12)
+    expires = _parse_alert_time(alert.get("expires"))
+    if expires is not None:
+        return _format_alert_time(expires, "expires", hour12=hour12)
+    return ""
+
+
+def _weather_alert_label(alert: dict[str, Any]) -> str:
+    return str(alert.get("event") or "Weather alert").strip() or "Weather alert"
+
+
+# NWS writes the "what is actually going to happen" line four different ways depending on
+# which desk issued the product, so pulling a descriptor out means trying each in turn.
+# Counts below are from one nationwide sample of 259 active alerts.
+#
+#   WHAT...        the modern watch/warning/advisory format          (128 of 259)
+#   HAZARD...      the convective format (thunderstorm, tornado)     (2, but the ones
+#                                                                     that matter most)
+#   * WINDS...     star-bulleted fields, used by the fire-weather desks
+#   .TODAY...      the marine period line, used by coastal forecasts
+#
+# Anything else — free-prose Air Quality Alerts, tropical headlines in block capitals —
+# has no machine-readable descriptor, and those get the event name alone rather than a
+# mangled guess.
+_DETAIL_TAGS = ("WHAT...", "HAZARD...")
+# Bookkeeping bullets, not weather. "Timing"/"When" would only repeat the until/from
+# phrase already on the row, and the rest push the useful bullet off the banner.
+_BULLET_SKIP = {
+    "affected area",
+    "changes",
+    "where",
+    "when",
+    "timing",
+    "impacts",
+    "impact",
+    "view",
+    "additional details",
+    "precautionary/preparedness actions",
+}
+# Bullets whose label adds nothing: "What: Dangerous rip currents expected" reads worse
+# than "Dangerous rip currents expected", and the label costs a third of the row.
+_BULLET_BARE = {"what", "hazard"}
+_BULLET_RE = re.compile(r"^\*\s*([A-Za-z][A-Za-z /]{2,30})\.\.\.\s*(.+)$", re.DOTALL)
+# ".TODAY...W wind 25 kt. Seas 10 ft." — the first period of a coastal waters forecast.
+_PERIOD_RE = re.compile(r"^\.([A-Z][A-Z0-9 ]*)\.\.\.\s*(.*)$")
+# Roomy enough for the real ones ("Dangerously hot conditions with temperatures up to
+# 112" is 63) and tight enough to stay a glanceable phrase rather than a paragraph.
+_DETAIL_MAX_CHARS = 70
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _tidy_detail(text: str) -> str:
+    """First sentence only, trimmed — or "" if even that is too long to be glanceable.
+
+    Bailing out beats truncating. This is a caption read from across a room, and half a
+    sentence trailing into an ellipsis costs a reader more than the event name alone. Plenty
+    of products have no short way to say what they are, and those simply don't get a caption.
+    """
+    collapsed = " ".join(text.split()).strip()
+    if not collapsed:
+        return ""
+    detail = _SENTENCE_END_RE.split(collapsed)[0].strip().rstrip(".")
+    if not detail or len(detail) > _DETAIL_MAX_CHARS:
+        return ""
+    return detail
+
+
+def _detail_from_tags(paragraphs: list[str]) -> str:
+    for tag in _DETAIL_TAGS:
+        for paragraph in paragraphs:
+            if paragraph.startswith(tag):
+                detail = _tidy_detail(paragraph[len(tag) :])
+                if detail:
+                    return detail
+    return ""
+
+
+def _detail_from_bullets(paragraphs: list[str]) -> str:
+    """First substantive "* LABEL...value" bullet, rendered as "Label: value"."""
+    for paragraph in paragraphs:
+        match = _BULLET_RE.match(paragraph)
+        if not match:
+            continue
+        label = " ".join(match.group(1).split()).strip()
+        if label.lower() in _BULLET_SKIP:
+            continue
+        value = _tidy_detail(match.group(2))
+        if not value:
+            continue
+        if label.lower() in _BULLET_BARE:
+            return value
+        # Budget the label into the same row, so "Winds: ..." can't push past one line.
+        return _tidy_detail(f"{label.title()}: {value}")
+    return ""
+
+
+def _detail_from_marine_period(description: str) -> str:
+    """The first period of a coastal waters forecast (".TODAY...W wind 25 kt. Seas 10 ft.").
+
+    Read off raw lines rather than paragraphs: the period lines run consecutively with no
+    blank line between them, so paragraph-joining would glue the whole week into one string.
+    A single period's text can still wrap, so continuation lines are gathered until the next
+    period starts.
+    """
+    collected: list[str] = []
+    for line in (description or "").split("\n"):
+        match = _PERIOD_RE.match(line.strip())
+        if match:
+            if collected:
+                break
+            collected.append(match.group(2))
+        elif collected:
+            if not line.strip():
+                break
+            collected.append(line.strip())
+    return _tidy_detail(" ".join(collected))
+
+
+def _weather_alert_detail(alert: dict[str, Any]) -> str:
+    """One line saying what the alert is actually about, or "" when NWS gave nothing usable.
+
+    "Small Craft Advisory" or "Special Weather Statement" alone tells a passing reader
+    nothing; "Wind gusts up to 40 mph" is the part worth reading from across the room.
+    Only structured fields are used — falling back to the first sentence of the prose would
+    put "At 1121 AM EDT, Doppler radar was tracking storms along a line extending from..."
+    on the banner, which is worse than saying nothing.
+    """
+    description = str(alert.get("description") or "")
+    paragraphs = _nws_paragraphs(description)
+    return _detail_from_tags(paragraphs) or _detail_from_bullets(paragraphs) or _detail_from_marine_period(description)
+
+
+def _banner_worthy_alerts(snapshot: OverlaySnapshot, theme: OverlayTheme) -> list[dict[str, Any]]:
+    """Active alerts that currently warrant a banner, most urgent first.
+
+    The three modes (always / never / timed window) all live in banner_active, so this
+    must not second-guess the minutes value — BANNER_ALWAYS is negative on purpose.
+    """
+    minutes = int(theme.weather_alert_banner_minutes)
+    return [
+        item
+        for item in (snapshot.weather_alerts or ())
+        if isinstance(item, dict) and banner_active(item, banner_minutes=minutes)
+    ]
+
+
+def _build_weather_alert_pill(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
+    """Badge carrying the active NWS alerts once their banner has retired.
+
+    One-sided like the speaker badge: there is no "no alerts" pill, because the quiet
+    state is the normal one. The pill names the most urgent alert and counts the rest,
+    rather than listing them, because badge space is scarce and the card behind the tap
+    has room for all of them.
+    """
+    alerts = [item for item in (snapshot.weather_alerts or ()) if isinstance(item, dict)]
+    if not alerts:
+        return ""
+    # The banner already says all of this, louder and with the hazard spelled out. Showing
+    # both at once is just the same sentence twice; the pill's job starts when the banner
+    # retires and the alert still has days to run.
+    if _banner_worthy_alerts(snapshot, theme):
+        return ""
+    primary = alerts[0]
+    tier = str(primary.get("tier") or "statement").strip().lower()
+    if tier not in TIER_RANK:
+        tier = "statement"
+    label = _weather_alert_label(primary)
+    if len(alerts) > 1:
+        label = f"{label} +{len(alerts) - 1}"
+    described = ", ".join(_weather_alert_label(item) for item in alerts)
+    detail = html_escape(f"Weather alerts: {described}", quote=True)
+    icon = ICON_MAP.get("weather_alert", "&#9679;")
+    return (
+        f'<span class="overlay-badge overlay-badge--weather-alert overlay-badge--weather-alert-{tier}" '
+        f'role="button" tabindex="0" data-badge-action="show_weather_alerts" '
+        f'data-alert-index="0" aria-label="{detail}" title="{detail}">'
+        f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
+        f"<span>{html_escape(label)}</span>"
+        "</span>"
+    )
+
+
+def _build_weather_alert_banner(snapshot: OverlaySnapshot, theme: OverlayTheme, *, hour12: bool = True) -> str:
+    """The alert strip above the notification bar.
+
+    Shows one alert at a time and, when several are active, rotates through them every
+    PULSE_WEATHER_ALERTS_ROTATE_SECONDS — a stacked banner per alert would be the
+    takeover this design exists to avoid, and cramming three event names onto one row
+    makes all three unreadable. Every alert is rendered; JS toggles which is visible (see
+    rotateAlertBanners in overlay.js), so the rotation costs no server round trips and
+    keeps working between overlay refreshes.
+
+    Rotation covers ALL active alerts, not just the banner-worthy ones, so the "n of N"
+    counter is honest about how many there are.
+    """
+    if not _banner_worthy_alerts(snapshot, theme):
+        return ""
+    alerts = [item for item in (snapshot.weather_alerts or ()) if isinstance(item, dict)]
+    if not alerts:
+        return ""
+    total = len(alerts)
+    rotate_seconds = max(0, int(theme.weather_alert_rotate_seconds or 0))
+    # With rotation off there is no way to reach the others from the strip, so only the
+    # most urgent renders — the counter still says how many the card behind it holds.
+    visible = alerts if rotate_seconds > 0 else alerts[:1]
+    banners = [
+        _render_weather_alert_banner(alert, position=index, total=total, hidden=index > 0, hour12=hour12)
+        for index, alert in enumerate(visible)
+    ]
+    rotate_attr = f' data-alert-rotate="{rotate_seconds}"' if rotate_seconds > 0 and len(banners) > 1 else ""
+    return f'<div class="overlay-weather-banners"{rotate_attr}>' + "".join(banners) + "</div>"
+
+
+def _render_weather_alert_banner(
+    alert: dict[str, Any],
+    *,
+    position: int,
+    total: int,
+    hidden: bool,
+    hour12: bool,
+) -> str:
+    tier = str(alert.get("tier") or "statement").strip().lower()
+    if tier not in TIER_RANK:
+        tier = "statement"
+    label = html_escape(_weather_alert_label(alert))
+    until = _format_alert_until(alert, hour12=hour12)
+    until_html = f'<span class="overlay-weather-banner__until">{html_escape(until)}</span>' if until else ""
+    detail = _weather_alert_detail(alert)
+    detail_html = f'<span class="overlay-weather-banner__detail">{html_escape(detail)}</span>' if detail else ""
+    # "2 of 3" rather than "+2": with the strip rotating, a position reads as a place in a
+    # sequence, which is what it is, and it tells you the rotation isn't stuck.
+    count_html = f'<span class="overlay-weather-banner__count">{position + 1} of {total}</span>' if total > 1 else ""
+    classes = ["overlay-weather-banner", f"overlay-weather-banner--{tier}"]
+    if hidden:
+        classes.append("overlay-weather-banner--hidden")
+    icon = ICON_MAP.get("weather_alert", "&#9679;")
+    return (
+        f'<div class="{" ".join(classes)}" '
+        f'role="button" tabindex="0" data-badge-action="show_weather_alerts" '
+        f'data-alert-index="{position}">'
+        f'<span class="overlay-weather-banner__icon" aria-hidden="true">{icon}</span>'
+        f'<span class="overlay-weather-banner__event">{label}</span>'
+        f"{count_html}{detail_html}{until_html}"
+        "</div>"
+    )
+
+
 def render_overlay_html(
     snapshot: OverlaySnapshot,
     theme: OverlayTheme,
@@ -862,7 +1194,7 @@ def render_overlay_html(
 
     info_card_markup = ""
     if snapshot.info_card:
-        candidate = _build_info_overlay(snapshot)
+        candidate = _build_info_overlay(snapshot, hour12=clock_hour12)
         if candidate:
             # Clear blocked cells before rendering to prevent visual artifacts
             for cell in INFO_CARD_BLOCKED_CELLS:
@@ -880,6 +1212,9 @@ def render_overlay_html(
         grid_markup += info_card_markup
 
     notification_html = _build_notification_bar(snapshot, theme) if theme.show_notification_bar else ""
+    # Rendered above the notification bar rather than inside it: the banner is the one
+    # element allowed to claim a full row, and only for its first few minutes.
+    alert_banner_html = _build_weather_alert_banner(snapshot, theme, hour12=clock_hour12)
 
     ticker_html = _build_ticker_bar(snapshot, theme) if theme.show_ticker else ""
     root_class = "overlay-root overlay-root--ticker" if ticker_html else "overlay-root"
@@ -910,6 +1245,7 @@ def render_overlay_html(
 </head>
 <body>
 <div {root_attrs}>
+{alert_banner_html}
 {notification_html}
 <div class="overlay-grid">
 {grid_markup}
@@ -1259,6 +1595,11 @@ def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> s
     badges: list[str] = []
     badges.append(_render_badge("help", "Help"))
     badges.append(_render_badge("config", "Config"))
+    # First of the status pills, ahead of even the speaker badge: nothing else on this bar
+    # can be a tornado warning, and if only one pill gets read at a glance it should be this.
+    alert_pill = _build_weather_alert_pill(snapshot, theme)
+    if alert_pill:
+        badges.append(alert_pill)
     # Ahead of the alarm/timer badges on purpose: a speaker that is off doesn't just
     # mean no music, it means the alarm sitting next to it won't be heard either. If
     # anything on this bar deserves to be read first, it's this.
@@ -1308,7 +1649,7 @@ def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> s
     return f'<div class="{class_attr}">{content}</div>'
 
 
-def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
+def _build_info_overlay(snapshot: OverlaySnapshot, *, hour12: bool = True) -> str:
     card = snapshot.info_card or {}
     card_type = str(card.get("type") or "").lower()
     if card_type == "help":
@@ -1321,6 +1662,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
         return _build_calendar_info_overlay(snapshot, card)
     if card_type == "weather":
         return _build_weather_info_overlay(snapshot, card)
+    if card_type == "weather_alerts":
+        return _build_weather_alerts_info_overlay(snapshot, card, hour12=hour12)
     if card_type == "update":
         return _build_update_info_overlay(snapshot, card)
     if card_type == "lights":
@@ -2091,6 +2434,124 @@ def _build_weather_info_overlay(snapshot: OverlaySnapshot, card: dict[str, Any])
   </div>
 </div>
 """.strip()
+
+
+def _nws_paragraphs(text: str) -> list[str]:
+    """Split NWS bulletin text into paragraphs, undoing its fixed-width hard wrapping.
+
+    NWS ships plain text hard-wrapped at roughly 68 columns, with blank lines between
+    paragraphs. Rendering it verbatim gives ragged 68-char lines on a 1280px display, so
+    single newlines are joined back into flowing text and only blank lines break.
+    """
+    paragraphs: list[str] = []
+    for block in (text or "").split("\n\n"):
+        joined = " ".join(part.strip() for part in block.split("\n") if part.strip())
+        if joined:
+            paragraphs.append(joined)
+    return paragraphs
+
+
+def _build_weather_alerts_info_overlay(
+    snapshot: OverlaySnapshot,
+    card: dict[str, Any],
+    *,
+    hour12: bool = True,
+) -> str:
+    """Full detail for ONE alert, with prev/next when several are active.
+
+    Deliberately not a stacked list: a coastal point can sit under half a dozen products
+    at once, and eight NWS bulletins in one card is a scroll nobody reads. The banner is
+    already showing one alert at a time, so tapping it opens that one — the index rides
+    along on the click (see data-alert-index) rather than always landing on the most
+    urgent one.
+
+    Reads the alerts off the snapshot rather than off the card payload, so a card left
+    open through a poll picks up new alerts and drops expired ones instead of freezing
+    whatever was active at the moment somebody tapped.
+    """
+    alerts = [item for item in (snapshot.weather_alerts or ()) if isinstance(item, dict)]
+    if not alerts:
+        body = '<div class="overlay-info-card__empty">No active weather alerts.</div>'
+        subtitle_html = ""
+        nav_html = ""
+    else:
+        try:
+            index = int(card.get("index") or 0)
+        except (TypeError, ValueError):
+            index = 0
+        # Clamped, not wrapped: alerts expire while a card is open, and an index pointing
+        # past the end should land on the last one rather than silently jump to the first.
+        index = max(0, min(index, len(alerts) - 1))
+        alert = alerts[index]
+        total = len(alerts)
+
+        tier = str(alert.get("tier") or "statement").strip().lower()
+        if tier not in TIER_RANK:
+            tier = "statement"
+        until = _format_alert_until(alert, hour12=hour12)
+        meta_parts = [part for part in (str(alert.get("sender") or "").strip(), until) if part]
+        meta_html = (
+            f'<div class="overlay-alert__meta">{html_escape(" · ".join(meta_parts))}</div>' if meta_parts else ""
+        )
+        area = str(alert.get("area") or "").strip()
+        area_html = f'<div class="overlay-alert__area">{html_escape(area)}</div>' if area else ""
+        description_html = "".join(
+            f"<p>{html_escape(paragraph)}</p>" for paragraph in _nws_paragraphs(str(alert.get("description") or ""))
+        )
+        instruction_paragraphs = _nws_paragraphs(str(alert.get("instruction") or ""))
+        instruction_html = (
+            '<div class="overlay-alert__instruction">'
+            + "".join(f"<p>{html_escape(paragraph)}</p>" for paragraph in instruction_paragraphs)
+            + "</div>"
+            if instruction_paragraphs
+            else ""
+        )
+        body = (
+            f'<div class="overlay-alert overlay-alert--{tier}">'
+            f'<div class="overlay-alert__event">{html_escape(_weather_alert_label(alert))}</div>'
+            f"{meta_html}{area_html}"
+            f'<div class="overlay-alert__body">{description_html}</div>'
+            f"{instruction_html}"
+            "</div>"
+        )
+        subtitle = f"{index + 1} of {total}" if total > 1 else ""
+        subtitle_html = f'<div class="overlay-info-card__subtitle">{html_escape(subtitle)}</div>' if subtitle else ""
+        nav_html = _build_weather_alert_nav(index, total) if total > 1 else ""
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--weather-alerts">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">Weather Alerts</div>
+      {subtitle_html}
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close weather alerts">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+  {nav_html}
+</div>
+""".strip()
+
+
+def _build_weather_alert_nav(index: int, total: int) -> str:
+    """Prev/next for the alert card.
+
+    Wraps rather than disabling at the ends: stepping off a short ring and finding a dead
+    button reads as broken, and with two alerts either button should just show the other.
+    """
+    previous_index = (index - 1) % total
+    next_index = (index + 1) % total
+    return (
+        '<div class="overlay-alert-nav">'
+        '<span class="overlay-alert-nav__button" role="button" tabindex="0" '
+        f'data-badge-action="show_weather_alerts" data-alert-index="{previous_index}" '
+        'aria-label="Previous alert">&#8249; Prev</span>'
+        '<span class="overlay-alert-nav__button" role="button" tabindex="0" '
+        f'data-badge-action="show_weather_alerts" data-alert-index="{next_index}" '
+        'aria-label="Next alert">Next &#8250;</span>'
+        "</div>"
+    )
 
 
 def _build_lights_info_overlay(card: dict[str, Any]) -> str:

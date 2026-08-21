@@ -136,6 +136,224 @@ body {
   }
 }
 
+/* Weather-alert pill — the only badge that can outrank the speaker fault, so it sits
+   first on the bar. Only watches and warnings get a color: an advisory or a Special
+   Weather Statement is genuinely informational, and painting every one of them amber
+   would spend the display's alarm vocabulary on "it might get windy". Those keep the
+   neutral badge background and rely on the ⚠ glyph alone. */
+.overlay-badge--weather-alert {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* Red, despite red already meaning "earmuffs are on" elsewhere on this bar. A warning
+   means the weather is happening now, which is the one condition on the display with a
+   stronger claim to red than a user preference toggle; the ⚠ glyph and the event name
+   keep the two from being confused at a glance. */
+.overlay-badge.overlay-badge--weather-alert-warning {
+  background: #dc322f !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
+  color: #ffffff !important;
+  animation: overlayWeatherAlertPulse 2.4s ease-in-out infinite alternate;
+}
+
+.overlay-badge.overlay-badge--weather-alert-watch {
+  background: #b58900 !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  color: #ffffff !important;
+}
+
+/* Same slow, dim cadence as the speaker-offline badge and for the same reason: a warning
+   can run for hours, and it has to survive a passing glance without strobing at whoever
+   is sitting in the room. */
+@keyframes overlayWeatherAlertPulse {
+  from {
+    box-shadow: 0 0 0 rgba(220, 50, 47, 0.35);
+  }
+  to {
+    box-shadow: 0 0 14px rgba(220, 50, 47, 0.75);
+  }
+}
+
+/* One-shot banner for a just-issued alert. Deliberately a single slim row above the
+   notification bar — it claims a strip, never the display — and it removes itself after
+   PULSE_WEATHER_ALERTS_BANNER_MINUTES, so a multi-day winter storm warning does not
+   leave a permanent stripe that everyone learns to look past. */
+/* Wrapper for the rotating set. Only one child is visible at a time (see
+   rotateAlertBanners in overlay.js), so the strip is always exactly one row tall however
+   many alerts are active. */
+.overlay-weather-banners {
+  flex-shrink: 0;
+}
+
+.overlay-weather-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  padding: 0.55rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  user-select: none;
+  font-size: 1.05rem;
+}
+
+/* Compound selector on purpose: a bare .overlay-weather-banner--hidden loses to the
+   .overlay-weather-banner { display: flex } above it on source order, and every banner
+   renders at once. */
+.overlay-weather-banner.overlay-weather-banner--hidden {
+  display: none;
+}
+
+.overlay-weather-banner--warning {
+  background: #dc322f;
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+}
+
+.overlay-weather-banner--watch {
+  background: #b58900;
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+}
+
+.overlay-weather-banner__icon {
+  font-size: 1.15rem;
+}
+
+.overlay-weather-banner__event {
+  flex: 0 0 auto;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* The NWS HAZARD line — what is actually going to happen, as opposed to the name of the
+   product. It takes whatever width is left and ellipsizes, so the event name and the end
+   time (the two things that must always be readable) never get pushed off the row. */
+/* "2 of 3" — a place in the rotation, which also shows at a glance that the strip isn't
+   stuck on one alert. */
+.overlay-weather-banner__count {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 0.78em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.overlay-weather-banner__detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overlay-weather-banner__detail::before {
+  content: "· ";
+  opacity: 0.6;
+}
+
+.overlay-weather-banner__until {
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0.85;
+  font-size: 0.9em;
+}
+
+/* Prev/next for the alert card. One alert at a time beats a stack: a coastal point can
+   sit under half a dozen simultaneous products, and eight bulletins in one card is a
+   scroll nobody reads. */
+.overlay-alert-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding-top: 0.9rem;
+  margin-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.overlay-alert-nav__button {
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95rem;
+  transition: background 0.2s ease;
+}
+
+.overlay-alert-nav__button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Alert detail card — the thing behind a tap on the pill or the banner. */
+.overlay-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.overlay-alert {
+  padding-left: 0.9rem;
+  border-left: 4px solid rgba(255, 255, 255, 0.3);
+}
+
+.overlay-alert--warning {
+  border-left-color: #dc322f;
+}
+
+.overlay-alert--watch {
+  border-left-color: #b58900;
+}
+
+.overlay-alert__event {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.overlay-alert__meta,
+.overlay-alert__area {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* The county list runs to a dozen names on a regional product; two lines of it is
+   orientation, more is noise the description below already covers. */
+.overlay-alert__area {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.overlay-alert__body p,
+.overlay-alert__instruction p {
+  margin: 0.6rem 0 0;
+  line-height: 1.45;
+}
+
+/* NWS puts the actionable part ("take shelter now") in a separate instruction field;
+   giving it its own tint keeps it from reading as more radar prose. */
+.overlay-alert__instruction {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-badge.overlay-badge--weather-alert-warning {
+    animation: none;
+  }
+}
+
 .overlay-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -231,9 +231,33 @@ window.PulseOverlay.initialize = function() {
     });
   };
 
+  // --- Weather-alert banner rotation ---
+  // Which banner is visible is derived from the wall clock rather than kept in a counter,
+  // so it survives the photo-card swapping the overlay markup out from under us and stays
+  // in step across displays. Runs on the same 1s cadence as the clock tick below.
+  const rotateAlertBanners = () => {
+    const rotator = root.querySelector('[data-alert-rotate]');
+    if (!rotator) {
+      return;
+    }
+    const banners = rotator.querySelectorAll('.overlay-weather-banner');
+    if (banners.length < 2) {
+      return;
+    }
+    const seconds = Math.max(5, parseInt(rotator.getAttribute('data-alert-rotate'), 10) || 30);
+    const index = Math.floor(Date.now() / (seconds * 1000)) % banners.length;
+    banners.forEach((banner, position) => {
+      banner.classList.toggle('overlay-weather-banner--hidden', position !== index);
+    });
+  };
+
   // Initial tick to set clock immediately
+  rotateAlertBanners();
   tick();
-  window.PulseOverlay.clockInterval = window.setInterval(tick, 1000);
+  window.PulseOverlay.clockInterval = window.setInterval(() => {
+    tick();
+    rotateAlertBanners();
+  }, 1000);
   alignNowPlayingCard();
 
   // Store resize handler reference for cleanup
@@ -468,10 +492,17 @@ window.PulseOverlay.initialize = function() {
       const resetOpacity = () => {
         badgeButton.style.opacity = '';
       };
+      // Weather-alert banners and the card's prev/next carry which alert they mean, so
+      // clicking the one on screen opens that one rather than always the most urgent.
+      const payload = { action };
+      const alertIndex = badgeButton.getAttribute('data-alert-index');
+      if (alertIndex !== null) {
+        payload.index = parseInt(alertIndex, 10) || 0;
+      }
       fetch(infoEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify(payload)
       }).finally(resetOpacity);
       return;
     }
