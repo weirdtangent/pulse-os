@@ -44,7 +44,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pulse import __version__
 from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
-from pulse.weather_alerts import TIER_RANK, banner_active
+from pulse.weather_alerts import BANNER_ALWAYS, TIER_RANK, banner_active
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
 DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
@@ -614,7 +614,10 @@ class OverlayTheme:
     ticker_label_mode: str = "auto"  # "name" | "ticker" | "auto" (name for indices, symbol otherwise)
     # Minutes a brand-new weather alert gets a banner before collapsing to the pill.
     # 0 disables banners entirely; the pill still carries every active alert.
-    weather_alert_banner_minutes: int = 15
+    weather_alert_banner_minutes: int = BANNER_ALWAYS
+    # Seconds each alert holds the banner when several are active; 0 shows only the most
+    # urgent. Floor of 5s is enforced client-side.
+    weather_alert_rotate_seconds: int = 30
 
 
 CELL_ORDER = (
@@ -938,8 +941,22 @@ def _weather_alert_hazard(alert: dict[str, Any]) -> str:
     return ""
 
 
-def _build_weather_alert_pill(snapshot: OverlaySnapshot) -> str:
-    """Badge carrying the active NWS alerts for the whole of their lives.
+def _banner_worthy_alerts(snapshot: OverlaySnapshot, theme: OverlayTheme) -> list[dict[str, Any]]:
+    """Active alerts that currently warrant a banner, most urgent first.
+
+    The three modes (always / never / timed window) all live in banner_active, so this
+    must not second-guess the minutes value — BANNER_ALWAYS is negative on purpose.
+    """
+    minutes = int(theme.weather_alert_banner_minutes)
+    return [
+        item
+        for item in (snapshot.weather_alerts or ())
+        if isinstance(item, dict) and banner_active(item, banner_minutes=minutes)
+    ]
+
+
+def _build_weather_alert_pill(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
+    """Badge carrying the active NWS alerts once their banner has retired.
 
     One-sided like the speaker badge: there is no "no alerts" pill, because the quiet
     state is the normal one. The pill names the most urgent alert and counts the rest,
@@ -948,6 +965,11 @@ def _build_weather_alert_pill(snapshot: OverlaySnapshot) -> str:
     """
     alerts = [item for item in (snapshot.weather_alerts or ()) if isinstance(item, dict)]
     if not alerts:
+        return ""
+    # The banner already says all of this, louder and with the hazard spelled out. Showing
+    # both at once is just the same sentence twice; the pill's job starts when the banner
+    # retires and the alert still has days to run.
+    if _banner_worthy_alerts(snapshot, theme):
         return ""
     primary = alerts[0]
     tier = str(primary.get("tier") or "statement").strip().lower()
@@ -970,23 +992,44 @@ def _build_weather_alert_pill(snapshot: OverlaySnapshot) -> str:
 
 
 def _build_weather_alert_banner(snapshot: OverlaySnapshot, theme: OverlayTheme, *, hour12: bool = True) -> str:
-    """One-shot banner for an alert that arrived within the last banner window.
+    """The alert strip above the notification bar.
 
-    Deliberately shows only the single most urgent qualifying alert: a banner that lists
-    three products is a takeover, and the pill plus card already handle the full set. See
-    weather_alerts.banner_active for why this is time-boxed rather than persistent.
+    Shows one alert at a time and, when several are active, rotates through them every
+    PULSE_WEATHER_ALERTS_ROTATE_SECONDS — a stacked banner per alert would be the
+    takeover this design exists to avoid, and cramming three event names onto one row
+    makes all three unreadable. Every alert is rendered; JS toggles which is visible (see
+    rotateAlertBanners in overlay.js), so the rotation costs no server round trips and
+    keeps working between overlay refreshes.
+
+    Rotation covers ALL active alerts, not just the banner-worthy ones, so the "n of N"
+    counter is honest about how many there are.
     """
-    minutes = int(theme.weather_alert_banner_minutes or 0)
-    if minutes <= 0:
+    if not _banner_worthy_alerts(snapshot, theme):
         return ""
-    fresh = [
-        item
-        for item in (snapshot.weather_alerts or ())
-        if isinstance(item, dict) and banner_active(item, banner_minutes=minutes)
+    alerts = [item for item in (snapshot.weather_alerts or ()) if isinstance(item, dict)]
+    if not alerts:
+        return ""
+    total = len(alerts)
+    rotate_seconds = max(0, int(theme.weather_alert_rotate_seconds or 0))
+    # With rotation off there is no way to reach the others from the strip, so only the
+    # most urgent renders — the counter still says how many the card behind it holds.
+    visible = alerts if rotate_seconds > 0 else alerts[:1]
+    banners = [
+        _render_weather_alert_banner(alert, position=index, total=total, hidden=index > 0, hour12=hour12)
+        for index, alert in enumerate(visible)
     ]
-    if not fresh:
-        return ""
-    alert = fresh[0]
+    rotate_attr = f' data-alert-rotate="{rotate_seconds}"' if rotate_seconds > 0 and len(banners) > 1 else ""
+    return f'<div class="overlay-weather-banners"{rotate_attr}>' + "".join(banners) + "</div>"
+
+
+def _render_weather_alert_banner(
+    alert: dict[str, Any],
+    *,
+    position: int,
+    total: int,
+    hidden: bool,
+    hour12: bool,
+) -> str:
     tier = str(alert.get("tier") or "statement").strip().lower()
     if tier not in TIER_RANK:
         tier = "statement"
@@ -995,13 +1038,19 @@ def _build_weather_alert_banner(snapshot: OverlaySnapshot, theme: OverlayTheme, 
     until_html = f'<span class="overlay-weather-banner__until">{html_escape(until)}</span>' if until else ""
     hazard = _weather_alert_hazard(alert)
     hazard_html = f'<span class="overlay-weather-banner__hazard">{html_escape(hazard)}</span>' if hazard else ""
+    # "2 of 3" rather than "+2": with the strip rotating, a position reads as a place in a
+    # sequence, which is what it is, and it tells you the rotation isn't stuck.
+    count_html = f'<span class="overlay-weather-banner__count">{position + 1} of {total}</span>' if total > 1 else ""
+    classes = ["overlay-weather-banner", f"overlay-weather-banner--{tier}"]
+    if hidden:
+        classes.append("overlay-weather-banner--hidden")
     icon = ICON_MAP.get("weather_alert", "&#9679;")
     return (
-        f'<div class="overlay-weather-banner overlay-weather-banner--{tier}" '
+        f'<div class="{" ".join(classes)}" '
         f'role="button" tabindex="0" data-badge-action="show_weather_alerts">'
         f'<span class="overlay-weather-banner__icon" aria-hidden="true">{icon}</span>'
         f'<span class="overlay-weather-banner__event">{label}</span>'
-        f"{hazard_html}{until_html}"
+        f"{count_html}{hazard_html}{until_html}"
         "</div>"
     )
 
@@ -1438,7 +1487,7 @@ def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> s
     badges.append(_render_badge("config", "Config"))
     # First of the status pills, ahead of even the speaker badge: nothing else on this bar
     # can be a tornado warning, and if only one pill gets read at a glance it should be this.
-    alert_pill = _build_weather_alert_pill(snapshot)
+    alert_pill = _build_weather_alert_pill(snapshot, theme)
     if alert_pill:
         badges.append(alert_pill)
     # Ahead of the alarm/timer badges on purpose: a speaker that is off doesn't just

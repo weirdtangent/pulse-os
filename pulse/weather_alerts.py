@@ -51,6 +51,10 @@ SEVERITY_ORDER = ("unknown", "minor", "moderate", "severe", "extreme")
 SEVERITY_RANK = {name: index for index, name in enumerate(SEVERITY_ORDER)}
 DEFAULT_MIN_SEVERITY = "severe"
 
+# Sentinel for PULSE_WEATHER_ALERTS_BANNER_MINUTES="always" — the banner stays up for as
+# long as the alert is active, and the pill never takes over.
+BANNER_ALWAYS = -1
+
 # Cap on how many alerts the pill/banner will carry. Coastal and mountain points routinely
 # sit under half a dozen simultaneous products; the card lists them all, this only bounds
 # what the state manager has to diff and render.
@@ -146,20 +150,40 @@ class WeatherAlert:
         }
 
 
-def banner_active(alert: dict[str, Any], *, banner_minutes: int, now: float | None = None) -> bool:
-    """Whether an alert is still inside its one-shot banner window.
+def parse_banner_minutes(spec: str | None) -> int:
+    """Parse the banner window: "always" (the default), "0" for never, or a minute count.
 
-    The banner is a "this just happened" announcement, not a status display: it shows for
-    the first banner_minutes of an alert's life on this kiosk and then never again, because
-    a winter storm warning can run for days and a permanent stripe across the display would
-    train everyone to stop seeing it. The pill carries the alert for the rest of its life.
-
-    Because the window is derived from first_seen rather than a UI flag, it survives an
-    overlay reload — a card refresh mid-storm cannot resurrect a banner that already expired.
-    NWS issues a fresh alert ID when a watch is upgraded to a warning, so a genuine
-    escalation does get its own banner; routine "extended until 6 AM" reissues carry the
-    same ID and do not.
+    Returned as an int so it can live in a frozen config, with BANNER_ALWAYS as the
+    sentinel for "for as long as the alert is active".
     """
+    normalized = (spec or "").strip().lower()
+    if not normalized or normalized in {"always", "full", "-1"}:
+        return BANNER_ALWAYS
+    try:
+        minutes = int(normalized)
+    except ValueError:
+        return BANNER_ALWAYS
+    return BANNER_ALWAYS if minutes < 0 else minutes
+
+
+def banner_active(alert: dict[str, Any], *, banner_minutes: int, now: float | None = None) -> bool:
+    """Whether an alert should currently have a banner.
+
+    Three modes, all through one setting:
+    - BANNER_ALWAYS (the default): the banner is the display, for the alert's whole life.
+      The strip turned out to be unobtrusive enough to leave up, and it carries the hazard
+      text, which the pill has no room for.
+    - 0: never; the pill alone carries the alert.
+    - N > 0: a "this just happened" announcement for N minutes, then the pill takes over.
+
+    In the timed mode the window is derived from first_seen rather than a UI flag, so it
+    survives an overlay reload — a card refresh mid-storm cannot resurrect a banner that
+    already expired. NWS issues a fresh alert ID when a watch is upgraded to a warning, so
+    a genuine escalation gets a new window; routine "extended until 6 AM" reissues carry
+    the same ID and do not.
+    """
+    if banner_minutes == BANNER_ALWAYS:
+        return True
     if banner_minutes <= 0:
         return False
     try:

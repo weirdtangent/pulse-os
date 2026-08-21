@@ -47,6 +47,7 @@ from pulse.stock_ticker import (
 from pulse.utils import parse_bool, parse_int, sanitize_hostname_for_entity_id
 from pulse.weather_alerts import (
     WeatherAlertClient,
+    parse_banner_minutes,
     parse_exclusions,
     parse_min_severity,
     parse_tiers,
@@ -123,7 +124,8 @@ class OverlayConfig:
     weather_alerts_min_severity: str  # NWS severity floor: extreme|severe|moderate|minor|unknown
     weather_alerts_exclude: tuple[str, ...]  # NWS event names to never show
     weather_alerts_interval: int  # seconds between polls of api.weather.gov
-    weather_alerts_banner_minutes: int  # banner window for a new alert; 0 = pill only
+    weather_alerts_banner_minutes: int  # BANNER_ALWAYS | 0 = pill only | N minutes
+    weather_alerts_rotate_seconds: int  # seconds per alert when several are active; 0 = top one only
     weather_alerts_contact: str  # contact string for the NWS-required User-Agent
     weather_alerts_sound: bool  # chime once when an alert first appears
     weather_alerts_sound_id: str  # any sound id from the library (or a path to a .wav/.ogg)
@@ -519,7 +521,8 @@ def load_config() -> EnvConfig:
         # Floor of 60s out of courtesy to a free, unauthenticated public API; NWS issues
         # products on the order of minutes, so polling faster buys nothing.
         weather_alerts_interval=max(60, parse_int(os.environ.get("PULSE_WEATHER_ALERTS_INTERVAL"), 300)),
-        weather_alerts_banner_minutes=max(0, parse_int(os.environ.get("PULSE_WEATHER_ALERTS_BANNER_MINUTES"), 15)),
+        weather_alerts_banner_minutes=parse_banner_minutes(os.environ.get("PULSE_WEATHER_ALERTS_BANNER_MINUTES")),
+        weather_alerts_rotate_seconds=max(0, parse_int(os.environ.get("PULSE_WEATHER_ALERTS_ROTATE_SECONDS"), 30)),
         weather_alerts_contact=(os.environ.get("PULSE_WEATHER_ALERTS_CONTACT") or "").strip(),
         weather_alerts_sound=parse_bool(os.environ.get("PULSE_WEATHER_ALERTS_SOUND"), False),
         weather_alerts_sound_id=(os.environ.get("PULSE_SOUND_WEATHER_ALERT") or "notify-two-tone").strip(),
@@ -837,6 +840,7 @@ class KioskMqttListener:
                 ticker_emoji=self.overlay_config.ticker_emoji,
                 ticker_label_mode=self.overlay_config.ticker_label_mode,
                 weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
+                weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
             )
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,

@@ -205,13 +205,24 @@ PULSE_WEATHER_ALERTS_EXCLUDE=""
 # PULSE_WEATHER_ALERTS_INTERVAL — seconds between polls of api.weather.gov (minimum 60).
 PULSE_WEATHER_ALERTS_INTERVAL="300"
 
-# PULSE_WEATHER_ALERTS_BANNER_MINUTES — how long a NEWLY-issued alert gets a banner above
-# the notification bar before collapsing to just the pill. Measured from when this kiosk
-# first saw the alert, so booting into a two-day-old storm doesn't re-announce it, and an
-# open card can't resurrect an expired banner. NWS issues a new alert ID when a watch is
-# upgraded to a warning, so a genuine escalation does get a fresh banner; routine
-# "extended until 6 AM" reissues do not. Set "0" for pill-only, never a banner.
-PULSE_WEATHER_ALERTS_BANNER_MINUTES="15"
+# PULSE_WEATHER_ALERTS_BANNER_MINUTES — how long an alert holds the banner above the
+# notification bar. The strip is one row tall and doesn't cover anything, so the default
+# leaves it up for the alert's whole life:
+#   "always" — banner for as long as the alert is active (default). The pill never shows.
+#   "0"      — never a banner; the small pill on the notification bar carries the alert.
+#   "15"     — banner for 15 minutes as a "this just happened", then it collapses to the
+#              pill. Measured from when THIS kiosk first saw the alert, so booting into a
+#              two-day-old storm doesn't re-announce it and an overlay reload can't
+#              resurrect an expired banner. NWS issues a new alert ID when a watch is
+#              upgraded to a warning, so a real escalation gets a fresh banner; routine
+#              "extended until 6 AM" reissues do not.
+PULSE_WEATHER_ALERTS_BANNER_MINUTES="always"
+
+# PULSE_WEATHER_ALERTS_ROTATE_SECONDS — when several alerts are active, how long each one
+# holds the banner before the next takes over (minimum 5). The strip stays exactly one row
+# tall either way; a stacked banner per alert would be the takeover this design avoids.
+# Set "0" to show only the most urgent and never rotate.
+PULSE_WEATHER_ALERTS_ROTATE_SECONDS="30"
 
 # PULSE_WEATHER_ALERTS_SOUND — play a sound once when an alert first appears. Fires on
 # the arrival of an alert this kiosk hasn't seen before, and only one chime per poll no

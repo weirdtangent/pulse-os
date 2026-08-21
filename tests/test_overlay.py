@@ -16,6 +16,7 @@ from pulse.overlay import (
     parse_clock_config,
     render_overlay_html,
 )
+from pulse.weather_alerts import BANNER_ALWAYS
 
 
 class OverlayRenderTests(unittest.TestCase):
@@ -1093,11 +1094,12 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
 
     @staticmethod
     def _body(html: str) -> str:
-        """Markup only. The document embeds the whole stylesheet, which names every class,
-        so asserting a class is ABSENT against the full document always fails."""
-        return html.split("</style>", 1)[-1]
+        """Markup only. The document embeds the whole stylesheet AND overlay.js, both of
+        which name every class, so asserting a class is ABSENT against the full document
+        always fails."""
+        return html.split("</style>", 1)[-1].split("<script", 1)[0]
 
-    def _banner_theme(self, minutes: int = 15) -> OverlayTheme:
+    def _banner_theme(self, minutes: int = 15, rotate_seconds: int = 30) -> OverlayTheme:
         return OverlayTheme(
             ambient_background="rgba(0,0,0,0.32)",
             alert_background="rgba(0,0,0,0.65)",
@@ -1105,6 +1107,7 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
             accent_color="#88C0D0",
             show_notification_bar=True,
             weather_alert_banner_minutes=minutes,
+            weather_alert_rotate_seconds=rotate_seconds,
         )
 
     def test_no_pill_without_alerts(self) -> None:
@@ -1113,20 +1116,25 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         self.assertNotIn("overlay-weather-banner", body)
 
     def test_pill_names_the_most_urgent_alert(self) -> None:
-        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self.theme))
+        # self.theme leaves the banner window at its default, so age the alert past it.
+        aged = self._alert(first_seen=time.time() - 20 * 60)
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(aged,)), self._banner_theme(15)))
         self.assertIn("overlay-badge--weather-alert-warning", body)
         self.assertIn("Tornado Warning", body)
         self.assertIn('data-badge-action="show_weather_alerts"', body)
 
     def test_pill_counts_the_remaining_alerts(self) -> None:
-        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
-        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self.theme))
+        old = time.time() - 20 * 60
+        alerts = (self._alert(first_seen=old), self._alert(id="b", event="Flood Watch", tier="watch", first_seen=old))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme(15)))
         self.assertIn("Tornado Warning +1", body)
 
     def test_advisories_get_no_color_class(self) -> None:
         """Only watches and warnings are colored; an advisory keeps the neutral badge."""
-        alert = self._alert(event="Heat Advisory", tier="advisory", severity="moderate")
-        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self.theme))
+        alert = self._alert(
+            event="Heat Advisory", tier="advisory", severity="moderate", first_seen=time.time() - 20 * 60
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme(15)))
         self.assertIn("overlay-badge--weather-alert-advisory", body)
         self.assertNotIn("overlay-badge--weather-alert-warning", body)
 
@@ -1146,11 +1154,43 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         self.assertNotIn("overlay-weather-banner", body)
         self.assertIn("overlay-badge--weather-alert", body)
 
-    def test_banner_shows_only_the_most_urgent_alert(self) -> None:
+    def test_banner_suppresses_the_pill_while_it_is_up(self) -> None:
+        """Both at once is the same sentence twice; the pill's job starts when the banner retires."""
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertIn("overlay-weather-banner", body)
+        self.assertNotIn("overlay-badge--weather-alert", body)
+
+    def test_multiple_alerts_rotate_with_a_position_counter(self) -> None:
         alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme()))
-        self.assertEqual(body.count("overlay-weather-banner--warning"), 1)
+        self.assertIn('data-alert-rotate="30"', body)
+        self.assertIn("1 of 2", body)
+        self.assertIn("2 of 2", body)
+        # Exactly one visible at a time, so the strip stays a single row.
+        self.assertEqual(body.count("overlay-weather-banner--hidden"), 1)
+
+    def test_rotation_off_renders_only_the_most_urgent(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(
+            render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme(rotate_seconds=0))
+        )
+        self.assertNotIn("data-alert-rotate", body)
         self.assertNotIn("overlay-weather-banner--watch", body)
+        # The counter still says how many the card behind it holds.
+        self.assertIn("1 of 2", body)
+
+    def test_single_alert_has_no_counter(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__count", body)
+
+    def test_always_mode_keeps_the_banner_for_the_alerts_whole_life(self) -> None:
+        """The default: the strip is unobtrusive enough to leave up, so it stays."""
+        ancient = self._alert(first_seen=time.time() - 3 * 24 * 3600)
+        body = self._body(
+            render_overlay_html(self._snapshot(weather_alerts=(ancient,)), self._banner_theme(BANNER_ALWAYS))
+        )
+        self.assertIn("overlay-weather-banner", body)
+        self.assertNotIn("overlay-badge--weather-alert", body)
 
     def test_banner_surfaces_the_nws_hazard_line(self) -> None:
         """ "Special Weather Statement" alone tells a passing reader nothing."""

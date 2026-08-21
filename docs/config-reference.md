@@ -122,13 +122,20 @@ Service has an active alert covering `PULSE_LOCATION`, plus a one-shot banner fo
 first few minutes of a brand-new alert. Tapping either opens a card with the full NWS
 description and instructions.
 
-Alerts are long-lived — a winter storm warning routinely runs for days — so the shape of
-the feature follows from that: the element that persists is a small pill, and the loud
-element removes itself. `PULSE_WEATHER_ALERTS_BANNER_MINUTES` is measured from when this
-kiosk first *saw* the alert rather than from the NWS onset, which means a display that
-boots mid-storm doesn't re-announce a two-day-old warning, and reloading the overlay
-can't resurrect a banner that already expired. NWS mints a new alert ID when a watch is
-upgraded to a warning, so a real escalation does get its own banner; the routine
+Alerts are long-lived — a winter storm warning routinely runs for days — so nothing here
+covers content. The banner is a single row above the notification bar carrying the event
+name, the NWS hazard line, and the end time; by default it stays up for as long as the
+alert is active, and the pill is suppressed while it's there (both at once is the same
+sentence twice). When several alerts are active the banner rotates through them every
+`PULSE_WEATHER_ALERTS_ROTATE_SECONDS` with an "n of N" counter, so the strip is always
+exactly one row tall however many products are running.
+
+Set `PULSE_WEATHER_ALERTS_BANNER_MINUTES` to a number instead and the banner becomes a
+"this just happened" announcement that retires into the pill after N minutes. That window
+is measured from when this kiosk first *saw* the alert rather than from the NWS onset, so
+a display booting mid-storm doesn't re-announce a two-day-old warning and reloading the
+overlay can't resurrect a banner that already expired. NWS mints a new alert ID when a
+watch is upgraded to a warning, so a real escalation gets its own window; the routine
 "extended until 6 AM" reissues carry the same ID and don't.
 
 > **Data source.** [api.weather.gov](https://www.weather.gov/documentation/services-web-api)
@@ -153,7 +160,8 @@ Warning are different things. Set both. Alerts that state *no* severity are alwa
 | `PULSE_WEATHER_ALERTS_MIN_SEVERITY` | `severe` | NWS severity floor: `extreme`, `severe`, `moderate`, `minor`, or `any`. |
 | `PULSE_WEATHER_ALERTS_EXCLUDE` | *(empty)* | Comma-separated NWS event names to never show (e.g. `Heat Advisory,Air Quality Alert`), whatever the filters above allow. |
 | `PULSE_WEATHER_ALERTS_INTERVAL` | `300` | Seconds between polls of api.weather.gov (min 60). |
-| `PULSE_WEATHER_ALERTS_BANNER_MINUTES` | `15` | Minutes a new alert gets a banner before collapsing to the pill. `0` = pill only, never a banner. |
+| `PULSE_WEATHER_ALERTS_BANNER_MINUTES` | `always` | `always` = banner for the alert's whole life (the pill never shows); `0` = pill only, never a banner; `N` = banner for N minutes, then the pill takes over. |
+| `PULSE_WEATHER_ALERTS_ROTATE_SECONDS` | `30` | Seconds each alert holds the banner when several are active (min 5). `0` shows only the most urgent. |
 | `PULSE_WEATHER_ALERTS_SOUND` | `false` | Play a sound once when an alert first appears. |
 | `PULSE_SOUND_WEATHER_ALERT` | `notify-two-tone` | Which sound that is — any library id or a path to a `.wav`/`.ogg`. |
 | `PULSE_WEATHER_ALERTS_CONTACT` | repo URL | Email or URL sent in the NWS-required `User-Agent`. |

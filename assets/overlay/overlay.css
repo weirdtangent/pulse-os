@@ -178,6 +178,17 @@ body {
    notification bar — it claims a strip, never the display — and it removes itself after
    PULSE_WEATHER_ALERTS_BANNER_MINUTES, so a multi-day winter storm warning does not
    leave a permanent stripe that everyone learns to look past. */
+/* Wrapper for the rotating set. Only one child is visible at a time (see
+   rotateAlertBanners in overlay.js), so the strip is always exactly one row tall however
+   many alerts are active. */
+.overlay-weather-banners {
+  flex-shrink: 0;
+}
+
+.overlay-weather-banner--hidden {
+  display: none;
+}
+
 .overlay-weather-banner {
   display: flex;
   align-items: baseline;
@@ -218,6 +229,18 @@ body {
 /* The NWS HAZARD line — what is actually going to happen, as opposed to the name of the
    product. It takes whatever width is left and ellipsizes, so the event name and the end
    time (the two things that must always be readable) never get pushed off the row. */
+/* "2 of 3" — a place in the rotation, which also shows at a glance that the strip isn't
+   stuck on one alert. */
+.overlay-weather-banner__count {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 0.78em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .overlay-weather-banner__hazard {
   flex: 1 1 auto;
   min-width: 0;
