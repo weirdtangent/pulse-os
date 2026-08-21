@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import unittest
 from datetime import UTC, datetime, timedelta
 
@@ -1066,6 +1067,164 @@ class NowPlayingAlbumArtRenderTests(NowPlayingCardTests):
         self.assertIsNotNone(result)
         _, html = result  # type: ignore[misc]
         self.assertNotIn("overlay-now-playing__art", html)
+
+
+class WeatherAlertOverlayTests(OverlayRenderTests):
+    """Pill, banner, and card behavior for active NWS alerts."""
+
+    def _alert(self, **overrides) -> dict:
+        alert = {
+            "id": "urn:oid:test.1",
+            "event": "Tornado Warning",
+            "tier": "warning",
+            "severity": "extreme",
+            "headline": "Tornado Warning issued by NWS Test",
+            "description": "At 1052 AM EDT, a severe thunderstorm was\nlocated near Salem.\n\nHAZARD...Tornado.",
+            "instruction": "TAKE COVER NOW!",
+            "sender": "NWS Test",
+            "area": "Testville",
+            "onset": "",
+            "ends": "",
+            "expires": "",
+            "first_seen": time.time(),
+        }
+        alert.update(overrides)
+        return alert
+
+    @staticmethod
+    def _body(html: str) -> str:
+        """Markup only. The document embeds the whole stylesheet, which names every class,
+        so asserting a class is ABSENT against the full document always fails."""
+        return html.split("</style>", 1)[-1]
+
+    def _banner_theme(self, minutes: int = 15) -> OverlayTheme:
+        return OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+            weather_alert_banner_minutes=minutes,
+        )
+
+    def test_no_pill_without_alerts(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(), self.theme))
+        self.assertNotIn("overlay-badge--weather-alert", body)
+        self.assertNotIn("overlay-weather-banner", body)
+
+    def test_pill_names_the_most_urgent_alert(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self.theme))
+        self.assertIn("overlay-badge--weather-alert-warning", body)
+        self.assertIn("Tornado Warning", body)
+        self.assertIn('data-badge-action="show_weather_alerts"', body)
+
+    def test_pill_counts_the_remaining_alerts(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self.theme))
+        self.assertIn("Tornado Warning +1", body)
+
+    def test_advisories_get_no_color_class(self) -> None:
+        """Only watches and warnings are colored; an advisory keeps the neutral badge."""
+        alert = self._alert(event="Heat Advisory", tier="advisory", severity="moderate")
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self.theme))
+        self.assertIn("overlay-badge--weather-alert-advisory", body)
+        self.assertNotIn("overlay-badge--weather-alert-warning", body)
+
+    def test_banner_shows_for_a_new_alert(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertIn("overlay-weather-banner--warning", body)
+
+    def test_banner_gone_once_the_window_passes(self) -> None:
+        aged = self._alert(first_seen=time.time() - 20 * 60)
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(aged,)), self._banner_theme(15)))
+        self.assertNotIn("overlay-weather-banner", body)
+        # ...but the alert itself is still on the bar for its whole life.
+        self.assertIn("overlay-badge--weather-alert", body)
+
+    def test_zero_minutes_disables_the_banner_entirely(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme(0)))
+        self.assertNotIn("overlay-weather-banner", body)
+        self.assertIn("overlay-badge--weather-alert", body)
+
+    def test_banner_shows_only_the_most_urgent_alert(self) -> None:
+        alerts = (self._alert(), self._alert(id="b", event="Flood Watch", tier="watch"))
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=alerts), self._banner_theme()))
+        self.assertEqual(body.count("overlay-weather-banner--warning"), 1)
+        self.assertNotIn("overlay-weather-banner--watch", body)
+
+    def test_card_renders_description_and_instruction(self) -> None:
+        html = render_overlay_html(
+            self._snapshot(weather_alerts=(self._alert(),), info_card={"type": "weather_alerts"}),
+            self.theme,
+        )
+        self.assertIn("overlay-info-card--weather-alerts", html)
+        # NWS hard-wraps at ~68 columns; single newlines rejoin into flowing paragraphs.
+        self.assertIn("thunderstorm was located near Salem", html)
+        self.assertIn("HAZARD...Tornado.", html)
+        self.assertIn("TAKE COVER NOW!", html)
+
+    def test_card_reads_live_alerts_not_the_card_payload(self) -> None:
+        """An open card must track the poll rather than freeze at tap time."""
+        html = render_overlay_html(
+            self._snapshot(weather_alerts=(), info_card={"type": "weather_alerts"}),
+            self.theme,
+        )
+        self.assertIn("No active weather alerts.", html)
+
+    def test_until_falls_back_to_expires_with_a_different_verb(self) -> None:
+        """`ends` is when the weather stops; `expires` is when the bulletin lapses."""
+        ends = datetime.now(UTC) + timedelta(hours=1)
+        with_ends = self._alert(ends=ends.isoformat(), expires=ends.isoformat())
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(with_ends,)), self._banner_theme()))
+        self.assertIn("until ", body)
+        self.assertNotIn("expires ", body)
+
+        without_ends = self._alert(ends="", expires=ends.isoformat())
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(without_ends,)), self._banner_theme()))
+        self.assertIn("expires ", body)
+
+    def test_no_time_phrase_when_nws_gives_neither(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__until", body)
+
+
+class WeatherAlertStateTests(unittest.TestCase):
+    def _alert(self, alert_id: str = "a", **overrides) -> dict:
+        alert = {"id": alert_id, "event": "Tornado Warning", "tier": "warning", "first_seen": time.time()}
+        alert.update(overrides)
+        return alert
+
+    def test_first_alert_bumps_the_version(self) -> None:
+        mgr = OverlayStateManager()
+        change = mgr.set_weather_alerts([self._alert()], banner_minutes=15)
+        self.assertTrue(change.changed)
+        self.assertEqual(len(mgr.snapshot().weather_alerts), 1)
+
+    def test_reissued_identical_alert_does_not_bump(self) -> None:
+        """NWS reissues every few minutes; bumping would reload the photo card each time."""
+        mgr = OverlayStateManager()
+        alert = self._alert()
+        mgr.set_weather_alerts([alert], banner_minutes=15)
+        reissued = {**alert, "expires": "2026-08-21T23:00:00-04:00", "description": "updated text"}
+        self.assertFalse(mgr.set_weather_alerts([reissued], banner_minutes=15).changed)
+
+    def test_new_alert_bumps(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.set_weather_alerts([self._alert("a")], banner_minutes=15)
+        self.assertTrue(mgr.set_weather_alerts([self._alert("a"), self._alert("b")], banner_minutes=15).changed)
+
+    def test_banner_expiry_bumps(self) -> None:
+        """The poll that crosses the banner window has to push a refresh."""
+        mgr = OverlayStateManager()
+        fresh = self._alert(first_seen=time.time())
+        mgr.set_weather_alerts([fresh], banner_minutes=15)
+        aged = {**fresh, "first_seen": time.time() - 20 * 60}
+        self.assertTrue(mgr.set_weather_alerts([aged], banner_minutes=15).changed)
+
+    def test_clearing_alerts_bumps(self) -> None:
+        mgr = OverlayStateManager()
+        mgr.set_weather_alerts([self._alert()], banner_minutes=15)
+        self.assertTrue(mgr.set_weather_alerts([], banner_minutes=15).changed)
 
 
 if __name__ == "__main__":

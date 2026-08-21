@@ -568,6 +568,12 @@ html, body {{
                     if outer._on_state_change:
                         outer._on_state_change(change)
                     self._log(f"overlay: calendar info card updated (changed={change.changed})")
+                elif action == "show_weather_alerts":
+                    # No payload: the card builder reads the live alert list off the
+                    # snapshot, so an open card tracks the poll instead of freezing.
+                    change = outer.state.update_info_card({"type": "weather_alerts"})
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
                 elif action == "show_help":
                     change = outer.state.update_info_card({"type": "help"})
                     if outer._on_state_change:

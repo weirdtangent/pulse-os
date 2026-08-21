@@ -171,6 +171,67 @@ PULSE_TICKER_LABEL="auto"
 PULSE_TICKER_STALE_AFTER="300"
 
 # ============================================================================
+# Weather alerts (National Weather Service)
+# ============================================================================
+# Shows a pill on the notification bar whenever an NWS alert is active for PULSE_LOCATION,
+# plus a one-shot banner for the first few minutes of a brand-new alert. Tapping the pill
+# opens the full NWS text. Source is api.weather.gov: free, no API key, US only — a
+# non-US location simply never has alerts rather than erroring.
+#
+# The design assumption is that alerts last a long time (a winter storm warning can run
+# for days), so the permanent element is a small pill and the banner removes itself.
+
+# PULSE_WEATHER_ALERTS_ENABLED — master switch (default off).
+PULSE_WEATHER_ALERTS_ENABLED="false"
+
+# PULSE_WEATHER_ALERTS_TIERS — which kinds of alert to show, from the last word of the
+# NWS event name. Comma-separated subset of:
+#   warning   — happening or imminent ("Tornado Warning"); also covers "... Emergency"
+#   watch     — conditions are favorable ("Flood Watch")
+#   advisory  — inconvenient but survivable ("Heat Advisory"); also covers "... Alert"
+#   statement — informational ("Special Weather Statement")
+PULSE_WEATHER_ALERTS_TIERS="warning,watch"
+
+# PULSE_WEATHER_ALERTS_MIN_SEVERITY — NWS's own severity floor, applied on top of the
+# tier filter: extreme | severe | moderate | minor | any. The two disagree often enough
+# to want both — a Heat Advisory and a Winter Storm Warning are both "moderate".
+# Alerts that state no severity at all are always shown; only a stated one is filtered.
+PULSE_WEATHER_ALERTS_MIN_SEVERITY="severe"
+
+# PULSE_WEATHER_ALERTS_EXCLUDE — comma-separated NWS event names to never show, whatever
+# the filters above say. The escape hatch for a product your area gets constantly.
+PULSE_WEATHER_ALERTS_EXCLUDE=""
+
+# PULSE_WEATHER_ALERTS_INTERVAL — seconds between polls of api.weather.gov (minimum 60).
+PULSE_WEATHER_ALERTS_INTERVAL="300"
+
+# PULSE_WEATHER_ALERTS_BANNER_MINUTES — how long a NEWLY-issued alert gets a banner above
+# the notification bar before collapsing to just the pill. Measured from when this kiosk
+# first saw the alert, so booting into a two-day-old storm doesn't re-announce it, and an
+# open card can't resurrect an expired banner. NWS issues a new alert ID when a watch is
+# upgraded to a warning, so a genuine escalation does get a fresh banner; routine
+# "extended until 6 AM" reissues do not. Set "0" for pill-only, never a banner.
+PULSE_WEATHER_ALERTS_BANNER_MINUTES="15"
+
+# PULSE_WEATHER_ALERTS_SOUND — play a sound once when an alert first appears. Fires on
+# the arrival of an alert this kiosk hasn't seen before, and only one chime per poll no
+# matter how many products arrive together. Never fires on the first poll after a
+# restart, so a display rebooted mid-storm doesn't re-announce a two-day-old warning.
+PULSE_WEATHER_ALERTS_SOUND="false"
+
+# PULSE_SOUND_WEATHER_ALERT — which sound that is. Any id from the sound library (see the
+# Config → Sounds card on the display) or a path to your own .wav/.ogg. Unlike the other
+# PULSE_SOUND_* settings this isn't limited to one kind, so the attention-getting alarm
+# sounds (e.g. "alarm-bright-triple", "alarm-analog-bell") are fair game alongside the
+# notification ones.
+PULSE_SOUND_WEATHER_ALERT="notify-two-tone"
+
+# PULSE_WEATHER_ALERTS_CONTACT — NWS asks API clients to identify themselves with a
+# contact (email or URL) in the User-Agent. Defaults to the PulseOS repo URL; set your
+# own if you'd rather they contact you about your traffic.
+# PULSE_WEATHER_ALERTS_CONTACT=""
+
+# ============================================================================
 # Telemetry & MQTT
 # ============================================================================
 

@@ -115,6 +115,64 @@ Notes:
   warnings in the logs and a bar that only ever shows cached/last-good values. See
   [troubleshooting.md](troubleshooting.md#stock-ticker).
 
+## Weather alerts
+
+An optional pill on the notification bar that appears whenever the National Weather
+Service has an active alert covering `PULSE_LOCATION`, plus a one-shot banner for the
+first few minutes of a brand-new alert. Tapping either opens a card with the full NWS
+description and instructions.
+
+Alerts are long-lived — a winter storm warning routinely runs for days — so the shape of
+the feature follows from that: the element that persists is a small pill, and the loud
+element removes itself. `PULSE_WEATHER_ALERTS_BANNER_MINUTES` is measured from when this
+kiosk first *saw* the alert rather than from the NWS onset, which means a display that
+boots mid-storm doesn't re-announce a two-day-old warning, and reloading the overlay
+can't resurrect a banner that already expired. NWS mints a new alert ID when a watch is
+upgraded to a warning, so a real escalation does get its own banner; the routine
+"extended until 6 AM" reissues carry the same ID and don't.
+
+> **Data source.** [api.weather.gov](https://www.weather.gov/documentation/services-web-api)
+> is a free, unauthenticated US government API — no key, no quota, no ToS grey area. It
+> asks only that clients identify themselves in the `User-Agent`, which is what
+> `PULSE_WEATHER_ALERTS_CONTACT` is for. It is **US-only**: a non-US `PULSE_LOCATION`
+> resolves fine and simply never has alerts. Open-Meteo, which powers the assistant's
+> forecast, has no alerts product at all, so this is a separate client.
+
+Filtering runs on two axes because NWS's own two axes disagree. **Tier** comes from the
+last word of the event name (`Tornado Warning` → warning, `Special Weather Statement` →
+statement) and is how people actually talk about alerts. **Severity** is NWS's own
+Extreme…Minor scale. A Heat Advisory and a Winter Storm Warning are both `Moderate`, so
+severity alone can't separate them; conversely a `Severe`-rated Watch and a `Moderate`
+Warning are different things. Set both. Alerts that state *no* severity are always shown
+— `unknown` is NWS declining to answer, not a low rating.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_WEATHER_ALERTS_ENABLED` | `false` | Master switch for the pill and banner. |
+| `PULSE_WEATHER_ALERTS_TIERS` | `warning,watch` | Comma-separated subset of `warning` (incl. `… Emergency`), `watch`, `advisory` (incl. `… Alert`), `statement`. An unrecognized value falls back to the default rather than to "everything". |
+| `PULSE_WEATHER_ALERTS_MIN_SEVERITY` | `severe` | NWS severity floor: `extreme`, `severe`, `moderate`, `minor`, or `any`. |
+| `PULSE_WEATHER_ALERTS_EXCLUDE` | *(empty)* | Comma-separated NWS event names to never show (e.g. `Heat Advisory,Air Quality Alert`), whatever the filters above allow. |
+| `PULSE_WEATHER_ALERTS_INTERVAL` | `300` | Seconds between polls of api.weather.gov (min 60). |
+| `PULSE_WEATHER_ALERTS_BANNER_MINUTES` | `15` | Minutes a new alert gets a banner before collapsing to the pill. `0` = pill only, never a banner. |
+| `PULSE_WEATHER_ALERTS_SOUND` | `false` | Play a sound once when an alert first appears. |
+| `PULSE_SOUND_WEATHER_ALERT` | `notify-two-tone` | Which sound that is — any library id or a path to a `.wav`/`.ogg`. |
+| `PULSE_WEATHER_ALERTS_CONTACT` | repo URL | Email or URL sent in the NWS-required `User-Agent`. |
+
+Only watches and warnings get a colored pill; advisories and statements keep the neutral
+badge background and rely on the ⚠ glyph. Painting every Special Weather Statement amber
+would spend the display's alarm vocabulary on "it might get windy".
+
+Requires `PULSE_LOCATION` to resolve to coordinates. If it doesn't, the feature logs once
+at startup and stays off rather than guessing.
+
+The chime fires on the arrival of an alert ID this kiosk hasn't seen before — one chime
+per poll however many products arrive together — and never on the first poll after a
+restart, so a display rebooted mid-storm doesn't re-announce a warning everyone has been
+looking at for two days. Unlike the other `PULSE_SOUND_*` settings it isn't restricted to
+one sound kind, so the attention-getting alarm sounds are selectable alongside the
+notification ones. It is not gated on earmuffs: that switch turns microphone/LLM
+listening off and is not a mute.
+
 ## Telemetry & MQTT
 
 | Key | Default | Description |
