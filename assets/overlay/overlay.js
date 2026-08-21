@@ -380,7 +380,11 @@ window.PulseOverlay.initialize = function() {
                            !wrapper.classList.contains('overlay-info-card__text-wrapper');
 
       if (needsWrapper) {
-        // Create wrapper if needed
+        // Moving an element to a new parent resets its scrollTop, and the refresh loop
+        // re-renders the card (losing the wrapper) on every state change, so this ran
+        // again each time and snapped anyone reading a long card back to the top ~100ms
+        // after they scrolled. Capture the offset across the re-parent and put it back.
+        const preservedScroll = scrollableElement.scrollTop;
         wrapper = document.createElement('div');
         if (scrollableElement.classList.contains('overlay-info-card__body')) {
           wrapper.className = 'overlay-info-card__body-wrapper';
@@ -389,6 +393,9 @@ window.PulseOverlay.initialize = function() {
         }
         scrollableElement.parentElement.insertBefore(wrapper, scrollableElement);
         wrapper.appendChild(scrollableElement);
+        if (preservedScroll > 0) {
+          scrollableElement.scrollTop = preservedScroll;
+        }
       }
 
       // Create arrows if they don't exist
