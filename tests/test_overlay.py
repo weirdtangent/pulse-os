@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -1258,6 +1259,32 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
         self.assertNotIn("overlay-weather-banner__detail", body)
         self.assertNotIn("Ping pong", body)
+
+    def test_every_rendered_alert_class_has_a_style_rule(self) -> None:
+        """A renamed class must not silently lose its styling.
+
+        Renaming __hazard to __detail left one selector behind, and nothing caught it: the
+        caption still looked right because it is capped short enough never to need the
+        width and ellipsis rules it had quietly lost.
+        """
+        alerts = (self._alert(description="* WHAT...Dangerous rip currents expected."),) * 2
+        snapshot = self._snapshot(weather_alerts=alerts, info_card={"type": "weather_alerts"})
+        html = render_overlay_html(snapshot, self._banner_theme())
+        body = self._body(html)
+        rendered = set(re.findall(r'class="([^"]*)"', body))
+        classes = {
+            cls
+            for group in rendered
+            for cls in group.split()
+            if cls.startswith(("overlay-weather-banner", "overlay-alert"))
+        }
+        self.assertTrue(classes, "expected alert markup to render")
+        styles = html.split("</style>", 1)[0]
+        # Require a BASE rule, not merely the name appearing somewhere: a leftover
+        # `.foo::before` contains `.foo` as a substring, which is exactly how the original
+        # rename slipped through. Reject a match followed by a colon or another name char.
+        missing = sorted(cls for cls in classes if not re.search(rf"\.{re.escape(cls)}(?![\w-])(?!:)", styles))
+        self.assertEqual(missing, [], f"rendered but unstyled: {missing}")
 
     def test_card_opens_the_alert_that_was_clicked(self) -> None:
         """Tapping the banner showing alert 2 must not open alert 1."""

@@ -76,7 +76,12 @@ def parse_tiers(spec: str | None) -> tuple[str, ...]:
 
 
 def parse_min_severity(spec: str | None) -> str:
-    """Parse the minimum-severity floor. "any" (or anything unrecognized) means no floor."""
+    """Parse the minimum-severity floor: a severity name, or "any"/"all" for no floor.
+
+    An unrecognized value falls back to the default floor rather than to "no floor", for
+    the same reason parse_tiers does: the failure mode of a typo should be fewer alerts on
+    the wall, not every Minor advisory in the county.
+    """
     normalized = (spec or "").strip().lower()
     if normalized in SEVERITY_RANK:
         return normalized

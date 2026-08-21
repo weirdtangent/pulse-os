@@ -244,7 +244,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.overlay-weather-banner__hazard {
+.overlay-weather-banner__detail {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;

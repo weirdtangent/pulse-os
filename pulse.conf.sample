@@ -173,13 +173,14 @@ PULSE_TICKER_STALE_AFTER="300"
 # ============================================================================
 # Weather alerts (National Weather Service)
 # ============================================================================
-# Shows a pill on the notification bar whenever an NWS alert is active for PULSE_LOCATION,
-# plus a one-shot banner for the first few minutes of a brand-new alert. Tapping the pill
-# opens the full NWS text. Source is api.weather.gov: free, no API key, US only — a
-# non-US location simply never has alerts rather than erroring.
+# Shows a banner across the top of the display whenever an NWS alert is active for
+# PULSE_LOCATION, naming the hazard and not just the product, and rotating when several
+# are active. Tapping it opens the full NWS text. Source is api.weather.gov: free, no API
+# key, US only — a non-US location simply never has alerts rather than erroring.
 #
-# The design assumption is that alerts last a long time (a winter storm warning can run
-# for days), so the permanent element is a small pill and the banner removes itself.
+# Alerts last a long time (a winter storm warning can run for days), so the banner is one
+# unobtrusive row that never covers content. Set PULSE_WEATHER_ALERTS_BANNER_MINUTES below
+# to retire it into a small notification-bar pill after N minutes instead.
 
 # REQUIRES PULSE_LOCATION (further down this file). Alerts are looked up by coordinate;
 # if PULSE_LOCATION doesn't resolve, the feature logs once at startup and stays off.
