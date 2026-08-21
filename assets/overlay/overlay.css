@@ -561,7 +561,11 @@ body {
   gap: 0.6rem;
 }
 
+/* Sliders are horizontal, and this is a touchscreen: pan-y hands vertical drags to the
+   scroller so a finger swiping down a long card scrolls it instead of dragging whichever
+   slider it happened to cross. Without this, scrolling changed the brightness. */
 .overlay-control__slider {
+  touch-action: pan-y;
   flex: 1;
   accent-color: var(--overlay-accent-color);
 }

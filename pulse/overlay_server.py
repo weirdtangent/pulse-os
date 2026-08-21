@@ -365,6 +365,17 @@ html, body {{
         console.log(`Overlay updated (v${{currentVersion}} -> v${{newVersion}})`);
         currentVersion = newVersion;
 
+        // Remember where the open card was scrolled to. Replacing the DOM resets
+        // scrollTop, so any state change while somebody is reading a long card snapped
+        // them back to the top -- most often their own scrolling did it, because a finger
+        // dragged down the card crosses the sliders and nudges one.
+        const previousCard = overlayContainer.querySelector('.overlay-info-card');
+        const previousBody = overlayContainer.querySelector('.overlay-info-card__body');
+        const previousScroll = previousBody ? previousBody.scrollTop : 0;
+        // Keyed on the card's classes so switching to a different card still opens at the
+        // top; only the same card being re-rendered underneath you keeps its place.
+        const previousCardKey = previousCard ? previousCard.className : '';
+
         // Replace overlay content without touching the iframe
         while (overlayContainer.firstChild) {{
           overlayContainer.removeChild(overlayContainer.firstChild);
@@ -380,6 +391,12 @@ html, body {{
         // the :root --overlay-* declarations onto the element's inline style is enough:
         // they are the whole of what the theme controls, and inline wins over the sheet.
         applyThemeVariables(doc);
+
+        const nextCard = overlayContainer.querySelector('.overlay-info-card');
+        const nextBody = overlayContainer.querySelector('.overlay-info-card__body');
+        if (nextBody && previousScroll > 0 && nextCard && nextCard.className === previousCardKey) {{
+          nextBody.scrollTop = previousScroll;
+        }}
 
         // Update data-version attribute on the container (used by polling)
         overlayContainer.dataset.version = newVersion;
