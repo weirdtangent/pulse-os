@@ -210,11 +210,30 @@ body {
 }
 
 .overlay-weather-banner__event {
+  flex: 0 0 auto;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
+/* The NWS HAZARD line — what is actually going to happen, as opposed to the name of the
+   product. It takes whatever width is left and ellipsizes, so the event name and the end
+   time (the two things that must always be readable) never get pushed off the row. */
+.overlay-weather-banner__hazard {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overlay-weather-banner__hazard::before {
+  content: "· ";
+  opacity: 0.6;
+}
+
 .overlay-weather-banner__until {
+  flex: 0 0 auto;
+  margin-left: auto;
   opacity: 0.85;
   font-size: 0.9em;
 }

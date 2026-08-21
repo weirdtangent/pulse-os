@@ -1152,6 +1152,33 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         self.assertEqual(body.count("overlay-weather-banner--warning"), 1)
         self.assertNotIn("overlay-weather-banner--watch", body)
 
+    def test_banner_surfaces_the_nws_hazard_line(self) -> None:
+        """ "Special Weather Statement" alone tells a passing reader nothing."""
+        alert = self._alert(
+            event="Special Weather Statement",
+            tier="statement",
+            description="At 1121 AM EDT, radar was tracking storms.\n\nHAZARD...Wind gusts up to 40 mph.",
+        )
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("Wind gusts up to 40 mph", body)
+
+    def test_banner_hazard_omitted_when_the_bulletin_has_no_tag(self) -> None:
+        """The first sentence of the prose is worse than saying nothing."""
+        alert = self._alert(description="At 1121 AM EDT, Doppler radar was tracking strong thunderstorms.")
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertNotIn("overlay-weather-banner__hazard", body)
+        self.assertNotIn("Doppler radar", body)
+
+    def test_long_hazard_is_truncated_to_keep_the_banner_one_line(self) -> None:
+        hazard = (
+            "Ping pong ball size hail and destructive wind gusts of up to eighty miles "
+            "per hour, plus frequent cloud to ground lightning"
+        )
+        alert = self._alert(description=f"HAZARD...{hazard}.")
+        body = self._body(render_overlay_html(self._snapshot(weather_alerts=(alert,)), self._banner_theme()))
+        self.assertIn("\u2026", body)
+        self.assertNotIn(hazard, body)
+
     def test_card_renders_description_and_instruction(self) -> None:
         html = render_overlay_html(
             self._snapshot(weather_alerts=(self._alert(),), info_card={"type": "weather_alerts"}),
@@ -1182,6 +1209,23 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
         without_ends = self._alert(ends="", expires=ends.isoformat())
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(without_ends,)), self._banner_theme()))
         self.assertIn("expires ", body)
+
+    def test_card_and_banner_agree_with_the_device_clock_format(self) -> None:
+        """A 24h display must not get AM/PM smuggled back in via the card."""
+        ends = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+        # Description deliberately free of clock text — the fixture's "1052 AM EDT" prose
+        # is NWS's own wording, not the formatted time this test is about.
+        snapshot = self._snapshot(
+            weather_alerts=(self._alert(ends=ends, description="HAZARD...Tornado."),),
+            info_card={"type": "weather_alerts"},
+        )
+        body = self._body(render_overlay_html(snapshot, self._banner_theme(), clock_hour12=False))
+        self.assertNotIn("AM", body)
+        self.assertNotIn("PM", body)
+
+        body = self._body(render_overlay_html(snapshot, self._banner_theme(), clock_hour12=True))
+        self.assertEqual(body.count("until "), 2)  # banner and card, both 12-hour
+        self.assertTrue("AM" in body or "PM" in body)
 
     def test_no_time_phrase_when_nws_gives_neither(self) -> None:
         body = self._body(render_overlay_html(self._snapshot(weather_alerts=(self._alert(),)), self._banner_theme()))

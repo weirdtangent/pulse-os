@@ -909,6 +909,35 @@ def _weather_alert_label(alert: dict[str, Any]) -> str:
     return str(alert.get("event") or "Weather alert").strip() or "Weather alert"
 
 
+# NWS bulletins carry a machine-ish tag block inside the prose — "HAZARD...Wind gusts up
+# to 40 mph." — which is the one line that says what is actually going to happen. Without
+# it the banner can only repeat the product name, and "Special Weather Statement" tells a
+# passing reader nothing.
+_HAZARD_TAG = "HAZARD..."
+# Long enough for the real ones ("Ping pong ball size hail and 60 mph wind gusts") and
+# short enough that the banner stays a single line on a 1280px display.
+_HAZARD_MAX_CHARS = 90
+
+
+def _weather_alert_hazard(alert: dict[str, Any]) -> str:
+    """The alert's HAZARD line, or "" when the bulletin has no tag block.
+
+    Only the tagged line is used. Falling back to the first sentence of the description
+    would put "At 1121 AM EDT, Doppler radar was tracking strong thunderstorms along a
+    line extending from..." on the banner, which is worse than saying nothing.
+    """
+    for paragraph in _nws_paragraphs(str(alert.get("description") or "")):
+        if not paragraph.startswith(_HAZARD_TAG):
+            continue
+        hazard = paragraph[len(_HAZARD_TAG) :].strip().rstrip(".")
+        if not hazard:
+            return ""
+        if len(hazard) > _HAZARD_MAX_CHARS:
+            hazard = hazard[: _HAZARD_MAX_CHARS - 1].rstrip() + "\u2026"
+        return hazard
+    return ""
+
+
 def _build_weather_alert_pill(snapshot: OverlaySnapshot) -> str:
     """Badge carrying the active NWS alerts for the whole of their lives.
 
@@ -964,13 +993,15 @@ def _build_weather_alert_banner(snapshot: OverlaySnapshot, theme: OverlayTheme, 
     label = html_escape(_weather_alert_label(alert))
     until = _format_alert_until(alert, hour12=hour12)
     until_html = f'<span class="overlay-weather-banner__until">{html_escape(until)}</span>' if until else ""
+    hazard = _weather_alert_hazard(alert)
+    hazard_html = f'<span class="overlay-weather-banner__hazard">{html_escape(hazard)}</span>' if hazard else ""
     icon = ICON_MAP.get("weather_alert", "&#9679;")
     return (
         f'<div class="overlay-weather-banner overlay-weather-banner--{tier}" '
         f'role="button" tabindex="0" data-badge-action="show_weather_alerts">'
         f'<span class="overlay-weather-banner__icon" aria-hidden="true">{icon}</span>'
         f'<span class="overlay-weather-banner__event">{label}</span>'
-        f"{until_html}"
+        f"{hazard_html}{until_html}"
         "</div>"
     )
 
@@ -1004,7 +1035,7 @@ def render_overlay_html(
 
     info_card_markup = ""
     if snapshot.info_card:
-        candidate = _build_info_overlay(snapshot)
+        candidate = _build_info_overlay(snapshot, hour12=clock_hour12)
         if candidate:
             # Clear blocked cells before rendering to prevent visual artifacts
             for cell in INFO_CARD_BLOCKED_CELLS:
@@ -1459,7 +1490,7 @@ def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> s
     return f'<div class="{class_attr}">{content}</div>'
 
 
-def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
+def _build_info_overlay(snapshot: OverlaySnapshot, *, hour12: bool = True) -> str:
     card = snapshot.info_card or {}
     card_type = str(card.get("type") or "").lower()
     if card_type == "help":
@@ -1473,7 +1504,7 @@ def _build_info_overlay(snapshot: OverlaySnapshot) -> str:
     if card_type == "weather":
         return _build_weather_info_overlay(snapshot, card)
     if card_type == "weather_alerts":
-        return _build_weather_alerts_info_overlay(snapshot)
+        return _build_weather_alerts_info_overlay(snapshot, hour12=hour12)
     if card_type == "update":
         return _build_update_info_overlay(snapshot, card)
     if card_type == "lights":
@@ -2261,7 +2292,7 @@ def _nws_paragraphs(text: str) -> list[str]:
     return paragraphs
 
 
-def _build_weather_alerts_info_overlay(snapshot: OverlaySnapshot) -> str:
+def _build_weather_alerts_info_overlay(snapshot: OverlaySnapshot, *, hour12: bool = True) -> str:
     """Full detail for every active alert — the thing behind the pill and the banner.
 
     Reads the alerts off the snapshot rather than off the card payload, so a card left
@@ -2280,7 +2311,7 @@ def _build_weather_alerts_info_overlay(snapshot: OverlaySnapshot) -> str:
             if tier not in TIER_RANK:
                 tier = "statement"
             event = html_escape(_weather_alert_label(alert))
-            until = _format_alert_until(alert)
+            until = _format_alert_until(alert, hour12=hour12)
             meta_parts = [part for part in (str(alert.get("sender") or "").strip(), until) if part]
             meta_html = (
                 f'<div class="overlay-alert__meta">{html_escape(" · ".join(meta_parts))}</div>' if meta_parts else ""
