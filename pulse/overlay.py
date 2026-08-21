@@ -2269,7 +2269,8 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
         <div class="overlay-control__description">Typeface used across the overlay.</div>
       </div>
     </div>
-    <select class="overlay-control__select" data-font-select aria-label="Overlay font"{select_style}>
+    <select class="overlay-control__select" data-font-select size="6"
+            aria-label="Overlay font"{select_style}>
       {options}
     </select>
   </div>

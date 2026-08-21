@@ -318,6 +318,25 @@ def _extract_primary_font(font_stack: str) -> str | None:
     return None
 
 
+# Families fontconfig reports that are not usable as a UI typeface: symbol, dingbat, math,
+# and emoji sets. Picking one renders the overlay as gibberish, and on a 720px kiosk every
+# extra entry pushes the font list further up the screen. Text faces are all kept, including
+# the URW/Nimbus clones — those are perfectly good choices, just unfashionable ones.
+_NON_TEXT_FONT_FAMILIES = {
+    "d050000l",  # URW Dingbats
+    "standard symbols ps",
+    "dejavu math tex gyre",
+    "noto color emoji",
+    "noto emoji",
+    "droid sans fallback",  # CJK fallback, not a display face
+    "z003",  # URW Chancery, a script face that is unreadable at overlay sizes
+}
+
+
+def _is_non_text_font(name: str) -> bool:
+    return name.strip().casefold() in _NON_TEXT_FONT_FAMILIES
+
+
 def _detect_installed_fonts() -> list[str]:
     try:
         result = subprocess.run(  # nosec B603 B607 - hardcoded command array
@@ -1469,7 +1488,7 @@ class KioskMqttListener:
         )
 
     def _refresh_font_options(self) -> None:
-        fonts = _detect_installed_fonts()
+        fonts = [name for name in _detect_installed_fonts() if not _is_non_text_font(name)]
         primary = _extract_primary_font(self._default_font_stack)
         if primary:
             fonts.append(primary)

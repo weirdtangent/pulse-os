@@ -463,15 +463,35 @@ body {
   opacity: 0.75;
 }
 
+/* Rendered as an inline listbox (size=6), not a dropdown. A native popup holding every
+   installed font is taller than a 720px kiosk screen, so it opens against the top edge
+   and covers the display; this keeps the list inside the card and scrolls it instead. */
 .overlay-control__select {
   width: 100%;
-  padding: 0.55rem 0.75rem;
+  padding: 0.35rem;
   border-radius: 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(0, 0, 0, 0.35);
   color: inherit;
   font: inherit;
   font-size: 0.95rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--overlay-accent-color) transparent;
+}
+
+.overlay-control__select option {
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.45rem;
+  /* Touch targets: this is a finger on a wall display, not a mouse. */
+  min-height: 2rem;
+  background: transparent;
+  color: inherit;
+}
+
+.overlay-control__select option:checked {
+  background: var(--overlay-accent-color);
+  color: #10233a;
+  font-weight: 600;
 }
 
 .overlay-device-actions {
