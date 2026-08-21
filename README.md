@@ -17,6 +17,16 @@
   <em>Live stock ticker — indices plus your own symbols during market hours, with a market pill in the badge row up top for an at-a-glance read</em>
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/pulse-weather-alert.jpg" alt="Weather alert banner across the top of the display" width="80%" /><br />
+  <em>Weather alerts — active National Weather Service alerts ride a single unobtrusive strip that names the hazard, not just the product, so a multi-day warning never covers the display</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/pulse-weather-alert-card.jpg" alt="Weather alert detail card with the full NWS bulletin" width="80%" /><br />
+  <em>Tap the banner for the full NWS bulletin — description, affected area, and the preparedness instructions called out</em>
+</p>
+
 # Pulse Kiosk v1 — Complete Setup Guide
 
 ## Raspberry Pi 5 + Pi 7" Touch Display 2
