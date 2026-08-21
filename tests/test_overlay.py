@@ -1203,6 +1203,22 @@ class DeviceControlsCardTests(unittest.TestCase):
         html = _build_device_controls_info_overlay(self._card())
         self.assertIn("data-confirm-label", html)
 
+    def test_change_listener_is_cleaned_up_on_reinit(self) -> None:
+        """initialize() runs on every refresh, so a listener it adds must also be removed."""
+        self.assertIn("root.addEventListener('change', changeHandler)", OVERLAY_JS)
+        self.assertIn("oldRoot.removeEventListener('change', changeHandler)", OVERLAY_JS)
+        # Registered for cleanup alongside the click/input handlers.
+        registry = OVERLAY_JS.split("PulseOverlay.eventHandlers = {", 1)[1].split("}", 1)[0]
+        self.assertIn("changeHandler", registry)
+        # Never on document: that survives re-init and accumulates a copy per refresh.
+        self.assertNotIn("document.addEventListener('change'", OVERLAY_JS)
+
+    def test_failed_reboot_request_disarms_the_button(self) -> None:
+        """Left armed, the next single tap would reboot with no confirmation at all."""
+        catch_block = OVERLAY_JS.split("action: 'reboot_device'", 1)[1].split("return;", 1)[0]
+        self.assertIn("dataset.armed = 'false'", catch_block)
+        self.assertIn("overlay-button--armed", catch_block)
+
     def test_every_slider_kind_maps_to_its_own_action(self) -> None:
         """The mapping was a ternary defaulting to set_volume, so a new slider changed the
         volume instead of what it said. Every rendered kind must have an explicit action."""

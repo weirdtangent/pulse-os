@@ -326,8 +326,11 @@ _CSS_GENERIC_FAMILIES = ("sans-serif", "serif", "monospace", "cursive", "fantasy
 
 def _with_generic_fallback(font_stack: str) -> str:
     stack = (font_stack or "").strip() or DEFAULT_FONT_STACK
-    lowered = stack.lower()
-    if any(generic in lowered for generic in _CSS_GENERIC_FAMILIES):
+    # Compare whole entries, not substrings: "DejaVu Serif" contains "serif", so a
+    # substring test reads a real family as a generic and skips the fallback that family
+    # needs. Split on commas and strip quotes so only an actual generic entry counts.
+    entries = {entry.strip().strip("\"'").lower() for entry in stack.split(",")}
+    if entries & set(_CSS_GENERIC_FAMILIES):
         return stack
     return f'{stack}, sans-serif, "Noto Color Emoji"'
 

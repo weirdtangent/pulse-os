@@ -45,11 +45,14 @@ window.PulseOverlay.initialize = function() {
   }
 
   if (window.PulseOverlay.eventHandlers) {
-    const { clickHandler, inputHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
+    const { clickHandler, inputHandler, changeHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
     const oldRoot = window.PulseOverlay.eventHandlers.root;
     if (oldRoot) {
       oldRoot.removeEventListener('click', clickHandler);
       oldRoot.removeEventListener('input', inputHandler);
+      if (changeHandler) {
+        oldRoot.removeEventListener('change', changeHandler);
+      }
     }
     if (resizeHandler) {
       window.removeEventListener('resize', resizeHandler);
@@ -500,7 +503,6 @@ window.PulseOverlay.initialize = function() {
       return;
     }
   };
-  document.addEventListener('change', changeHandler);
 
   // Handle stop timer button clicks
   const clickHandler = (e) => {
@@ -582,7 +584,14 @@ window.PulseOverlay.initialize = function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reboot_device' })
       }).catch(() => {
+        // Disarm fully on failure. Leaving it armed meant the next single tap would
+        // reboot with no confirmation at all, which is the opposite of the point.
         rebootButton.disabled = false;
+        rebootButton.dataset.armed = 'false';
+        rebootButton.classList.remove('overlay-button--armed');
+        if (rebootButton.dataset.idleLabel) {
+          rebootButton.innerHTML = rebootButton.dataset.idleLabel;
+        }
       });
       return;
     }
@@ -946,12 +955,14 @@ window.PulseOverlay.initialize = function() {
   // Attach event listeners
   root.addEventListener('click', clickHandler);
   root.addEventListener('input', inputHandler);
+  root.addEventListener('change', changeHandler);
 
   // Store handler references for cleanup on next initialization
   window.PulseOverlay.eventHandlers = {
     root,
     clickHandler,
     inputHandler,
+    changeHandler,
     resizeHandler
   };
 })();
