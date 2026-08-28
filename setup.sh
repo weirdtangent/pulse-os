@@ -688,12 +688,48 @@ install_device_python_deps() {
     pip_install_packages "voice assistant" "${ASSISTANT_PIP_PACKAGES[@]}" || true
 }
 
+# Debian ships an old snapclient (trixie: 0.31.0, bookworm: 0.26.0) and never moves
+# it within a release, so apt cannot get us current. Upstream publishes per-suite,
+# per-arch .debs; use those and fall back to apt if the download is unavailable.
+# NOTE: this leaves snapclient outside apt's update path -- bump SNAPCLIENT_VERSION
+# here when a new release ships (nothing will tell you automatically).
+SNAPCLIENT_VERSION="${SNAPCLIENT_VERSION:-0.35.0}"
+
 ensure_snapclient_package() {
+    local installed=""
     if dpkg -s snapclient >/dev/null 2>&1; then
-        return
+        installed="$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null)"
     fi
-    log "Installing snapclient…"
-    sudo apt install -y snapclient
+    case "$installed" in
+        "${SNAPCLIENT_VERSION}-1"*) return ;;
+    esac
+
+    local suite arch url tmp
+    suite="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+    arch="$(dpkg --print-architecture)"
+    # The pulse backend is required: pulse-snapclient.sh runs with --player pulse via
+    # PipeWire's PulseAudio compatibility socket. The plain and with-pipewire builds
+    # do NOT carry it.
+    url="https://github.com/snapcast/snapcast/releases/download/v${SNAPCLIENT_VERSION}/snapclient_${SNAPCLIENT_VERSION}-1_${arch}_${suite}_with-pulse.deb"
+    tmp="$(mktemp -d)"
+
+    log "Installing snapclient ${SNAPCLIENT_VERSION} (${arch}/${suite}) from upstream…"
+    if curl -fsSL -o "$tmp/snapclient.deb" "$url"; then
+        if sudo dpkg -i "$tmp/snapclient.deb"; then
+            rm -rf "$tmp"
+            return
+        fi
+        log "dpkg failed; resolving dependencies…"
+        sudo apt-get -f install -y || true
+    else
+        log "Could not fetch $url"
+    fi
+    rm -rf "$tmp"
+
+    if ! dpkg -s snapclient >/dev/null 2>&1; then
+        log "Falling back to the distro snapclient package…"
+        sudo apt install -y snapclient
+    fi
 }
 
 disable_stock_snapclient() {
