@@ -688,12 +688,110 @@ install_device_python_deps() {
     pip_install_packages "voice assistant" "${ASSISTANT_PIP_PACKAGES[@]}" || true
 }
 
+# Debian ships an old snapclient (trixie: 0.31.0, bookworm: 0.26.0) and never moves
+# it within a release, so apt cannot get us current. Upstream publishes per-suite,
+# per-arch .debs; use those.
+#
+# NOTE: this leaves snapclient outside apt's update path -- bump SNAPCLIENT_VERSION
+# AND the matching checksum below when a new release ships (nothing will tell you
+# automatically).
+SNAPCLIENT_VERSION="${SNAPCLIENT_VERSION:-0.35.0}"
+
+# sha256 of each upstream .deb we are willing to install, keyed "<arch>_<suite>".
+# Upstream publishes no checksums or signatures alongside the release, so pinning the
+# digest here is what makes the download verifiable: if the asset is ever replaced,
+# this stops matching and we fall back to apt rather than installing something we did
+# not expect. A combination that is not listed is NOT installed from GitHub -- it
+# takes the apt path, which is exactly the old behaviour.
+snapclient_expected_sha256() {
+    case "$1" in
+        arm64_trixie)   echo "541d3cbf886d0715c2ae7a7e6ecdfcec076039b7792f36418ba308075ef23bb1" ;;
+        arm64_bookworm) echo "4e0445eb1cf792da209f18f3d0aecb982595bd9b2530a313617be4321f43406d" ;;
+        *)              echo "" ;;
+    esac
+}
+
+# True only when snapclient is present AND fully configured at the wanted version.
+# `dpkg -s` reporting a version is not enough: a failed `dpkg -i` leaves the package
+# unpacked-but-unconfigured, which still reports a version and would otherwise look
+# like a successful install on this run and every future one.
+snapclient_is_installed_ok() {
+    local want="$1" status version
+    status="$(dpkg-query -W -f='${Status}' snapclient 2>/dev/null || true)"
+    [ "$status" = "install ok installed" ] || return 1
+    version="$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || true)"
+    case "$version" in
+        "${want}-1"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+install_snapclient_from_apt() {
+    log "Installing snapclient from the distro archive…"
+    sudo apt install -y snapclient
+}
+
 ensure_snapclient_package() {
-    if dpkg -s snapclient >/dev/null 2>&1; then
+    if snapclient_is_installed_ok "$SNAPCLIENT_VERSION"; then
         return
     fi
-    log "Installing snapclient…"
-    sudo apt install -y snapclient
+
+    local suite arch key expected url tmp actual
+    suite="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+    arch="$(dpkg --print-architecture)"
+    key="${arch}_${suite}"
+    expected="$(snapclient_expected_sha256 "$key")"
+
+    if [ -z "$expected" ]; then
+        log "No pinned snapclient checksum for ${key}; using the distro package instead."
+        if ! snapclient_is_installed_ok "" && ! dpkg -s snapclient >/dev/null 2>&1; then
+            install_snapclient_from_apt
+        fi
+        return
+    fi
+
+    # The pulse backend is required: pulse-snapclient.sh runs with --player pulse via
+    # PipeWire's PulseAudio compatibility socket. The plain and with-pipewire builds
+    # do NOT carry it.
+    url="https://github.com/snapcast/snapcast/releases/download/v${SNAPCLIENT_VERSION}/snapclient_${SNAPCLIENT_VERSION}-1_${arch}_${suite}_with-pulse.deb"
+    tmp="$(mktemp -d)"
+    # shellcheck disable=SC2064 # expand tmp now, not at trap time
+    trap "rm -rf '$tmp'" RETURN
+
+    log "Installing snapclient ${SNAPCLIENT_VERSION} (${key}) from upstream…"
+    if ! curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp/snapclient.deb" "$url"; then
+        log "Could not fetch $url"
+        dpkg -s snapclient >/dev/null 2>&1 || install_snapclient_from_apt
+        return
+    fi
+
+    actual="$(sha256sum "$tmp/snapclient.deb" | cut -d" " -f1)"
+    if [ "$actual" != "$expected" ]; then
+        log "REFUSING snapclient .deb: sha256 mismatch for ${key}"
+        log "  expected $expected"
+        log "  actual   $actual"
+        dpkg -s snapclient >/dev/null 2>&1 || install_snapclient_from_apt
+        return
+    fi
+
+    if ! sudo dpkg -i "$tmp/snapclient.deb"; then
+        # dpkg has already unpacked at this point, so the old working client is gone.
+        # Resolve dependencies and check the result -- do NOT swallow this: a silent
+        # failure here leaves a half-configured package that plays no audio, and the
+        # early return above would treat it as done on every later run.
+        log "dpkg reported an error; resolving dependencies…"
+        sudo apt-get -f install -y || log "apt-get -f install failed"
+    fi
+
+    if snapclient_is_installed_ok "$SNAPCLIENT_VERSION"; then
+        return
+    fi
+
+    log "snapclient ${SNAPCLIENT_VERSION} did not install cleanly; falling back to the distro package."
+    install_snapclient_from_apt
+    if ! dpkg-query -W -f='${Status}' snapclient 2>/dev/null | grep -q "install ok installed"; then
+        log "WARNING: snapclient is not correctly installed — this room will have no audio."
+    fi
 }
 
 disable_stock_snapclient() {
