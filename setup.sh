@@ -731,10 +731,18 @@ install_snapclient_from_apt() {
     sudo apt install -y snapclient
 }
 
+# Set to 1 by ensure_snapclient_package when the installed package actually moved,
+# so configure_snapclient knows the running process is now stale. Replacing the
+# binary does NOT restart the client: systemd keeps the old process alive against
+# the replaced inode, so `snapclient -v` reports the new version while the client
+# still speaks the old one to the server.
+SNAPCLIENT_PACKAGE_CHANGED=0
+
 ensure_snapclient_package() {
     if snapclient_is_installed_ok "$SNAPCLIENT_VERSION"; then
         return
     fi
+    SNAPCLIENT_PACKAGE_CHANGED=1
 
     local suite arch key expected url tmp actual
     suite="$(. /etc/os-release && echo "$VERSION_CODENAME")"
@@ -821,6 +829,12 @@ configure_snapclient() {
 
     ensure_snapclient_package
 
+    # Checksum the defaults before/after so we only bounce the client when the file
+    # genuinely moved -- setup.sh runs on every update, and restarting the audio
+    # client unconditionally would cut the room off for no reason each time.
+    local config_before config_after config_changed=0
+    config_before="$(sha256sum "$config_file" 2>/dev/null | cut -d" " -f1)"
+
     sudo tee "$config_file" >/dev/null <<EOF
 SNAPCAST_HOST="${PULSE_SNAPCAST_HOST}"
 SNAPCAST_PORT="${PULSE_SNAPCAST_PORT:-1704}"
@@ -831,11 +845,31 @@ SNAPCLIENT_LATENCY_MS="${PULSE_SNAPCLIENT_LATENCY_MS:-}"
 SNAPCLIENT_EXTRA_ARGS="${PULSE_SNAPCLIENT_EXTRA_ARGS:---player pulse}"
 SNAPCLIENT_HOST_ID="${PULSE_SNAPCLIENT_HOST_ID:-}"
 EOF
+    config_after="$(sha256sum "$config_file" 2>/dev/null | cut -d" " -f1)"
+    [ "$config_before" != "$config_after" ] && config_changed=1
+
     log "Wrote Snapcast client defaults to $config_file"
 
     # Snapclient streams through PipeWire/Pulse (--player pulse). Make sure the
     # per-user audio stack is running even when Bluetooth autoconnect is disabled.
     ensure_user_systemd_session
+
+    # Pick up a new binary or new defaults. Neither lands on its own: the later
+    # `systemctl enable --now pulse-snapclient.service` is a no-op against a unit
+    # that is already running, so without this the room keeps serving audio from
+    # the OLD client. That is not cosmetic -- on the 0.31 -> 0.35 upgrade every
+    # room reported the new version on disk while snapserver still saw v0.31.0
+    # clients, because the processes predated the package.
+    #
+    # Only restart a unit that is already active: if the client is meant to be off,
+    # or has not been enabled yet, starting it here would be the wrong call.
+    if [ "$SNAPCLIENT_PACKAGE_CHANGED" = "1" ] || [ "$config_changed" = "1" ]; then
+        if systemctl is-active --quiet pulse-snapclient.service; then
+            log "Snapclient package or config changed; restarting pulse-snapclient…"
+            sudo systemctl restart pulse-snapclient.service || \
+                log "WARNING: pulse-snapclient failed to restart — this room may be silent"
+        fi
+    fi
 }
 
 setup_user_dirs() {
