@@ -73,10 +73,17 @@ cmd=(
     "$SNAPCLIENT_BIN"
     --host "$SNAPCAST_HOST"
     --port "$SNAPCAST_PORT"
-    --controlPort "$SNAPCAST_CONTROL_PORT"
     --hostID "$SNAPCLIENT_HOST_ID"
     --soundcard "$SNAPCLIENT_SOUNDCARD"
 )
+
+# snapclient 0.35 REMOVED --controlPort (no replacement; it moved to a url-based
+# connection scheme) and exits Fatal on an unknown argument. The fleet is upgraded
+# room by room, so this script has to run against 0.26 (bluesnap), 0.31 and 0.35 at
+# the same time -- probe the binary instead of assuming a version.
+if "$SNAPCLIENT_BIN" --help 2>&1 | grep -q -- "--controlPort"; then
+    cmd+=(--controlPort "$SNAPCAST_CONTROL_PORT")
+fi
 
 if [ -n "$SNAPCLIENT_LATENCY_MS" ]; then
     cmd+=(--latency "$SNAPCLIENT_LATENCY_MS")
