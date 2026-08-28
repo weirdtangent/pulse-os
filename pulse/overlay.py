@@ -1256,7 +1256,14 @@ def render_overlay_html(
         f'data-info-endpoint="{info_endpoint_attr}"'
     )
 
-    css_block = f"{_theme_css(theme)}\n{OVERLAY_CSS}"
+    # Theme AFTER the static sheet, not before. Both blocks target :root with the same
+    # specificity, so whichever comes last wins -- with the theme first, OVERLAY_CSS's
+    # :root defaults silently overrode every configured colour and font on initial
+    # render. It only ever looked right because the refresh loop copies the theme onto
+    # documentElement's inline style, and that runs solely when the overlay CONTENT
+    # version changes: so a display showed its configured accent until the next reload,
+    # then reverted to the built-in default until some card happened to appear.
+    css_block = f"{OVERLAY_CSS}\n{_theme_css(theme)}"
     html_document = f"""<!DOCTYPE html>
 <html lang="en">
 <head>

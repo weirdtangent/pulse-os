@@ -37,6 +37,42 @@ class OverlayRenderTests(unittest.TestCase):
             show_notification_bar=True,
         )
 
+    def test_theme_css_wins_over_the_static_stylesheet(self) -> None:
+        """The theme block must come AFTER OVERLAY_CSS in the rendered document.
+
+        Both declare :root with identical specificity, so source order decides. With
+        the theme emitted first, OVERLAY_CSS's :root defaults silently overrode every
+        configured colour on initial render, and the display only picked the real theme
+        up when the refresh loop next copied it onto documentElement -- which happens
+        solely on an overlay CONTENT change. Net effect: a kiosk showed its configured
+        accent until the page reloaded, then reverted to the built-in default until
+        some card happened to appear.
+        """
+        from pulse.overlay_assets import OVERLAY_CSS
+
+        theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#ff5c5c",
+            show_notification_bar=True,
+        )
+        html = render_overlay_html(self._snapshot(), theme)
+
+        themed = html.rfind("--overlay-accent-color: #ff5c5c")
+        self.assertGreaterEqual(themed, 0, "themed accent missing from the document")
+
+        # The static sheet also defines --overlay-accent-color; the themed one has to
+        # come later or it loses the cascade.
+        static_default = OVERLAY_CSS[OVERLAY_CSS.find("--overlay-accent-color") :][:60]
+        self.assertIn("--overlay-accent-color", static_default)
+        static_at = html.find("--overlay-accent-color")
+        self.assertLess(
+            static_at,
+            themed,
+            "static :root default must precede the theme block, otherwise it wins",
+        )
+
     def _snapshot(self, **overrides) -> OverlaySnapshot:
         data = {
             "version": 1,
