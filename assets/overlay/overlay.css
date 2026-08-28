@@ -1018,6 +1018,29 @@ body {
   color: var(--overlay-accent-color);
 }
 
+/* The clock card is the ONLY card rendered without a background plate -- every other
+   card carries --ambient or --alert, so its text is read against a known dark scrim.
+   The clock sits directly on the wallpaper, which can be any photo at any luminance,
+   so colour alone cannot make it legible: the accent disappeared over a bright sunlit
+   shot, and white would disappear over a pale one just as badly. The time and date
+   only get away with being unshadowed because they are enormous (up to 6.5rem); the
+   title is 0.95rem and had no such margin.
+
+   So: the title joins its siblings in white rather than the accent, and all three get
+   a shadow so the card holds up over an arbitrary background. The accent still marks
+   titles on the backed cards, where it reads fine. */
+.overlay-card--clock .overlay-card__title {
+  color: var(--overlay-text-color, #ffffff);
+}
+
+.overlay-card--clock .overlay-card__title,
+.overlay-card--clock .overlay-clock__time,
+.overlay-card--clock .overlay-clock__date {
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.85),
+    0 0 14px rgba(0, 0, 0, 0.55);
+}
+
 /* The clock gets its own family. It is the one thing on screen rendered at 100px+, where a
    face picked for legibility in a 14px badge often reads badly, so the two are chosen
    separately. Falls back to the overlay font when no clock font is set. */

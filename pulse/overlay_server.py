@@ -326,7 +326,13 @@ html, body {{
     const style = doc.querySelector('style');
     if (!style) return;
     const text = style.textContent || '';
-    const rootAt = text.indexOf(':root');
+    // LAST :root, not the first. The document carries two: the static stylesheet's
+    // defaults come first, and the theme block is appended after it so it wins the
+    // cascade (see the css_block ordering in overlay.py). Taking the first one here
+    // would copy the built-in DEFAULTS onto documentElement's inline style -- and
+    // inline beats the sheet, so it would defeat the very ordering that makes the
+    // configured theme apply at all.
+    const rootAt = text.lastIndexOf(':root');
     if (rootAt < 0) return;
     const open = text.indexOf('{{', rootAt);
     const close = text.indexOf('}}', open);
