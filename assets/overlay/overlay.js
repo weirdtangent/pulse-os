@@ -89,7 +89,12 @@ window.PulseOverlay.initialize = function() {
   const hour12Attr = root.dataset.clockHour12;
   const hour12 = hour12Attr !== 'false';
   const timeOptions = { hour: hour12 ? 'numeric' : '2-digit', minute: '2-digit', hour12 };
-  const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+  const dateOptions = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
+  // The date is assembled part by part rather than handed to Intl whole: no locale
+  // renders an ordinal day ("September 1st"), and the browser's own locale would
+  // otherwise decide day-vs-month order.
+  const ordinalRules = new Intl.PluralRules('en-US', { type: 'ordinal' });
+  const ordinalSuffixes = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
 
   const clampPercent = (value) => {
     const numberValue = Number(value);
@@ -173,6 +178,22 @@ window.PulseOverlay.initialize = function() {
     }
   };
 
+  const formatClockDate = (date, tz) => {
+    let parts;
+    try {
+      parts = new Intl.DateTimeFormat('en-US', { ...dateOptions, timeZone: tz || undefined }).formatToParts(date);
+    } catch (error) {
+      parts = new Intl.DateTimeFormat('en-US', dateOptions).formatToParts(date);
+    }
+    const part = (type) => {
+      const match = parts.find((entry) => entry.type === type);
+      return match ? match.value : '';
+    };
+    const day = part('day');
+    const suffix = ordinalSuffixes[ordinalRules.select(Number(day))] || 'th';
+    return `${part('weekday')} ${part('month')} ${day}${suffix}, ${part('year')}`;
+  };
+
   const tick = () => {
     const now = new Date();
     const clockNodes = root.querySelectorAll('[data-clock]');
@@ -189,7 +210,7 @@ window.PulseOverlay.initialize = function() {
       }
       if (dateEl) {
         try {
-          dateEl.textContent = formatWithZone(now, tz, dateOptions);
+          dateEl.textContent = formatClockDate(now, tz);
         } catch (err) {
           // Silently handle timezone formatting errors
         }
