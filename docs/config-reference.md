@@ -24,6 +24,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_WATCHDOG_URL` | `http://homeassistant.local:8123/static/icons/favicon.ico` | Lightweight URL Chromium fetches to prove connectivity. |
 | `PULSE_WATCHDOG_LIMIT` | `5` | Consecutive watchdog fetch failures before Chromium is restarted. |
 | `PULSE_WATCHDOG_INTERVAL` | `60` | Seconds between watchdog fetches. |
+| `PULSE_KIOSK_LOCALE` | `en_US.UTF-8` | Locale exported to the kiosk session and passed to Chromium as `--lang` / `--accept-lang` (converted to BCP 47, so `en_US.UTF-8` becomes `en-US`). Raspberry Pi OS ships `en_GB.UTF-8`, which Chromium otherwise uses for every date, number and sort it renders. Generate the locale on the device first: `sudo locale-gen <locale> && sudo update-locale LANG=<locale>`. |
 | `CHROMIUM_DEVTOOLS_URL` | `http://localhost:9222/json` | Remote debugging endpoint for kiosk automation. |
 | `CHROMIUM_DEVTOOLS_TIMEOUT` | `3` | Timeout (seconds) for DevTools HTTP/WebSocket operations. |
 

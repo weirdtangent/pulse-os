@@ -43,6 +43,13 @@ PULSE_WATCHDOG_LIMIT=5
 # PULSE_WATCHDOG_INTERVAL — seconds between watchdog fetches.
 PULSE_WATCHDOG_INTERVAL=60
 
+# PULSE_KIOSK_LOCALE — locale the kiosk session and Chromium run under. Raspberry Pi OS
+# images ship en_GB.UTF-8, which Chromium then uses for every date, number and sort it
+# renders. Set here rather than relying on the OS default, and generate it on the device
+# first (sudo locale-gen <locale> && sudo update-locale LANG=<locale>). The BCP 47 form
+# is derived for Chromium's --lang, so en_US.UTF-8 becomes en-US.
+PULSE_KIOSK_LOCALE="en_US.UTF-8"
+
 # CHROMIUM_DEVTOOLS_URL — DevTools discovery endpoint for kiosk navigation/debug (default points to local Chromium).
 CHROMIUM_DEVTOOLS_URL="http://localhost:9222/json"
 

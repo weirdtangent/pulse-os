@@ -214,7 +214,11 @@ window.PulseOverlay.initialize = function() {
   // 1280x720 kiosk. Measuring beats counting characters -- the overlay font is
   // proportional and configurable, so "Wednesday" and "May 1st" are not comparable by
   // length. Only runs when the text changes, i.e. once a day, not on every tick.
-  const dateFitClasses = ['overlay-clock__date--tight', 'overlay-clock__date--tighter'];
+  const dateFitClasses = [
+    'overlay-clock__date--tight',
+    'overlay-clock__date--tighter',
+    'overlay-clock__date--tightest',
+  ];
   const fitClockDate = (el) => {
     el.classList.remove(...dateFitClasses);
     for (const className of dateFitClasses) {
