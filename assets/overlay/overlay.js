@@ -189,17 +189,18 @@ window.PulseOverlay.initialize = function() {
     } catch (error) {
       parts = new Intl.DateTimeFormat('en-US', dateOptions).formatToParts(date);
     }
-    const part = (type) => {
-      const match = parts.find((entry) => entry.type === type);
-      return match ? match.value : '';
-    };
-    const day = part('day');
+    // Indexed in one pass rather than a find() per token: tick() runs every second.
+    const parted = {};
+    parts.forEach((entry) => {
+      parted[entry.type] = entry.value;
+    });
+    const day = parted.day || '';
     const values = {
-      weekday: part('weekday'),
-      month: part('month'),
+      weekday: parted.weekday || '',
+      month: parted.month || '',
       day,
       ordinal: `${day}${ordinalSuffixes[ordinalRules.select(Number(day))] || 'th'}`,
-      year: part('year'),
+      year: parted.year || '',
     };
     // An unknown token is left as written rather than blanked, so a typo in the config
     // shows up on the screen as itself instead of a mysterious gap.
