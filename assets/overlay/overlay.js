@@ -209,6 +209,22 @@ window.PulseOverlay.initialize = function() {
     );
   };
 
+  // Step the date down a size rather than let it wrap: the clock sits in a fixed grid
+  // cell, and the longest date the templates can produce is wider than that cell on a
+  // 1280x720 kiosk. Measuring beats counting characters -- the overlay font is
+  // proportional and configurable, so "Wednesday" and "May 1st" are not comparable by
+  // length. Only runs when the text changes, i.e. once a day, not on every tick.
+  const dateFitClasses = ['overlay-clock__date--tight', 'overlay-clock__date--tighter'];
+  const fitClockDate = (el) => {
+    el.classList.remove(...dateFitClasses);
+    for (const className of dateFitClasses) {
+      if (el.scrollWidth <= el.clientWidth) {
+        return;
+      }
+      el.classList.add(className);
+    }
+  };
+
   const tick = () => {
     const now = new Date();
     const clockNodes = root.querySelectorAll('[data-clock]');
@@ -225,7 +241,11 @@ window.PulseOverlay.initialize = function() {
       }
       if (dateEl) {
         try {
-          dateEl.textContent = formatClockDate(now, tz);
+          const dateText = formatClockDate(now, tz);
+          if (dateEl.textContent !== dateText) {
+            dateEl.textContent = dateText;
+            fitClockDate(dateEl);
+          }
         } catch (err) {
           // Silently handle timezone formatting errors
         }
