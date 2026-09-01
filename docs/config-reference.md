@@ -46,7 +46,7 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_ACCENT_COLOR` | `#88C0D0` | Accent color for highlights. |
 | `PULSE_OVERLAY_NOTIFICATION_BAR` | `true` | Toggles the badge row at the top of the overlay. |
 | `PULSE_OVERLAY_CLOCK_24H` | `false` | Forces 24-hour clock labels when `true`. |
-| `PULSE_OVERLAY_CLOCK_DATE_STYLE` | `long` | Date shown under the clock: `long` (Tuesday, September 1, 2026), `long-no-year` (Tuesday, September 1), `ordinal` (Tuesday, September 1st) or `ordinal-year` (Tuesday, September 1st, 2026). Unknown values fall back to `long`. |
+| `PULSE_OVERLAY_CLOCK_DATE_FORMAT` | `long` | Date under the clock. A preset name — `long` (Tuesday, September 1, 2026), `long-no-year`, `ordinal` (Tuesday, September 1st), `ordinal-year`, `day-first` (Tuesday 1 September 2026), `day-first-no-year` — or a template of `{weekday}` `{month}` `{day}` `{ordinal}` `{year}`, e.g. `{weekday}, {day} {month}`. Unrecognised values fall back to `long`. |
 | `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
 
 ## Stock ticker

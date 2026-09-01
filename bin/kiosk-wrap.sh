@@ -79,6 +79,19 @@ fi
 
 URL="$(append_pulse_host_param "$URL" "$HOSTNAME_FALLBACK")"
 
+# Pin the kiosk locale. Raspberry Pi OS ships en_GB.UTF-8, and Chromium inherits it
+# for every date, number and sort it renders -- a US kiosk was showing "Tuesday 1
+# September". The session env is set for anything Chromium shells out to, and --lang
+# is passed explicitly because Chromium also persists an app locale in its profile
+# from whatever it saw on first run.
+: "${PULSE_KIOSK_LOCALE:=en_US.UTF-8}"
+export LANG="$PULSE_KIOSK_LOCALE"
+export LC_ALL="$PULSE_KIOSK_LOCALE"
+# en_US.UTF-8 -> en-US, the BCP 47 form Chromium's --lang wants.
+KIOSK_UI_LANG="${PULSE_KIOSK_LOCALE%%.*}"
+KIOSK_UI_LANG="${KIOSK_UI_LANG//_/-}"
+export LANGUAGE="$KIOSK_UI_LANG"
+
 # Isolate Chromium temp files away from /tmp (tmpfs)
 export TMPDIR="$HOME/.cache/chromium-tmp"
 mkdir -p "$TMPDIR"
@@ -168,6 +181,8 @@ BROWSER="$(command -v chromium || command -v chromium-browser)"
 while true; do
   "$BROWSER" \
     --v=0 \
+    --lang="$KIOSK_UI_LANG" \
+    --accept-lang="$KIOSK_UI_LANG" \
     --remote-debugging-port=9222 \
     --remote-debugging-address=0.0.0.0 \
     --disable-application-cache \

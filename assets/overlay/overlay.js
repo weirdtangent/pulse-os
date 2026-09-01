@@ -95,13 +95,10 @@ window.PulseOverlay.initialize = function() {
   // otherwise decide day-vs-month order (the kiosks resolve to "Tuesday 1 September").
   const ordinalRules = new Intl.PluralRules('en-US', { type: 'ordinal' });
   const ordinalSuffixes = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
-  const dateStyles = {
-    long: ({ weekday, month, day, year }) => `${weekday}, ${month} ${day}, ${year}`,
-    'long-no-year': ({ weekday, month, day }) => `${weekday}, ${month} ${day}`,
-    ordinal: ({ weekday, month, day, suffix }) => `${weekday}, ${month} ${day}${suffix}`,
-    'ordinal-year': ({ weekday, month, day, suffix, year }) => `${weekday}, ${month} ${day}${suffix}, ${year}`,
-  };
-  const dateStyle = dateStyles[root.dataset.clockDateStyle] ? root.dataset.clockDateStyle : 'long';
+  // The arrangement is a token template resolved server-side; this end only substitutes,
+  // so the preset list lives in one place (pulse/overlay.py) and cannot drift.
+  const DEFAULT_DATE_FORMAT = '{weekday}, {month} {day}, {year}';
+  const dateFormat = root.dataset.clockDateFormat || DEFAULT_DATE_FORMAT;
 
   const clampPercent = (value) => {
     const numberValue = Number(value);
@@ -197,13 +194,18 @@ window.PulseOverlay.initialize = function() {
       return match ? match.value : '';
     };
     const day = part('day');
-    return dateStyles[dateStyle]({
+    const values = {
       weekday: part('weekday'),
       month: part('month'),
       day,
+      ordinal: `${day}${ordinalSuffixes[ordinalRules.select(Number(day))] || 'th'}`,
       year: part('year'),
-      suffix: ordinalSuffixes[ordinalRules.select(Number(day))] || 'th',
-    });
+    };
+    // An unknown token is left as written rather than blanked, so a typo in the config
+    // shows up on the screen as itself instead of a mysterious gap.
+    return dateFormat.replace(/{(\w+)}/g, (token, name) =>
+      Object.prototype.hasOwnProperty.call(values, name) ? values[name] : token,
+    );
   };
 
   const tick = () => {
