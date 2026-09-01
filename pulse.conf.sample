@@ -103,6 +103,14 @@ PULSE_OVERLAY_NOTIFICATION_BAR="true"
 # PULSE_OVERLAY_CLOCK_24H — set to "true" for 24-hour clock display (default 12-hour).
 PULSE_OVERLAY_CLOCK_24H="false"
 
+# PULSE_OVERLAY_CLOCK_DATE_STYLE — how the date under the clock reads. Month names and
+# weekdays are always US English, so the format does not follow the browser locale.
+#   long          Tuesday, September 1, 2026   (default)
+#   long-no-year  Tuesday, September 1
+#   ordinal       Tuesday, September 1st
+#   ordinal-year  Tuesday, September 1st, 2026
+PULSE_OVERLAY_CLOCK_DATE_STYLE="long"
+
 # PULSE_OVERLAY_AUTH_TOKEN — optional bearer token for overlay POST endpoints.
 # When set, all state-changing requests (stop/snooze, volume, brightness, updates)
 # require an "Authorization: Bearer <token>" header. Leave unset to allow

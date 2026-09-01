@@ -31,6 +31,7 @@ from pulse.overlay import (
     OverlayChange,
     OverlayStateManager,
     OverlayTheme,
+    normalize_clock_date_style,
     parse_clock_config,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
@@ -106,6 +107,7 @@ class OverlayConfig:
     accent_color: str
     show_notification_bar: bool
     clock_24h: bool
+    clock_date_style: str
     font_family: str  # configured default stack; never rewritten by a pick
     font_choice: str  # overlay font picked on-screen or from HA ("" = use the default)
     clock_font_choice: str  # clock font picked separately ("" = follow the overlay font)
@@ -551,6 +553,7 @@ def load_config() -> EnvConfig:
         accent_color=os.environ.get("PULSE_OVERLAY_ACCENT_COLOR", "#88C0D0"),
         show_notification_bar=parse_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
         clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
+        clock_date_style=normalize_clock_date_style(os.environ.get("PULSE_OVERLAY_CLOCK_DATE_STYLE")),
         font_family=overlay_font_stack,
         font_choice=overlay_font_choice,
         clock_font_choice=overlay_clock_font_choice,
@@ -903,6 +906,7 @@ class KioskMqttListener:
                 port=self.overlay_config.port,
                 allowed_origins=self.overlay_config.allowed_origins,
                 clock_24h=self.overlay_config.clock_24h,
+                clock_date_style=self.overlay_config.clock_date_style,
                 stop_endpoint=self._overlay_stop_endpoint,
                 info_endpoint=self._overlay_info_endpoint,
                 auth_token=self.overlay_config.auth_token,

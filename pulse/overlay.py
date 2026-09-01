@@ -663,6 +663,25 @@ CELL_ORDER = (
 
 CLOCK_POSITION = "bottom-left"
 
+# Date styles the clock card understands. The rendering itself lives in overlay.js
+# (Intl does the month and weekday names); this list only has to agree with the keys
+# in its `dateStyles` map so an unknown value can be caught before it reaches a kiosk.
+CLOCK_DATE_STYLES = (
+    "long",  # Tuesday, September 1, 2026
+    "long-no-year",  # Tuesday, September 1
+    "ordinal",  # Tuesday, September 1st
+    "ordinal-year",  # Tuesday, September 1st, 2026
+)
+DEFAULT_CLOCK_DATE_STYLE = "long"
+
+
+def normalize_clock_date_style(value: str | None) -> str:
+    """Return a known date style, falling back to the default for anything else."""
+
+    candidate = (value or "").strip().lower()
+    return candidate if candidate in CLOCK_DATE_STYLES else DEFAULT_CLOCK_DATE_STYLE
+
+
 INFO_CARD_BLOCKED_CELLS = {
     "top-center",
     "top-right",
@@ -1193,6 +1212,7 @@ def render_overlay_html(
     theme: OverlayTheme,
     *,
     clock_hour12: bool = True,
+    clock_date_style: str = DEFAULT_CLOCK_DATE_STYLE,
     stop_endpoint: str | None = None,
     info_endpoint: str | None = None,
 ) -> str:
@@ -1252,6 +1272,7 @@ def render_overlay_html(
         f'data-version="{snapshot.version}" '
         f'data-generated-at="{int(snapshot.generated_at * 1000)}" '
         f'data-clock-hour12="{"true" if clock_hour12 else "false"}" '
+        f'data-clock-date-style="{normalize_clock_date_style(clock_date_style)}" '
         f'data-stop-endpoint="{stop_endpoint_attr}" '
         f'data-info-endpoint="{info_endpoint_attr}"'
     )

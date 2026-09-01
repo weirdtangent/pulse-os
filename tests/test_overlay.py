@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pulse.overlay import (
+    CLOCK_DATE_STYLES,
     KEY_LIBRARIES,
     ClockConfig,
     OverlaySnapshot,
@@ -20,6 +21,7 @@ from pulse.overlay import (
     _copyright_years,
     _get_library_versions,
     _theme_css,
+    normalize_clock_date_style,
     parse_clock_config,
     render_overlay_html,
 )
@@ -1706,3 +1708,43 @@ class WeatherAlertStateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClockDateStyleTests(unittest.TestCase):
+    """The style is chosen in Python but rendered in overlay.js, so the two must agree."""
+
+    def setUp(self) -> None:
+        self.theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+        )
+
+    def _snapshot(self) -> OverlaySnapshot:
+        return OverlayStateManager().snapshot()
+
+    def test_every_style_reaches_the_markup(self) -> None:
+        for style in CLOCK_DATE_STYLES:
+            with self.subTest(style=style):
+                html = render_overlay_html(self._snapshot(), self.theme, clock_date_style=style)
+                self.assertIn(f'data-clock-date-style="{style}"', html)
+
+    def test_unknown_and_empty_styles_fall_back_to_long(self) -> None:
+        for value in ("", "   ", "gibberish", None):
+            with self.subTest(value=value):
+                self.assertEqual(normalize_clock_date_style(value), "long")
+
+    def test_style_matching_ignores_case_and_padding(self) -> None:
+        self.assertEqual(normalize_clock_date_style("  Ordinal-Year "), "ordinal-year")
+
+    def test_default_style_is_rendered_without_an_explicit_argument(self) -> None:
+        html = render_overlay_html(self._snapshot(), self.theme)
+        self.assertIn('data-clock-date-style="long"', html)
+
+    def test_javascript_implements_exactly_the_declared_styles(self) -> None:
+        """A style Python accepts but overlay.js cannot render would silently show `long`."""
+        block = OVERLAY_JS.split("const dateStyles = {", 1)[1].split("};", 1)[0]
+        in_js = set(re.findall(r"^\s*'?([a-z-]+)'?:", block, re.MULTILINE))
+        self.assertEqual(in_js, set(CLOCK_DATE_STYLES))

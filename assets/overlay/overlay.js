@@ -92,9 +92,16 @@ window.PulseOverlay.initialize = function() {
   const dateOptions = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
   // The date is assembled part by part rather than handed to Intl whole: no locale
   // renders an ordinal day ("September 1st"), and the browser's own locale would
-  // otherwise decide day-vs-month order.
+  // otherwise decide day-vs-month order (the kiosks resolve to "Tuesday 1 September").
   const ordinalRules = new Intl.PluralRules('en-US', { type: 'ordinal' });
   const ordinalSuffixes = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
+  const dateStyles = {
+    long: ({ weekday, month, day, year }) => `${weekday}, ${month} ${day}, ${year}`,
+    'long-no-year': ({ weekday, month, day }) => `${weekday}, ${month} ${day}`,
+    ordinal: ({ weekday, month, day, suffix }) => `${weekday}, ${month} ${day}${suffix}`,
+    'ordinal-year': ({ weekday, month, day, suffix, year }) => `${weekday}, ${month} ${day}${suffix}, ${year}`,
+  };
+  const dateStyle = dateStyles[root.dataset.clockDateStyle] ? root.dataset.clockDateStyle : 'long';
 
   const clampPercent = (value) => {
     const numberValue = Number(value);
@@ -190,8 +197,13 @@ window.PulseOverlay.initialize = function() {
       return match ? match.value : '';
     };
     const day = part('day');
-    const suffix = ordinalSuffixes[ordinalRules.select(Number(day))] || 'th';
-    return `${part('weekday')} ${part('month')} ${day}${suffix}, ${part('year')}`;
+    return dateStyles[dateStyle]({
+      weekday: part('weekday'),
+      month: part('month'),
+      day,
+      year: part('year'),
+      suffix: ordinalSuffixes[ordinalRules.select(Number(day))] || 'th',
+    });
   };
 
   const tick = () => {
