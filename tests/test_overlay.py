@@ -25,7 +25,7 @@ from pulse.overlay import (
     render_overlay_html,
     resolve_clock_date_format,
 )
-from pulse.overlay_assets import OVERLAY_JS
+from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 from pulse.weather_alerts import BANNER_ALWAYS
 
 
@@ -1792,3 +1792,46 @@ class ClockDateFormatTests(unittest.TestCase):
         block = OVERLAY_JS.split("const values = {", 1)[1].split("};", 1)[0]
         in_js = set(re.findall(r"^\s*([a-z]+)[,:]", block, re.MULTILINE))
         self.assertEqual(in_js, set(CLOCK_DATE_TOKENS))
+
+
+class ClockDateFitTests(unittest.TestCase):
+    """The date steps down a size rather than wrapping; the two ends must agree."""
+
+    @staticmethod
+    def _rule_body(selector: str) -> str:
+        """Every top-level rule for exactly this selector, concatenated.
+
+        The stylesheet splits `.overlay-clock__date` across several rules and also
+        mentions it inside compound selectors, so a naive substring search reads the
+        wrong block.
+        """
+        pattern = re.compile(rf"^{re.escape(selector)}\s*\{{([^}}]*)\}}", re.MULTILINE)
+        return "\n".join(pattern.findall(OVERLAY_CSS))
+
+    def _fit_classes(self) -> list[str]:
+        block = OVERLAY_JS.split("const dateFitClasses = [", 1)[1].split("]", 1)[0]
+        return re.findall(r"'([^']+)'", block)
+
+    @staticmethod
+    def _clamp_max_rem(body: str) -> float:
+        match = re.search(r"font-size:\s*clamp\([^,]+,[^,]+,\s*([\d.]+)rem\)", body)
+        assert match is not None, f"no clamped font-size in rule body: {body!r}"
+        return float(match.group(1))
+
+    def test_the_date_never_wraps(self) -> None:
+        self.assertIn("white-space: nowrap", self._rule_body(".overlay-clock__date"))
+
+    def test_every_step_down_class_is_styled(self) -> None:
+        """A class the JS adds with no rule behind it would silently do nothing."""
+        classes = self._fit_classes()
+        self.assertTrue(classes, "overlay.js no longer declares any step-down classes")
+        for class_name in classes:
+            with self.subTest(class_name=class_name):
+                self.assertTrue(self._rule_body(f".{class_name}").strip())
+
+    def test_the_steps_get_progressively_smaller(self) -> None:
+        """Applied in order, so a later class that is not smaller would never help."""
+        sizes = [self._clamp_max_rem(self._rule_body(".overlay-clock__date"))]
+        sizes += [self._clamp_max_rem(self._rule_body(f".{name}")) for name in self._fit_classes()]
+        self.assertEqual(sizes, sorted(sizes, reverse=True))
+        self.assertEqual(len(set(sizes)), len(sizes), "two steps render at the same size")

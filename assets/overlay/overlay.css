@@ -1059,6 +1059,19 @@ body {
   font-size: clamp(1.3rem, 3vw, 2.2rem);
   font-weight: 400;
   opacity: 0.85;
+  /* The clock sits in a fixed grid cell (403px on a 1280x720 kiosk) and the longest
+     date it can render -- "Wednesday, September 30, 2026" -- is wider than that. A
+     wrapped date pushes the card into two ragged lines, so it steps down a size
+     instead; overlay.js adds the classes below when the text does not fit. */
+  white-space: nowrap;
+}
+
+.overlay-clock__date--tight {
+  font-size: clamp(1.2rem, 2.6vw, 1.9rem);
+}
+
+.overlay-clock__date--tighter {
+  font-size: clamp(1.1rem, 2.3vw, 1.7rem);
 }
 
 .overlay-card--ambient {
