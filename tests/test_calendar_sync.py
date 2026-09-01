@@ -1759,3 +1759,149 @@ def test_the_content_digest_survives_refolded_lines() -> None:
     )
     # Same property, wrapped at a different column: one logical line either way.
     assert _content_digest(folded_one) == _content_digest(folded_two)
+
+
+def test_the_content_digest_notices_data_moving_between_events() -> None:
+    """Review catch: a digest over a bag of lines misses a swap between two events.
+
+    The file's set of lines is identical either way, so only per-component hashing
+    distinguishes them -- otherwise a real edit reuses a stale parse.
+    """
+    from pulse.assistant.calendar_sync import _content_digest
+
+    def ics(first_summary: bytes, second_summary: bytes) -> bytes:
+        return (
+            b"BEGIN:VCALENDAR\r\n"
+            b"BEGIN:VEVENT\r\nUID:a\r\nDTSTART:20260101T090000Z\r\nSUMMARY:" + first_summary + b"\r\nEND:VEVENT\r\n"
+            b"BEGIN:VEVENT\r\nUID:b\r\nDTSTART:20260101T100000Z\r\nSUMMARY:" + second_summary + b"\r\nEND:VEVENT\r\n"
+            b"END:VCALENDAR\r\n"
+        )
+
+    assert _content_digest(ics(b"Standup", b"Review")) != _content_digest(ics(b"Review", b"Standup"))
+
+
+def test_the_content_digest_notices_an_alarm_moving_between_events() -> None:
+    """A VALARM belongs to its event, so moving it must invalidate the cache."""
+    from pulse.assistant.calendar_sync import _content_digest
+
+    alarm = b"BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT30M\r\nEND:VALARM\r\n"
+    on_first = (
+        b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\n" + alarm + b"END:VEVENT\r\n"
+        b"BEGIN:VEVENT\r\nUID:b\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    on_second = (
+        b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nEND:VEVENT\r\n"
+        b"BEGIN:VEVENT\r\nUID:b\r\n" + alarm + b"END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    assert _content_digest(on_first) != _content_digest(on_second)
+
+
+def test_the_content_digest_still_ignores_component_order() -> None:
+    """Reordering whole events is export churn, not an edit."""
+    from pulse.assistant.calendar_sync import _content_digest
+
+    one = (
+        b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nSUMMARY:Standup\r\nEND:VEVENT\r\n"
+        b"BEGIN:VEVENT\r\nUID:b\r\nSUMMARY:Review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    two = (
+        b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:b\r\nSUMMARY:Review\r\nEND:VEVENT\r\n"
+        b"BEGIN:VEVENT\r\nUID:a\r\nSUMMARY:Standup\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    assert _content_digest(one) == _content_digest(two)
+
+
+@pytest.mark.anyio
+async def test_a_304_still_rebuilds_the_window() -> None:
+    """Review catch: the lookahead moves even when the feed does not.
+
+    With per-feed slices persisting, returning early on 304 would freeze a feed's
+    events -- ones entering the window later would never appear or be scheduled.
+    """
+    config = _make_config()
+    svc = CalendarSyncService(config=config, trigger_callback=_noop_trigger)
+    state = svc._feed_states[config.feeds[0]]
+
+    # An event four hours out, and a first pass that parses and windows it.
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=_ok_response(_ics_with_event("later-1", hours_ahead=4)))
+    svc._client = client
+    await svc._sync_once()
+    assert {r.uid for r in svc.cached_events()} == {"later-1"}
+
+    # Now the server answers 304 and the slice is deliberately emptied: only a genuine
+    # re-expansion of the cached calendar can put the event back.
+    state.window.clear()
+    not_modified = MagicMock()
+    not_modified.status_code = 304
+    not_modified.headers = {}
+    client.get = AsyncMock(return_value=not_modified)
+    await svc._sync_once()
+
+    assert {r.uid for r in svc.cached_events()} == {"later-1"}, (
+        "a 304 must re-expand the cached calendar, not freeze the feed's slice"
+    )
+
+    for task in list(svc._scheduled.values()):
+        task.cancel()
+
+
+@pytest.mark.anyio
+async def test_a_304_without_a_cached_calendar_is_a_no_op() -> None:
+    """Nothing parsed yet means there is nothing to re-expand."""
+    config = _make_config()
+    svc = CalendarSyncService(config=config, trigger_callback=_noop_trigger)
+    state = svc._feed_states[config.feeds[0]]
+    state.etag = '"abc"'
+
+    not_modified = MagicMock()
+    not_modified.status_code = 304
+    not_modified.headers = {}
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=not_modified)
+    svc._client = client
+
+    await svc._sync_feed(state, datetime.now(UTC).astimezone())
+    assert state.window == {}
+    assert state.etag == '"abc"'
+
+
+@pytest.mark.anyio
+async def test_the_snapshot_uses_the_clock_at_emission() -> None:
+    """Review catch: a sweep over a 19 MB feed runs for ~35s.
+
+    Emitting against the timestamp captured at the start would keep events that ended
+    during the sweep on screen.
+    """
+    config = _make_config()
+    emitted: list[list] = []
+
+    async def capture(events) -> None:
+        emitted.append(list(events))
+
+    svc = CalendarSyncService(config=config, trigger_callback=_noop_trigger, snapshot_callback=capture)
+    state = svc._feed_states[config.feeds[0]]
+    now = datetime.now(UTC).astimezone()
+    # Ended one minute ago: in window had we used a `now` captured before the sweep.
+    state.window["ending"] = CalendarReminder(
+        uid="ending",
+        summary="Ends mid-sweep",
+        description=None,
+        location=None,
+        start=now - timedelta(hours=1),
+        end=now - timedelta(minutes=1),
+        all_day=False,
+        trigger_time=now - timedelta(hours=2),
+        calendar_name=None,
+        source_url=config.feeds[0],
+    )
+
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=httpx.ReadTimeout("slow"))
+    svc._client = client
+    await svc._sync_once()
+
+    assert emitted and emitted[-1] == [], "an event that ended during the sweep must not be emitted"
+
+    for task in list(svc._retry_tasks.values()):
+        task.cancel()

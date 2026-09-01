@@ -32,14 +32,49 @@ _VOLATILE_ICS_PREFIXES = (b"DTSTAMP", b"LAST-MODIFIED", b"CREATED", b"SEQUENCE")
 
 
 def _content_digest(body: bytes) -> str:
-    """Digest an ICS body, ignoring per-export churn, folding and line ordering."""
+    """Digest an ICS body, ignoring per-export churn, folding and component ordering.
+
+    Components are digested individually and only those digests are sorted, so a line
+    keeps its association with the event it came from: moving a SUMMARY or DTSTART
+    between two events changes the result, even though the file's set of lines has not.
+    """
 
     # Unfold first (RFC 5545 continuation lines). Google re-wraps long ATTENDEE
     # properties at different octet boundaries between exports, which moved ~434 lines
     # of an unchanged work calendar and defeated a line-level digest on its own.
     unfolded = body.replace(b"\r\n ", b"").replace(b"\r\n\t", b"")
-    lines = sorted(line for line in unfolded.split(b"\r\n") if not line.startswith(_VOLATILE_ICS_PREFIXES))
-    return hashlib.sha256(b"\n".join(lines)).hexdigest()
+    component_digests: list[bytes] = []
+    calendar_lines: list[bytes] = []
+    current: list[bytes] | None = None
+    depth = 0
+    for line in unfolded.split(b"\r\n"):
+        if line.startswith(_VOLATILE_ICS_PREFIXES):
+            continue
+        if line.startswith(b"BEGIN:VCALENDAR") or line.startswith(b"END:VCALENDAR"):
+            continue
+        if line.startswith(b"BEGIN:"):
+            depth += 1
+            if depth == 1:
+                current = []
+        if current is not None:
+            # Nested components (a VALARM inside its VEVENT) stay part of the block, so
+            # a reminder moving between events also changes the digest.
+            current.append(line)
+        else:
+            calendar_lines.append(line)
+        if line.startswith(b"END:"):
+            depth = max(0, depth - 1)
+            if depth == 0 and current is not None:
+                component_digests.append(hashlib.sha256(b"\n".join(current)).digest())
+                current = None
+    if current:  # unterminated component: keep its content rather than dropping it
+        component_digests.append(hashlib.sha256(b"\n".join(current)).digest())
+    digest = hashlib.sha256()
+    for line in sorted(calendar_lines):
+        digest.update(line + b"\n")
+    for component in sorted(component_digests):
+        digest.update(component)
+    return digest.hexdigest()
 
 
 def _now() -> datetime:
@@ -258,7 +293,9 @@ class CalendarSyncService:
                     len(state.window),
                 )
         try:
-            await self._emit_event_snapshot(now)
+            # No `now` argument: a sweep can run for half a minute over a large feed,
+            # and events that ended during it must not linger in the snapshot.
+            await self._emit_event_snapshot()
         except Exception:
             self._logger.exception("[calendar] Calendar snapshot emit failed")
         else:
@@ -286,32 +323,40 @@ class CalendarSyncService:
         if response.status_code == 304:
             # Successful response (not modified) - clear any retry
             self._cancel_retry(state.url)
-            return
-        if response.status_code >= 400:
+            if state.calendar is None:
+                return
+            # Fall through to re-expand the cached calendar. The lookahead window moves
+            # even when the feed does not, so returning here would freeze this feed's
+            # slice: events entering the window later would never appear and their
+            # reminders would never be scheduled until the body happened to change.
+            calendar = state.calendar
+        elif response.status_code >= 400:
             self._logger.warning("[calendar] Calendar fetch returned %s for '%s'", response.status_code, feed_label)
             self._schedule_retry(state.url)
             return
-        # Successful fetch - clear any retry
-        self._cancel_retry(state.url)
-        state.etag = response.headers.get("etag") or state.etag
-        state.last_modified = response.headers.get("last-modified") or state.last_modified
-        # Parsing is the expensive half -- a ~19 MB export costs ~14s of CPU -- and these
-        # feeds carry no ETag or Last-Modified, so the content is digested instead: an
-        # unchanged calendar reuses the parse and only its window is expanded again.
-        digest = await asyncio.to_thread(_content_digest, response.content)
-        if state.body_hash == digest and state.calendar is not None:
-            calendar = state.calendar
         else:
-            try:
-                # Off the event loop: 14s of blocking parse would otherwise stall
-                # reminders, MQTT and the overlay for the whole duration.
-                calendar = await asyncio.to_thread(Calendar.from_ical, response.content)
-            except Exception as exc:
-                self._logger.warning("[calendar] Calendar parse failed for '%s': %s", feed_label, exc)
-                self._schedule_retry(state.url)
-                return
-            state.calendar = calendar
-            state.body_hash = digest
+            # Successful fetch - clear any retry
+            self._cancel_retry(state.url)
+            state.etag = response.headers.get("etag") or state.etag
+            state.last_modified = response.headers.get("last-modified") or state.last_modified
+            # Parsing is the expensive half -- a ~19 MB export costs ~14s of CPU -- and
+            # these feeds carry no ETag or Last-Modified, so the content is digested
+            # instead: an unchanged calendar reuses the parse and only its window is
+            # expanded again.
+            digest = await asyncio.to_thread(_content_digest, response.content)
+            if state.body_hash == digest and state.calendar is not None:
+                calendar = state.calendar
+            else:
+                try:
+                    # Off the event loop: 14s of blocking parse would otherwise stall
+                    # reminders, MQTT and the overlay for the whole duration.
+                    calendar = await asyncio.to_thread(Calendar.from_ical, response.content)
+                except Exception as exc:
+                    self._logger.warning("[calendar] Calendar parse failed for '%s': %s", feed_label, exc)
+                    self._schedule_retry(state.url)
+                    return
+                state.calendar = calendar
+                state.body_hash = digest
         calendar_name = calendar.get("X-WR-CALNAME")
         if calendar_name:
             state.calendar_name = str(calendar_name)
