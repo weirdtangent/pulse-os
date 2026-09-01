@@ -1071,7 +1071,11 @@ body {
 }
 
 .overlay-clock__date--tighter {
-  font-size: clamp(1.1rem, 2.3vw, 1.7rem);
+  font-size: clamp(1.1rem, 2.3vw, 1.6rem);
+}
+
+.overlay-clock__date--tightest {
+  font-size: clamp(1rem, 2vw, 1.4rem);
 }
 
 .overlay-card--ambient {
