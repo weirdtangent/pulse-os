@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -17,6 +18,28 @@ from icalendar import Calendar, Component  # type: ignore[import-untyped]
 from .config import CalendarConfig
 
 LOGGER = logging.getLogger("pulse.calendar_sync")
+
+# Budget for one feed: fetch, parse and window expansion. A ~19 MB Google work export
+# measures roughly 17s + 14s + 1s on a Pi 4, so this leaves room for a bad day without
+# letting one feed hold the sweep open indefinitely.
+FEED_SYNC_TIMEOUT = 90.0
+
+# Google re-stamps DTSTAMP and reorders lines on every export, so a feed's raw bytes
+# never repeat even when nothing in the calendar changed -- a plain hash of the body
+# would never match. Sorting the non-volatile lines gives a key that moves only when
+# the calendar does: measured at 0.4s against a 19 MB feed, against ~14s to re-parse it.
+_VOLATILE_ICS_PREFIXES = (b"DTSTAMP", b"LAST-MODIFIED", b"CREATED", b"SEQUENCE")
+
+
+def _content_digest(body: bytes) -> str:
+    """Digest an ICS body, ignoring per-export churn, folding and line ordering."""
+
+    # Unfold first (RFC 5545 continuation lines). Google re-wraps long ATTENDEE
+    # properties at different octet boundaries between exports, which moved ~434 lines
+    # of an unchanged work calendar and defeated a line-level digest on its own.
+    unfolded = body.replace(b"\r\n ", b"").replace(b"\r\n\t", b"")
+    lines = sorted(line for line in unfolded.split(b"\r\n") if not line.startswith(_VOLATILE_ICS_PREFIXES))
+    return hashlib.sha256(b"\n".join(lines)).hexdigest()
 
 
 def _now() -> datetime:
@@ -94,6 +117,14 @@ class _FeedState:
     label: str | None = None
     active_keys: set[str] = field(default_factory=set)
     owner_tokens: set[str] = field(default_factory=set)
+    # Digest of the body behind `calendar`, so an unchanged feed is not re-parsed.
+    # A 19 MB work export costs ~14s of CPU to parse on a Pi; the window it feeds
+    # moves every cycle, but the bytes usually do not.
+    body_hash: str | None = None
+    calendar: Component | None = None
+    # This feed's contribution to the overlay snapshot. Held per feed so one slow
+    # or failing feed drops only its own events instead of blanking the badge.
+    window: dict[str, CalendarReminder] = field(default_factory=dict)
 
 
 class CalendarSyncService:
@@ -131,7 +162,6 @@ class CalendarSyncService:
         self._last_sync_completed: datetime | None = None
         self._retry_tasks: dict[str, asyncio.Task] = {}
         self._failed_feeds: set[str] = set()
-        self._windowed_events: dict[str, CalendarReminder] = {}
 
     async def start(self) -> None:
         if not self._config.feeds:
@@ -140,11 +170,13 @@ class CalendarSyncService:
         if self._runner:
             return
         self._stop_event.clear()
-        # Keep per-request timeouts tight so a slow network (e.g., while music
-        # is streaming) cannot stall the sync loop.
+        # Generous enough for a large export -- a full Google work calendar runs to
+        # ~19 MB and takes ~17s to fetch on a Pi -- while still bounded, so a slow
+        # network (e.g. while music is streaming) cannot stall the sync loop. Every
+        # value here must stay under FEED_SYNC_TIMEOUT.
         self._client = httpx.AsyncClient(
             follow_redirects=True,
-            timeout=httpx.Timeout(25.0, connect=8.0, read=18.0, write=12.0, pool=12.0),
+            timeout=httpx.Timeout(75.0, connect=8.0, read=45.0, write=12.0, pool=12.0),
         )
         self._runner = asyncio.create_task(self._run_loop())
 
@@ -171,12 +203,16 @@ class CalendarSyncService:
 
     async def _run_loop(self) -> None:
         refresh_seconds = max(1, self._config.refresh_minutes) * 60
+        # Derived from the per-feed budget rather than fixed: a flat cap below
+        # FEED_SYNC_TIMEOUT x feeds can kill a sweep before a single feed has used
+        # its own allowance, which is what a 30s cap over a 60s per-feed budget did.
+        loop_timeout = FEED_SYNC_TIMEOUT * max(1, len(self._feed_states)) + 30.0
         while not self._stop_event.is_set():
             try:
-                await asyncio.wait_for(self._sync_once(), timeout=30.0)
+                await asyncio.wait_for(self._sync_once(), timeout=loop_timeout)
             except TimeoutError:
                 # Avoid noisy tracebacks when a slow sync exceeds the loop budget
-                self._logger.warning("[calendar] Calendar sync loop timed out after 30s; continuing")
+                self._logger.warning("[calendar] Calendar sync loop timed out after %.0fs; continuing", loop_timeout)
             except Exception:
                 self._logger.exception("[calendar] Calendar sync loop failed; continuing")
             try:
@@ -201,17 +237,28 @@ class CalendarSyncService:
         now = _now()
         self._last_sync_started = now
         self._prune_triggered(now)
-        self._windowed_events.clear()
+        # Each feed replaces its own slice on success (see _schedule_reminders). A feed
+        # that times out or errors keeps the slice it had, so one slow calendar no
+        # longer deletes its own events from the overlay -- the symptom was a work
+        # calendar's events vanishing from the badge while its reminders still fired.
         for state in self._feed_states.values():
             feed_label = self._feed_label(state)
             try:
-                await asyncio.wait_for(self._sync_feed(state, now), timeout=60.0)
+                await asyncio.wait_for(self._sync_feed(state, now), timeout=FEED_SYNC_TIMEOUT)
             except TimeoutError:
-                self._logger.warning("[calendar] Calendar sync timed out for feed '%s'", feed_label)
+                self._logger.warning(
+                    "[calendar] Calendar sync timed out for feed '%s'; keeping its %d known event(s)",
+                    feed_label,
+                    len(state.window),
+                )
             except Exception:
-                self._logger.exception("[calendar] Calendar sync failed for feed '%s'", feed_label)
+                self._logger.exception(
+                    "[calendar] Calendar sync failed for feed '%s'; keeping its %d known event(s)",
+                    feed_label,
+                    len(state.window),
+                )
         try:
-            await self._emit_event_snapshot()
+            await self._emit_event_snapshot(now)
         except Exception:
             self._logger.exception("[calendar] Calendar snapshot emit failed")
         else:
@@ -248,17 +295,30 @@ class CalendarSyncService:
         self._cancel_retry(state.url)
         state.etag = response.headers.get("etag") or state.etag
         state.last_modified = response.headers.get("last-modified") or state.last_modified
-        try:
-            calendar = Calendar.from_ical(response.content)
-        except Exception as exc:
-            self._logger.warning("[calendar] Calendar parse failed for '%s': %s", feed_label, exc)
-            self._schedule_retry(state.url)
-            return
+        # Parsing is the expensive half -- a ~19 MB export costs ~14s of CPU -- and these
+        # feeds carry no ETag or Last-Modified, so the content is digested instead: an
+        # unchanged calendar reuses the parse and only its window is expanded again.
+        digest = await asyncio.to_thread(_content_digest, response.content)
+        if state.body_hash == digest and state.calendar is not None:
+            calendar = state.calendar
+        else:
+            try:
+                # Off the event loop: 14s of blocking parse would otherwise stall
+                # reminders, MQTT and the overlay for the whole duration.
+                calendar = await asyncio.to_thread(Calendar.from_ical, response.content)
+            except Exception as exc:
+                self._logger.warning("[calendar] Calendar parse failed for '%s': %s", feed_label, exc)
+                self._schedule_retry(state.url)
+                return
+            state.calendar = calendar
+            state.body_hash = digest
         calendar_name = calendar.get("X-WR-CALNAME")
         if calendar_name:
             state.calendar_name = str(calendar_name)
             state.label = state.calendar_name
-        reminders = self._collect_reminders(calendar, state, now)
+        # Expansion reads only the parsed calendar, the feed's owner tokens and config,
+        # so it is safe to run in a worker thread alongside the loop.
+        reminders = await asyncio.to_thread(self._collect_reminders, calendar, state, now)
         if not reminders:
             self._logger.debug(
                 "[calendar] Calendar feed '%s' produced no reminders at %s",
@@ -561,6 +621,9 @@ class CalendarSyncService:
     ) -> None:
         lookahead_end = now + timedelta(hours=self._config.lookahead_hours)
         valid_keys: set[str] = set()
+        # Built here and swapped into the feed state at the end: the slice is replaced
+        # only by a pass that got this far, never emptied by one that failed earlier.
+        window: dict[str, CalendarReminder] = {}
         # First pass: collect all valid reminders and their trigger times per UID
         valid_reminders: list[CalendarReminder] = []
         uids_to_schedule: dict[str, dict[str, set[datetime]]] = {}  # uid -> {source_url: {trigger_times}}
@@ -576,9 +639,9 @@ class CalendarSyncService:
             include_in_window = reminder.start <= lookahead_end or reminder.trigger_time <= lookahead_end
             if include_in_window and not reminder.declined:
                 window_key = self._window_key(reminder)
-                existing = self._windowed_events.get(window_key)
+                existing = window.get(window_key)
                 if not existing or reminder.trigger_time < existing.trigger_time:
-                    self._windowed_events[window_key] = reminder
+                    window[window_key] = reminder
             trigger_time = reminder.trigger_time
             if trigger_time < now - timedelta(minutes=1):
                 skipped_past_triggers += 1
@@ -623,6 +686,7 @@ class CalendarSyncService:
             self._scheduled_reminders.pop(key, None)
             self._key_to_feed.pop(key, None)
         state.active_keys = {key for key in valid_keys if key in self._scheduled}
+        state.window = window
         if reminders and not valid_reminders:
             self._logger.warning(
                 "[calendar] Calendar feed '%s' had %d reminder(s) but none were scheduled "
@@ -730,8 +794,20 @@ class CalendarSyncService:
             self._key_to_feed.pop(key, None)
             state.active_keys.discard(key)
 
-    async def _emit_event_snapshot(self) -> None:
-        ordered = sorted(self._windowed_events.values(), key=lambda reminder: (reminder.start, reminder.trigger_time))
+    async def _emit_event_snapshot(self, now: datetime | None = None) -> None:
+        now = now or _now()
+        # Merge every feed's slice, dropping anything that has since ended. A slice held
+        # over from a failed sync decays on its own this way, rather than pinning an
+        # event to the badge until that feed succeeds again.
+        merged: dict[str, CalendarReminder] = {}
+        for state in self._feed_states.values():
+            for window_key, reminder in state.window.items():
+                if (reminder.end or reminder.start) <= now:
+                    continue
+                existing = merged.get(window_key)
+                if not existing or reminder.trigger_time < existing.trigger_time:
+                    merged[window_key] = reminder
+        ordered = sorted(merged.values(), key=lambda reminder: (reminder.start, reminder.trigger_time))
         if not ordered:
             self._logger.debug(
                 "[calendar] No upcoming calendar events found within the next %d hour(s)",
