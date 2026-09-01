@@ -89,7 +89,16 @@ window.PulseOverlay.initialize = function() {
   const hour12Attr = root.dataset.clockHour12;
   const hour12 = hour12Attr !== 'false';
   const timeOptions = { hour: hour12 ? 'numeric' : '2-digit', minute: '2-digit', hour12 };
-  const dateOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+  const dateOptions = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
+  // The date is assembled part by part rather than handed to Intl whole: no locale
+  // renders an ordinal day ("September 1st"), and the browser's own locale would
+  // otherwise decide day-vs-month order (the kiosks resolve to "Tuesday 1 September").
+  const ordinalRules = new Intl.PluralRules('en-US', { type: 'ordinal' });
+  const ordinalSuffixes = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
+  // The arrangement is a token template resolved server-side; this end only substitutes,
+  // so the preset list lives in one place (pulse/overlay.py) and cannot drift.
+  const DEFAULT_DATE_FORMAT = '{weekday}, {month} {day}, {year}';
+  const dateFormat = root.dataset.clockDateFormat || DEFAULT_DATE_FORMAT;
 
   const clampPercent = (value) => {
     const numberValue = Number(value);
@@ -173,6 +182,33 @@ window.PulseOverlay.initialize = function() {
     }
   };
 
+  const formatClockDate = (date, tz) => {
+    let parts;
+    try {
+      parts = new Intl.DateTimeFormat('en-US', { ...dateOptions, timeZone: tz || undefined }).formatToParts(date);
+    } catch (error) {
+      parts = new Intl.DateTimeFormat('en-US', dateOptions).formatToParts(date);
+    }
+    // Indexed in one pass rather than a find() per token: tick() runs every second.
+    const parted = {};
+    parts.forEach((entry) => {
+      parted[entry.type] = entry.value;
+    });
+    const day = parted.day || '';
+    const values = {
+      weekday: parted.weekday || '',
+      month: parted.month || '',
+      day,
+      ordinal: `${day}${ordinalSuffixes[ordinalRules.select(Number(day))] || 'th'}`,
+      year: parted.year || '',
+    };
+    // An unknown token is left as written rather than blanked, so a typo in the config
+    // shows up on the screen as itself instead of a mysterious gap.
+    return dateFormat.replace(/{(\w+)}/g, (token, name) =>
+      Object.prototype.hasOwnProperty.call(values, name) ? values[name] : token,
+    );
+  };
+
   const tick = () => {
     const now = new Date();
     const clockNodes = root.querySelectorAll('[data-clock]');
@@ -189,7 +225,7 @@ window.PulseOverlay.initialize = function() {
       }
       if (dateEl) {
         try {
-          dateEl.textContent = formatWithZone(now, tz, dateOptions);
+          dateEl.textContent = formatClockDate(now, tz);
         } catch (err) {
           // Silently handle timezone formatting errors
         }

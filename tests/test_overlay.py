@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pulse.overlay import (
+    CLOCK_DATE_PRESETS,
     KEY_LIBRARIES,
     ClockConfig,
     OverlaySnapshot,
@@ -22,6 +23,7 @@ from pulse.overlay import (
     _theme_css,
     parse_clock_config,
     render_overlay_html,
+    resolve_clock_date_format,
 )
 from pulse.overlay_assets import OVERLAY_JS
 from pulse.weather_alerts import BANNER_ALWAYS
@@ -1706,3 +1708,87 @@ class WeatherAlertStateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClockDateFormatTests(unittest.TestCase):
+    """The template is resolved in Python and substituted in overlay.js."""
+
+    def setUp(self) -> None:
+        self.theme = OverlayTheme(
+            ambient_background="rgba(0,0,0,0.32)",
+            alert_background="rgba(0,0,0,0.65)",
+            text_color="#FFFFFF",
+            accent_color="#88C0D0",
+            show_notification_bar=True,
+        )
+
+    def _snapshot(self) -> OverlaySnapshot:
+        return OverlayStateManager().snapshot()
+
+    def _rendered_format(self, value: str | None = None) -> str:
+        kwargs = {} if value is None else {"clock_date_format": value}
+        html = render_overlay_html(self._snapshot(), self.theme, **kwargs)  # type: ignore[arg-type]
+        match = re.search(r'data-clock-date-format="([^"]*)"', html)
+        assert match is not None, "the clock date format never reached the markup"
+        return match.group(1)
+
+    def test_every_preset_resolves_to_its_template(self) -> None:
+        for name, template in CLOCK_DATE_PRESETS.items():
+            with self.subTest(preset=name):
+                self.assertEqual(resolve_clock_date_format(name), template)
+
+    def test_presets_reach_the_markup(self) -> None:
+        for name, template in CLOCK_DATE_PRESETS.items():
+            with self.subTest(preset=name):
+                self.assertEqual(self._rendered_format(name), template)
+
+    def test_a_custom_template_passes_through(self) -> None:
+        """The British arrangement is a config edit, not a code change."""
+        self.assertEqual(
+            self._rendered_format("{weekday}, {day} {month}"),
+            "{weekday}, {day} {month}",
+        )
+
+    def test_preset_names_tolerate_case_and_padding(self) -> None:
+        self.assertEqual(
+            resolve_clock_date_format("  Day-First "),
+            CLOCK_DATE_PRESETS["day-first"],
+        )
+
+    def test_unusable_values_fall_back_to_the_default_preset(self) -> None:
+        default = CLOCK_DATE_PRESETS["long"]
+        for value in (None, "", "   ", "just words", "{nonsense} {day}", "{}"):
+            with self.subTest(value=value):
+                self.assertEqual(resolve_clock_date_format(value), default)
+
+    def test_an_overlong_template_falls_back(self) -> None:
+        """A runaway config value must not push the clock card off the screen."""
+        self.assertEqual(
+            resolve_clock_date_format("{weekday} " + "x" * 200),
+            CLOCK_DATE_PRESETS["long"],
+        )
+
+    def test_the_default_is_used_without_an_explicit_argument(self) -> None:
+        self.assertEqual(self._rendered_format(), CLOCK_DATE_PRESETS["long"])
+
+    def test_a_template_cannot_break_out_of_the_attribute(self) -> None:
+        rendered = render_overlay_html(
+            self._snapshot(),
+            self.theme,
+            clock_date_format='{day}" onload="alert(1)',
+        )
+        self.assertNotIn('onload="alert(1)"', rendered)
+
+    def test_javascript_default_matches_the_python_default(self) -> None:
+        """The JS fallback only shows when the attribute is missing; it must still agree."""
+        match = re.search(r"const DEFAULT_DATE_FORMAT = '([^']*)'", OVERLAY_JS)
+        assert match is not None, "overlay.js no longer declares a default date format"
+        self.assertEqual(match.group(1), CLOCK_DATE_PRESETS["long"])
+
+    def test_javascript_substitutes_every_declared_token(self) -> None:
+        """A token Python advertises but the JS cannot fill would render as itself."""
+        from pulse.overlay import CLOCK_DATE_TOKENS
+
+        block = OVERLAY_JS.split("const values = {", 1)[1].split("};", 1)[0]
+        in_js = set(re.findall(r"^\s*([a-z]+)[,:]", block, re.MULTILINE))
+        self.assertEqual(in_js, set(CLOCK_DATE_TOKENS))

@@ -33,7 +33,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 from pulse.audio import play_sound, play_volume_feedback
 from pulse.sound_library import SoundLibrary, SoundSettings
 
-from .overlay import OverlayChange, OverlayStateManager, OverlayTheme, render_overlay_html
+from .overlay import (
+    DEFAULT_CLOCK_DATE_FORMAT,
+    OverlayChange,
+    OverlayStateManager,
+    OverlayTheme,
+    render_overlay_html,
+)
 from .overlay_assets import OVERLAY_JS
 
 Logger = Callable[[str], None]
@@ -45,6 +51,7 @@ class OverlayServerConfig:
     port: int
     allowed_origins: tuple[str, ...] = ("*",)
     clock_24h: bool = False
+    clock_date_format: str = DEFAULT_CLOCK_DATE_FORMAT
     stop_endpoint: str = "/overlay/stop"
     info_endpoint: str = "/overlay/info-card"
     auth_token: str | None = None
@@ -226,6 +233,7 @@ class OverlayHttpServer:
             snapshot,
             self.theme,
             clock_hour12=not self.config.clock_24h,
+            clock_date_format=self.config.clock_date_format,
             stop_endpoint=self.config.stop_endpoint,
             info_endpoint=self.config.info_endpoint,
         )
@@ -820,6 +828,7 @@ html, body {{
                     snapshot,
                     outer.theme,
                     clock_hour12=not outer.config.clock_24h,
+                    clock_date_format=outer.config.clock_date_format,
                     stop_endpoint=outer.config.stop_endpoint,
                     info_endpoint=outer.config.info_endpoint,
                 ).encode("utf-8")

@@ -103,6 +103,20 @@ PULSE_OVERLAY_NOTIFICATION_BAR="true"
 # PULSE_OVERLAY_CLOCK_24H — set to "true" for 24-hour clock display (default 12-hour).
 PULSE_OVERLAY_CLOCK_24H="false"
 
+# PULSE_OVERLAY_CLOCK_DATE_FORMAT — how the date under the clock reads. Month and
+# weekday names are always US English, so this does not follow the device locale.
+# Either a preset name:
+#   long               Tuesday, September 1, 2026   (default)
+#   long-no-year       Tuesday, September 1
+#   ordinal            Tuesday, September 1st
+#   ordinal-year       Tuesday, September 1st, 2026
+#   day-first          Tuesday 1 September 2026
+#   day-first-no-year  Tuesday 1 September
+# or a template built from {weekday} {month} {day} {ordinal} {year}, e.g.
+#   PULSE_OVERLAY_CLOCK_DATE_FORMAT="{weekday}, {day} {month}"   Tuesday, 1 September
+# Anything unrecognised falls back to the long preset.
+PULSE_OVERLAY_CLOCK_DATE_FORMAT="long"
+
 # PULSE_OVERLAY_AUTH_TOKEN — optional bearer token for overlay POST endpoints.
 # When set, all state-changing requests (stop/snooze, volume, brightness, updates)
 # require an "Authorization: Bearer <token>" header. Leave unset to allow

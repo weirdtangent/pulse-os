@@ -663,6 +663,59 @@ CELL_ORDER = (
 
 CLOCK_POSITION = "bottom-left"
 
+# The date under the clock is a token template. Templates travel to the browser whole
+# and overlay.js only substitutes, so a new arrangement costs a config edit rather than
+# a release -- the exact wording changed four times before this one settled.
+CLOCK_DATE_TOKENS = (
+    "weekday",  # Tuesday
+    "month",  # September
+    "day",  # 1
+    "ordinal",  # 1st
+    "year",  # 2026
+)
+
+# Names for the arrangements worth having on hand. Anything else can be spelled out
+# as a template, e.g. PULSE_OVERLAY_CLOCK_DATE_FORMAT="{weekday}, {day} {month}".
+CLOCK_DATE_PRESETS = {
+    "long": "{weekday}, {month} {day}, {year}",  # Tuesday, September 1, 2026
+    "long-no-year": "{weekday}, {month} {day}",  # Tuesday, September 1
+    "ordinal": "{weekday}, {month} {ordinal}",  # Tuesday, September 1st
+    "ordinal-year": "{weekday}, {month} {ordinal}, {year}",  # Tuesday, September 1st, 2026
+    "day-first": "{weekday} {day} {month} {year}",  # Tuesday 1 September 2026
+    "day-first-no-year": "{weekday} {day} {month}",  # Tuesday 1 September
+}
+DEFAULT_CLOCK_DATE_FORMAT = "long"
+
+# Long enough for any sensible arrangement of five tokens, short enough that a
+# runaway config value cannot push the clock card off the screen.
+MAX_CLOCK_DATE_FORMAT_LENGTH = 120
+
+_CLOCK_DATE_TOKEN_RE = re.compile(r"{([^{}]*)}")
+
+
+def resolve_clock_date_format(value: str | None) -> str:
+    """Return the token template for a preset name or a literal template.
+
+    Anything unrecognised falls back to the default preset: a kiosk showing the wrong
+    arrangement is a nuisance, but one showing a raw `{month}` or a blank line is a
+    bug report.
+    """
+
+    candidate = (value or "").strip()
+    default = CLOCK_DATE_PRESETS[DEFAULT_CLOCK_DATE_FORMAT]
+    if not candidate:
+        return default
+    preset = CLOCK_DATE_PRESETS.get(candidate.lower())
+    if preset:
+        return preset
+    if len(candidate) > MAX_CLOCK_DATE_FORMAT_LENGTH:
+        return default
+    tokens = _CLOCK_DATE_TOKEN_RE.findall(candidate)
+    if tokens and all(token in CLOCK_DATE_TOKENS for token in tokens):
+        return candidate
+    return default
+
+
 INFO_CARD_BLOCKED_CELLS = {
     "top-center",
     "top-right",
@@ -1193,6 +1246,7 @@ def render_overlay_html(
     theme: OverlayTheme,
     *,
     clock_hour12: bool = True,
+    clock_date_format: str = DEFAULT_CLOCK_DATE_FORMAT,
     stop_endpoint: str | None = None,
     info_endpoint: str | None = None,
 ) -> str:
@@ -1252,6 +1306,7 @@ def render_overlay_html(
         f'data-version="{snapshot.version}" '
         f'data-generated-at="{int(snapshot.generated_at * 1000)}" '
         f'data-clock-hour12="{"true" if clock_hour12 else "false"}" '
+        f'data-clock-date-format="{html_escape(resolve_clock_date_format(clock_date_format), quote=True)}" '
         f'data-stop-endpoint="{stop_endpoint_attr}" '
         f'data-info-endpoint="{info_endpoint_attr}"'
     )
