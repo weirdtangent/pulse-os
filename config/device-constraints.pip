@@ -1,8 +1,15 @@
 # Version constraints for the Python packages installed on a device by setup.sh.
 #
 # GENERATED — do not edit by hand. Regenerate with:
-#   uv export --frozen --no-dev --no-hashes --no-emit-project > config/device-constraints.txt
+#   uv export --frozen --no-dev --no-hashes --no-emit-project > config/device-constraints.pip
 # tests/test_device_constraints.py fails if this drifts from uv.lock.
+#
+# THE .pip EXTENSION IS DELIBERATE — do not rename this back to .txt. Dependabot's Python
+# file fetcher globs every '*.txt' and '*.in' file in a scanned directory and treats it as
+# a requirements file it may rewrite. While this was device-constraints.txt, every weekly
+# uv PR bumped the pins here independently of the uv resolution, so the file and uv.lock
+# disagreed and the guard test below failed on each one (see PRs #247, #257). pip's -c flag
+# does not care about the extension, so moving off .txt costs nothing and ends the churn.
 #
 # Used as a pip CONSTRAINTS file (-c), not a requirements file: it pins versions for
 # whatever gets installed without itself installing anything. That matters because the

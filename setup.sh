@@ -645,7 +645,7 @@ ASSISTANT_PIP_PACKAGES=(wyoming recurring-ical-events)
 # site and that shadows apt: icalendar is exactly this case, resolving to the pip 7.2.2
 # copy on a device that also has python3-icalendar 6.0.1. Untouched apt packages keep
 # Debian's version only because nothing being installed asked for a different one.
-DEVICE_CONSTRAINTS="$REPO_DIR/config/device-constraints.txt"
+DEVICE_CONSTRAINTS="$REPO_DIR/config/device-constraints.pip"
 
 pip_install_packages() {
     local label="$1"

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-CONSTRAINTS = ROOT / "config" / "device-constraints.txt"
+CONSTRAINTS = ROOT / "config" / "device-constraints.pip"
 SETUP = ROOT / "setup.sh"
 
 EXPORT_COMMAND = ["uv", "export", "--frozen", "--no-dev", "--no-hashes", "--no-emit-project"]
@@ -57,8 +57,8 @@ def test_constraints_file_matches_the_lockfile():
     exported = [line for line in result.stdout.splitlines() if line.strip() and not line.startswith("#")]
     committed = [line for line in CONSTRAINTS.read_text().splitlines() if line.strip() and not line.startswith("#")]
     assert committed == exported, (
-        "config/device-constraints.txt is stale; regenerate with:\n  " + " ".join(EXPORT_COMMAND) + " > "
-        "config/device-constraints.txt"
+        "config/device-constraints.pip is stale; regenerate with:\n  " + " ".join(EXPORT_COMMAND) + " > "
+        "config/device-constraints.pip"
     )
 
 
