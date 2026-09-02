@@ -42,8 +42,6 @@ cffi==2.1.1 ; platform_python_implementation == 'CPython' and sys_platform == 'w
     # via gevent
 click==8.5.0
     # via x-wr-timezone
-colorama==0.4.6 ; sys_platform == 'win32'
-    # via click
 gevent==26.8.0
     # via websocket
 greenlet==3.5.5
