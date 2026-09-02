@@ -32,11 +32,11 @@ import httpx
 
 try:
     import websockets
-    from websockets.client import WebSocketClientProtocol  # type: ignore[attr-defined]
+    from websockets.asyncio.client import ClientConnection
     from websockets.exceptions import WebSocketException
 except ImportError:
     websockets = None  # type: ignore[assignment]
-    WebSocketClientProtocol = None  # type: ignore[assignment,misc]
+    ClientConnection = None  # type: ignore[assignment,misc]
     WebSocketException = None  # type: ignore[assignment,misc]
 
 from .config import HomeAssistantConfig
@@ -186,7 +186,7 @@ class HomeAssistantClient:
             payload["language"] = language
         return await self._request("POST", "/api/conversation/process", json=payload)
 
-    async def _resolve_pipeline_id(self, ws: WebSocketClientProtocol | Any, pipeline_name_or_id: str) -> str:
+    async def _resolve_pipeline_id(self, ws: ClientConnection | Any, pipeline_name_or_id: str) -> str:
         """Resolve pipeline name to ID via WebSocket."""
         # If it looks like a UUID/ID (long alphanumeric string), assume it's already an ID
         if len(pipeline_name_or_id) > 20 and pipeline_name_or_id.replace("-", "").replace("_", "").isalnum():

@@ -211,7 +211,7 @@ async def test_websocket_connection():
     except websockets.exceptions.InvalidURI as exc:
         print(f"ERROR: Invalid WebSocket URI: {exc}")
         return False
-    except websockets.exceptions.InvalidStatusCode as exc:
+    except websockets.exceptions.InvalidStatus as exc:
         print(f"ERROR: WebSocket connection failed: {exc}")
         return False
     except Exception as exc:
