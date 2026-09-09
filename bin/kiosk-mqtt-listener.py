@@ -2600,8 +2600,29 @@ class KioskMqttListener:
         else:
             self.log(f"Received message on unexpected topic {msg.topic}")
 
+    def _ensure_update_availability(self) -> bool:
+        """Return whether an update is available, re-checking once if the cache says no.
+
+        The periodic poll runs PULSE_VERSION_CHECKS_PER_DAY times a day (12 by
+        default, and the allowed values bottom out at hourly), so a release cut
+        minutes ago stays invisible for up to two hours. Gating an explicit,
+        human-initiated update request on that cache makes the button look broken
+        and forces a service restart to clear it. Polling faster is the wrong fix:
+        the check is an unauthenticated GitHub API call and every kiosk on the
+        network shares one 60-requests-per-hour budget. Instead, spend exactly one
+        extra request at the moment someone actually asks.
+        """
+        if self.is_update_available():
+            return True
+        self.log("update: nothing cached; re-checking for a new release before giving up")
+        try:
+            self.refresh_update_availability()
+        except Exception as exc:  # noqa: BLE001 - a failed check must not kill the request
+            self.log(f"update: on-demand version check failed: {exc}")
+        return self.is_update_available()
+
     def handle_update(self) -> None:
-        if not self.is_update_available():
+        if not self._ensure_update_availability():
             self.log("update: request ignored because no update is available")
             return
         if not self.update_lock.acquire(blocking=False):
