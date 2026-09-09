@@ -396,6 +396,14 @@ def log(message: str) -> None:
 BACKLIGHT_DEFAULT_DAY = 85
 BACKLIGHT_DEFAULT_NIGHT = 25
 
+# Home Assistant recovery: an HA restart leaves the kiosk browser stranded on a
+# stale or errored dashboard and it never recovers on its own. These bound the
+# unreachable -> reachable transition that triggers an automatic reload.
+HA_RECOVERY_MIN_OUTAGE_SECONDS = 120
+HA_RECOVERY_SETTLE_SECONDS = 45
+HA_RECOVERY_MIN_INTERVAL_SECONDS = 600
+HA_RECOVERY_PROBE_TIMEOUT_SECONDS = 5
+
 
 def _parse_backlight_conf() -> dict[str, str]:
     """Parse the backlight config file into a dict of key/value pairs."""
@@ -827,6 +835,12 @@ class KioskMqttListener:
         self._last_now_playing_error: float = 0.0
         self._last_now_playing_art_key: str = ""
         self._last_now_playing_art: str = ""
+        self._ha_unreachable_since: float | None = None
+        self._ha_pending_home_since: float | None = None
+        self._ha_pending_outage: float = 0.0
+        # None, not 0.0: time.monotonic() starts near boot, so a 0.0 sentinel would
+        # make the rate limiter suppress the FIRST legitimate reload for 10 minutes.
+        self._last_ha_recovery_home: float | None = None
         self.assistant_topics = config.assistant_topics
         self.overlay_config = config.overlay
         self.overlay_state: OverlayStateManager | None = None
@@ -1272,6 +1286,9 @@ class KioskMqttListener:
                     except Exception as exc:  # noqa: BLE001
                         self.log(f"watchdog: assistant restart failed: {exc}")
 
+            # Check Home Assistant reachability: reload the dashboard when HA returns
+            self._check_ha_recovery(now)
+
             # Check own MQTT connectivity: reboot if broker unreachable
             offline_seconds = now - self._last_mqtt_ok
             if offline_seconds < grace_seconds:
@@ -1288,6 +1305,86 @@ class KioskMqttListener:
                 self.log(f"watchdog: reboot attempt failed: {exc}")
             finally:
                 self.reboot_lock.release()
+
+    def _probe_home_assistant(self) -> bool:
+        """Return True if Home Assistant's authenticated API is answering.
+
+        Uses /api/, HA's own health endpoint, which returns {"message": "API running."}
+        for a valid long-lived token. This must be called WITH the token -- an
+        unauthenticated poll of /api/ returns 401 and would report a healthy HA as
+        permanently down.
+        """
+        url = f"{self.config.ha_base_url.rstrip('/')}/api/"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {self.config.ha_token}",
+                "Accept": "application/json",
+            },
+        )
+        open_kwargs: dict[str, Any] = {"timeout": HA_RECOVERY_PROBE_TIMEOUT_SECONDS}
+        if self._ha_ssl_context is not None:
+            open_kwargs["context"] = self._ha_ssl_context
+        try:
+            with urllib.request.urlopen(request, **open_kwargs) as response:  # type: ignore[arg-type]  # nosec B310 - timeout in kwargs
+                return 200 <= int(getattr(response, "status", 0)) < 300
+        except Exception:  # noqa: BLE001 - any failure means "not reachable"
+            return False
+
+    def _check_ha_recovery(self, now: float) -> None:
+        """Send the kiosk home once Home Assistant comes back after an outage.
+
+        A Home Assistant restart leaves the kiosk browser sitting on a stale or
+        errored dashboard; the page does not recover on its own and has to be
+        reloaded by hand. This watches for an unreachable -> reachable transition
+        and then issues the same hard reload the HOME command performs.
+
+        Deliberately conservative, because a spurious reload is user-visible:
+          * the outage must last HA_RECOVERY_MIN_OUTAGE_SECONDS, so a single failed
+            probe or a brief network blip does not trigger a reload;
+          * after HA answers again we wait HA_RECOVERY_SETTLE_SECONDS before
+            reloading, because /api/ starts answering before the frontend is ready
+            to serve the dashboard -- reloading too early just re-strands the kiosk;
+          * at most one reload per HA_RECOVERY_MIN_INTERVAL_SECONDS, so a flapping
+            HA cannot put the kiosk into a reload loop.
+        """
+        if not self.config.ha_base_url or not self.config.ha_token:
+            return
+
+        if not self._probe_home_assistant():
+            if self._ha_unreachable_since is None:
+                self._ha_unreachable_since = now
+            # A fresh outage cancels any reload still waiting to settle.
+            self._ha_pending_home_since = None
+            return
+
+        # Reachable. First success after an outage only starts the settle timer.
+        if self._ha_unreachable_since is not None:
+            outage = now - self._ha_unreachable_since
+            self._ha_unreachable_since = None
+            if outage >= HA_RECOVERY_MIN_OUTAGE_SECONDS:
+                self._ha_pending_home_since = now
+                self._ha_pending_outage = outage
+                self.log(f"watchdog: Home Assistant reachable again after {int(outage)}s; will reload shortly")
+            return
+
+        if self._ha_pending_home_since is None:
+            return
+        if now - self._ha_pending_home_since < HA_RECOVERY_SETTLE_SECONDS:
+            return
+
+        outage = self._ha_pending_outage
+        self._ha_pending_home_since = None
+        self._ha_pending_outage = 0.0
+        if (
+            self._last_ha_recovery_home is not None
+            and now - self._last_ha_recovery_home < HA_RECOVERY_MIN_INTERVAL_SECONDS
+        ):
+            self.log("watchdog: skipping HA-recovery reload, one was issued recently")
+            return
+        self._last_ha_recovery_home = now
+        self.log(f"watchdog: Home Assistant was unreachable for {int(outage)}s; sending kiosk home")
+        self.handle_home()
 
     def _collect_telemetry_metrics(self) -> dict[str, int | float | str]:
         metrics: dict[str, int | float | str] = {}
