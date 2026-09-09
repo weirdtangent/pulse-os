@@ -81,68 +81,73 @@ def test_text_families_are_offered(listener, name):
 
 # -- Home Assistant recovery state machine ------------------------------------
 #
-# _check_ha_recovery decides whether an HA outage should trigger a dashboard
-# reload. It is driven here against a stub rather than a real listener so no
+# _check_ha_recovery decides whether an HA outage should trigger a reload of the
+# kiosk page. It is driven here against a stub rather than a real listener so no
 # MQTT, DevTools or HTTP is involved -- only the state machine is under test.
+
+_PULSE_URL = "http://ha.example/dashboard-pulse/home"
 
 
 class _Recorder:
     """Minimal stand-in exposing just what _check_ha_recovery touches."""
 
-    def __init__(self, listener, reachable: bool = True):
-        self.config = SimpleNamespace(ha_base_url="http://ha.example", ha_token="tok")
-        self.reachable = reachable
-        self.homes = 0
+    def __init__(self, listener, *, token: str = "tok", pulse_url: str = _PULSE_URL):
+        self.config = SimpleNamespace(ha_base_url="http://ha.example", ha_token=token, pulse_url=pulse_url)
+        self.reachable = True
+        self.reloads: list[str] = []
         self.logs: list[str] = []
+        self._last_navigated_url = None
         self._ha_unreachable_since = None
         self._ha_pending_home_since = None
         self._ha_pending_outage = 0.0
         self._last_ha_recovery_home = None
-        self._check_ha_recovery = listener.KioskMqttListener._check_ha_recovery.__get__(self)
+        cls = listener.KioskMqttListener
+        self._check_ha_recovery = cls._check_ha_recovery.__get__(self)
+        self._recovery_probe_target = cls._recovery_probe_target.__get__(self)
 
     def _probe_home_assistant(self) -> bool:
         return self.reachable
 
-    def handle_home(self) -> None:
-        self.homes += 1
+    def reload_url(self, url: str) -> bool:
+        self.reloads.append(url)
+        return True
 
     def log(self, message: str) -> None:
         self.logs.append(message)
 
 
-def _outage(listener, *, seconds: float, settle: float):
-    """Run one full down->up cycle and return the stub after settling."""
-    r = _Recorder(listener)
+def _outage(r, *, seconds: float, settle: float):
+    """Run one full down->up cycle on an existing recorder."""
     r.reachable = False
-    r._check_ha_recovery(0.0)  # outage starts
-    r._check_ha_recovery(seconds)  # still down
+    r._check_ha_recovery(0.0)
+    r._check_ha_recovery(seconds)
     r.reachable = True
-    r._check_ha_recovery(seconds)  # first success -> starts settle timer
+    r._check_ha_recovery(seconds)  # first success starts the settle timer
     r._check_ha_recovery(seconds + settle)
     return r
 
 
-def test_restart_length_outage_sends_the_kiosk_home(listener):
-    r = _outage(listener, seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1)
-    assert r.homes == 1
+def test_restart_length_outage_reloads_the_kiosk(listener):
+    r = _outage(_Recorder(listener), seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1)
+    assert r.reloads == [_PULSE_URL]
 
 
 def test_brief_blip_does_not_reload(listener):
     # Shorter than HA_RECOVERY_MIN_OUTAGE_SECONDS: a single failed probe or a
     # momentary network wobble must never reload a working dashboard.
     r = _outage(
-        listener,
+        _Recorder(listener),
         seconds=listener.HA_RECOVERY_MIN_OUTAGE_SECONDS - 1,
         settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1,
     )
-    assert r.homes == 0
+    assert r.reloads == []
 
 
 def test_reload_waits_for_the_settle_window(listener):
     # /api/ answers before the frontend can serve the dashboard, so reloading on
     # the first successful probe would just re-strand the kiosk.
-    r = _outage(listener, seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS - 1)
-    assert r.homes == 0
+    r = _outage(_Recorder(listener), seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS - 1)
+    assert r.reloads == []
 
 
 def test_outage_during_settle_cancels_the_pending_reload(listener):
@@ -156,27 +161,61 @@ def test_outage_during_settle_cancels_the_pending_reload(listener):
     r.reachable = True
     r._check_ha_recovery(320.0)  # too brief to re-arm
     r._check_ha_recovery(999.0)
-    assert r.homes == 0
+    assert r.reloads == []
 
 
 def test_flapping_ha_cannot_cause_a_reload_loop(listener):
-    r = _outage(listener, seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1)
-    assert r.homes == 1
+    r = _outage(_Recorder(listener), seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1)
+    assert len(r.reloads) == 1
     base = 300 + listener.HA_RECOVERY_SETTLE_SECONDS + 1
-    # A second full outage inside the rate limit must not reload again.
     r.reachable = False
     r._check_ha_recovery(base + 1)
     r._check_ha_recovery(base + 300)
     r.reachable = True
     r._check_ha_recovery(base + 300)
     r._check_ha_recovery(base + 300 + listener.HA_RECOVERY_SETTLE_SECONDS + 1)
-    assert r.homes == 1
+    assert len(r.reloads) == 1
 
 
-def test_no_ha_credentials_means_no_probing(listener):
+# -- what gets reloaded -------------------------------------------------------
+
+
+def test_recovery_restores_the_last_navigated_url(listener):
+    # A kiosk driven elsewhere by kiosk/url/set (a camera view, a status page)
+    # must come back to THAT page, not be snapped home by an unrelated outage.
     r = _Recorder(listener)
-    r.config = SimpleNamespace(ha_base_url="", ha_token="")
+    r._last_navigated_url = "http://cam.example/stream"
+    _outage(r, seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1)
+    assert r.reloads == ["http://cam.example/stream"]
+
+
+def test_recovery_falls_back_to_pulse_url_when_nothing_was_navigated(listener):
+    r = _outage(_Recorder(listener), seconds=300, settle=listener.HA_RECOVERY_SETTLE_SECONDS + 1)
+    assert r.reloads == [_PULSE_URL]
+
+
+# -- probe target selection ---------------------------------------------------
+
+
+def test_probe_prefers_the_authenticated_api_when_a_token_exists(listener):
+    url, headers = _Recorder(listener, token="tok")._recovery_probe_target()
+    assert url == "http://ha.example/api/"
+    assert headers["Authorization"] == "Bearer tok"
+
+
+def test_probe_falls_back_to_pulse_url_without_a_token(listener):
+    # HOME_ASSISTANT_TOKEN ships empty in pulse.conf.sample; requiring it would
+    # silently disable recovery for every install that never minted one.
+    url, headers = _Recorder(listener, token="")._recovery_probe_target()
+    assert url == _PULSE_URL
+    assert headers == {}
+
+
+def test_no_token_and_no_pulse_url_disables_recovery(listener):
+    r = _Recorder(listener, token="", pulse_url="")
+    r.config.ha_base_url = ""
+    assert r._recovery_probe_target() is None
     r.reachable = False
     r._check_ha_recovery(0.0)
     assert r._ha_unreachable_since is None
-    assert r.homes == 0
+    assert r.reloads == []
