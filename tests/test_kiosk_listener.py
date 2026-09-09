@@ -219,3 +219,61 @@ def test_no_token_and_no_pulse_url_disables_recovery(listener):
     r._check_ha_recovery(0.0)
     assert r._ha_unreachable_since is None
     assert r.reloads == []
+
+
+# -- update button re-check ---------------------------------------------------
+#
+# _ensure_update_availability exists so an explicit "update now" is never refused
+# because the cached availability flag is stale. Driven against a stub: no MQTT,
+# no HTTP, no threads.
+
+
+class _UpdateStub:
+    def __init__(self, listener, *, cached: bool, after_refresh: bool | None = None, boom: bool = False):
+        self._cached = cached
+        self._after_refresh = after_refresh
+        self._boom = boom
+        self.refreshes = 0
+        self.logs: list[str] = []
+        self._ensure_update_availability = listener.KioskMqttListener._ensure_update_availability.__get__(self)
+
+    def is_update_available(self) -> bool:
+        return self._cached
+
+    def refresh_update_availability(self) -> None:
+        self.refreshes += 1
+        if self._boom:
+            raise RuntimeError("github unreachable")
+        if self._after_refresh is not None:
+            self._cached = self._after_refresh
+
+    def log(self, message: str) -> None:
+        self.logs.append(message)
+
+
+def test_cached_availability_skips_the_extra_request(listener):
+    s = _UpdateStub(listener, cached=True)
+    assert s._ensure_update_availability() is True
+    assert s.refreshes == 0  # must not spend a GitHub call when we already know
+
+
+def test_stale_cache_is_refreshed_so_a_fresh_release_is_seen(listener):
+    # The exact case that made the button look broken: a release cut minutes ago
+    # is invisible to the cache for up to 2h.
+    s = _UpdateStub(listener, cached=False, after_refresh=True)
+    assert s._ensure_update_availability() is True
+    assert s.refreshes == 1
+
+
+def test_genuinely_no_update_still_returns_false(listener):
+    s = _UpdateStub(listener, cached=False, after_refresh=False)
+    assert s._ensure_update_availability() is False
+    assert s.refreshes == 1
+
+
+def test_failed_check_does_not_propagate(listener):
+    # GitHub being unreachable must not turn a button press into a crash.
+    s = _UpdateStub(listener, cached=False, boom=True)
+    assert s._ensure_update_availability() is False
+    assert s.refreshes == 1
+    assert any("on-demand version check failed" in m for m in s.logs)
