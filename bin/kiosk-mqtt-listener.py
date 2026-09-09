@@ -841,6 +841,7 @@ class KioskMqttListener:
         # None, not 0.0: time.monotonic() starts near boot, so a 0.0 sentinel would
         # make the rate limiter suppress the FIRST legitimate reload for 10 minutes.
         self._last_ha_recovery_home: float | None = None
+        self._last_navigated_url: str | None = None
         self.assistant_topics = config.assistant_topics
         self.overlay_config = config.overlay
         self.overlay_state: OverlayStateManager | None = None
@@ -1306,22 +1307,36 @@ class KioskMqttListener:
             finally:
                 self.reboot_lock.release()
 
-    def _probe_home_assistant(self) -> bool:
-        """Return True if Home Assistant's authenticated API is answering.
+    def _recovery_probe_target(self) -> tuple[str, dict[str, str]] | None:
+        """Return (url, headers) to poll for reachability, or None if we cannot.
 
-        Uses /api/, HA's own health endpoint, which returns {"message": "API running."}
-        for a valid long-lived token. This must be called WITH the token -- an
-        unauthenticated poll of /api/ returns 401 and would report a healthy HA as
-        permanently down.
+        Prefers HA's authenticated /api/ health endpoint, which only answers once
+        core is actually up. Falls back to an unauthenticated GET of PULSE_URL --
+        the page the kiosk actually displays -- because HOME_ASSISTANT_TOKEN ships
+        empty in pulse.conf.sample and is only needed for Assist and now-playing.
+        Without that fallback this whole feature silently does nothing for anyone
+        running a plain dashboard kiosk, which is the common case.
+
+        The fallback is slightly less precise: HA's frontend returns 200 a little
+        before core can serve a dashboard. HA_RECOVERY_SETTLE_SECONDS covers that.
         """
-        url = f"{self.config.ha_base_url.rstrip('/')}/api/"
-        request = urllib.request.Request(
-            url,
-            headers={
-                "Authorization": f"Bearer {self.config.ha_token}",
-                "Accept": "application/json",
-            },
-        )
+        if self.config.ha_base_url and self.config.ha_token:
+            return (
+                f"{self.config.ha_base_url.rstrip('/')}/api/",
+                {"Authorization": f"Bearer {self.config.ha_token}", "Accept": "application/json"},
+            )
+        target = self.config.pulse_url or self.config.ha_base_url
+        if not target:
+            return None
+        return (target, {})
+
+    def _probe_home_assistant(self) -> bool:
+        """Return True if the kiosk's page source is answering."""
+        probe = self._recovery_probe_target()
+        if probe is None:
+            return False
+        url, headers = probe
+        request = urllib.request.Request(url, headers=headers)
         open_kwargs: dict[str, Any] = {"timeout": HA_RECOVERY_PROBE_TIMEOUT_SECONDS}
         if self._ha_ssl_context is not None:
             open_kwargs["context"] = self._ha_ssl_context
@@ -1348,7 +1363,7 @@ class KioskMqttListener:
           * at most one reload per HA_RECOVERY_MIN_INTERVAL_SECONDS, so a flapping
             HA cannot put the kiosk into a reload loop.
         """
-        if not self.config.ha_base_url or not self.config.ha_token:
+        if self._recovery_probe_target() is None:
             return
 
         if not self._probe_home_assistant():
@@ -1383,8 +1398,15 @@ class KioskMqttListener:
             self.log("watchdog: skipping HA-recovery reload, one was issued recently")
             return
         self._last_ha_recovery_home = now
-        self.log(f"watchdog: Home Assistant was unreachable for {int(outage)}s; sending kiosk home")
-        self.handle_home()
+        # Restore whatever the kiosk was showing rather than forcing PULSE_URL:
+        # a display driven elsewhere by kiosk/url/set (a camera view, a status
+        # page) must not be silently snapped back home by an unrelated outage.
+        target = self._last_navigated_url or self.config.pulse_url
+        if not target:
+            self.log("watchdog: HA recovered but there is no URL to reload")
+            return
+        self.log(f"watchdog: Home Assistant was unreachable for {int(outage)}s; reloading {target}")
+        self.reload_url(target)
 
     def _collect_telemetry_metrics(self) -> dict[str, int | float | str]:
         metrics: dict[str, int | float | str] = {}
@@ -2206,6 +2228,10 @@ class KioskMqttListener:
             self.log("navigate: empty url, ignoring request")
             return False
 
+        # Remembered so an HA-recovery reload restores what the kiosk was actually
+        # showing (a camera view, an automation-driven URL) instead of forcing it home.
+        self._last_navigated_url = url
+
         try:
             pages = self.fetch_page_targets()
         except urllib.error.URLError as exc:
@@ -2252,9 +2278,11 @@ class KioskMqttListener:
         if not self.config.pulse_url:
             self.log("HOME command received but PULSE_URL is not set")
             return
-        # Add cache-busting parameter to force hard reload
+        self.reload_url(self.config.pulse_url)
+
+    def reload_url(self, url: str) -> bool:
+        """Navigate to url with a cache-busting parameter, forcing a hard reload."""
         cache_buster = int(time.time() * 1000)  # milliseconds timestamp
-        url = self.config.pulse_url
         # Parse URL to add/update cache-busting parameter
         parsed = urllib.parse.urlparse(url)
         query_params = urllib.parse.parse_qs(parsed.query)
@@ -2270,7 +2298,7 @@ class KioskMqttListener:
                 parsed.fragment,
             )
         )
-        self.navigate(new_url)
+        return self.navigate(new_url)
 
     def handle_goto(self, payload: bytes) -> None:
         url = normalize_url(payload)
