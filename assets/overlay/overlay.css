@@ -107,6 +107,108 @@ body {
   color: #ff5c5c;
 }
 
+/* Connectivity pill — pinned leftmost, and the only badge here with no text at all.
+   Text would defeat the purpose: this pill is on screen permanently, so anything that
+   reads like a sentence becomes furniture within a day. Four rungs and a dot are shapes
+   you can take in without reading, which is the only way a permanent indicator stays
+   worth the space. The full story is in the title/aria-label, and one tap away in the
+   info card. */
+.overlay-badge--network {
+  gap: 0.45rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.overlay-network__wifi {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.12rem;
+  height: 0.95rem;
+}
+
+/* Unlit rungs stay visible rather than disappearing, so the pill keeps a constant
+   width and a constant shape. A control that changes size as the signal moves draws
+   the eye every time it does — exactly the wrong behaviour for something on screen
+   around the clock. */
+.overlay-network__bar {
+  width: 0.22rem;
+  border-radius: 0.08rem;
+  background: rgba(255, 255, 255, 0.28);
+  transition: background 0.3s ease;
+}
+
+.overlay-network__bar:nth-child(1) { height: 30%; }
+.overlay-network__bar:nth-child(2) { height: 50%; }
+.overlay-network__bar:nth-child(3) { height: 75%; }
+.overlay-network__bar:nth-child(4) { height: 100%; }
+
+.overlay-network__bar--on {
+  background: #4caf50;
+}
+
+/* One bar is not "a bit worse than two", it is the state where this fleet's roam
+   stalls and power-save drops start, so it gets amber — a warning you can act on
+   while the display is still usable, rather than after it has fallen off the network. */
+.overlay-network__wifi--weak .overlay-network__bar--on {
+  background: #e0a030;
+}
+
+/* Kept bright enough to still read as a signal meter under the slash. Dropped much
+   further the rungs disappear and the pill becomes an unexplained red streak — the
+   shape has to survive, because the shape is what says "this is the WiFi". */
+.overlay-network__wifi--off .overlay-network__bar {
+  background: rgba(255, 92, 92, 0.55);
+}
+
+/* The crossed-out state. A diagonal rule over the (all-unlit) rungs rather than a
+   separate glyph, so "no WiFi" occupies the same footprint as every other signal
+   level and the pill never reflows. */
+.overlay-network__slash {
+  position: absolute;
+  left: -0.1rem;
+  right: -0.1rem;
+  top: 50%;
+  height: 2px;
+  background: #ff5c5c;
+  border-radius: 2px;
+  transform: rotate(-35deg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.overlay-network__eth {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s ease;
+}
+
+.overlay-network__eth--up {
+  background: #4caf50;
+}
+
+/* Red is reserved for a cable that is plugged in and has stopped working. Every kiosk
+   in this fleet runs on WiFi with an empty Ethernet port, so "no cable" has to be a
+   quiet grey — a permanent red dot on four displays would teach everyone to stop
+   looking at this pill, and the one Ethernet fault worth catching would go unseen. */
+.overlay-network__eth--down {
+  background: #ff5c5c;
+  box-shadow: 0 0 6px rgba(255, 92, 92, 0.7);
+}
+
+.overlay-network__eth--absent {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* No pulse animation here, unlike the speaker and weather-alert badges. Those appear
+   only when something is wrong, so movement is informative; this pill is always
+   present, and anything that moves on it permanently would be a distraction in the
+   room rather than a signal. */
+.overlay-badge.overlay-badge--network-offline {
+  background: rgba(120, 20, 20, 0.7);
+  border: 1px solid rgba(255, 92, 92, 0.45);
+}
+
 /* Speaker-offline badge — the one badge on this bar that reports a fault, so it gets
    amber rather than the neutral translucent background. Amber, not the earmuffs red:
    red on this bar already means "earmuffs are on", a deliberate user choice, and a

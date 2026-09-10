@@ -25,6 +25,7 @@ from pulse import __version__, audio, display
 from pulse.config_persist import ConfigPersister, persist_preference
 from pulse.location_resolver import resolve_location
 from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_select_entity
+from pulse.network import check_network, status_payload
 from pulse.overlay import (
     DEFAULT_FONT_STACK,
     ClockConfig,
@@ -144,6 +145,8 @@ class OverlayConfig:
     bt_autoconnect: bool
     bt_mac: str
     speaker_sink: str  # substring of the expected wired sink; empty disables that check
+    network_pill: bool  # show the always-on WiFi/Ethernet pill at the left of the bar
+    network_interval: int  # seconds between connectivity readings
 
 
 @dataclass(frozen=True)
@@ -598,6 +601,12 @@ def load_config() -> EnvConfig:
         bt_autoconnect=parse_bool(os.environ.get("PULSE_BLUETOOTH_AUTOCONNECT"), True),
         bt_mac=(os.environ.get("PULSE_BT_MAC") or "").strip(),
         speaker_sink=(os.environ.get("PULSE_SPEAKER_SINK") or "").strip(),
+        network_pill=parse_bool(os.environ.get("PULSE_NETWORK_PILL"), True),
+        # Every read is a handful of sysfs files and two ioctls, so this is cheap enough
+        # to run often; 30s is fast enough that a link going bad shows up while somebody
+        # is still standing in front of the display. The 10s floor is there only to stop
+        # a typo'd config from spinning the poll thread.
+        network_interval=max(10, parse_int(os.environ.get("PULSE_NETWORK_INTERVAL"), 30)),
     )
 
     version_source_url = os.environ.get("PULSE_VERSION_SOURCE_URL", DEFAULT_VERSION_SOURCE_URL)
@@ -824,6 +833,9 @@ class KioskMqttListener:
         self._speaker_thread: threading.Thread | None = None
         self._speaker_stop_event = threading.Event()
         self._speaker_offline_streak = 0
+        self._network_lock = threading.Lock()
+        self._network_thread: threading.Thread | None = None
+        self._network_stop_event = threading.Event()
         self._watchdog_thread: threading.Thread | None = None
         self._watchdog_stop_event = threading.Event()
         self._last_mqtt_ok: float = time.monotonic()
@@ -1109,6 +1121,62 @@ class KioskMqttListener:
                     break
         finally:
             client.close()
+
+    def start_network_monitor(self) -> None:
+        if not self.overlay_state or not self.overlay_config.network_pill:
+            return
+        with self._network_lock:
+            if self._network_thread and self._network_thread.is_alive():
+                return
+            self._network_stop_event.clear()
+            thread = threading.Thread(target=self._network_loop, name="pulse-network", daemon=True)
+            self._network_thread = thread
+            thread.start()
+
+    def stop_network_monitor(self) -> None:
+        with self._network_lock:
+            if not self._network_thread:
+                return
+            self._network_stop_event.set()
+            self._network_thread.join(timeout=self.overlay_config.network_interval)
+            self._network_thread = None
+
+    def _network_loop(self) -> None:
+        state = self.overlay_state
+        if not state:
+            return
+        last_logged = ""
+        while not self._network_stop_event.is_set():
+            try:
+                status = check_network()
+                change = state.update_network(status_payload(status))
+                # Logged only on a transition, and only for the states worth a journal
+                # line: a healthy link that stays healthy must not write a line every
+                # poll, or the pill becomes the noisiest thing in the log.
+                if status.wifi_present and not status.wifi_up:
+                    current = "wifi-down"
+                elif status.ethernet == "down":
+                    current = "ethernet-down"
+                elif status.wifi_bars is not None and status.wifi_bars <= 1:
+                    current = f"wifi-weak:{status.wifi_dbm}"
+                else:
+                    current = ""
+                if current != last_logged:
+                    if current.startswith("wifi-weak"):
+                        self.log(f"network: weak WiFi signal ({status.wifi_dbm} dBm on {status.wifi_interface})")
+                    elif current == "wifi-down":
+                        self.log(f"network: WiFi is down ({status.wifi_interface})")
+                    elif current == "ethernet-down":
+                        self.log(f"network: Ethernet cable connected but has no IP ({status.ethernet_interface})")
+                    elif last_logged:
+                        self.log("network: connectivity recovered")
+                    last_logged = current
+                if change.changed:
+                    self._emit_overlay_refresh(change.version, change.reason)
+            except Exception as exc:  # nosec B110 - never let a probe error kill the loop
+                self.log(f"network: check failed: {exc}")
+            if self._network_stop_event.wait(self.overlay_config.network_interval):
+                break
 
     def start_speaker_monitor(self) -> None:
         if not self.overlay_state or not self.overlay_config.speaker_alert:
@@ -2548,6 +2616,7 @@ class KioskMqttListener:
         self.start_ticker()
         self.start_weather_alerts()
         self.start_speaker_monitor()
+        self.start_network_monitor()
         if self.overlay_state:
             # Start the HTTP server BEFORE announcing the boot refresh, otherwise the
             # photo-card re-fetches /overlay against a not-yet-listening port, fails, and
@@ -2898,6 +2967,7 @@ def main():
     atexit.register(listener.stop_ticker)
     atexit.register(listener.stop_weather_alerts)
     atexit.register(listener.stop_speaker_monitor)
+    atexit.register(listener.stop_network_monitor)
     atexit.register(listener.stop_overlay_server)
     atexit.register(listener._stop_watchdog)
 

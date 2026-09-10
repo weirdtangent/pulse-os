@@ -241,6 +241,8 @@ listening off and is not a mute.
 | `PULSE_SPEAKER_ALERT` | `true` | Shows a notification-bar badge while the configured speaker is unreachable. |
 | `PULSE_SPEAKER_SINK` | *(empty)* | Substring of the expected wired sink name (`pactl list sinks short`) to watch on non-Bluetooth displays. |
 | `PULSE_SPEAKER_INTERVAL` | `60` | Seconds between speaker reachability checks (minimum 15). |
+| `PULSE_NETWORK_PILL` | `true` | Shows the always-on WiFi/Ethernet pill at the far left of the notification bar. |
+| `PULSE_NETWORK_INTERVAL` | `30` | Seconds between connectivity readings (minimum 10). |
 
 ### On-screen device controls
 
@@ -278,6 +280,36 @@ there is no save step.
 
 The day/night targets are hidden entirely on a display with no backlight, since it cannot
 act on a schedule.
+
+### Connectivity pill
+
+`PULSE_NETWORK_PILL` puts a WiFi/Ethernet indicator at the far left of the notification bar,
+left of **Help**. It is the only badge on that bar shown in its healthy state, and that is
+deliberate: every other pill there reports something otherwise invisible, so appearing at all
+is the message. Connectivity instead degrades *gradually*, and the reading worth having is the
+trend — a display that normally sits at four bars and is now at two has a problem worth chasing
+before it drops off the network entirely and takes the overlay with it. A pill that only shows
+up at zero cannot tell you that.
+
+- **WiFi** — four rungs, filled 1–4 by signal strength (≥ −55 dBm = 4, ≥ −65 = 3, ≥ −75 = 2,
+  below that = 1). One bar turns amber: that is where this fleet's roam stalls and power-save
+  drops start, not merely "a bit worse than two". No link at all crosses the rungs out in red.
+- **Ethernet** — a dot: green for a working cable, red for a cable that is plugged in but has
+  no IP address (carrier up, DHCP never completed), grey for no cable. Grey rather than red is
+  the point — every Pulse kiosk runs on WiFi with an empty Ethernet port, and a permanent red
+  dot on every display would teach everyone to ignore the pill, costing exactly the one
+  Ethernet fault worth catching.
+
+Tapping the pill opens a card with SSID, access point (BSSID), signal strength in dBm, IP
+address, and Ethernet state. The access point is there because a kiosk pinned to a specific AP
+silently loses that pin when the AP reboots, and "which radio am I actually on" is then the
+only thing distinguishing a healthy roam from a stalled one — and it is precisely what you
+cannot go look up over SSH, because SSH is what stops working when the answer is bad.
+
+State is read straight from `/sys/class/net` and `/proc/net/wireless` (plus two ioctls for the
+SSID/BSSID) rather than by shelling out to `iw` or `nmcli`: no fork per poll on a Pi, no
+dependency on tools that aren't installed uniformly, and no multi-second block against a wedged
+driver. A probe that cannot run reports "unknown" and renders nothing, never a healthy pill.
 
 ### Speaker-offline badge
 
