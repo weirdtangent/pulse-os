@@ -116,6 +116,14 @@ body {
 .overlay-badge--network {
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
+  /* Every other badge on this bar is as tall as its emoji ICON's line box, which is
+     meaningfully taller than plain text at the same size — the emoji font's metrics,
+     not the text font's, are what set the height. This pill is the only one with no
+     emoji (it draws its own glyphs), so without this it renders ~5px short and sits
+     visibly low next to Help. 1.32em is that emoji line box measured on the fleet's
+     stack; 0.7rem is this rule's own vertical padding, which border-box folds into
+     min-height. Keep the two in step if the padding above ever changes. */
+  min-height: calc(1.32em + 0.7rem);
 }
 
 .overlay-network__wifi {
