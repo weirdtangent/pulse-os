@@ -397,6 +397,19 @@ PULSE_SPEAKER_SINK=""
 # PULSE_SPEAKER_INTERVAL — seconds between speaker reachability checks (minimum 15).
 PULSE_SPEAKER_INTERVAL="60"
 
+# PULSE_NETWORK_PILL — show the always-on connectivity pill at the far left of the
+# notification bar: 1-4 WiFi bars (crossed out in red when there's no link) and a dot for
+# Ethernet (green = working, red = cable in but no IP, grey = no cable). Tap it for the
+# SSID, access point, signal strength and IP address. Unlike the other badges this one is
+# visible in its healthy state on purpose — a display sliding from four bars to one is the
+# early, visible form of the roam-stall and power-save failures, and you can't see a trend
+# from an indicator that only appears once the network is already gone.
+PULSE_NETWORK_PILL="true"
+
+# PULSE_NETWORK_INTERVAL — seconds between connectivity readings (minimum 10). Each read is
+# a handful of sysfs files and two ioctls, so this is cheap to run often.
+PULSE_NETWORK_INTERVAL="30"
+
 # ============================================================================
 # Logging & Reliability
 # ============================================================================

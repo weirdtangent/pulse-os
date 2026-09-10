@@ -17,6 +17,7 @@ from pulse.overlay import (
     _build_config_info_overlay,
     _build_device_controls_info_overlay,
     _build_help_info_overlay,
+    _build_network_pill,
     _build_now_playing_card,
     _copyright_years,
     _get_library_versions,
@@ -351,6 +352,145 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(snapshot, self.theme)
         self.assertLess(html.index(self._SPEAKER_PILL_MARKUP), html.index("Alarm ringing"))
 
+    # --- Connectivity pill (notification bar) -----------------------------------
+    _NETWORK_PILL_MARKUP = 'data-badge-action="show_network"'
+
+    @staticmethod
+    def _network(**overrides: object) -> dict:
+        data = {
+            "wifi_present": True,
+            "wifi_up": True,
+            "bars": 4,
+            "dbm": -48,
+            "ssid": "Graystorm",
+            "bssid": "AA:BB:CC:DD:EE:FF",
+            "wifi_ip": "192.168.1.50",
+            "wifi_interface": "wlan0",
+            "ethernet": "absent",
+            "ethernet_ip": "",
+            "ethernet_interface": "eth0",
+        }
+        data.update(overrides)
+        return data
+
+    def test_network_pill_absent_before_first_reading(self) -> None:
+        # None means the poll has not run (or the pill is disabled). Rendering a healthy
+        # pill there would claim a link state nothing has actually measured.
+        self.assertEqual(_build_network_pill(None), "")
+        html = render_overlay_html(self._snapshot(network=None), self.theme)
+        self.assertNotIn(self._NETWORK_PILL_MARKUP, html)
+
+    def test_network_pill_shown_when_healthy(self) -> None:
+        # The one badge on this bar that is deliberately visible in its healthy state:
+        # signal degrades gradually, and the trend is the reading worth having.
+        html = render_overlay_html(self._snapshot(network=self._network()), self.theme)
+        self.assertIn(self._NETWORK_PILL_MARKUP, html)
+        self.assertIn("WiFi 4/4 to &quot;Graystorm&quot; at -48 dBm", html)
+
+    def test_network_pill_is_leftmost_badge(self) -> None:
+        # Pinned ahead of Help so it never slides sideways when an alarm or weather
+        # alert appears — a permanent indicator that moves stops being readable.
+        snapshot = self._snapshot(network=self._network(), active_alarm={"label": "Wake up"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertLess(html.index(self._NETWORK_PILL_MARKUP), html.index(">Help<"))
+
+    def test_network_pill_lights_one_bar_per_signal_level(self) -> None:
+        for bars in (1, 2, 3, 4):
+            with self.subTest(bars=bars):
+                pill = _build_network_pill(self._network(bars=bars))
+                self.assertEqual(pill.count("overlay-network__bar--on"), bars)
+                # Unlit rungs stay in the DOM: the pill must keep a constant width
+                # whatever the signal is doing, or it draws the eye every time it moves.
+                self.assertEqual(pill.count('class="overlay-network__bar'), 4)
+
+    def test_network_pill_marks_one_bar_as_weak(self) -> None:
+        # One bar is where this fleet's roam stalls start, so it is amber, not just short.
+        self.assertIn("overlay-network__wifi--weak", _build_network_pill(self._network(bars=1, dbm=-82)))
+        self.assertNotIn("overlay-network__wifi--weak", _build_network_pill(self._network(bars=2, dbm=-70)))
+
+    def test_network_pill_crosses_out_wifi_when_disconnected(self) -> None:
+        pill = _build_network_pill(self._network(wifi_up=False, bars=None, dbm=None, ssid="", bssid="", wifi_ip=""))
+        self.assertIn("overlay-network__wifi--off", pill)
+        self.assertIn("overlay-network__slash", pill)
+        self.assertNotIn("overlay-network__bar--on", pill)
+        self.assertIn("WiFi disconnected", pill)
+
+    def test_network_pill_ignores_a_stale_bar_count_when_wifi_is_down(self) -> None:
+        # A reading can carry the last-known bar count with wifi_up already false. The
+        # pill must follow the link state, not the leftover number, or a display that
+        # has dropped off the network keeps showing four cheerful green rungs.
+        pill = _build_network_pill(self._network(wifi_up=False, bars=4, dbm=-48))
+        self.assertIn("overlay-network__wifi--off", pill)
+        self.assertNotIn("overlay-network__bar--on", pill)
+
+    def test_network_pill_greys_ethernet_when_no_cable(self) -> None:
+        # Every kiosk here runs on WiFi with an empty port. Red for that permanent state
+        # would train everyone to ignore the pill and cost us the real Ethernet fault.
+        pill = _build_network_pill(self._network(ethernet="absent"))
+        self.assertIn("overlay-network__eth--absent", pill)
+        self.assertNotIn("overlay-network__eth--down", pill)
+
+    def test_network_pill_reds_ethernet_only_when_cable_is_broken(self) -> None:
+        pill = _build_network_pill(self._network(ethernet="down", ethernet_ip=""))
+        self.assertIn("overlay-network__eth--down", pill)
+        self.assertIn("Ethernet cable plugged in but not working", pill)
+
+    def test_network_pill_greens_ethernet_when_up(self) -> None:
+        pill = _build_network_pill(self._network(ethernet="up"))
+        self.assertIn("overlay-network__eth--up", pill)
+        self.assertIn("Ethernet connected", pill)
+
+    def test_network_pill_omits_ethernet_dot_when_no_interface(self) -> None:
+        pill = _build_network_pill(self._network(ethernet="none", ethernet_interface=""))
+        self.assertIn(self._NETWORK_PILL_MARKUP, pill)
+        self.assertNotIn("overlay-network__eth", pill)
+
+    def test_network_pill_absent_when_device_has_no_interfaces(self) -> None:
+        pill = _build_network_pill(self._network(wifi_present=False, wifi_up=False, ethernet="none"))
+        self.assertEqual(pill, "")
+
+    def test_network_pill_escapes_ssid(self) -> None:
+        # An SSID is whatever the AP broadcasts, so it is untrusted text.
+        pill = _build_network_pill(self._network(ssid="<img src=x onerror=alert(1)>"))
+        self.assertNotIn("<img", pill)
+        self.assertIn("&lt;img", pill)
+
+    # --- Network info card --------------------------------------------------------
+
+    def test_network_info_card_reads_the_live_snapshot(self) -> None:
+        # The card carries no payload of its own, so an open card follows the poll
+        # instead of freezing at whatever was true when somebody tapped it.
+        snapshot = self._snapshot(network=self._network(bars=2, dbm=-68), info_card={"type": "network"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("overlay-info-card--network", html)
+        self.assertIn("2/4 — fair (-68 dBm)", html)
+        self.assertIn("Graystorm", html)
+        self.assertIn("AA:BB:CC:DD:EE:FF", html)
+        self.assertIn("192.168.1.50", html)
+
+    def test_network_info_card_calls_out_missing_dhcp_lease(self) -> None:
+        # Associated but with no address is a real and confusing failure — the pill shows
+        # full bars while nothing works — so the card has to name it.
+        snapshot = self._snapshot(network=self._network(wifi_ip=""), info_card={"type": "network"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("DHCP has not completed", html)
+
+    def test_network_info_card_separates_no_reading_from_no_adapter(self) -> None:
+        # These are different problems and must not share a message: "no wireless
+        # adapter" would send somebody hunting a hardware fault that doesn't exist.
+        snapshot = self._snapshot(network=None, info_card={"type": "network"})
+        html = render_overlay_html(snapshot, self.theme)
+        self.assertIn("Network status is not available yet.", html)
+        self.assertNotIn("No wireless adapter", html)
+
+        no_adapter = self._snapshot(
+            network=self._network(wifi_present=False, wifi_up=False, ethernet="up", ethernet_ip="10.0.0.9"),
+            info_card={"type": "network"},
+        )
+        html = render_overlay_html(no_adapter, self.theme)
+        self.assertIn("No wireless adapter", html)
+        self.assertNotIn("Network status is not available yet.", html)
+
     def test_only_first_clock_used_if_multiple_provided(self) -> None:
         # Even if multiple clocks are provided, only the first one is rendered
         clocks = (
@@ -420,6 +560,58 @@ class OverlayRenderTests(unittest.TestCase):
         alarm_card = manager.snapshot().info_card
         assert alarm_card is not None
         self.assertIn("alarms", alarm_card)
+
+    def test_update_network_ignores_dbm_jitter(self) -> None:
+        manager = OverlayStateManager()
+
+        def reading(**overrides):
+            data = {
+                "wifi_present": True,
+                "wifi_up": True,
+                "bars": 4,
+                "dbm": -48,
+                "ssid": "Graystorm",
+                "bssid": "AA:BB:CC:DD:EE:FF",
+                "wifi_ip": "192.168.1.50",
+                "wifi_interface": "wlan0",
+                "ethernet": "absent",
+                "ethernet_ip": "",
+                "ethernet_interface": "eth0",
+            }
+            data.update(overrides)
+            return data
+
+        self.assertTrue(manager.update_network(reading()).changed)
+        version = manager.snapshot().version
+
+        # Signal jitters by a few dB every poll even on a display bolted to a wall. The
+        # pill draws bars, so a dBm that moves within the same bar must NOT bump the
+        # version — bumping reloads the photo card underneath, which would mean the
+        # wallpaper flickering roughly twice a minute forever.
+        self.assertFalse(manager.update_network(reading(dbm=-51)).changed)
+        self.assertEqual(manager.snapshot().version, version)
+        # ...but the fresh dBm is still stored, because the info card reads it live off
+        # the snapshot and should track the poll rather than freeze at the last bump.
+        stored = manager.snapshot().network
+        assert stored is not None
+        self.assertEqual(stored["dbm"], -51)
+
+        # A bar actually changing is a visible change, so it bumps.
+        self.assertTrue(manager.update_network(reading(bars=2, dbm=-70)).changed)
+        # So does roaming to a different AP, even at identical strength — that is the
+        # transition worth catching when a pinned kiosk loses its pin.
+        self.assertTrue(manager.update_network(reading(bars=2, dbm=-70, bssid="11:22:33:44:55:66")).changed)
+        # And so does the cable state.
+        self.assertTrue(
+            manager.update_network(reading(bars=2, dbm=-70, bssid="11:22:33:44:55:66", ethernet="up")).changed
+        )
+
+    def test_update_network_clears_back_to_none(self) -> None:
+        manager = OverlayStateManager()
+        manager.update_network({"wifi_present": True, "wifi_up": True, "bars": 3, "ethernet": "absent"})
+        cleared = manager.update_network(None)
+        self.assertTrue(cleared.changed)
+        self.assertIsNone(manager.snapshot().network)
 
     def test_set_ticker_bumps_only_on_symbol_change(self) -> None:
         manager = OverlayStateManager()

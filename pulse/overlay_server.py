@@ -675,6 +675,12 @@ html, body {{
                     change = outer.state.update_info_card({"type": "help"})
                     if outer._on_state_change:
                         outer._on_state_change(change)
+                elif action == "show_network":
+                    # No payload travels with the request: _build_network_info_overlay
+                    # reads the live snapshot, so the open card follows the poll.
+                    change = outer.state.update_info_card({"type": "network"})
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
                 elif action == "show_config":
                     change = outer.state.update_info_card({"type": "config"})
                     if outer._on_state_change:

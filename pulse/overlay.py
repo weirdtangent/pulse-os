@@ -94,6 +94,10 @@ class OverlaySnapshot:
     # Active NWS alerts for this kiosk's location, most urgent first. See
     # pulse/weather_alerts.py for the shape of each entry.
     weather_alerts: tuple[dict[str, Any], ...] = ()
+    # Latest WiFi/Ethernet reading as produced by pulse.network.status_payload, or
+    # None before the first poll (or when the network pill is disabled), in which
+    # case the pill renders nothing at all rather than guessing at a state.
+    network: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -184,6 +188,7 @@ class OverlayStateManager:
         self._ticker: tuple[dict[str, Any], ...] = ()
         self._speaker_offline: dict[str, Any] | None = None
         self._weather_alerts: tuple[dict[str, Any], ...] = ()
+        self._network: dict[str, Any] | None = None
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -204,6 +209,7 @@ class OverlayStateManager:
             "ticker": "",
             "speaker_offline": "",
             "weather_alerts": "",
+            "network": "",
         }
 
     @property
@@ -518,6 +524,32 @@ class OverlayStateManager:
             self._signatures["speaker_offline"] = signature
             return self._bump("speaker_offline")
 
+    def update_network(self, network: dict[str, Any] | None) -> OverlayChange:
+        """Record the latest WiFi/Ethernet reading.
+
+        Signed on the *rendered* fields only — bar count, link states, SSID/AP — and
+        deliberately not on the raw dBm. Signal strength jitters by a few dB every poll
+        even on a stationary display, and signing it would bump the overlay version on
+        every single cycle, reloading the photo card underneath roughly twice a minute
+        forever. The pill draws bars, so bars are what a change means.
+        """
+        normalized = dict(network) if network else None
+        if normalized is None:
+            signature = ""
+        else:
+            signature = ":".join(
+                str(normalized.get(key, "")) for key in ("wifi_present", "wifi_up", "bars", "ssid", "bssid", "ethernet")
+            )
+        with self._lock:
+            # Stored unconditionally, even when the signature matches: the info card
+            # reads dBm and IP straight off the snapshot, so an open card should track
+            # the live numbers rather than freeze at whatever bumped the version last.
+            self._network = normalized
+            if signature == self._signatures["network"]:
+                return OverlayChange(False, self._version, "network")
+            self._signatures["network"] = signature
+            return self._bump("network")
+
     def set_weather_alerts(self, alerts: Sequence[dict[str, Any]], *, banner_minutes: int = 0) -> OverlayChange:
         """Store the active NWS alerts for this location, most urgent first.
 
@@ -567,6 +599,7 @@ class OverlayStateManager:
                 ticker=tuple(dict(item) for item in self._ticker),
                 speaker_offline=copy.deepcopy(self._speaker_offline),
                 weather_alerts=tuple(copy.deepcopy(item) for item in self._weather_alerts),
+                network=copy.deepcopy(self._network),
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -747,6 +780,8 @@ ICON_MAP = {
     "market": "&#128200;",  # 📈
     "speaker_off": "&#128263;",  # 🔇
     "weather_alert": "&#9888;",  # ⚠
+    "wifi_off": "&#128683;",  # 🚫 — overlaid on the bars when there is no WiFi link
+    "ethernet": "&#128268;",  # 🔌
 }
 
 
@@ -948,6 +983,88 @@ def _build_speaker_pill(snapshot: OverlaySnapshot) -> str:
         f'aria-label="{safe_detail}" title="{safe_detail}">'
         f'<span class="overlay-badge__icon" aria-hidden="true">{icon}</span>'
         f"<span>{safe_label}</span>"
+        "</span>"
+    )
+
+
+def _build_network_pill(network: dict[str, Any] | None) -> str:
+    """Always-on connectivity pill: WiFi bars plus an Ethernet dot.
+
+    The one badge on this bar that is shown in its healthy state, and that is the
+    point of it. Every other pill here appears only when something is wrong, which
+    works because the thing it reports on is otherwise invisible. Connectivity is the
+    opposite: it degrades gradually, and the useful reading is the *trend* — a display
+    that normally sits at four bars and is now at two has a problem worth chasing
+    before it drops off the network entirely and takes the overlay with it. You cannot
+    see that from a pill that only appears at zero.
+
+    Ethernet gets three states rather than two. Green is a working cable; red is a
+    cable that is plugged in and has stopped working (carrier but no address); grey is
+    no cable, which is the normal, permanent condition of every kiosk in this fleet.
+    Painting that grey case red would put a fault indicator on four displays forever
+    and spend the pill's credibility on nothing.
+    """
+    if not network:
+        return ""
+    wifi_present = bool(network.get("wifi_present"))
+    ethernet_state = str(network.get("ethernet") or "none")
+    if not wifi_present and ethernet_state == "none":
+        # Nothing to draw. A device with neither interface is not a state anyone needs
+        # a pill for; it is a device that isn't on the network at all, and the overlay
+        # it would be drawn on could not have loaded.
+        return ""
+
+    bars = network.get("bars")
+    bars = bars if isinstance(bars, int) else None
+    wifi_linked = bool(network.get("wifi_up")) and bars is not None
+    ssid = str(network.get("ssid") or "").strip()
+    dbm = network.get("dbm")
+
+    segments: list[str] = []
+    if wifi_present:
+        filled = bars or 0
+        rungs = "".join(
+            f'<span class="overlay-network__bar'
+            f'{" overlay-network__bar--on" if wifi_linked and index <= filled else ""}"></span>'
+            for index in range(1, 5)
+        )
+        wifi_classes = ["overlay-network__wifi"]
+        if not wifi_linked:
+            wifi_classes.append("overlay-network__wifi--off")
+        elif filled <= 1:
+            wifi_classes.append("overlay-network__wifi--weak")
+        slash = '<span class="overlay-network__slash" aria-hidden="true"></span>' if not wifi_linked else ""
+        segments.append(f'<span class="{" ".join(wifi_classes)}" aria-hidden="true">{rungs}{slash}</span>')
+    if ethernet_state != "none":
+        segments.append(
+            f'<span class="overlay-network__eth overlay-network__eth--{html_escape(ethernet_state, quote=True)}"'
+            f' aria-hidden="true"></span>'
+        )
+
+    if not wifi_present:
+        wifi_text = "No WiFi adapter"
+    elif not wifi_linked:
+        wifi_text = "WiFi disconnected"
+    else:
+        where = f' to "{ssid}"' if ssid else ""
+        strength = f" at {dbm} dBm" if isinstance(dbm, int) else ""
+        wifi_text = f"WiFi {bars}/4{where}{strength}"
+    ethernet_text = {
+        "up": "Ethernet connected",
+        "down": "Ethernet cable plugged in but not working",
+        "absent": "no Ethernet cable",
+    }.get(ethernet_state, "")
+    detail = wifi_text if not ethernet_text else f"{wifi_text}, {ethernet_text}"
+    safe_detail = html_escape(detail, quote=True)
+
+    classes = ["overlay-badge", "overlay-badge--network"]
+    if wifi_present and not wifi_linked:
+        classes.append("overlay-badge--network-offline")
+    return (
+        f'<span class="{" ".join(classes)}" role="button" tabindex="0"'
+        f' data-badge-action="show_network"'
+        f' aria-label="{safe_detail}" title="{safe_detail}">'
+        f"{''.join(segments)}"
         "</span>"
     )
 
@@ -1679,6 +1796,14 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
 
 def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
     badges: list[str] = []
+    # Leftmost, ahead of even Help: it is the only pill that is shown in its healthy
+    # state, so it needs a fixed home on the bar. Anywhere further right and it would
+    # slide sideways every time an alarm or a weather alert appears, which is exactly
+    # the kind of movement that stops a permanent indicator from being readable at a
+    # glance. Pinned first, it is always in the same place.
+    network_pill = _build_network_pill(snapshot.network)
+    if network_pill:
+        badges.append(network_pill)
     badges.append(_render_badge("help", "Help"))
     badges.append(_render_badge("config", "Config"))
     # First of the status pills, ahead of even the speaker badge: nothing else on this bar
@@ -1758,6 +1883,8 @@ def _build_info_overlay(snapshot: OverlaySnapshot, *, hour12: bool = True) -> st
         return _build_routines_info_overlay(card)
     if card_type == "health":
         return _build_health_info_overlay(card)
+    if card_type == "network":
+        return _build_network_info_overlay(snapshot)
     if card_type == "config":
         return _build_config_info_overlay()
     if card_type == "device_controls":
@@ -2874,6 +3001,92 @@ def _build_health_info_overlay(card: dict[str, Any]) -> str:
       {subtitle_html}
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close health status">&times;</button>
+  </div>
+  <div class="overlay-info-card__body">
+    {body}
+  </div>
+</div>
+""".strip()
+
+
+def _build_network_info_overlay(snapshot: OverlaySnapshot) -> str:
+    """Detail card behind the connectivity pill.
+
+    Reads the live snapshot rather than a payload frozen at tap time, so an open card
+    tracks the poll — which is what makes it usable for watching a link actually
+    recover instead of having to close and reopen it.
+
+    The AP address earns its place here despite being the least human-readable line on
+    the card: this fleet pins kiosks to specific access points, an AP outage silently
+    strips that pin, and "which radio am I actually on" is then the only question that
+    distinguishes a healthy roam from a stalled one. It is also precisely the thing you
+    cannot go look up over SSH when the answer is bad.
+    """
+    network = snapshot.network
+    if not network:
+        # No reading has happened yet (or the pill is turned off). That is emphatically
+        # not the same as "this device has no wireless adapter", and saying so would
+        # send somebody looking for a hardware fault that doesn't exist.
+        return _network_info_shell('<div class="overlay-info-card__empty">Network status is not available yet.</div>')
+    rows: list[tuple[str, str]] = []
+
+    wifi_interface = str(network.get("wifi_interface") or "")
+    if not network.get("wifi_present"):
+        rows.append(("WiFi", "No wireless adapter"))
+    elif not network.get("wifi_up"):
+        rows.append(("WiFi", f"Disconnected ({wifi_interface})" if wifi_interface else "Disconnected"))
+    else:
+        bars = network.get("bars")
+        dbm = network.get("dbm")
+        if isinstance(bars, int) and isinstance(dbm, int):
+            quality = {4: "excellent", 3: "good", 2: "fair", 1: "weak"}.get(bars, "unusable")
+            rows.append(("Signal", f"{bars}/4 — {quality} ({dbm} dBm)"))
+        elif isinstance(dbm, int):
+            rows.append(("Signal", f"{dbm} dBm"))
+        else:
+            rows.append(("Signal", "Connected, strength unknown"))
+        rows.append(("Network", str(network.get("ssid") or "").strip() or "Unknown"))
+        bssid = str(network.get("bssid") or "").strip()
+        if bssid:
+            rows.append(("Access point", bssid))
+        rows.append(("IP address", str(network.get("wifi_ip") or "").strip() or "None — DHCP has not completed"))
+        if wifi_interface:
+            rows.append(("Interface", wifi_interface))
+
+    ethernet = str(network.get("ethernet") or "none")
+    ethernet_interface = str(network.get("ethernet_interface") or "")
+    if ethernet == "up":
+        address = str(network.get("ethernet_ip") or "").strip()
+        rows.append(("Ethernet", f"Connected — {address}" if address else "Connected"))
+    elif ethernet == "down":
+        rows.append(("Ethernet", "Cable connected but no IP address — DHCP has not completed"))
+    elif ethernet == "absent":
+        rows.append(
+            ("Ethernet", f"No cable connected ({ethernet_interface})" if ethernet_interface else "No cable connected")
+        )
+
+    entries = "".join(
+        f"""
+  <div class="overlay-info-card__reminder">
+    <div class="overlay-info-card__reminder-body">
+      <div class="overlay-info-card__reminder-label">{html_escape(label)}</div>
+      <div class="overlay-info-card__reminder-meta">{html_escape(value)}</div>
+    </div>
+  </div>
+            """.strip()
+        for label, value in rows
+    )
+    return _network_info_shell('<div class="overlay-info-card__alarm-list">' + entries + "</div>")
+
+
+def _network_info_shell(body: str) -> str:
+    return f"""
+<div class="overlay-card overlay-info-card overlay-info-card--network">
+  <div class="overlay-info-card__header">
+    <div>
+      <div class="overlay-info-card__title">Network</div>
+    </div>
+    <button class="overlay-info-card__close" data-info-card-close aria-label="Close network status">&times;</button>
   </div>
   <div class="overlay-info-card__body">
     {body}
