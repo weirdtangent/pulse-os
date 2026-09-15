@@ -20,10 +20,25 @@ jobs:
     # TODO: Remove continue-on-error once upstream SDK bugs are fixed
     # See: https://github.com/anthropics/claude-code-action/issues/892
     continue-on-error: true
+    # Comment-triggered runs are gated on the COMMENTER, not just on the comment body.
+    # Without this, the only thing between an outside commenter on a fork PR and a
+    # write-scoped agent run is claude-code-action's own internal write-permission check
+    # (src/github/validation/permissions.ts). That check is real and currently holds at
+    # every SHA this org pins -- verified 2026-09-15 across all three in use -- but it is
+    # a property we INHERIT from a third-party action rather than one we enforce, and
+    # nothing re-checks it when the pin is next bumped. The fork check in skip-check below
+    # is no help: its elif only matches the pull_request event, so comment-triggered runs
+    # fall straight through it. See weirdtangent/bookprepper#122 -- the reporter withdrew
+    # the exploitability claim after reading the action source; this is the hardening half
+    # that stands. Keep the association list in sync across all repos carrying this file.
     if: >
       github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'issue_comment' &&
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' &&
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     concurrency:
       group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
