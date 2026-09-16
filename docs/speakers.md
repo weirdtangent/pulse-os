@@ -82,7 +82,20 @@ Unitek Y-247A adapter feeding powered desktop speakers, configured exactly the s
    the check: without a name to expect, there is no way to distinguish "unplugged" from "never
    had one".
 
-4. **Apply and verify:**
+4. **If this display previously used Bluetooth, stop the autoconnect timer.**
+   ```bash
+   systemctl --user disable --now bt-autoconnect.timer bt-autoconnect.service
+   ```
+   Setting `PULSE_BLUETOOTH_AUTOCONNECT="false"` and re-running `setup.sh` prevents the units
+   activating in future, but older releases did not stop a timer that was *already running* —
+   it keeps paging a speaker nobody is listening to until the next reboot. That is worth doing
+   properly rather than ignoring: BT paging competes with wifi for the Pi's single 2.4 GHz
+   radio, so a stray timer degrades the network link. Confirm with
+   `systemctl --user is-active bt-autoconnect.timer` (expect `inactive`) — note these are
+   **user** units, so checking them in system scope always reports `inactive` even while they
+   are actively running.
+
+5. **Apply and verify:**
    ```bash
    sudo systemctl restart pulse-kiosk-mqtt
    # only if you run Snapcast (PULSE_SNAPCLIENT="true"; it defaults to false)

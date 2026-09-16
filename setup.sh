@@ -1189,8 +1189,13 @@ enable_services() {
         log "Disabling Bluetooth auto-connect..."
         sudo systemctl --global disable bt-autoconnect.service 2>/dev/null || true
         sudo systemctl --global disable bt-autoconnect.timer 2>/dev/null || true
-        run_user_systemctl disable bt-autoconnect.service bt-autoconnect.timer >/dev/null 2>&1 || true
-        sudo systemctl disable pulse-bt-mute.service 2>/dev/null || true
+        # --now matters, and its absence used to be a silent bug: the enable branch
+        # above starts the units immediately, so switching a live display to a wired
+        # speaker left the timer running and paging a speaker nobody listens to any
+        # more. On a Pi that shares one 2.4GHz radio between wifi and Bluetooth, that
+        # is not merely untidy -- it degrades the network link.
+        run_user_systemctl disable --now bt-autoconnect.timer bt-autoconnect.service >/dev/null 2>&1 || true
+        sudo systemctl disable --now pulse-bt-mute.service 2>/dev/null || true
     fi
 }
 
