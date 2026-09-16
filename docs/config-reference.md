@@ -333,7 +333,10 @@ The wired check is the more trustworthy of the two, and is one of several reason
 [speakers](speakers.md) recommends USB over Bluetooth.
 
 Displays with neither configured are never checked, so stale pairings left over from a
-re-purposed display can't produce a badge that never clears. The badge needs two consecutive
+re-purposed display can't produce a badge that never clears. Note this only holds once
+autoconnect is off: with the default `PULSE_BLUETOOTH_AUTOCONNECT="true"` and no
+`PULSE_BT_MAC`, `resolve_bt_mac()` still falls back to the first paired device, so a stale
+pairing *is* treated as the watched speaker and can raise the badge. The badge needs two consecutive
 failed checks to appear (riding out the A2DP renegotiation blips and the post-reboot
 autoconnect window) and clears on the first successful one.
 

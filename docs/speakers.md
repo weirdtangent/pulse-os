@@ -18,7 +18,7 @@ audio stack. The specific problems, all of them things we actually hit:
 | Problem | What it looked like |
 |---|---|
 | **Silent failure** | A speaker that is off or out of range does not error. Playback "succeeds", snapclient stays connected, and the room simply goes quiet. **A silent speaker also means a silent alarm** — which is the whole point of the device. |
-| **Auto power-off** | Battery pods shut down after a few minutes idle. We had to invent a keepalive that pushed silent audio every 2 minutes purely to stop them sleeping. |
+| **Auto power-off** | Battery pods shut down after a few minutes idle. We had to invent a keepalive that plays an *inaudible 30 Hz tone* every 2 minutes purely to stop them sleeping — digital silence does not work, because the speaker's DSP does not count it as a signal. |
 | **Slow, unreliable reconnect** | `bluetoothctl connect` blocks for ~60 seconds against a powered-off speaker, so every retry loop had to be written around that stall. |
 | **Radio contention** | The Pi shares one 2.4 GHz radio between Wi-Fi and Bluetooth. BT paging against an absent speaker starved the Wi-Fi link badly enough to cause snapclient reconnect loops and clock-sync failures — a *Bluetooth* fault that presents as a *network* fault. |
 | **Log spam** | A single offline speaker produced roughly 240 `avdtp_connect_cb() ... Host is down (112)` entries per day, drowning out real problems. |
@@ -85,12 +85,14 @@ Unitek Y-247A adapter feeding powered desktop speakers, configured exactly the s
 4. **Apply and verify:**
    ```bash
    sudo systemctl restart pulse-kiosk-mqtt
-   sudo systemctl restart pulse-snapclient
+   # only if you run Snapcast (PULSE_SNAPCLIENT="true"; it defaults to false)
+   systemctl is-enabled pulse-snapclient >/dev/null 2>&1 && sudo systemctl restart pulse-snapclient
    pactl get-default-sink
    paplay /usr/share/sounds/alsa/Front_Left.wav
    ```
-   Restart **both** services. `snapclient` runs with `--soundcard default`, and an
-   already-running client keeps its stream on the old sink rather than migrating.
+   If you run Snapcast, restart `pulse-snapclient` **as well as** `pulse-kiosk-mqtt`. It runs
+   with `--soundcard default`, and an already-running client keeps its stream on the old sink
+   rather than migrating to the new default.
 
 ### Optional: turn the Bluetooth radio off
 
@@ -117,7 +119,17 @@ restores UART0 on GPIO 14/15, which is not what you want here.
 
 ## Legacy: pairing a Bluetooth speaker
 
-Still supported, and everything below still works. Prefer USB if you have the choice.
+Still supported. Prefer USB if you have the choice.
+
+> **If you followed the radio-off step above, undo it first** — otherwise `bluetoothctl` has
+> no adapter to work with and `scan on` finds nothing, with no obvious error:
+> ```bash
+> sudo sed -i '/^dtoverlay=disable-bt-pi5$/d' /boot/firmware/config.txt
+> sudo systemctl enable --now bluetooth
+> sudo reboot
+> ```
+> Then set `PULSE_BLUETOOTH_AUTOCONNECT="true"` in `pulse.conf` and re-run `setup.sh` before
+> pairing. Confirm the adapter is back with `hciconfig | grep -c ^hci` (expect `1`).
 
 Pairing is a one-time step per device — redo it if you reimage or replace the microSD card.
 Commands assume you are the `pulse` user on the device.
@@ -143,13 +155,24 @@ Commands assume you are the `pulse` user on the device.
    connect XX:XX:XX:XX:XX:XX
    ```
    Then `quit`.
-5. **Optional: pin the speaker** in `pulse.conf` so autoconnect always targets it:
+5. **Optional: pin the speaker** so autoconnect always targets one device rather than
+   falling back to "first paired":
    ```bash
    PULSE_BT_MAC="XX:XX:XX:XX:XX:XX"
    ```
-   > `pulse.conf` is sourced by the shell, so it takes **no inline comments**. Writing
-   > `PULSE_BT_MAC=""   # note` sets the variable to the comment text. Put comments on their
-   > own line.
+   > **This does not currently work from `pulse.conf` alone.** `bin/bt-autoconnect.sh` reads
+   > `PULSE_BT_MAC` from its *environment*, but it never sources `pulse.conf`, and
+   > `bt-autoconnect.service` is a **user** unit with no `EnvironmentFile`. Setting the value
+   > here is silently ignored; the script falls back to the connected device, then the first
+   > paired one. Tracked in
+   > [#272](https://github.com/weirdtangent/pulse-os/issues/272). Until that lands, a display
+   > with exactly one paired speaker needs no pin anyway.
+
+   > **Mind the quoting.** A normal trailing `# comment` after a value is fine, but an extra
+   > quote silently corrupts it: `PULSE_BT_MAC="""   # note"` parses as `""` concatenated with
+   > `"   # note"`, assigning the *comment text* as the MAC. Nothing errors. Verify an edit by
+   > sourcing the file rather than eyeballing it:
+   > `( set -a; . /opt/pulse-os/pulse.conf; set +a; echo "[$PULSE_BT_MAC]" )`
 6. **Apply the changes:**
    ```bash
    cd /opt/pulse-os

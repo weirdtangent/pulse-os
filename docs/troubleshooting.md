@@ -86,14 +86,16 @@ wired sink for you.
    must be a substring of the real sink name, and `PULSE_BLUETOOTH_AUTOCONNECT` must be
    `"false"`. An empty `PULSE_SPEAKER_SINK` disables the check entirely.
 
-4. **Restart both audio consumers:**
+4. **Restart the audio consumers:**
    ```bash
    sudo systemctl restart pulse-kiosk-mqtt
-   sudo systemctl restart pulse-snapclient
+   # Snapcast is optional — PULSE_SNAPCLIENT defaults to false, so this unit
+   # does not exist on a standard install.
+   systemctl is-enabled pulse-snapclient >/dev/null 2>&1 && sudo systemctl restart pulse-snapclient
    ```
-   Restarting only `pulse-kiosk-mqtt` is a common miss. `snapclient` runs with
-   `--soundcard default` and an already-running client keeps its stream on the *old* sink
-   rather than migrating to the new default.
+   On a Snapcast install, restarting only `pulse-kiosk-mqtt` is a common miss. `snapclient`
+   runs with `--soundcard default` and an already-running client keeps its stream on the
+   *old* sink rather than migrating to the new default.
 
 5. **Prove it end to end:**
    ```bash
@@ -131,7 +133,7 @@ See [speakers](speakers.md) for full setup.
    systemctl --user enable --now bt-autoconnect.timer
    ```
 
-4. **Speaker auto-power-off**: Many Bluetooth speakers automatically power off after a period of inactivity. PulseOS includes a keepalive mechanism that sends a silent audio signal every 2 minutes to prevent this. The keepalive runs automatically when `PULSE_BLUETOOTH_AUTOCONNECT="true"` is enabled.
+4. **Speaker auto-power-off**: Many Bluetooth speakers automatically power off after a period of inactivity. PulseOS includes a keepalive mechanism that plays an inaudible 30 Hz tone every 2 minutes to prevent this — *not* digital silence, which the speaker's DSP does not count as a signal (see the comment in `bin/bt-autoconnect.sh`). The keepalive runs automatically when `PULSE_BLUETOOTH_AUTOCONNECT="true"` is enabled.
 
 5. **If speaker is off**: Make sure the speaker is powered on. The autoconnect script will connect once the speaker is turned on and the script runs (every 15 seconds).
 
