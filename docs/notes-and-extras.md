@@ -138,7 +138,9 @@ The notification tone that plays after each volume change (and when the assistan
 This enclosure fits the Pi Touch Display 2 with a Pi 5 mounted on the back:
 <https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2#profileId-1868464>
 
-The `/models` directory also includes STL/SCAD files for the ReSpeaker stand, plate, and cover; and BoomPod cup. Mount the stand behind the display to keep the microphone array out of sight. The BoomPod can be glued down to one of the legs.
+The `/models` directory also includes STL/SCAD files for the ReSpeaker stand, plate, and cover; and a BoomPod cup. Mount the stand behind the display to keep the microphone array out of sight.
+
+The BoomPod cup is for the legacy BoomPods Zero Bluetooth pod, which can be glued to one of the legs. Current builds use a wired USB speaker instead and do not need it — see [speakers](speakers.md) for why.
 
 ---
 
