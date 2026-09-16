@@ -60,7 +60,58 @@ sudo raspi-config nonint do_boot_behaviour B2
 ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
 ```
 
+## Wired USB speaker silent, or the offline badge will not clear
+
+**Problem**: A USB speaker is plugged in but the room is silent, or the amber speaker badge
+stays up.
+
+**Solution**: PulseOS follows whatever PipeWire reports as the default sink; it never picks a
+wired sink for you.
+
+1. **Confirm the sink exists and is the default:**
+   ```bash
+   pactl list short sinks     # is the speaker listed?
+   pactl get-default-sink     # is it the default?
+   ```
+   On a display with a ReSpeaker mic array, that array also appears as a sink. If it is the
+   default, audio is going out a *microphone* at 16 kHz — telephone bandwidth. That is the
+   usual cause of "it plays, but sounds terrible".
+
+2. **Set the default** (WirePlumber persists it across reboots):
+   ```bash
+   pactl set-default-sink <full-sink-name>
+   ```
+
+3. **Check the badge is looking for the right thing.** `PULSE_SPEAKER_SINK` in `pulse.conf`
+   must be a substring of the real sink name, and `PULSE_BLUETOOTH_AUTOCONNECT` must be
+   `"false"`. An empty `PULSE_SPEAKER_SINK` disables the check entirely.
+
+4. **Restart the audio consumers:**
+   ```bash
+   sudo systemctl restart pulse-kiosk-mqtt
+   # Snapcast is optional — PULSE_SNAPCLIENT defaults to false, so this unit
+   # does not exist on a standard install.
+   systemctl is-enabled pulse-snapclient >/dev/null 2>&1 && sudo systemctl restart pulse-snapclient
+   ```
+   On a Snapcast install, restarting only `pulse-kiosk-mqtt` is a common miss. `snapclient`
+   runs with `--soundcard default` and an already-running client keeps its stream on the
+   *old* sink rather than migrating to the new default.
+
+5. **Prove it end to end:**
+   ```bash
+   paplay /usr/share/sounds/alsa/Front_Left.wav
+   ```
+   Note that `speaker-test -D pulse` does **not** work on these images — there is no ALSA
+   `pulse` PCM plugin installed, so it fails with `Unknown PCM pulse`. Use `paplay`.
+
+See [speakers](speakers.md) for full setup.
+
 ## Bluetooth speaker not connecting or auto-powering off
+
+> Bluetooth is no longer the recommended audio path — see
+> [speakers](speakers.md#why-usb-instead-of-bluetooth) for why, and note that several
+> "network" faults on these devices turn out to be BT paging starving the shared 2.4 GHz
+> radio. This section is kept for existing Bluetooth setups.
 
 **Problem**: Bluetooth speaker won't connect, or it keeps turning off after periods of inactivity.
 
@@ -82,7 +133,7 @@ ls -1 /sys/class/drm | grep DSI   # expect card0-DSI-2
    systemctl --user enable --now bt-autoconnect.timer
    ```
 
-4. **Speaker auto-power-off**: Many Bluetooth speakers automatically power off after a period of inactivity. PulseOS includes a keepalive mechanism that sends a silent audio signal every 2 minutes to prevent this. The keepalive runs automatically when `PULSE_BLUETOOTH_AUTOCONNECT="true"` is enabled.
+4. **Speaker auto-power-off**: Many Bluetooth speakers automatically power off after a period of inactivity. PulseOS includes a keepalive mechanism that plays an inaudible 30 Hz tone every 2 minutes to prevent this — *not* digital silence, which the speaker's DSP does not count as a signal (see the comment in `bin/bt-autoconnect.sh`). The keepalive runs automatically when `PULSE_BLUETOOTH_AUTOCONNECT="true"` is enabled.
 
 5. **If speaker is off**: Make sure the speaker is powered on. The autoconnect script will connect once the speaker is turned on and the script runs (every 15 seconds).
 

@@ -38,7 +38,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - Local ICS/WebCal polling with RRULE expansion for recurring events, multi-`VALARM` support, “declined” attendee detection, on-screen calendar cards, and auto-suppressed pop-ups for meetings you said “No” to.
 - Optional Wyoming voice stack (wake word, Whisper STT, Piper TTS) with shortcut intents for news/weather/sports and LLM routing between 6 providers: OpenAI, Gemini, Anthropic Claude, Groq, Mistral AI, and OpenRouter.
 - MQTT telemetry, syslog streaming, and safe-reboot guardrails for remote monitoring, plus built-in OTA-style updates triggered from Home Assistant.
-- Sunrise/sunset-aware backlight control, Bluetooth autoconnect for external speakers, and one-touch audio tests to confirm volume changes.
+- Sunrise/sunset-aware backlight control, wired-USB or Bluetooth speaker support with an offline-speaker badge, and one-touch audio tests to confirm volume changes.
 - Printable hardware accessories (mic stand, speaker cups, Pi 5 case) and ready-made scripts for kiosk recovery, calendar snapshots, and service restarts.
 
 ### How to obtain, get help, and contribute
@@ -66,6 +66,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 - [troubleshooting](docs/troubleshooting.md) — Pi 5 + Touch Display kiosk fixes (black strip, touch, autologin, etc.)
 - [notes-and-extras](docs/notes-and-extras.md) — Voice assistant tips, MQTT knobs, hardware accessories, boot splash notes, and other odds & ends
 - [public-photo-sources](docs/public-photo-sources.md) — Open-licensed image feeds (NASA, Smithsonian, Met, etc.) for `pulse-photo-card`
+- [speakers](docs/speakers.md) — Audio output: why wired USB is recommended over Bluetooth, setup for both
 - [config-reference](docs/config-reference.md) — Comprehensive `pulse.conf` option list with defaults and usage notes
 
 ### External interfaces (APIs, inputs/outputs)
@@ -77,7 +78,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 <details>
   <summary><strong>Supported hardware, recommended parts, and printable accessories</strong></summary>
 
-#### As of Nov 2025, $317 plus 3d printed parts (or buy/figure out a case) to build a single Pulse. Or choose your own components - anything that will work with Linux.
+#### As of Sep 2026, about $290 plus 3d printed parts (or buy/figure out a case) to build a single Pulse. Or choose your own components - anything that will work with Linux.
 
 ### Raspberry Pi 5 — 16GB
 * Specs: <https://www.raspberrypi.com/products/raspberry-pi-5/>
@@ -96,10 +97,18 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 * Retailer: <https://www.seeedstudio.com/ReSpeaker-Mic-Array-v3-0.html>
 * Price (11/2025): $64
 
-### BoomPod Zero mini speaker
-* Specs: <https://boompodsusa.com/products/boompods-zero-mini-wireless-bluetooth-5-pocket-size-speaker>
-* Retailer: same
-* Price (11/2025): $40
+### Adafruit Mini External USB Stereo Speaker (#3369)
+* Specs & retailer: <https://www.adafruit.com/product/3369>
+* Price (09/2026): $12.50
+* 84 × 43 × 32 mm, 74 g, 2 × 2 W. **A single USB cable carries both power and audio** — no 3.5mm jack, no battery, no pairing.
+* Any USB audio class speaker or DAC works just as well. See [speakers](docs/speakers.md).
+
+> **Why not a Bluetooth speaker?** Earlier builds used a BoomPods Zero BT pod. Bluetooth turned
+> out to be the least reliable part of the whole device: speakers auto-power-off, reconnects
+> stall for a minute at a time, a dead speaker fails *silently* (so alarms go silent with it),
+> and BT paging competes with Wi-Fi for the Pi's single 2.4 GHz radio. Wired USB removes all of
+> it and costs less. Bluetooth is still supported — see
+> [speakers](docs/speakers.md#legacy-pairing-a-bluetooth-speaker).
 
 ### Desktop Case + Pi 5 Stand
 * MakerWorld: <https://makerworld.com/en/models/789481-desktop-case-for-raspberry-pi-7-touch-display-2>
@@ -107,7 +116,7 @@ Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assi
 ### 3d Print Models (see models/ directory)
 * ReSpeaker Mic Array Plate (which I glue to the Pi case cover)
 * ReSpeaker Mic Array Cover
-* BoomPod Zero Cup (which I glue to one of the display leg stands - or both for two pods!)
+* BoomPod Zero Cup — for the legacy BoomPods Zero BT pod; glue it to one of the display leg stands. Not needed for the USB speaker, which sits on its own base.
 </details>
 
 ---

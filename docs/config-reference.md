@@ -236,10 +236,10 @@ listening off and is not a mute.
 | `PULSE_TWILIGHT_MODE` | `OFFICIAL` | Twilight definition (`OFFICIAL`, `CIVIL`, `NAUTICAL`, `ASTRONOMICAL`). |
 | `PULSE_BACKLIGHT_DEVICE` | `/sys/class/backlight/11-0045` | Backlight device path (auto-detect if unset). |
 | `PULSE_VOLUME_TEST_SOUND` | `true` | Plays a short “thump” after MQTT volume changes. |
-| `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. |
+| `PULSE_BLUETOOTH_AUTOCONNECT` | `true` | Reconnects to the last paired Bluetooth speaker and sends keepalives. Set `false` when using a wired USB speaker, which is the recommended setup — see [speakers](speakers.md). |
 | `PULSE_BT_MAC` | *(empty)* | Optional explicit Bluetooth MAC to target. |
 | `PULSE_SPEAKER_ALERT` | `true` | Shows a notification-bar badge while the configured speaker is unreachable. |
-| `PULSE_SPEAKER_SINK` | *(empty)* | Substring of the expected wired sink name (`pactl list sinks short`) to watch on non-Bluetooth displays. |
+| `PULSE_SPEAKER_SINK` | *(empty)* | Substring of the expected wired sink name (`pactl list sinks short`) to watch on non-Bluetooth displays, e.g. `Jieli` or `C-Media`. Required for the offline badge to work on a wired display. |
 | `PULSE_SPEAKER_INTERVAL` | `60` | Seconds between speaker reachability checks (minimum 15). |
 | `PULSE_NETWORK_PILL` | `true` | Shows the always-on WiFi/Ethernet pill at the far left of the notification bar. |
 | `PULSE_NETWORK_INTERVAL` | `30` | Seconds between connectivity readings (minimum 10). |
@@ -314,20 +314,29 @@ driver. A probe that cannot run reports "unknown" and renders nothing, never a h
 ### Speaker-offline badge
 
 A speaker that has been switched off or unplugged fails silently — playback "succeeds",
-snapclient stays connected, and the only evidence is bluetoothd retrying in the journal
-(`avdtp_connect_cb() connect to …: Host is down (112)`). `PULSE_SPEAKER_ALERT` surfaces that
+snapclient stays connected, and nothing surfaces the fault. `PULSE_SPEAKER_ALERT` surfaces it
 as an amber badge at the front of the notification bar, ahead of the alarm badges, because a
 silent speaker also means a silent alarm.
 
-Which speaker is watched follows the same rules `bin/bt-autoconnect.sh` uses, so the badge and
-the reconnect loop can't disagree:
+Which speaker is watched:
 
-- `PULSE_BLUETOOTH_AUTOCONNECT="true"` (the default) → `PULSE_BT_MAC` if set, otherwise the
-  connected device, otherwise the first paired one.
-- `PULSE_BLUETOOTH_AUTOCONNECT="false"` → the wired check, and only if `PULSE_SPEAKER_SINK` is set.
+- `PULSE_BLUETOOTH_AUTOCONNECT="false"` (**recommended**, wired USB) → the wired check, and
+  only if `PULSE_SPEAKER_SINK` is set. The named sink vanishing from `pactl list sinks short`
+  is the signal.
+- `PULSE_BLUETOOTH_AUTOCONNECT="true"` → `PULSE_BT_MAC` if set, otherwise the connected device,
+  otherwise the first paired one. This mirrors `bin/bt-autoconnect.sh` exactly, so the badge
+  and the reconnect loop can't disagree about which speaker a room owns. The corroborating
+  evidence in the journal is bluetoothd retrying
+  (`avdtp_connect_cb() connect to …: Host is down (112)`).
+
+The wired check is the more trustworthy of the two, and is one of several reasons
+[speakers](speakers.md) recommends USB over Bluetooth.
 
 Displays with neither configured are never checked, so stale pairings left over from a
-re-purposed display can't produce a badge that never clears. The badge needs two consecutive
+re-purposed display can't produce a badge that never clears. Note this only holds once
+autoconnect is off: with the default `PULSE_BLUETOOTH_AUTOCONNECT="true"` and no
+`PULSE_BT_MAC`, `resolve_bt_mac()` still falls back to the first paired device, so a stale
+pairing *is* treated as the watched speaker and can raise the badge. The badge needs two consecutive
 failed checks to appear (riding out the A2DP renegotiation blips and the post-reboot
 autoconnect window) and clears on the first successful one.
 
