@@ -173,13 +173,9 @@ Commands assume you are the `pulse` user on the device.
    ```bash
    PULSE_BT_MAC="XX:XX:XX:XX:XX:XX"
    ```
-   > **This does not currently work from `pulse.conf` alone.** `bin/bt-autoconnect.sh` reads
-   > `PULSE_BT_MAC` from its *environment*, but it never sources `pulse.conf`, and
-   > `bt-autoconnect.service` is a **user** unit with no `EnvironmentFile`. Setting the value
-   > here is silently ignored; the script falls back to the connected device, then the first
-   > paired one. Tracked in
-   > [#272](https://github.com/weirdtangent/pulse-os/issues/272). Until that lands, a display
-   > with exactly one paired speaker needs no pin anyway.
+   > An exported `PULSE_BT_MAC` overrides the `pulse.conf` value, which is the quickest way
+   > to try a different speaker without editing anything:
+   > `PULSE_BT_MAC="XX:XX:XX:XX:XX:XX" /home/pulse/bin/bt-autoconnect.sh`
 
    > **Mind the quoting.** A normal trailing `# comment` after a value is fine, but an extra
    > quote silently corrupts it: `PULSE_BT_MAC="""   # note"` parses as `""` concatenated with

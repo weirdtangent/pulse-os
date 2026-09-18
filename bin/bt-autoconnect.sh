@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bluetooth device MAC address (can be set via PULSE_BT_MAC env var or pulse.conf)
-# If not set, script will attempt to find the first connected Bluetooth audio device
-MAC="${PULSE_BT_MAC:-}"
+# PULSE_BT_MAC is documented to live in pulse.conf, but this script runs from
+# bt-autoconnect.service -- a *user* unit with no EnvironmentFile= -- so nothing else
+# puts the conf into our environment. Without this, a pin set in pulse.conf was
+# silently ignored and we fell through to "first paired device", which is precisely
+# the case the pin exists to override.
+#
+# An explicitly exported PULSE_BT_MAC still wins over the conf, so a hand-run
+# override while debugging is not discarded the same silent way.
+PULSE_BT_MAC_ENV="${PULSE_BT_MAC:-}"
+if [ -f /opt/pulse-os/pulse.conf ]; then
+  # Deliberately *not* `set -a` here, unlike kiosk-mqtt-wrapper.sh. That wrapper
+  # exports because the Python it launches reads MQTT_* / HOME_ASSISTANT_* from the
+  # environment. This script needs exactly one value, and pulse.conf also holds API
+  # keys and tokens -- exporting them would hand every credential to the bluetoothctl
+  # and pw-play children for no reason.
+  # shellcheck disable=SC1091
+  source /opt/pulse-os/pulse.conf
+fi
+
+# Bluetooth device MAC address. If not set, the script attempts the connected
+# Bluetooth audio device, then the first paired one.
+MAC="${PULSE_BT_MAC_ENV:-${PULSE_BT_MAC:-}}"
 BOOT_SOUND="/opt/pulse-os/sounds/pulse-revived.wav"
 FLAG="/run/user/$(id -u)/pulse-boot-sound-played"
 KEEPALIVE_SOUND="/tmp/pulse-bt-keepalive-v2.wav"
