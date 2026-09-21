@@ -113,6 +113,24 @@ async def test_compare_needs_two_devices(call):
     assert "Need at least 2 devices" in out
 
 
+async def test_compare_rejects_a_host_outside_the_allowlist(call, ssh):
+    """The explicit list is caller-supplied, so it gets the same check as
+    every other tool — it is otherwise the one way to make the server SSH to
+    an unconfigured host."""
+    out = await call("compare_configs", devices="pulse-attic,pulse-office")
+
+    assert "Unknown device 'pulse-attic'" in out
+    assert ssh.calls == []
+
+
+async def test_compare_rejects_an_unknown_host_listed_last(call, ssh):
+    """Validation covers the whole list, not just the first entry."""
+    out = await call("compare_configs", devices="pulse-office,pulse-attic")
+
+    assert "Unknown device 'pulse-attic'" in out
+    assert ssh.calls == []
+
+
 def _per_host(host: str) -> str:
     return OFFICE_CONF if host == "pulse-office" else KITCHEN_CONF
 

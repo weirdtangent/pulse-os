@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 
-import config as config_module
-from config import load_config, mask_secrets
+# Imported as a module (not `from config import ...`) so the search-path patch
+# below and the calls here refer to the same object — CodeQL flags mixing the
+# two import forms for one module.
+import config
 
 
 def _write_conf(tmp_path, payload: dict) -> str:
@@ -28,7 +30,7 @@ def test_env_path_wins(tmp_path, monkeypatch):
             },
         ),
     )
-    cfg = load_config()
+    cfg = config.load_config()
 
     assert cfg.ssh.user == "someone"
     assert cfg.ssh.timeout == 42
@@ -46,7 +48,7 @@ def test_missing_env_path_falls_back_to_defaults(tmp_path, monkeypatch):
     depends on whether a pulse-devices.conf is checked out beside the server.
     """
     monkeypatch.setenv("PULSE_MCP_CONFIG", str(tmp_path / "nope.conf"))
-    cfg = load_config()
+    cfg = config.load_config()
 
     assert cfg.ssh.user == "pulse"
     assert cfg.ssh.key_path == "~/.ssh/id_ed25519"
@@ -60,7 +62,7 @@ def test_unknown_keys_are_ignored(tmp_path, monkeypatch):
         "PULSE_MCP_CONFIG",
         _write_conf(tmp_path, {"ssh": {"user": "pulse", "nonsense": "x"}, "devices_file": ""}),
     )
-    cfg = load_config()
+    cfg = config.load_config()
 
     assert not hasattr(cfg.ssh, "nonsense")
 
@@ -82,7 +84,7 @@ def test_devices_file_merges_without_duplicates(tmp_path, monkeypatch):
         "PULSE_MCP_CONFIG",
         _write_conf(tmp_path, {"devices": ["pulse-office", "pulse-kitchen"], "devices_file": "pulse-devices.conf"}),
     )
-    cfg = load_config()
+    cfg = config.load_config()
 
     # json order preserved, file entries appended, no duplicate kitchen,
     # comments and blank lines dropped, whitespace stripped.
@@ -95,7 +97,7 @@ def test_devices_file_resolves_next_to_the_config(tmp_path, monkeypatch):
     monkeypatch.setenv("PULSE_MCP_CONFIG", _write_conf(tmp_path, {"devices_file": "devices.txt"}))
     monkeypatch.chdir(tmp_path.parent)
 
-    assert load_config().devices == ["pulse-great-room"]
+    assert config.load_config().devices == ["pulse-great-room"]
 
 
 def test_missing_devices_file_is_not_fatal(tmp_path, monkeypatch):
@@ -104,21 +106,21 @@ def test_missing_devices_file_is_not_fatal(tmp_path, monkeypatch):
         _write_conf(tmp_path, {"devices": ["pulse-office"], "devices_file": "absent.conf"}),
     )
 
-    assert load_config().devices == ["pulse-office"]
+    assert config.load_config().devices == ["pulse-office"]
 
 
 def test_search_paths_are_used_when_no_env_var(tmp_path, monkeypatch):
     found = tmp_path / "pulse-mcp.conf"
     found.write_text(json.dumps({"devices": ["pulse-office"], "devices_file": ""}))
     monkeypatch.delenv("PULSE_MCP_CONFIG", raising=False)
-    monkeypatch.setattr(config_module, "_CONFIG_SEARCH_PATHS", [found])
+    monkeypatch.setattr(config, "_CONFIG_SEARCH_PATHS", [found])
 
-    assert load_config().devices == ["pulse-office"]
+    assert config.load_config().devices == ["pulse-office"]
 
 
 class TestMaskSecrets:
     def test_masks_by_name_regardless_of_case(self):
-        masked = mask_secrets(
+        masked = config.mask_secrets(
             {
                 "HOME_ASSISTANT_TOKEN": "abc123",
                 "mqtt_password": "hunter2",
@@ -131,10 +133,10 @@ class TestMaskSecrets:
         assert set(masked.values()) == {"***"}
 
     def test_leaves_ordinary_values_alone(self):
-        masked = mask_secrets({"MQTT_HOST": "broker.local", "PULSE_NAME": "Kitchen"})
+        masked = config.mask_secrets({"MQTT_HOST": "broker.local", "PULSE_NAME": "Kitchen"})
 
         assert masked == {"MQTT_HOST": "broker.local", "PULSE_NAME": "Kitchen"}
 
     def test_empty_secret_is_not_masked(self):
         """An unset token should read as unset, not as though it had a value."""
-        assert mask_secrets({"HOME_ASSISTANT_TOKEN": ""}) == {"HOME_ASSISTANT_TOKEN": ""}
+        assert config.mask_secrets({"HOME_ASSISTANT_TOKEN": ""}) == {"HOME_ASSISTANT_TOKEN": ""}
