@@ -7,7 +7,7 @@ import logging
 import sys
 
 from config import load_config
-from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
+from mcp.server.mcpserver import MCPServer  # type: ignore[import-not-found]
 from ssh import PulseSSH
 
 # All logging to stderr (stdout is reserved for JSON-RPC in STDIO transport)
@@ -22,8 +22,8 @@ logger = logging.getLogger("pulse-mcp")
 config = load_config()
 ssh = PulseSSH(config.ssh)
 
-# Create the FastMCP server
-mcp = FastMCP("pulse-os")
+# Create the MCP server
+mcp = MCPServer("pulse-os")
 
 # Register tools from each module — passing shared dependencies
 from tools.config_tools import _register as _reg_config  # noqa: E402

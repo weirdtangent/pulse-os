@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "MCP server for Pulse OS device diagnostics"
 requires-python = ">=3.13"
 dependencies = [
-    "mcp[cli]>=1.2.0",
+    "mcp[cli]>=2.2.0",
     "asyncssh>=2.23.0",
 ]
 
