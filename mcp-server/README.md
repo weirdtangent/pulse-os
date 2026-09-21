@@ -94,6 +94,28 @@ Ask Claude: "list my pulse devices" — it should SSH into each device and repor
 | `check_connectivity` | SSH, service states, MQTT broker, recent error count |
 | `restart_service` | Restart a Pulse service (allowlisted names only) |
 
+## Tests
+
+```bash
+uv run --directory mcp-server --frozen --dev pytest    # from the repo root
+uv run --frozen --dev pytest                           # from mcp-server/
+```
+
+This is a separate uv project with its own lockfile, so the repo-root `uv run
+pytest` does not reach it — CI runs it as its own step in `build.yaml`.
+
+No test talks to a real device: `tests/conftest.py` swaps in a `FakeSSH` that
+records the commands a tool builds and replays canned output, so the suite
+covers both the command (quoting, clamping, unit names, the restart allowlist)
+and how the result is rendered.
+
+`tests/test_server_wiring.py` is the SDK guard. It imports `server.py` for
+real and asserts all 11 tools register, which is what catches a breaking SDK
+release — the v1 → v2 upgrade renamed `FastMCP` to `MCPServer` and moved it out
+of `mcp.server.fastmcp`, so a lockfile refresh alone turned `import server`
+into a `ModuleNotFoundError`. Adding or removing a tool means updating
+`EXPECTED_TOOLS` there on purpose.
+
 ## Example Queries
 
 - "Show me the last hour of assistant errors on pulse-kitchen"

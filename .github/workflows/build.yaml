@@ -135,6 +135,13 @@ jobs:
         if: needs.changes.outputs.python == 'true'
         run: uv run pytest tests/ -v --tb=short
 
+      # mcp-server is a separate uv project with its own lockfile and its own
+      # test suite, so it needs its own sync and run — the root `uv run pytest`
+      # above never sees it.
+      - name: Run mcp-server tests
+        if: needs.changes.outputs.python == 'true'
+        run: uv run --directory mcp-server --frozen --dev pytest
+
       - name: Security audit dependencies
         if: needs.changes.outputs.python == 'true'
         run: uv run pip-audit --desc --skip-editable --ignore-vuln CVE-2026-25645 --ignore-vuln GHSA-58qw-9mgm-455v  # requests 2.32.5 + pip 26.0, no fix available
