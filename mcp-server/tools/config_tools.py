@@ -101,6 +101,13 @@ def _register(mcp, ssh, config):
         """
         device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else config.devices
 
+        # An explicit list is caller-supplied, so it goes through the same
+        # allowlist as every other tool — otherwise this is the one way to make
+        # the server open an SSH connection to an unconfigured host.
+        for hostname in device_list:
+            if err := validate_device(hostname, config):
+                return err
+
         if len(device_list) < 2:
             return "Need at least 2 devices to compare. Configure devices in pulse-devices.conf."
 

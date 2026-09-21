@@ -135,9 +135,26 @@ jobs:
         if: needs.changes.outputs.python == 'true'
         run: uv run pytest tests/ -v --tb=short
 
+      # mcp-server is a separate uv project with its own lockfile and its own
+      # test suite, so it needs its own sync and run — the root `uv run pytest`
+      # above never sees it.
+      - name: Run mcp-server tests
+        if: needs.changes.outputs.python == 'true'
+        run: uv run --directory mcp-server --frozen --dev pytest
+
       - name: Security audit dependencies
         if: needs.changes.outputs.python == 'true'
         run: uv run pip-audit --desc --skip-editable --ignore-vuln CVE-2026-25645 --ignore-vuln GHSA-58qw-9mgm-455v  # requests 2.32.5 + pip 26.0, no fix available
+
+      # The audit above only sees the root project's environment, so mcp-server's
+      # ~127 packages went unaudited in CI. Export its lockfile and run the root
+      # project's pip-audit against that, rather than adding pip-audit to
+      # mcp-server's own dev group.
+      - name: Security audit mcp-server dependencies
+        if: needs.changes.outputs.python == 'true'
+        run: |
+          uv export --directory mcp-server --frozen --no-emit-project --no-hashes > "$RUNNER_TEMP/mcp-requirements.txt"
+          uv run pip-audit -r "$RUNNER_TEMP/mcp-requirements.txt" --desc
 
   # Gate job that always runs - use this as the required status check
   ci:

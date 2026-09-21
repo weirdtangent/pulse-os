@@ -17,3 +17,19 @@ py-modules = ["server", "config", "ssh"]
 
 [tool.setuptools.packages.find]
 include = ["tools", "tools.*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+# server.py, config.py and ssh.py are top-level modules here, not a package,
+# so tests import them the same way server.py does.
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
