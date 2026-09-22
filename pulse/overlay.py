@@ -771,7 +771,6 @@ ICON_MAP = {
     "alarm": "&#128276;",  # 🔔
     "alarm_ringing": "&#128276;",
     "timer": "&#9201;",
-    "music": "&#9835;",
     "reminder": "&#128221;",
     "calendar": "&#128197;",
     "earmuffs": "&#127911;",  # 🎧
@@ -1841,8 +1840,6 @@ def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> s
         count = len(calendar_events)
         label = f"{count} calendar event{'s' if count != 1 else ''}"
         badges.append(_render_badge("calendar", label))
-    if snapshot.now_playing.strip():
-        badges.append(_render_badge("music", "Now playing"))
     if snapshot.update_available:
         badges.append(_render_badge("update", "Update available"))
     if theme.show_ticker:

@@ -524,7 +524,10 @@ class OverlayRenderTests(unittest.TestCase):
         snapshot = self._snapshot(alarms=alarms, timers=timers, now_playing="Artist — Title")
         html = render_overlay_html(snapshot, self.theme)
         self.assertIn("overlay-notification-bar", html)
-        self.assertIn("Now playing", html)
+        self.assertIn("1 alarm", html)
+        self.assertIn("1 timer", html)
+        # Now Playing lives in its own card; the bar doesn't repeat it.
+        self.assertNotIn("Now playing", html)
 
     def test_parse_clock_config_inserts_local_by_default(self) -> None:
         clocks = parse_clock_config("America/Chicago=HQ", default_label="Home", log=None)
