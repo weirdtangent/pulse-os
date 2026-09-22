@@ -1903,3 +1903,77 @@ body {
   opacity: 0.55;
   font-size: 0.78em;
 }
+
+/* --- Sleep mode ---------------------------------------------------------------
+   A wall-clock window (PULSE_SLEEP_START/END) during which the overlay stops being a
+   transparent layer over the photos and becomes the whole screen: opaque black, one
+   large dim clock, nothing else. The photos underneath are the actual light source in
+   a dark room, so covering them is what buys the darkness -- the clock colour is the
+   smaller half of the effect.
+
+   overlay.js owns the class; see the sleep block there for the window maths, the
+   breakthrough hold, and tap-to-wake. */
+.overlay-sleep {
+  display: none;
+}
+
+/* .overlay-root is `transparent !important` so the photo card shows through, which has
+   to be beaten deliberately rather than by specificity alone. The root is 100% of a
+   100vw/100vh body with no margin, so painting it opaque covers the viewport -- html
+   and body can stay transparent underneath. */
+.overlay-root--sleep {
+  background: #000000 !important;
+}
+
+.overlay-root--sleep .overlay-grid,
+.overlay-root--sleep .overlay-notification-bar,
+.overlay-root--sleep .pulse-ticker,
+.overlay-root--sleep .overlay-weather-banner-rotator {
+  display: none !important;
+}
+
+.overlay-root--sleep .overlay-sleep {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5vh;
+  color: var(--overlay-sleep-color, #b03030);
+  /* No text-shadow, unlike the day clock: there is nothing behind it to separate from,
+     and a glow on a dark panel just smears. */
+  text-shadow: none;
+}
+
+.overlay-sleep__time {
+  font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
+  /* Roughly double the day clock. The ceiling is what keeps "12:00" off the bezels on
+     a 1280x720 kiosk; the vw term is what makes it fill a larger panel. */
+  font-size: clamp(6rem, 22vw, 18rem);
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.overlay-sleep__date {
+  font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
+  font-size: clamp(1.2rem, 3.2vw, 2.6rem);
+  font-weight: 400;
+  /* Dimmer than the time on purpose -- at 3am the time is the only thing being read,
+     and the date is there for the times you wake up genuinely unsure which day it is. */
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.overlay-sleep__alarm {
+  font-size: clamp(1rem, 2.4vw, 2rem);
+  font-weight: 400;
+  opacity: 0.45;
+  white-space: nowrap;
+}
+
+/* The first tap during the sleep window only wakes the screen; it must not also land
+   on whatever card happens to be under the finger. */
+.overlay-root--sleep {
+  cursor: none;
+}

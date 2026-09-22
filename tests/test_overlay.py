@@ -23,8 +23,10 @@ from pulse.overlay import (
     _get_library_versions,
     _theme_css,
     parse_clock_config,
+    parse_sleep_time,
     render_overlay_html,
     resolve_clock_date_format,
+    sleep_window,
 )
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 from pulse.weather_alerts import BANNER_ALWAYS
@@ -2030,3 +2032,202 @@ class ClockDateFitTests(unittest.TestCase):
         sizes += [self._clamp_max_rem(self._rule_body(f".{name}")) for name in self._fit_classes()]
         self.assertEqual(sizes, sorted(sizes, reverse=True))
         self.assertEqual(len(set(sizes)), len(sizes), "two steps render at the same size")
+
+
+class SleepModeTests(unittest.TestCase):
+    """Sleep mode: a wall-clock window where the overlay is a black screen with a clock."""
+
+    def _theme(self, **overrides) -> OverlayTheme:
+        data = {
+            "ambient_background": "rgba(0,0,0,0.32)",
+            "alert_background": "rgba(0,0,0,0.65)",
+            "text_color": "#FFFFFF",
+            "accent_color": "#88C0D0",
+            "sleep_start": "20:00",
+            "sleep_end": "07:00",
+        }
+        data.update(overrides)
+        return OverlayTheme(**data)  # type: ignore[arg-type]
+
+    def _snapshot(self, **overrides) -> OverlaySnapshot:
+        data = {
+            "version": 1,
+            "clocks": (ClockConfig("clock0", "Local", None),),
+            "now_playing": "",
+            "now_playing_state": "",
+            "now_playing_image": "",
+            "timers": (),
+            "alarms": (),
+            "reminders": (),
+            "calendar_events": (),
+            "active_alarm": None,
+            "active_timer": None,
+            "active_reminder": None,
+            "notifications": (),
+            "timer_positions": {},
+            "info_card": None,
+            "last_reason": "test",
+            "generated_at": 0.0,
+            "schedule_snapshot": None,
+            "earmuffs_enabled": False,
+            "update_available": False,
+        }
+        data.update(overrides)
+        return OverlaySnapshot(**data)  # type: ignore[arg-type]
+
+    def _body(self, html: str) -> str:
+        """Markup only. The stylesheet and script are inlined into every document, and
+        both mention every sleep class and attribute, so a whole-document assertNotIn
+        passes or fails on the CSS rather than on what was rendered."""
+        return html.split("</head>", 1)[1].split("<script>", 1)[0]
+
+    def test_parse_sleep_time_accepts_the_shapes_people_type(self) -> None:
+        self.assertEqual(parse_sleep_time("20:00"), 20 * 60)
+        self.assertEqual(parse_sleep_time("7:05"), 7 * 60 + 5)
+        self.assertEqual(parse_sleep_time("20.00"), 20 * 60)
+        self.assertEqual(parse_sleep_time(" 06:30 "), 6 * 60 + 30)
+        self.assertEqual(parse_sleep_time("00:00"), 0)
+
+    def test_parse_sleep_time_rejects_nonsense(self) -> None:
+        for bad in ("", None, "8pm", "24:00", "20:60", "-1:00", "20", "20:00:00"):
+            self.assertIsNone(parse_sleep_time(bad), bad)
+
+    def test_window_off_unless_both_ends_are_usable(self) -> None:
+        self.assertEqual(sleep_window(self._theme()), (20 * 60, 7 * 60))
+        self.assertIsNone(sleep_window(self._theme(sleep_start="")))
+        self.assertIsNone(sleep_window(self._theme(sleep_end="")))
+        self.assertIsNone(sleep_window(self._theme(sleep_start="nope")))
+
+    def test_equal_ends_are_treated_as_unconfigured(self) -> None:
+        """A 24-hour black screen is never what someone meant to type, and a kiosk that
+        blanks forever with no way back is expensive to debug on a wall."""
+        self.assertIsNone(sleep_window(self._theme(sleep_start="20:00", sleep_end="20:00")))
+
+    def test_unconfigured_renders_no_sleep_markup_at_all(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(), self._theme(sleep_start="")))
+        self.assertNotIn("overlay-sleep", body)
+        self.assertNotIn("data-sleep-start", body)
+
+    def test_configured_emits_the_window_as_minutes(self) -> None:
+        html = render_overlay_html(self._snapshot(), self._theme())
+        self.assertIn('data-sleep-start="1200"', html)
+        self.assertIn('data-sleep-end="420"', html)
+        self.assertIn('data-sleep-wake-seconds="60"', html)
+        self.assertIn('class="overlay-sleep"', html)
+
+    def test_sleep_clock_reuses_the_shared_clock_tick(self) -> None:
+        """data-clock is what overlay.js drives; a second clock implementation would be
+        one more thing to keep in step with the first."""
+        html = render_overlay_html(self._snapshot(), self._theme())
+        block = html.split('class="overlay-sleep"', 1)[1].split("</div>\n</div>", 1)[0]
+        self.assertIn("data-clock", block)
+        self.assertIn("data-clock-time", block)
+        self.assertIn("data-clock-date", block)
+
+    def test_next_alarm_is_shown_and_only_the_next_one(self) -> None:
+        soon = (datetime.now(UTC) + timedelta(hours=9)).isoformat()
+        later = (datetime.now(UTC) + timedelta(hours=11)).isoformat()
+        alarms = (
+            {"id": "b", "label": "Later", "next_fire": later, "time_of_day": "08:30"},
+            {"id": "a", "label": "Wake", "next_fire": soon, "time_of_day": "06:30"},
+        )
+        html = render_overlay_html(self._snapshot(alarms=alarms), self._theme())
+        block = html.split('class="overlay-sleep"', 1)[1]
+        self.assertIn("6:30 AM", block)
+        self.assertNotIn("8:30 AM", block)
+
+    def test_next_alarm_follows_the_24h_clock_setting(self) -> None:
+        soon = (datetime.now(UTC) + timedelta(hours=9)).isoformat()
+        alarms = ({"id": "a", "label": "Wake", "next_fire": soon, "time_of_day": "06:30"},)
+        html = render_overlay_html(self._snapshot(alarms=alarms), self._theme(), clock_hour12=False)
+        block = html.split('class="overlay-sleep"', 1)[1]
+        self.assertIn("06:30", block)
+        self.assertNotIn("AM", block)
+
+    def test_next_alarm_line_avoids_colour_emoji(self) -> None:
+        """The bar's bell emoji renders in full colour, which is a bright spot on a
+        screen whose entire job is to not be bright."""
+        soon = (datetime.now(UTC) + timedelta(hours=9)).isoformat()
+        alarms = ({"id": "a", "label": "Wake", "next_fire": soon, "time_of_day": "06:30"},)
+        block = self._body(render_overlay_html(self._snapshot(alarms=alarms), self._theme()))
+        block = block.split('class="overlay-sleep"', 1)[1]
+        self.assertIn("Alarm 6:30 AM", block)
+        self.assertNotIn("&#9200;", block)
+
+    def test_no_alarm_line_when_nothing_is_scheduled(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(), self._theme()))
+        self.assertNotIn("overlay-sleep__alarm", body)
+
+    def test_ringing_alarm_holds_the_screen_awake(self) -> None:
+        snapshot = self._snapshot(active_alarm={"id": "a", "label": "Wake"})
+        html = render_overlay_html(snapshot, self._theme())
+        self.assertIn('data-sleep-hold="alarm"', html)
+
+    def test_running_timer_holds_the_screen_awake(self) -> None:
+        target = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+        snapshot = self._snapshot(timers=({"id": "t", "label": "Tea", "next_fire": target},))
+        html = render_overlay_html(snapshot, self._theme())
+        self.assertIn('data-sleep-hold="timer"', html)
+
+    def test_weather_alert_holds_the_screen_awake(self) -> None:
+        """The one alert where waking someone is the entire point of the feature."""
+        alerts = ({"id": "w", "event": "Tornado Warning", "tier": "warning"},)
+        snapshot = self._snapshot(weather_alerts=alerts)
+        html = render_overlay_html(snapshot, self._theme())
+        self.assertIn('data-sleep-hold="weather"', html)
+
+    def test_quiet_night_has_no_hold(self) -> None:
+        body = self._body(render_overlay_html(self._snapshot(), self._theme()))
+        self.assertNotIn("data-sleep-hold", body)
+
+    def test_sleep_colour_reaches_the_theme_block(self) -> None:
+        css = _theme_css(self._theme(sleep_color="#7a1f1f"))
+        self.assertIn("--overlay-sleep-color: #7a1f1f;", css)
+
+    def test_blank_sleep_colour_falls_back_to_the_default(self) -> None:
+        css = _theme_css(self._theme(sleep_color=""))
+        self.assertIn("--overlay-sleep-color: #B03030;", css)
+
+    def test_wake_seconds_of_zero_is_emitted_not_dropped(self) -> None:
+        """0 is the 'nothing I do at night lights the room' setting, so it must survive
+        the trip to the browser rather than look like an unset attribute."""
+        html = render_overlay_html(self._snapshot(), self._theme(sleep_wake_seconds=0))
+        self.assertIn('data-sleep-wake-seconds="0"', html)
+
+    def test_js_handles_a_window_that_wraps_past_midnight(self) -> None:
+        """20:00-07:00 is the normal bedtime shape; a plain range test gets it backwards."""
+        block = OVERLAY_JS.split("const inSleepWindow", 1)[1].split("};", 1)[0]
+        self.assertIn("sleepStart < sleepEnd", block)
+        self.assertIn("minutes >= sleepStart || minutes < sleepEnd", block)
+
+    def test_js_respects_the_server_hold(self) -> None:
+        block = OVERLAY_JS.split("const applySleep", 1)[1].split("};", 1)[0]
+        self.assertIn("sleepHold", block)
+        self.assertIn("!held", block)
+
+    def test_js_wake_state_survives_reinitialization(self) -> None:
+        """The photo card swaps the overlay markup out periodically; a wake kept in a
+        local would drop the screen back to black mid-glance."""
+        self.assertIn("window.PulseOverlay.sleepWakeUntil", OVERLAY_JS)
+        init_block = OVERLAY_JS.split("PulseOverlay.initialize = function", 1)[0]
+        self.assertIn("sleepWakeUntil", init_block)
+
+    def test_js_sleep_tap_listener_is_cleaned_up_with_matching_capture_flag(self) -> None:
+        """removeEventListener only matches when the capture flag matches, so a mismatch
+        leaves one listener per refresh behind."""
+        self.assertIn("root.addEventListener('pointerdown', sleepTapHandler, true)", OVERLAY_JS)
+        self.assertIn("oldRoot.removeEventListener('pointerdown', sleepTapHandler, true)", OVERLAY_JS)
+        registry = OVERLAY_JS.split("PulseOverlay.eventHandlers = {", 1)[1].split("}", 1)[0]
+        self.assertIn("sleepTapHandler", registry)
+
+    def test_css_covers_the_photos_rather_than_tinting_them(self) -> None:
+        """The photos underneath are the actual light source; a translucent scrim would
+        leave the room lit no matter what colour the clock is."""
+        block = OVERLAY_CSS.split(".overlay-root--sleep {", 1)[1].split("}", 1)[0]
+        self.assertIn("#000000", block)
+        self.assertIn("!important", block)
+
+    def test_css_hides_every_other_overlay_surface(self) -> None:
+        selectors = OVERLAY_CSS.split(".overlay-root--sleep .overlay-grid,", 1)[1].split("{", 1)[0]
+        for hidden in ("overlay-notification-bar", "pulse-ticker"):
+            self.assertIn(hidden, selectors)

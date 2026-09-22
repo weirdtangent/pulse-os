@@ -28,6 +28,8 @@ from pulse.mqtt_discovery import build_button_entity, build_number_entity, build
 from pulse.network import check_network, status_payload
 from pulse.overlay import (
     DEFAULT_FONT_STACK,
+    DEFAULT_SLEEP_COLOR,
+    DEFAULT_SLEEP_WAKE_SECONDS,
     ClockConfig,
     OverlayChange,
     OverlayStateManager,
@@ -95,6 +97,19 @@ class AssistantTopics:
     available: str
 
 
+def _parse_sleep_wake_seconds(raw: str | None) -> int:
+    """Seconds a tap holds the overlay awake during the sleep window.
+
+    0 disables tap-to-wake. Anything else is floored at 5s: a mistyped 1 would put the
+    screen back to black before a hand finished moving, which reads as a broken kiosk
+    rather than as a short timeout.
+    """
+    seconds = parse_int(raw, DEFAULT_SLEEP_WAKE_SECONDS)
+    if seconds <= 0:
+        return 0
+    return max(5, seconds)
+
+
 @dataclass(frozen=True)
 class OverlayConfig:
     enabled: bool
@@ -147,6 +162,12 @@ class OverlayConfig:
     speaker_sink: str  # substring of the expected wired sink; empty disables that check
     network_pill: bool  # show the always-on WiFi/Ethernet pill at the left of the bar
     network_interval: int  # seconds between connectivity readings
+    # Sleep mode: "HH:MM" wall-clock window where the overlay goes black with a large
+    # dim clock. Either end empty disables it.
+    sleep_start: str
+    sleep_end: str
+    sleep_color: str
+    sleep_wake_seconds: int  # seconds a tap restores the normal overlay; 0 = no wake
 
 
 @dataclass(frozen=True)
@@ -594,6 +615,11 @@ def load_config() -> EnvConfig:
         weather_alerts_sound_id=(os.environ.get("PULSE_SOUND_WEATHER_ALERT") or "notify-two-tone").strip(),
         weather_alerts_latitude=resolved.latitude if resolved else None,
         weather_alerts_longitude=resolved.longitude if resolved else None,
+        sleep_start=(os.environ.get("PULSE_SLEEP_START") or "").strip(),
+        sleep_end=(os.environ.get("PULSE_SLEEP_END") or "").strip(),
+        sleep_color=(os.environ.get("PULSE_SLEEP_COLOR") or "").strip() or DEFAULT_SLEEP_COLOR,
+        # Floor of 5s so a mistyped 1 can't make the wake useless; 0 still disables.
+        sleep_wake_seconds=_parse_sleep_wake_seconds(os.environ.get("PULSE_SLEEP_WAKE_SECONDS")),
         speaker_alert=parse_bool(os.environ.get("PULSE_SPEAKER_ALERT"), True),
         # Floor of 15s matches the bt-autoconnect timer cadence; polling faster than the
         # thing doing the reconnecting only burns CPU on a Pi.
@@ -1711,6 +1737,10 @@ class KioskMqttListener:
             ticker_label_mode=self.overlay_config.ticker_label_mode,
             weather_alert_banner_minutes=self.overlay_config.weather_alerts_banner_minutes,
             weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
+            sleep_start=self.overlay_config.sleep_start,
+            sleep_end=self.overlay_config.sleep_end,
+            sleep_color=self.overlay_config.sleep_color,
+            sleep_wake_seconds=self.overlay_config.sleep_wake_seconds,
         )
 
     def _apply_overlay_font_choice(self, reason: str) -> None:

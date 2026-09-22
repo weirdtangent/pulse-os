@@ -52,6 +52,12 @@ DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
 # Mirrors the sentinel the listener publishes for the Home Assistant font select.
 OVERLAY_FONT_DEFAULT_OPTION = "System default"
 WEATHER_ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "weather" / "icons"
+# Sleep mode's clock colour. A dimmed red rather than #FF0000: pure red on black
+# fringes badly on the kiosk panels and reads worse at a glance, which is the whole
+# point of the mode.
+DEFAULT_SLEEP_COLOR = "#B03030"
+# Default seconds a tap holds the normal overlay open during the sleep window.
+DEFAULT_SLEEP_WAKE_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -680,6 +686,18 @@ class OverlayTheme:
     # Seconds each alert holds the banner when several are active; 0 shows only the most
     # urgent. Floor of 5s is enforced client-side.
     weather_alert_rotate_seconds: int = 30
+    # Sleep mode: a wall-clock window during which the overlay goes opaque black and
+    # shows nothing but a large dim clock. Both ends are "HH:MM"; empty (either one)
+    # disables the feature. Stored as text rather than minutes because this is what a
+    # human typed into pulse.conf and what gets echoed back in the config card.
+    sleep_start: str = ""
+    sleep_end: str = ""
+    # Deliberately not pure red: #FF0000 on black fringes on the kiosk panels and is
+    # genuinely harder to read at a glance than a dimmed red.
+    sleep_color: str = DEFAULT_SLEEP_COLOR
+    # Seconds a tap restores the normal overlay before it slides back to the clock.
+    # 0 disables tap-to-wake entirely.
+    sleep_wake_seconds: int = 60
 
 
 CELL_ORDER = (
@@ -1412,6 +1430,25 @@ def render_overlay_html(
     ticker_html = _build_ticker_bar(snapshot, theme) if theme.show_ticker else ""
     root_class = "overlay-root overlay-root--ticker" if ticker_html else "overlay-root"
 
+    # Sleep mode is rendered unconditionally whenever it is configured and armed; which
+    # side of the window the clock is on is decided in the browser. It has to be: the
+    # document is re-rendered only when overlay CONTENT changes, so a server-side check
+    # would sit on a stale answer until something unrelated happened to bump the version,
+    # and 20:00 would arrive whenever it felt like it.
+    sleep_html = ""
+    sleep_attrs = ""
+    window = sleep_window(theme)
+    if window:
+        hold = _sleep_hold_reason(snapshot)
+        sleep_html = _build_sleep_card(snapshot, hour12=clock_hour12)
+        sleep_attrs = (
+            f' data-sleep-start="{window[0]}"'
+            f' data-sleep-end="{window[1]}"'
+            f' data-sleep-wake-seconds="{max(0, theme.sleep_wake_seconds)}"'
+        )
+        if hold:
+            sleep_attrs += f' data-sleep-hold="{html_escape(hold, quote=True)}"'
+
     stop_endpoint = stop_endpoint or "/overlay/stop"
     info_endpoint = info_endpoint or "/overlay/info-card"
     stop_endpoint_attr = html_escape(stop_endpoint, quote=True)
@@ -1425,6 +1462,7 @@ def render_overlay_html(
         f'data-clock-date-format="{html_escape(resolve_clock_date_format(clock_date_format), quote=True)}" '
         f'data-stop-endpoint="{stop_endpoint_attr}" '
         f'data-info-endpoint="{info_endpoint_attr}"'
+        f"{sleep_attrs}"
     )
 
     # Theme AFTER the static sheet, not before. Both blocks target :root with the same
@@ -1452,6 +1490,7 @@ def render_overlay_html(
 {grid_markup}
 </div>
 {ticker_html}
+{sleep_html}
 </div>
 <script>
 {OVERLAY_JS}
@@ -1471,6 +1510,7 @@ def _theme_css(theme: OverlayTheme) -> str:
         f"  --overlay-accent-color: {theme.accent_color};\n"
         f"  --overlay-font-family: {theme.font_family};\n"
         f"  --overlay-clock-font-family: {theme.clock_font_family or theme.font_family};\n"
+        f"  --overlay-sleep-color: {theme.sleep_color or DEFAULT_SLEEP_COLOR};\n"
         "}"
     )
 
@@ -1791,6 +1831,86 @@ def _build_now_playing_card(snapshot: OverlaySnapshot) -> tuple[str, str] | None
 </div>
 """.strip()
     return "bottom-right", card
+
+
+def parse_sleep_time(raw: str | None) -> int | None:
+    """Minutes past midnight for an "HH:MM" string, or None when unusable.
+
+    Also accepts "8:00" and "20.00" because both turn up in hand-edited configs.
+    """
+    text = str(raw or "").strip().replace(".", ":")
+    if not text:
+        return None
+    parts = text.split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= hour <= 23) or not (0 <= minute <= 59):
+        return None
+    return hour * 60 + minute
+
+
+def sleep_window(theme: OverlayTheme) -> tuple[int, int] | None:
+    """The configured window as (start, end) minutes, or None when sleep mode is off.
+
+    A window that starts and ends at the same minute is treated as unconfigured rather
+    than as "all day": a 24-hour black screen is never what someone meant to type, and
+    a kiosk that blanks forever with no way back is an expensive mistake to debug on a
+    wall-mounted Pi.
+    """
+    start = parse_sleep_time(theme.sleep_start)
+    end = parse_sleep_time(theme.sleep_end)
+    if start is None or end is None or start == end:
+        return None
+    return start, end
+
+
+def _sleep_hold_reason(snapshot: OverlaySnapshot) -> str:
+    """Why the overlay should stay awake despite being inside the sleep window.
+
+    These are the three things worth lighting a dark room for: an alarm actually
+    going off, a timer the user deliberately started before bed, and a weather alert
+    (where waking someone is the entire point of the feature).
+    """
+    if snapshot.active_alarm:
+        return "alarm"
+    if _extract_active_timers(snapshot):
+        return "timer"
+    if snapshot.weather_alerts:
+        return "weather"
+    return ""
+
+
+def _build_sleep_card(snapshot: OverlaySnapshot, *, hour12: bool) -> str:
+    """The centred clock shown while sleeping.
+
+    Carries `data-clock` so the existing tick in overlay.js fills the time and date for
+    free -- there is no second clock implementation to keep in step with the first.
+    """
+    clocks = snapshot.clocks or ()
+    tz_attr = html_escape((clocks[0].timezone if clocks else "") or "", quote=True)
+    alarm_html = ""
+    upcoming = _filter_upcoming_alarms(snapshot.alarms)
+    if upcoming:
+        # Only the next one. A list of alarms is a thing to read; this is a thing to
+        # confirm at a glance from across a dark room.
+        phrase = _format_alarm_time_phrase(upcoming[0], hour12=hour12)
+        if phrase and phrase != "—":
+            # The word, not the bell emoji the notification bar uses. Colour emoji are
+            # rendered by the font in full colour, which puts a bright spot on a screen
+            # whose entire job is to not be bright.
+            alarm_html = f'<div class="overlay-sleep__alarm">Alarm {html_escape(phrase)}</div>'
+    return f"""
+<div class="overlay-sleep" data-sleep-card data-clock data-tz="{tz_attr}" aria-hidden="true">
+  <div class="overlay-sleep__time" data-clock-time>--:--</div>
+  <div class="overlay-sleep__date" data-clock-date></div>
+  {alarm_html}
+</div>
+""".strip()
 
 
 def _build_notification_bar(snapshot: OverlaySnapshot, theme: OverlayTheme) -> str:
@@ -3193,18 +3313,19 @@ def _weather_icon_uri(icon_key: str) -> str | None:
     return _load_weather_icon_data(icon_key)
 
 
-def _format_alarm_time_phrase(alarm: dict[str, Any]) -> str:
+def _format_alarm_time_phrase(alarm: dict[str, Any], *, hour12: bool = True) -> str:
+    fmt = "%-I:%M %p" if hour12 else "%H:%M"
     time_text = str(alarm.get("time_of_day") or alarm.get("time") or "").strip()
     if time_text:
         try:
             dt = datetime.strptime(time_text, "%H:%M").replace(year=1900, month=1, day=1)
-            return dt.strftime("%-I:%M %p")
+            return dt.strftime(fmt)
         except ValueError:
             pass
     next_fire = _parse_timestamp(alarm.get("next_fire"))
     if next_fire:
         dt = datetime.fromtimestamp(next_fire)
-        return dt.strftime("%-I:%M %p")
+        return dt.strftime(fmt)
     return "—"
 
 
