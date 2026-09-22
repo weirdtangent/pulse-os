@@ -348,6 +348,16 @@ window.PulseOverlay.initialize = function() {
     Number.isFinite(sleepStart) && Number.isFinite(sleepEnd) && sleepStart !== sleepEnd;
   const sleepWakeMs = Math.max(0, Number(root.dataset.sleepWakeSeconds) || 0) * 1000;
 
+  // Seed the wake deadline from the server. The photo card replaces this iframe's whole
+  // srcdoc on every refresh, which builds a NEW window -- so a deadline kept only on
+  // window.PulseOverlay is destroyed by a refresh that can land at any time, and
+  // measured on a kiosk it cancelled a 10-minute wake after 103 seconds. The server
+  // holds the real deadline; this is how a freshly-built document learns about it.
+  const servedWakeUntil = Number(root.dataset.sleepWakeUntil) || 0;
+  if (servedWakeUntil > window.PulseOverlay.sleepWakeUntil) {
+    window.PulseOverlay.sleepWakeUntil = servedWakeUntil;
+  }
+
   const inSleepWindow = (now) => {
     const minutes = now.getHours() * 60 + now.getMinutes();
     // A window that wraps past midnight (20:00-07:00, the normal bedtime shape) is the
@@ -370,6 +380,25 @@ window.PulseOverlay.initialize = function() {
     root.classList.toggle('overlay-root--sleep', sleeping);
   };
 
+  // Fire-and-forget: the local deadline above already woke this document, so a failed
+  // POST costs only the survival of the wake across a refresh, never the wake itself.
+  const postSleepWake = () => {
+    const endpoint = root.dataset.sleepWakeEndpoint;
+    if (!endpoint) {
+      return;
+    }
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds: Math.round(sleepWakeMs / 1000) }),
+      // This request is owned by a document a srcdoc refresh can destroy mid-flight,
+      // and the whole point of it is to survive that swap. Without keepalive the
+      // browser is free to abort it during the navigation, which would leave no server
+      // deadline and drop the new document straight back to black.
+      keepalive: true
+    }).catch(() => {});
+  };
+
   const wakeFromSleep = () => {
     if (!sleepConfigured || sleepWakeMs <= 0) {
       return false;
@@ -379,6 +408,7 @@ window.PulseOverlay.initialize = function() {
     }
     window.PulseOverlay.sleepWakeUntil = Date.now() + sleepWakeMs;
     applySleep();
+    postSleepWake();
     return true;
   };
 
@@ -393,6 +423,7 @@ window.PulseOverlay.initialize = function() {
     }
     if (window.PulseOverlay.sleepWakeUntil && sleepWakeMs > 0 && sleepConfigured) {
       window.PulseOverlay.sleepWakeUntil = Date.now() + sleepWakeMs;
+      postSleepWake();
     }
   };
   if (sleepConfigured && sleepWakeMs > 0) {

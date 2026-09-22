@@ -104,6 +104,11 @@ class OverlaySnapshot:
     # None before the first poll (or when the network pill is disabled), in which
     # case the pill renders nothing at all rather than guessing at a state.
     network: dict[str, Any] | None = None
+    # Epoch seconds until which a tap holds the normal overlay open during the sleep
+    # window. Server state rather than browser state on purpose: the photo card
+    # replaces the overlay iframe's whole srcdoc on every refresh, which builds a NEW
+    # window and would otherwise throw away an in-progress wake.
+    sleep_wake_until: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -195,6 +200,7 @@ class OverlayStateManager:
         self._speaker_offline: dict[str, Any] | None = None
         self._weather_alerts: tuple[dict[str, Any], ...] = ()
         self._network: dict[str, Any] | None = None
+        self._sleep_wake_until = 0.0
         self._version = 0
         self._last_reason = "init"
         self._last_updated = time.time()
@@ -506,6 +512,22 @@ class OverlayStateManager:
             self._signatures["ticker"] = signature
             return self._bump("ticker")
 
+    def wake_from_sleep(self, seconds: float) -> OverlayChange:
+        """Hold the normal overlay open for `seconds` during the sleep window.
+
+        Deliberately does NOT bump the version. A bump makes the photo card refetch and
+        swap the iframe, and the swap is the very thing that used to cancel the wake --
+        so bumping here would fight the fix. The deadline reaches the browser on the
+        next refresh that happens for some other reason, and until then the tab that
+        asked for it is already awake from its own local copy.
+        """
+        with self._lock:
+            deadline = time.time() + max(0.0, seconds)
+            # Never shorten an existing wake: two taps in a row should extend the hold,
+            # and a stale in-flight request must not cut a fresh tap short.
+            self._sleep_wake_until = max(self._sleep_wake_until, deadline)
+            return OverlayChange(False, self._version, "sleep_wake")
+
     def update_update_available(self, available: bool) -> OverlayChange:
         signature = str(available)
         with self._lock:
@@ -606,6 +628,7 @@ class OverlayStateManager:
                 speaker_offline=copy.deepcopy(self._speaker_offline),
                 weather_alerts=tuple(copy.deepcopy(item) for item in self._weather_alerts),
                 network=copy.deepcopy(self._network),
+                sleep_wake_until=self._sleep_wake_until,
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -1383,6 +1406,7 @@ def render_overlay_html(
     clock_date_format: str = DEFAULT_CLOCK_DATE_FORMAT,
     stop_endpoint: str | None = None,
     info_endpoint: str | None = None,
+    sleep_wake_endpoint: str | None = None,
 ) -> str:
     """Render the overlay snapshot into an HTML document."""
 
@@ -1437,6 +1461,7 @@ def render_overlay_html(
     # and 20:00 would arrive whenever it felt like it.
     sleep_html = ""
     sleep_attrs = ""
+    sleep_wake_endpoint = sleep_wake_endpoint or "/overlay/sleep-wake"
     window = sleep_window(theme)
     if window:
         hold = _sleep_hold_reason(snapshot)
@@ -1448,6 +1473,13 @@ def render_overlay_html(
         )
         if hold:
             sleep_attrs += f' data-sleep-hold="{html_escape(hold, quote=True)}"'
+        # A wake still running at render time travels with the markup, so the new
+        # document picks up where the old one left off instead of snapping to black.
+        # Only forward a live one -- an expired deadline is noise in the DOM.
+        if snapshot.sleep_wake_until > time.time():
+            sleep_attrs += f' data-sleep-wake-until="{int(snapshot.sleep_wake_until * 1000)}"'
+        if theme.sleep_wake_seconds > 0:
+            sleep_attrs += f' data-sleep-wake-endpoint="{html_escape(sleep_wake_endpoint, quote=True)}"'
 
     stop_endpoint = stop_endpoint or "/overlay/stop"
     info_endpoint = info_endpoint or "/overlay/info-card"

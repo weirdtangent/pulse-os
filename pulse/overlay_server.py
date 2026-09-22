@@ -54,6 +54,7 @@ class OverlayServerConfig:
     clock_date_format: str = DEFAULT_CLOCK_DATE_FORMAT
     stop_endpoint: str = "/overlay/stop"
     info_endpoint: str = "/overlay/info-card"
+    sleep_wake_endpoint: str = "/overlay/sleep-wake"
     auth_token: str | None = None
 
 
@@ -236,6 +237,7 @@ class OverlayHttpServer:
             clock_date_format=self.config.clock_date_format,
             stop_endpoint=self.config.stop_endpoint,
             info_endpoint=self.config.info_endpoint,
+            sleep_wake_endpoint=self.config.sleep_wake_endpoint,
         )
         # Extract the body content from the overlay HTML (between <body> and </body>)
         body_start = overlay_html.find("<body>")
@@ -540,8 +542,37 @@ html, body {{
                     self._handle_stop()
                 elif path == "/overlay/info-card":
                     self._handle_info_card()
+                elif path == "/overlay/sleep-wake":
+                    self._handle_sleep_wake()
                 else:
                     self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
+
+            def _handle_sleep_wake(self) -> None:
+                """Record a tap-to-wake so it outlives the overlay iframe.
+
+                The photo card replaces the iframe's whole srcdoc on every refresh, which
+                builds a new window and drops any deadline kept in browser memory --
+                measured on a kiosk, that cancelled a 10-minute wake after 103 seconds.
+                Holding it here instead means a refresh re-renders with the wake intact.
+                """
+                try:
+                    data = self._read_json()
+                except ValueError as exc:
+                    self._log(f"overlay sleep-wake: invalid request: {exc}")
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
+                    return
+                try:
+                    seconds = float(data.get("seconds", 0))
+                except (TypeError, ValueError):
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid seconds")
+                    return
+                # Ceiling matches the longest window anyone could configure. Without it a
+                # single malformed request could pin the screen awake all night.
+                seconds = max(0.0, min(seconds, 3600.0))
+                outer.state.wake_from_sleep(seconds)
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self._set_common_headers()
+                self.end_headers()
 
             def _handle_stop(self) -> None:
                 try:
@@ -837,6 +868,7 @@ html, body {{
                     clock_date_format=outer.config.clock_date_format,
                     stop_endpoint=outer.config.stop_endpoint,
                     info_endpoint=outer.config.info_endpoint,
+                    sleep_wake_endpoint=outer.config.sleep_wake_endpoint,
                 ).encode("utf-8")
                 self.send_response(HTTPStatus.OK)
                 self._set_common_headers()

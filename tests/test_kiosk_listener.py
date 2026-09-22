@@ -277,3 +277,36 @@ def test_failed_check_does_not_propagate(listener):
     assert s._ensure_update_availability() is False
     assert s.refreshes == 1
     assert any("on-demand version check failed" in m for m in s.logs)
+
+
+# -- overlay endpoints --------------------------------------------------------
+
+
+def test_every_overlay_endpoint_is_absolute() -> None:
+    """A relative endpoint silently posts to Home Assistant instead of the kiosk.
+
+    pulse-photo-card injects the overlay into an iframe via `srcdoc`, and an
+    about:srcdoc document inherits the PARENT document's base URL — the HA dashboard,
+    not this device. Verified on pulse-bedroom: `document.baseURI` inside the overlay
+    iframe is `http://homeassistant.graystorm.com/dashboard-pulse/home`, so a relative
+    `/overlay/sleep-wake` resolves against HA and 404s, with no error anyone would see.
+
+    This caught exactly that bug once (#280), so it guards the whole set rather than the
+    one endpoint that happened to be wrong.
+    """
+    source = _LISTENER.read_text(encoding="utf-8")
+    assigned = [
+        line.strip()
+        for line in source.splitlines()
+        if "_overlay_" in line and "_endpoint = " in line and "self." in line
+    ]
+    assert assigned, "no overlay endpoint assignments found — did they move?"
+    relative = [line for line in assigned if "base_overlay_url" not in line]
+    assert relative == [], f"overlay endpoints not built from base_overlay_url: {relative}"
+
+
+def test_sleep_wake_endpoint_is_wired_into_the_server_config() -> None:
+    """Built but never passed is the same as never built."""
+    source = _LISTENER.read_text(encoding="utf-8")
+    assert 'self._overlay_sleep_wake_endpoint = f"{base_overlay_url}/overlay/sleep-wake"' in source
+    assert "sleep_wake_endpoint=self._overlay_sleep_wake_endpoint," in source
