@@ -104,6 +104,39 @@ You can customize the layout colors via the `PULSE_OVERLAY_*` knobs in `pulse.co
 
 The clock appears in the bottom-left corner. Timers/alarms automatically occupy the center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled” and “timer running”; Now Playing has its own card at the bottom right.
 
+### Sleep mode (big dim clock on black)
+
+Set a window in `pulse.conf` and the overlay stops being a transparent layer over the
+photos during those hours and becomes the whole screen:
+
+```sh
+PULSE_SLEEP_START="20:00"
+PULSE_SLEEP_END="07:00"
+```
+
+Opaque black, one large clock in a dimmed red, the date, and the next alarm — nothing
+else. Covering the photos is what actually darkens the room; the photos are the light
+source, not the overlay.
+
+Three things still break through, because they're worth lighting a room for: an alarm
+actually ringing, a timer you started before bed, and an active weather alert. While any
+of those is live the normal overlay is shown, and it returns to the night clock on its
+own once they clear. **Alarms still sound either way** — sleep mode only changes what
+the screen shows.
+
+A tap restores the normal overlay for 60s and then slides back (`PULSE_SLEEP_WAKE_SECONDS`;
+set it to `0` so nothing you — or a cat — do at night can light the room). The clock
+colour is `PULSE_SLEEP_COLOR`, defaulting to `#B03030` rather than pure red, which
+fringes on these panels and reads worse at a glance.
+
+The window is evaluated in the browser against the kiosk's local time, so it flips at the
+configured minute rather than waiting for the next overlay refresh. A window that wraps
+past midnight is the normal case; start and end being equal is treated as "off" rather
+than as a 24-hour black screen.
+
+This is independent of `PULSE_DAY_BRIGHTNESS` / `PULSE_NIGHT_BRIGHTNESS`, which dim the
+backlight at sunset. The two pair well and neither needs the other.
+
 ---
 
 ## 6. Troubleshooting

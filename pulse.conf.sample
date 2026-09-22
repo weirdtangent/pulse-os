@@ -131,6 +131,40 @@ PULSE_OVERLAY_CLOCK_DATE_FORMAT="long"
 # PULSE_OVERLAY_AUTH_TOKEN=""
 
 # ============================================================================
+# Sleep mode (optional night screen: big dim clock on black)
+# ============================================================================
+# During the configured window the overlay stops being a transparent layer over the
+# photos and becomes the whole screen: opaque black, one large dim clock, the date, and
+# the next alarm. The photos are the actual light source in a dark room, so covering
+# them is what buys the darkness.
+#
+# Three things still break through, because they are worth lighting a room for: an
+# alarm actually ringing, a timer you started before bed, and an active weather alert.
+# While any of those is live the normal overlay is shown; it returns to the clock on
+# its own once they clear. Alarms still SOUND regardless — sleep mode only changes
+# what the screen shows.
+#
+# This is independent of PULSE_DAY_BRIGHTNESS / PULSE_NIGHT_BRIGHTNESS above, which
+# dim the backlight at sunset. The two pair well; neither needs the other.
+
+# PULSE_SLEEP_START / PULSE_SLEEP_END — the window, as 24-hour "HH:MM" local time.
+# A window that wraps past midnight is normal and expected ("20:00" to "07:00").
+# Leave either blank to disable sleep mode entirely (the default).
+# PULSE_SLEEP_START="20:00"
+# PULSE_SLEEP_END="07:00"
+
+# PULSE_SLEEP_COLOR — colour of the night clock. Any CSS colour.
+# Not pure red by default: #FF0000 on black fringes on these panels and is harder to
+# read at a glance than a dimmed red, which defeats the point.
+# (default) PULSE_SLEEP_COLOR="#B03030"
+
+# PULSE_SLEEP_WAKE_SECONDS — how long a tap restores the normal overlay before it
+# slides back to the night clock. Set to 0 to disable tap-to-wake, so nothing you (or
+# a cat) do at night can light the room until the window ends. Values below 5 are
+# raised to 5.
+# (default) PULSE_SLEEP_WAKE_SECONDS="60"
+
+# ============================================================================
 # Stock ticker (optional scrolling bar across the bottom of the overlay)
 # ============================================================================
 # Quotes come from Yahoo Finance (near-real-time, no key) using two independent

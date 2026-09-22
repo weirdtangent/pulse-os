@@ -4,6 +4,10 @@ window.PulseOverlay.eventHandlers = null;
 window.PulseOverlay.mutationObserver = null;
 window.PulseOverlay.autoDismissTimer = null;
 window.PulseOverlay.scrollHandlers = [];
+// Survives re-initialization on purpose: the photo card swaps the overlay markup out
+// from under us periodically, and a wake that reset every time the document was
+// re-rendered would drop the screen back to black mid-glance.
+window.PulseOverlay.sleepWakeUntil = window.PulseOverlay.sleepWakeUntil || 0;
 
 // Expose initialization function for use after DOM updates
 window.PulseOverlay.initialize = function() {
@@ -45,13 +49,19 @@ window.PulseOverlay.initialize = function() {
   }
 
   if (window.PulseOverlay.eventHandlers) {
-    const { clickHandler, inputHandler, changeHandler, resizeHandler } = window.PulseOverlay.eventHandlers;
+    const { clickHandler, inputHandler, changeHandler, resizeHandler, sleepTapHandler } =
+      window.PulseOverlay.eventHandlers;
     const oldRoot = window.PulseOverlay.eventHandlers.root;
     if (oldRoot) {
       oldRoot.removeEventListener('click', clickHandler);
       oldRoot.removeEventListener('input', inputHandler);
       if (changeHandler) {
         oldRoot.removeEventListener('change', changeHandler);
+      }
+      if (sleepTapHandler) {
+        // Capture flag must match the one it was added with, or the listener survives
+        // and the overlay collects one per refresh.
+        oldRoot.removeEventListener('pointerdown', sleepTapHandler, true);
       }
     }
     if (resizeHandler) {
@@ -327,12 +337,76 @@ window.PulseOverlay.initialize = function() {
     });
   };
 
+  // --- Sleep mode ---
+  // Server-side we only know the window and whether something is holding the screen
+  // awake; which side of 20:00 we are on is decided here, because the document is
+  // re-rendered only when overlay CONTENT changes and a server-side answer would go
+  // stale until some unrelated card happened to bump the version.
+  const sleepStart = Number(root.dataset.sleepStart);
+  const sleepEnd = Number(root.dataset.sleepEnd);
+  const sleepConfigured =
+    Number.isFinite(sleepStart) && Number.isFinite(sleepEnd) && sleepStart !== sleepEnd;
+  const sleepWakeMs = Math.max(0, Number(root.dataset.sleepWakeSeconds) || 0) * 1000;
+
+  const inSleepWindow = (now) => {
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    // A window that wraps past midnight (20:00-07:00, the normal bedtime shape) is the
+    // reason this can't be a simple range test.
+    return sleepStart < sleepEnd
+      ? minutes >= sleepStart && minutes < sleepEnd
+      : minutes >= sleepStart || minutes < sleepEnd;
+  };
+
+  const applySleep = () => {
+    if (!sleepConfigured) {
+      return;
+    }
+    const now = new Date();
+    // `data-sleep-hold` is the server saying an alarm is ringing, a timer is running,
+    // or a weather alert is active -- the three things worth lighting a dark room for.
+    const held = Boolean(root.dataset.sleepHold);
+    const awake = Date.now() < window.PulseOverlay.sleepWakeUntil;
+    const sleeping = inSleepWindow(now) && !held && !awake;
+    root.classList.toggle('overlay-root--sleep', sleeping);
+  };
+
+  const wakeFromSleep = () => {
+    if (!sleepConfigured || sleepWakeMs <= 0) {
+      return false;
+    }
+    if (!root.classList.contains('overlay-root--sleep')) {
+      return false;
+    }
+    window.PulseOverlay.sleepWakeUntil = Date.now() + sleepWakeMs;
+    applySleep();
+    return true;
+  };
+
+  // Capture phase, and only while actually asleep: the tap that wakes the screen must
+  // not also land on whatever card happens to sit under the finger. Once awake, taps
+  // behave normally and each one pushes the return-to-black back out.
+  const sleepTapHandler = (event) => {
+    if (wakeFromSleep()) {
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+    if (window.PulseOverlay.sleepWakeUntil && sleepWakeMs > 0 && sleepConfigured) {
+      window.PulseOverlay.sleepWakeUntil = Date.now() + sleepWakeMs;
+    }
+  };
+  if (sleepConfigured && sleepWakeMs > 0) {
+    root.addEventListener('pointerdown', sleepTapHandler, true);
+  }
+
   // Initial tick to set clock immediately
   rotateAlertBanners();
   tick();
+  applySleep();
   window.PulseOverlay.clockInterval = window.setInterval(() => {
     tick();
     rotateAlertBanners();
+    applySleep();
   }, 1000);
   alignNowPlayingCard();
 
@@ -1023,7 +1097,8 @@ window.PulseOverlay.initialize = function() {
     clickHandler,
     inputHandler,
     changeHandler,
-    resizeHandler
+    resizeHandler,
+    sleepTapHandler
   };
 })();
 };
