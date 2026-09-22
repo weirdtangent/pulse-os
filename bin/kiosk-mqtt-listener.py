@@ -910,8 +910,13 @@ class KioskMqttListener:
         if ":" in overlay_host and not overlay_host.startswith("["):
             overlay_host = f"[{overlay_host}]"
         base_overlay_url = f"http://{overlay_host}:{self.overlay_config.port}"
+        # Absolute, not relative. The photo card injects the overlay into an iframe via
+        # srcdoc, and an about:srcdoc document inherits the PARENT's base URL -- which is
+        # the Home Assistant dashboard, not this kiosk. A relative endpoint would post to
+        # HA and quietly 404.
         self._overlay_stop_endpoint = f"{base_overlay_url}/overlay/stop"
         self._overlay_info_endpoint = f"{base_overlay_url}/overlay/info-card"
+        self._overlay_sleep_wake_endpoint = f"{base_overlay_url}/overlay/sleep-wake"
 
         if self.overlay_config.enabled:
             self.overlay_state = OverlayStateManager(self.overlay_config.clocks)
@@ -962,6 +967,7 @@ class KioskMqttListener:
                 clock_date_format=self.overlay_config.clock_date_format,
                 stop_endpoint=self._overlay_stop_endpoint,
                 info_endpoint=self._overlay_info_endpoint,
+                sleep_wake_endpoint=self._overlay_sleep_wake_endpoint,
                 auth_token=self.overlay_config.auth_token,
             )
             self._overlay_http = OverlayHttpServer(

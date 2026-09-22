@@ -390,7 +390,12 @@ window.PulseOverlay.initialize = function() {
     fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seconds: Math.round(sleepWakeMs / 1000) })
+      body: JSON.stringify({ seconds: Math.round(sleepWakeMs / 1000) }),
+      // This request is owned by a document a srcdoc refresh can destroy mid-flight,
+      // and the whole point of it is to survive that swap. Without keepalive the
+      // browser is free to abort it during the navigation, which would leave no server
+      // deadline and drop the new document straight back to black.
+      keepalive: true
     }).catch(() => {});
   };
 

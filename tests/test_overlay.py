@@ -2311,6 +2311,12 @@ class SleepWakePersistenceTests(unittest.TestCase):
         # Never let a stale served value shorten a wake this document just started.
         self.assertIn("> window.PulseOverlay.sleepWakeUntil", block)
 
+    def test_js_post_survives_the_document_being_torn_down(self) -> None:
+        """The request is owned by a document the srcdoc swap destroys, and outliving
+        that swap is its entire job — an aborted POST leaves no server deadline."""
+        block = OVERLAY_JS.split("const postSleepWake", 1)[1].split("};", 1)[0]
+        self.assertIn("keepalive: true", block)
+
     def test_js_reports_every_wake_to_the_server(self) -> None:
         """Including the taps that merely extend an existing wake — those are the ones a
         refresh would otherwise silently discard."""
