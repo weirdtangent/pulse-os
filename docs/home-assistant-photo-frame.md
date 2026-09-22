@@ -83,7 +83,7 @@ views:
 
 Options:
 - `fade_ms` sets the cross-fade length in milliseconds.
-- `now_playing_entity` (optional) mirrors any Home Assistant `media_player` (Music Assistant, Snapcast, Sonos, etc.) or sensor that exposes artist/title text. When the entity reports `playing`, a Now Playing badge animates in above the clock. Set it to `auto` to follow `sensor.<pulse_host>_now_playing`, which PulseOS publishes per kiosk.
+- `now_playing_entity` (optional) mirrors any Home Assistant `media_player` (Music Assistant, Snapcast, Sonos, etc.) or sensor that exposes artist/title text. When the entity reports `playing`, the Now Playing card animates in at the bottom right. Set it to `auto` to follow `sensor.<pulse_host>_now_playing`, which PulseOS publishes per kiosk.
 - The overlay clock automatically follows HA's locale/time zone (12h/24h).
 - Because the card double-buffers images, it never shows a white flash between photos—even on slow networks.
 
@@ -102,7 +102,7 @@ The kiosk renders the clock/timer/notification overlay itself and serves it at `
 
 You can customize the layout colors via the `PULSE_OVERLAY_*` knobs in `pulse.conf`. The clock timezone/label now defaults from `PULSE_LOCATION` (falling back to the device timezone); legacy `PULSE_OVERLAY_CLOCK` is still honored if set.
 
-The clock appears in the bottom-left corner. Timers/alarms automatically occupy the center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled”, “timer running”, and “Now Playing”.
+The clock appears in the bottom-left corner. Timers/alarms automatically occupy the center slots with darker translucent backgrounds so they're easy to spot. The optional top notification bar shows icons for “alarm scheduled” and “timer running”; Now Playing has its own card at the bottom right.
 
 ---
 
@@ -112,4 +112,3 @@ The clock appears in the bottom-left corner. Timers/alarms automatically occupy 
 - **401 Unauthorized in console** → you’re hitting `/local/...` or added your own query parameters. Let the card resolve the media-source path; don’t append cache busters, the signed `authSig` already handles caching.
 - **Still using old JS** → bump the resource version (`/local/pulse-photo-card.js?v=2`) or use Advanced Mode → Resources → Reload.
 - **Want even more flair?** The card CSS lives at the top of `pulse-photo-card.js`. Tweak fonts, overlay gradients, or add weather widgets there. See the [pulse-photo-card repository](https://github.com/weirdtangent/pulse-photo-card) for the source code.
-
