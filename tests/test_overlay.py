@@ -2231,3 +2231,92 @@ class SleepModeTests(unittest.TestCase):
         selectors = OVERLAY_CSS.split(".overlay-root--sleep .overlay-grid,", 1)[1].split("{", 1)[0]
         for hidden in ("overlay-notification-bar", "pulse-ticker"):
             self.assertIn(hidden, selectors)
+
+
+class SleepWakePersistenceTests(unittest.TestCase):
+    """A tap-to-wake has to outlive the overlay iframe.
+
+    pulse-photo-card sets `iframe.srcdoc` on every overlay refresh, which builds a NEW
+    window — so a deadline kept only on `window.PulseOverlay` is destroyed whenever a
+    refresh lands. Measured on a kiosk (2026-09-22) this cancelled a deliberately long
+    10-minute wake after 103 seconds, with the overlay version unchanged the whole time:
+    the card had re-fetched byte-identical HTML and swapped the document anyway. With a
+    120s poll and a 60s wake, roughly half of all night taps were being cut short.
+    """
+
+    def _theme(self, **overrides) -> OverlayTheme:
+        data = {
+            "ambient_background": "rgba(0,0,0,0.32)",
+            "alert_background": "rgba(0,0,0,0.65)",
+            "text_color": "#FFFFFF",
+            "accent_color": "#88C0D0",
+            "sleep_start": "20:00",
+            "sleep_end": "07:00",
+        }
+        data.update(overrides)
+        return OverlayTheme(**data)  # type: ignore[arg-type]
+
+    def _manager(self) -> OverlayStateManager:
+        return OverlayStateManager((ClockConfig("clock0", "Local", None),))
+
+    def _body(self, html: str) -> str:
+        return html.split("</head>", 1)[1].split("<script>", 1)[0]
+
+    def test_wake_is_recorded_on_the_server(self) -> None:
+        mgr = self._manager()
+        self.assertEqual(mgr.snapshot().sleep_wake_until, 0.0)
+        mgr.wake_from_sleep(60)
+        self.assertGreater(mgr.snapshot().sleep_wake_until, time.time() + 50)
+
+    def test_wake_does_not_bump_the_version(self) -> None:
+        """A bump makes the card refetch and swap the iframe — the very thing that used
+        to cancel the wake. Bumping here would fight the fix."""
+        mgr = self._manager()
+        before = mgr.snapshot().version
+        change = mgr.wake_from_sleep(60)
+        self.assertFalse(change.changed)
+        self.assertEqual(mgr.snapshot().version, before)
+
+    def test_a_second_tap_extends_rather_than_shortens(self) -> None:
+        mgr = self._manager()
+        mgr.wake_from_sleep(600)
+        long_deadline = mgr.snapshot().sleep_wake_until
+        mgr.wake_from_sleep(5)
+        self.assertEqual(mgr.snapshot().sleep_wake_until, long_deadline)
+
+    def test_live_wake_reaches_the_new_document(self) -> None:
+        mgr = self._manager()
+        mgr.wake_from_sleep(300)
+        html = render_overlay_html(mgr.snapshot(), self._theme())
+        self.assertIn("data-sleep-wake-until=", self._body(html))
+
+    def test_expired_wake_is_not_emitted(self) -> None:
+        """An elapsed deadline is noise in the DOM, and seeding from it would be a no-op
+        the JS still has to reason about."""
+        mgr = self._manager()
+        mgr.wake_from_sleep(0)
+        html = render_overlay_html(mgr.snapshot(), self._theme())
+        self.assertNotIn("data-sleep-wake-until=", self._body(html))
+
+    def test_endpoint_is_published_only_when_tap_to_wake_is_enabled(self) -> None:
+        mgr = self._manager()
+        on = self._body(render_overlay_html(mgr.snapshot(), self._theme()))
+        self.assertIn('data-sleep-wake-endpoint="/overlay/sleep-wake"', on)
+        off = self._body(render_overlay_html(mgr.snapshot(), self._theme(sleep_wake_seconds=0)))
+        self.assertNotIn("data-sleep-wake-endpoint", off)
+
+    def test_js_seeds_its_deadline_from_the_server(self) -> None:
+        block = OVERLAY_JS.split("const servedWakeUntil", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("root.dataset.sleepWakeUntil", block)
+        # Never let a stale served value shorten a wake this document just started.
+        self.assertIn("> window.PulseOverlay.sleepWakeUntil", block)
+
+    def test_js_reports_every_wake_to_the_server(self) -> None:
+        """Including the taps that merely extend an existing wake — those are the ones a
+        refresh would otherwise silently discard."""
+        self.assertEqual(OVERLAY_JS.count("postSleepWake()"), 2)
+        block = OVERLAY_JS.split("const postSleepWake", 1)[1].split("};", 1)[0]
+        self.assertIn("method: 'POST'", block)
+        self.assertIn("sleepWakeEndpoint", block)
+        # Fire-and-forget: the local deadline already woke this document.
+        self.assertIn(".catch(() => {})", block)

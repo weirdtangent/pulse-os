@@ -69,10 +69,15 @@ Off by default, and independent of `PULSE_DAY_BRIGHTNESS` / `PULSE_NIGHT_BRIGHTN
 | `PULSE_SLEEP_START` | *(empty)* | Start of the window, 24-hour `HH:MM` local time. Empty disables sleep mode. |
 | `PULSE_SLEEP_END` | *(empty)* | End of the window, same format. Wrapping past midnight (`20:00` → `07:00`) is the normal case. A start equal to the end is treated as *off* rather than as a 24-hour black screen. |
 | `PULSE_SLEEP_COLOR` | `#B03030` | Colour of the night clock. Any CSS colour. Not pure red by default: `#FF0000` fringes on these panels and reads worse at a glance. |
-| `PULSE_SLEEP_WAKE_SECONDS` | `60` | How long a tap restores the normal overlay before it returns to the night clock. `0` disables tap-to-wake entirely. Values from 1–4 are raised to 5. |
+| `PULSE_SLEEP_WAKE_SECONDS` | `60` | How long a tap restores the normal overlay before it returns to the night clock. `0` disables tap-to-wake entirely (and with it the `/overlay/sleep-wake` endpoint). Values from 1–4 are raised to 5. |
 
 The window is evaluated in the browser against the kiosk's local time, so it flips at the
 configured minute rather than waiting for the next overlay refresh.
+
+The wake deadline itself is held **on the device, not in the browser**: `pulse-photo-card`
+replaces the overlay iframe's entire `srcdoc` on every refresh, which builds a new window
+and would otherwise discard an in-progress wake. A tap POSTs to `/overlay/sleep-wake` and
+the deadline rides the next render back out as `data-sleep-wake-until`.
 
 ## Stock ticker
 
