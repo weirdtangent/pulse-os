@@ -50,6 +50,30 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_CLOCK_DATE_FORMAT` | `long` | Date under the clock. A preset name — `long` (Tuesday, September 1, 2026), `long-no-year`, `ordinal` (Tuesday, September 1st), `ordinal-year`, `day-first` (Tuesday 1 September 2026), `day-first-no-year` — or a template of `{weekday}` `{month}` `{day}` `{ordinal}` `{year}`, e.g. `{weekday}, {day} {month}`. Unrecognised values fall back to `long`. |
 | `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
 
+## Sleep mode
+
+A wall-clock window during which the overlay stops being a transparent layer over the
+photos and becomes the whole screen: opaque black, one large clock in a dimmed red, the
+date, and the next alarm. Covering the photos is what darkens the room — they are the
+light source, not the overlay.
+
+A ringing alarm, a running timer, and an active weather alert each break through and show
+the normal overlay until they clear. **Alarms still sound regardless**; sleep mode only
+changes what the screen shows.
+
+Off by default, and independent of `PULSE_DAY_BRIGHTNESS` / `PULSE_NIGHT_BRIGHTNESS`
+(which dim the backlight at sunset) — the two pair well and neither needs the other.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PULSE_SLEEP_START` | *(empty)* | Start of the window, 24-hour `HH:MM` local time. Empty disables sleep mode. |
+| `PULSE_SLEEP_END` | *(empty)* | End of the window, same format. Wrapping past midnight (`20:00` → `07:00`) is the normal case. A start equal to the end is treated as *off* rather than as a 24-hour black screen. |
+| `PULSE_SLEEP_COLOR` | `#B03030` | Colour of the night clock. Any CSS colour. Not pure red by default: `#FF0000` fringes on these panels and reads worse at a glance. |
+| `PULSE_SLEEP_WAKE_SECONDS` | `60` | How long a tap restores the normal overlay before it returns to the night clock. `0` disables tap-to-wake entirely. Values from 1–4 are raised to 5. |
+
+The window is evaluated in the browser against the kiosk's local time, so it flips at the
+configured minute rather than waiting for the next overlay refresh.
+
 ## Stock ticker
 
 An optional scrolling ticker bar across the bottom of the overlay. Quotes are fetched

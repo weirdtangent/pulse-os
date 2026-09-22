@@ -26,7 +26,7 @@
 
 ## Raspberry Pi 5 + Pi 7" Touch Display 2
 
-Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assistant dashboards. Each device self-provisions a hardened Chromium display with watchdogs, schedule-aware backlighting, and MQTT telemetry/control. A live overlay surfaces internal timers, alarms, reminders, now-playing info, plus on-demand news, weather, and sports snapshots—with clickable notification badges that stay synced to the backend schedule service. An optional Wyoming voice stack adds wake-word control, STT/TTS, and multi-turn conversations, while the LLM layer can hot-swap between OpenAI, Google Gemini, Anthropic Claude, Groq, Mistral AI, and OpenRouter so follow-up questions and automations route through whichever provider and model you prefer, all without leaving the Pulse display.
+Pulse Display Assistant is a Raspberry Pi kiosk OS purpose-built for Home Assistant dashboards. Each device self-provisions a hardened Chromium display with watchdogs, schedule-aware backlighting, and MQTT telemetry/control. A live overlay surfaces internal timers, alarms, reminders, now-playing info, plus on-demand news, weather, and sports snapshots—with clickable notification badges that stay synced to the backend schedule service, and an optional sleep mode that swaps the whole screen for a large dim clock on black during the hours you pick. An optional Wyoming voice stack adds wake-word control, STT/TTS, and multi-turn conversations, while the LLM layer can hot-swap between OpenAI, Google Gemini, Anthropic Claude, Groq, Mistral AI, and OpenRouter so follow-up questions and automations route through whichever provider and model you prefer, all without leaving the Pulse display.
 
 **What Pulse can do today**
 
