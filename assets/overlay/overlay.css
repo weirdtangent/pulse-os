@@ -36,6 +36,31 @@
      under a finger and needs a hit target that does not shift with the wallpaper. */
   --overlay-surface-solid: #2a2a2a;
 
+  /* ---- Surfaces a theme can move independently ---------------------------
+     Each of these used to BE one of the three above, which meant a theme could
+     not tint its pills without also tinting the alert cards and the ticker, or
+     give the info card its own plate without moving every ambient card with it.
+     They still default to what they were, so a theme that says nothing looks
+     exactly as it did.
+
+     The badge row is the one surface on screen permanently and the one that sits
+     over whatever photo or camera feed is up, so it is also the one most worth
+     being able to tune per theme. */
+  --overlay-badge-bg: var(--overlay-alert-bg);
+  --overlay-badge-text: var(--overlay-text-color);
+  /* Drawn as an inset shadow rather than a real border: .overlay-badge--network
+     pins its min-height to this rule's padding, and a border box would knock that
+     calculation out by two pixels on the one pill that cannot afford it. */
+  --overlay-badge-outline: transparent;
+  /* The info card and the other modals. Separate from --overlay-ambient-bg because
+     a panel holding settings wants to be readable, where an ambient card wants to
+     stay out of the way of the photo behind it. */
+  --overlay-panel-bg: var(--overlay-ambient-bg);
+  /* The clock is the only element with no plate behind it -- it sits directly on
+     the wallpaper -- so its colour is the one a theme is most likely to want apart
+     from body text. Defaults to the text colour, which is what it always was. */
+  --overlay-clock-color: var(--overlay-text-color);
+
   /* ---- Status colours ----------------------------------------------------
      These carry meaning, not style. A theme may retune them to fit its palette but
      must keep them distinguishable from each other and from the accent: they are
@@ -169,10 +194,13 @@ body {
   align-items: center;
   padding: 0.35rem 0.65rem;
   border-radius: var(--overlay-radius-pill);
-  /* The opaque-biased background the ticker bar uses, not the lighter ambient one the
-     cards use: badges sit over whatever photo or camera feed is on screen, and a bright
-     sky washes their text out — colored text (the market pill) worst of all. */
-  background: var(--overlay-alert-bg);
+  /* Defaults to the opaque-biased background the ticker bar uses, not the lighter
+     ambient one the cards use: badges sit over whatever photo or camera feed is on
+     screen, and a bright sky washes their text out — colored text (the market pill)
+     worst of all. A theme may move it, but not toward transparent. */
+  background: var(--overlay-badge-bg);
+  color: var(--overlay-badge-text);
+  box-shadow: inset 0 0 0 var(--overlay-border-width) var(--overlay-badge-outline);
   backdrop-filter: blur(var(--overlay-blur-badge));
   cursor: default;
   user-select: none;
@@ -601,7 +629,7 @@ body {
 .overlay-info-card {
   grid-column: 2 / 4;
   grid-row: 1 / 4;
-  background: var(--overlay-ambient-bg);
+  background: var(--overlay-panel-bg);
   backdrop-filter: blur(var(--overlay-blur-panel));
   border-radius: var(--overlay-radius-panel);
   padding: 2.5rem;
@@ -1258,8 +1286,10 @@ body {
    So: the title joins its siblings in white rather than the accent, and all three get
    a shadow so the card holds up over an arbitrary background. The accent still marks
    titles on the backed cards, where it reads fine. */
-.overlay-card--clock .overlay-card__title {
-  color: var(--overlay-text-color);
+.overlay-card--clock .overlay-card__title,
+.overlay-card--clock .overlay-clock__time,
+.overlay-card--clock .overlay-clock__date {
+  color: var(--overlay-clock-color);
 }
 
 .overlay-card--clock .overlay-card__title,

@@ -92,6 +92,18 @@ Three things are worth knowing before writing one:
 - **Translucent chrome comes from one triple.** `--overlay-tint-rgb` re-bases every
   border, hover and subtle surface in the sheet at whatever alpha each already uses, so
   a theme sets it once instead of listing twenty shades.
+- **Four surfaces move on their own.** `--overlay-badge-bg`, `--overlay-badge-text` and
+  `--overlay-badge-outline` for the notification pills, `--overlay-panel-bg` for the
+  info card and the other modals, and `--overlay-clock-color` for the clock. Each
+  defaults to the core background it used to be hardwired to, so a theme that says
+  nothing is unchanged — but a theme can now tint its pills without dragging the alert
+  cards and the ticker along with them. The badge outline is drawn as an inset shadow
+  rather than a border, because the connectivity pill pins its height to the badge's
+  padding and a border box would throw that off.
+
+  The badge row is the one surface on screen permanently, over whatever photo or camera
+  feed is up, so it takes the opaque-biased background rather than the lighter ambient
+  one. A test stops a theme making it see-through.
 - **Fonts have to exist on the Pi.** A missing face renders as the fallback with no
   warning at all. `config/apt/manual-packages.txt` installs the ten font packages the
   themes use; a theme that needs a new face means adding the package there in the same
