@@ -126,7 +126,7 @@ the screen shows.
 
 A tap restores the normal overlay for 60s and then slides back (`PULSE_SLEEP_WAKE_SECONDS`;
 set it to `0` so nothing you — or a cat — do at night can light the room). The clock
-colour is `PULSE_SLEEP_COLOR`, defaulting to `#B03030` rather than pure red, which
+colour comes from the theme (`--overlay-sleep-color`), a dimmed red rather than pure red, which
 fringes on these panels and reads worse at a glance.
 
 The window is evaluated in the browser against the kiosk's local time, so it flips at the

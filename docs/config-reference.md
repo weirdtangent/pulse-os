@@ -38,17 +38,67 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_PORT` | `8800` | TCP port serving `/overlay`. |
 | `PULSE_OVERLAY_BIND` | `127.0.0.1` | Bind address for the overlay server (use `0.0.0.0` to allow remote access). |
 | `PULSE_OVERLAY_ALLOWED_ORIGINS` | `*` | Comma-separated CORS allow list for overlay requests. |
-| `PULSE_OVERLAY_FONT_FAMILY` | `Inter` | Configured default font stack, used when nothing is picked. Never rewritten by a pick, so "System default" keeps its meaning. |
-| `PULSE_OVERLAY_FONT` | *(empty)* | Font picked from [Device controls](#on-screen-device-controls) or Home Assistant. Empty = use the default above. |
-| `PULSE_OVERLAY_CLOCK_FONT` | *(empty)* | Font for the big clock only. Empty = follow the overlay font. |
-| `PULSE_OVERLAY_AMBIENT_BG` | `rgba(0, 0, 0, 0.32)` | Background color for ambient cards. |
-| `PULSE_OVERLAY_ALERT_BG` | `rgba(0, 0, 0, 0.65)` | Background color for alert cards. |
-| `PULSE_OVERLAY_TEXT_COLOR` | `#FFFFFF` | Overlay text color. |
-| `PULSE_OVERLAY_ACCENT_COLOR` | `#88C0D0` | Accent color for highlights. |
+| `PULSE_OVERLAY_THEME` | `original` | The overlay's look — colours, corner radii, blur and typeface. See [Themes](#themes). Also picked from [Device controls](#on-screen-device-controls) or Home Assistant, and a pick is written back here. |
+| `PULSE_OVERLAY_ACCENT_COLOR` | *(empty)* | Overrides just the accent without leaving the theme. Empty = the theme's own accent. |
+| `PULSE_OVERLAY_FONT` | *(empty)* | Font picked from [Device controls](#on-screen-device-controls) or Home Assistant. Empty = the theme's face. A pick beats the theme. |
+| `PULSE_OVERLAY_CLOCK_FONT` | *(empty)* | Font for the big clock only. Empty = the theme's clock face, else the overlay font. |
 | `PULSE_OVERLAY_NOTIFICATION_BAR` | `true` | Toggles the badge row at the top of the overlay. |
 | `PULSE_OVERLAY_CLOCK_24H` | `false` | Forces 24-hour clock labels when `true`. |
 | `PULSE_OVERLAY_CLOCK_DATE_FORMAT` | `long` | Date under the clock. A preset name — `long` (Tuesday, September 1, 2026), `long-no-year`, `ordinal` (Tuesday, September 1st), `ordinal-year`, `day-first` (Tuesday 1 September 2026), `day-first-no-year` — or a template of `{weekday}` `{month}` `{day}` `{ordinal}` `{year}`, e.g. `{weekday}, {day} {month}`. Unrecognised values fall back to `long`. |
 | `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
+
+## Themes
+
+`PULSE_OVERLAY_THEME` picks the overlay's whole look at once: colours, corner radii,
+blur, shadows and typeface. It can also be changed from the display (Config → Device
+controls) or from the `Overlay Theme` select in Home Assistant, and a pick is written
+back to `pulse.conf`.
+
+| Theme | What it is |
+| --- | --- |
+| `original` | The stock look: cool cyan accent, rounded corners, translucent cards. |
+| `nord` | The palette the stock accent (`#88C0D0`) was borrowed from, finished properly. |
+| `slate` | Neutral and quiet. Softened chrome, grey accent, for a room where the display should stop asking for attention. |
+| `noir` | Greyscale. With no chroma anywhere else, a weather warning or a dead speaker is the only coloured thing on the wall. |
+| `solarized` | Solarized Dark. The stock weather watch and warning colours were already Solarized yellow and red. |
+| `terminal` | Amber phosphor: square corners, no blur, mono face, wide tracking. |
+| `neon` | Cyan on near-black. Condensed, tight radii, heavy blur — where `terminal` removes depth, this leans into it. |
+| `synthwave` | Magenta and violet, set in URW Gothic. |
+| `ember` | Warm. Reads as lamplight rather than screen light. |
+| `forest` | Cool green, low chroma; sits well under photographs. |
+| `contrast` | High contrast, opaque, no blur. An accessibility setting more than a style. |
+
+A theme change takes effect within a couple of seconds, with no restart and no page
+reload. That is not a coincidence: a theme is a set of `--overlay-*` CSS custom
+properties and nothing else, and the overlay's refresh loop copies those onto the live
+document on every poll. A new CSS *rule* would need a reload, which is why themes are
+not allowed to contain one.
+
+### Adding a theme
+
+Add an entry to `THEMES` in `pulse/overlay_themes.py`. It is a dict of token overrides
+against `assets/overlay/overlay.css`, so name only what actually changes — `original` is
+deliberately empty, and every other theme is a diff against the stylesheet's own
+`:root`.
+
+Three things are worth knowing before writing one:
+
+- **Status colours are optional.** Leave `--overlay-positive`, `--overlay-negative`,
+  `--overlay-caution`, `--overlay-fault`, `--overlay-severe` and `--overlay-watch` out
+  and the stock signal palette applies, which is usually what you want. They are the
+  only at-a-glance meaning the notification bar carries, so a theme should have to want
+  them changed rather than get it by accident. A test enforces that whatever a theme
+  does pick stays distinguishable.
+- **Translucent chrome comes from one triple.** `--overlay-tint-rgb` re-bases every
+  border, hover and subtle surface in the sheet at whatever alpha each already uses, so
+  a theme sets it once instead of listing twenty shades.
+- **Fonts have to exist on the Pi.** A missing face renders as the fallback with no
+  warning. The stock Debian image has the DejaVu, Liberation, Nimbus and URW families
+  and nothing else, so a theme that needs something new means adding the font package
+  to `setup.sh` in the same change.
+
+Per-device overrides are applied over the theme: `PULSE_OVERLAY_ACCENT_COLOR` for the
+accent, and the two font pickers for the typeface.
 
 ## Sleep mode
 
@@ -68,7 +118,6 @@ Off by default, and independent of `PULSE_DAY_BRIGHTNESS` / `PULSE_NIGHT_BRIGHTN
 | --- | --- | --- |
 | `PULSE_SLEEP_START` | *(empty)* | Start of the window, 24-hour `HH:MM` local time. Empty disables sleep mode. |
 | `PULSE_SLEEP_END` | *(empty)* | End of the window, same format. Wrapping past midnight (`20:00` → `07:00`) is the normal case. A start equal to the end is treated as *off* rather than as a 24-hour black screen. |
-| `PULSE_SLEEP_COLOR` | `#B03030` | Colour of the night clock. Any CSS colour. Not pure red by default: `#FF0000` fringes on these panels and reads worse at a glance. |
 | `PULSE_SLEEP_WAKE_SECONDS` | `60` | How long a tap restores the normal overlay before it returns to the night clock. `0` disables tap-to-wake entirely (and with it the `/overlay/sleep-wake` endpoint). Values from 1–4 are raised to 5. |
 
 The window is evaluated in the browser against the kiosk's local time, so it flips at the
@@ -297,8 +346,12 @@ There are two font pickers: one for the clock and one for everything else. The c
 the only element rendered at 100px+, where a face chosen to stay legible in a 14px badge
 often looks wrong, so the two are chosen separately; leaving the clock on "Same as overlay"
 makes it follow the other. Picking a font writes `PULSE_OVERLAY_FONT` (or
-`PULSE_OVERLAY_CLOCK_FONT`) and never touches `PULSE_OVERLAY_FONT_FAMILY`, so "System
-default" always means the configured default and any pick can be undone.
+`PULSE_OVERLAY_CLOCK_FONT`) and never touches the theme, so "Theme default" always means
+the theme's own face and any pick can be undone.
+
+A pick beats the theme, which matters when trying themes out: `terminal` and `synthwave`
+are half typeface, and neither looks like itself until the font picker is back on "Theme
+default".
 
 Both lists show the families actually installed on that Pi, each previewed in its own
 face, with symbol, dingbat, math, and emoji families filtered out — they render the overlay

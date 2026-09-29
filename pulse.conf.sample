@@ -76,33 +76,43 @@ PULSE_OVERLAY_BIND="127.0.0.1"
 # Using "*" allows any website to access your overlay server, which may expose sensitive information.
 PULSE_OVERLAY_ALLOWED_ORIGINS="*"
 
-# PULSE_OVERLAY_FONT_FAMILY — preferred overlay font (CSS font-family syntax).
-# Example: PULSE_OVERLAY_FONT_FAMILY="Roboto"
-# Fallback fonts are appended automatically if not provided.
-PULSE_OVERLAY_FONT_FAMILY="Inter"
+# PULSE_OVERLAY_THEME — the overlay's look: colours, corner shapes, blur and typeface.
+# Also picked on the display (Config → Device controls) or from Home Assistant, and a
+# pick is written back here. Changing it takes effect within a couple of seconds; no
+# restart and no reload.
+#   original    the stock look — cool cyan accent, rounded, translucent
+#   nord        the palette the stock accent came from, finished properly
+#   slate       neutral and quiet; softened chrome, grey accent
+#   noir        greyscale, so the only colour on screen is an actual warning
+#   solarized   Solarized Dark
+#   terminal    amber phosphor: square, no blur, mono, wide tracking
+#   neon        cyan on near-black, condensed, tight corners, heavy blur
+#   synthwave   magenta and violet, set in URW Gothic
+#   ember       warm; reads as lamplight rather than screen light
+#   forest      cool green, low chroma; sits well under photographs
+#   contrast    high contrast, opaque, no blur — legibility over looks
+# Themes live in pulse/overlay_themes.py. Adding one is a dict of CSS variables, not
+# config: this file holds the choice, never the colours.
+PULSE_OVERLAY_THEME="original"
+
+# PULSE_OVERLAY_ACCENT_COLOR — override just the accent (card titles, highlights,
+# scrollbars) without leaving the theme. Empty uses the theme's own accent.
+# The one colour that stayed a per-device setting, because it is genuinely per-device:
+# giving each room a different accent is what tells them apart at a glance.
+PULSE_OVERLAY_ACCENT_COLOR=""
 
 # PULSE_OVERLAY_FONT — the font picked on the display (Config → Device controls) or from
-# Home Assistant. Separate from the default above, which is never rewritten: that way
-# "System default" always means the same thing and any pick can be undone. Leave empty to
-# use the default. Only fonts actually installed on the device are offered.
+# Home Assistant. Separate from the theme, which is never rewritten: that way "Theme
+# default" always means the same thing and any pick can be undone. Leave empty to use the
+# theme's face. Only fonts actually installed on the device are offered.
+# NOTE: a pick here beats the theme, so a theme whose typeface is half its character
+# (terminal, synthwave) will not look right until this is cleared back to "Theme default".
 PULSE_OVERLAY_FONT=""
 
 # PULSE_OVERLAY_CLOCK_FONT — font for the big clock only. The clock is the one element
 # rendered at 100px+, where a face chosen to stay legible in a 14px badge often looks
 # wrong, so it is picked separately. Leave empty for the clock to follow PULSE_OVERLAY_FONT.
 PULSE_OVERLAY_CLOCK_FONT=""
-
-# PULSE_OVERLAY_AMBIENT_BG — CSS color for persistent cards (clocks, now playing).
-PULSE_OVERLAY_AMBIENT_BG="rgba(0, 0, 0, 0.32)"
-
-# PULSE_OVERLAY_ALERT_BG — CSS color for alert cards (timers, alarms).
-PULSE_OVERLAY_ALERT_BG="rgba(0, 0, 0, 0.65)"
-
-# PULSE_OVERLAY_TEXT_COLOR — primary overlay text color.
-PULSE_OVERLAY_TEXT_COLOR="#FFFFFF"
-
-# PULSE_OVERLAY_ACCENT_COLOR — accent color for titles and highlights.
-PULSE_OVERLAY_ACCENT_COLOR="#88C0D0"
 
 # PULSE_OVERLAY_NOTIFICATION_BAR — show the icon bar at the top of the overlay.
 PULSE_OVERLAY_NOTIFICATION_BAR="true"
@@ -153,10 +163,9 @@ PULSE_OVERLAY_CLOCK_DATE_FORMAT="long"
 # PULSE_SLEEP_START="20:00"
 # PULSE_SLEEP_END="07:00"
 
-# PULSE_SLEEP_COLOR — colour of the night clock. Any CSS colour.
-# Not pure red by default: #FF0000 on black fringes on these panels and is harder to
-# read at a glance than a dimmed red, which defeats the point.
-# (default) PULSE_SLEEP_COLOR="#B03030"
+# The night clock's colour comes from the theme (PULSE_OVERLAY_THEME) rather than from
+# here. It is not pure red in any theme: #FF0000 on black fringes on these panels and is
+# harder to read at a glance than a dimmed red, which defeats the point.
 
 # PULSE_SLEEP_WAKE_SECONDS — how long a tap restores the normal overlay before it
 # slides back to the night clock. Set to 0 to disable tap-to-wake, so nothing you (or
