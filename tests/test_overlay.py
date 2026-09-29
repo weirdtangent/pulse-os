@@ -30,6 +30,7 @@ from pulse.overlay import (
     sleep_window,
 )
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
+from pulse.overlay_style import STYLE_TOKEN_DEFAULTS
 from pulse.overlay_themes import DEFAULT_THEME, THEMES, normalize_theme, theme_names
 from pulse.weather_alerts import BANNER_ALWAYS
 
@@ -394,16 +395,47 @@ class ThemeSurfaceTests(unittest.TestCase):
                     resolved["--overlay-badge-bg"].lower(),
                 )
 
-    def test_the_badge_outline_is_drawn_without_a_border_box(self) -> None:
-        """An inset shadow, not a border.
+    def test_every_badge_on_the_row_is_the_same_height(self) -> None:
+        """Three things conspired to make one row of pills three different heights.
 
-        .overlay-badge--network pins its min-height to the badge's own padding, and a
-        real border would knock that calculation out by two pixels on the one pill that
-        cannot afford it -- it is the only badge with no emoji to set its line box.
+        Measured on a kiosk, one theme, one row: 29px for the emoji pills, 33px for
+        earmuffs, 42px for the connectivity pill. The causes were a `line-height: normal`
+        that followed whatever was inside the pill (a colour emoji's line box is taller
+        than text, and each theme's face is different again), variants declaring a border
+        the base did not reserve room for, and a hand-tuned min-height on the one pill
+        with no emoji -- derived from one font's metrics, back when there was only one.
         """
         rule = OVERLAY_CSS.split(".overlay-badge {", 1)[1].split("}", 1)[0]
-        self.assertIn("inset 0 0 0 var(--overlay-border-width)", rule)
-        self.assertNotIn("border:", rule)
+        # One height for all of them, from a token, and border-box so a variant's border
+        # eats into it rather than adding to it.
+        self.assertIn("min-height: var(--overlay-badge-height);", rule)
+        self.assertIn("box-sizing: border-box;", rule)
+        self.assertRegex(rule, r"line-height:\s*[\d.]+;")
+        # The border box reserved on the base, so a variant only changes its colour.
+        self.assertIn("border: var(--overlay-border-width) solid var(--overlay-badge-outline);", rule)
+        # And the bespoke floor gone, rather than re-tuned for one more font.
+        network = OVERLAY_CSS.split(".overlay-badge--network {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("min-height:", network)
+
+    def test_the_badge_row_is_a_touch_target(self) -> None:
+        """These are finger-operated wall panels. 2.6rem is ~42px at the kiosk's root
+        size, which is roughly the smallest thing worth aiming at."""
+        height = _style_tokens()["--overlay-badge-height"]
+        self.assertTrue(height.endswith("rem"), height)
+        self.assertGreaterEqual(float(height.removesuffix("rem")), 2.5)
+
+    def test_the_bar_reserves_the_height_of_the_pills_it_holds(self) -> None:
+        bar = OVERLAY_CSS.split(".overlay-notification-bar {", 1)[1].split("}", 1)[0]
+        self.assertIn("min-height: var(--overlay-badge-height);", bar)
+
+    def test_the_market_pill_centres_its_numbers(self) -> None:
+        """It is the only badge with no words, and it was the only one baseline-aligned.
+
+        0.92em numbers baseline-aligned beside a full-size emoji sit visibly above the
+        middle of the pill.
+        """
+        rule = OVERLAY_CSS.split(".overlay-market__move {", 1)[1].split("}", 1)[0]
+        self.assertIn("align-items: center;", rule)
 
     def test_the_clock_colour_covers_all_three_of_its_lines(self) -> None:
         """Title, time and date, or a theme tints the clock and leaves its label white."""
@@ -446,6 +478,25 @@ class ThemeSwitchTests(unittest.TestCase):
         self.assertLess(block.index("next.push"), block.index("removeProperty"))
         self.assertIn("if (!next.length) return;", block)
 
+    def test_a_theme_change_does_not_wait_for_a_content_change(self) -> None:
+        """applyThemeVariables runs on every poll, not inside the version check.
+
+        A theme change does not touch the overlay's CONTENT, so the snapshot version does
+        not move. With the call inside `if (newVersion !== currentVersion)`, the backend
+        served the new :root and the client never read it -- picking a theme on the wall
+        did nothing until something unrelated happened to redraw the overlay.
+        """
+        source = (Path(__file__).resolve().parent.parent / "pulse" / "overlay_server.py").read_text(encoding="utf-8")
+        loop = source.split("async function refreshOverlay", 1)[1]
+        apply_at = loop.index("applyThemeVariables(doc);")
+        gate_at = loop.index("if (newVersion && newVersion !== currentVersion)")
+        self.assertLess(apply_at, gate_at, "theme application is gated on a version change")
+
+    def test_the_every_poll_apply_short_circuits_when_nothing_changed(self) -> None:
+        """Otherwise it rewrites a dozen custom properties 30x a minute, forever, on a Pi."""
+        block = self._apply_block()
+        self.assertIn("if (themeText === lastThemeText) return;", block)
+
     def test_themes_that_override_shape_are_actually_reversible(self) -> None:
         """The scenario above, stated as data: terminal sets tokens `original` does not."""
         only_in_terminal = set(THEMES["terminal"]) - set(THEMES[DEFAULT_THEME])
@@ -456,13 +507,40 @@ class ThemeCssTests(unittest.TestCase):
     def _theme(self, **kw) -> OverlayTheme:
         return OverlayTheme(**kw)  # type: ignore[arg-type]
 
-    def test_a_theme_emits_only_what_it_changes(self) -> None:
+    def test_a_theme_block_carries_the_complete_token_set(self) -> None:
+        """Every token, every time -- not just the ones this theme changes.
+
+        The block is appended to the document's <style>, which is baked at page load and
+        never replaced; only the custom properties are copied across on a refresh. So a
+        block that carries a diff leaves the PREVIOUS theme's values standing for every
+        token the new one is silent about. Switch to `terminal` on a kiosk and every
+        theme picked afterwards inherited its square pills from a frozen copy of its
+        :root, until the page happened to reload.
+        """
         css = _theme_css(self._theme(name="original"))
-        # Both font properties always, because the stylesheet declares neither.
+        for token in STYLE_TOKEN_DEFAULTS:
+            with self.subTest(token=token):
+                self.assertIn(f"{token}:", css)
+        # Plus the two the stylesheet deliberately does not declare, because they are
+        # assembled at runtime from the theme and the live font picker.
         self.assertIn("--overlay-font-family:", css)
         self.assertIn("--overlay-clock-font-family:", css)
-        self.assertNotIn("--overlay-ambient-bg", css)
-        self.assertNotIn("--overlay-radius-pill", css)
+
+    def test_switching_themes_cannot_leave_a_token_behind(self) -> None:
+        """Stated as the property that matters: any two blocks name the same tokens."""
+        names = [
+            line.split(":")[0].strip()
+            for line in _theme_css(self._theme(name="terminal")).splitlines()
+            if "--overlay-" in line
+        ]
+        for other in THEMES:
+            with self.subTest(theme=other):
+                theirs = [
+                    line.split(":")[0].strip()
+                    for line in _theme_css(self._theme(name=other)).splitlines()
+                    if "--overlay-" in line
+                ]
+                self.assertEqual(sorted(theirs), sorted(names))
 
     def test_a_named_theme_emits_its_tokens(self) -> None:
         css = _theme_css(self._theme(name="terminal"))
@@ -519,13 +597,15 @@ class OverlayRenderTests(unittest.TestCase):
     def test_theme_css_wins_over_the_static_stylesheet(self) -> None:
         """The theme block must come AFTER OVERLAY_CSS in the rendered document.
 
-        Both declare :root with identical specificity, so source order decides. With
-        the theme emitted first, OVERLAY_CSS's :root defaults silently overrode every
-        configured colour on initial render, and the display only picked the real theme
-        up when the refresh loop next copied it onto documentElement -- which happens
-        solely on an overlay CONTENT change. Net effect: a kiosk showed its configured
-        accent until the page reloaded, then reverted to the built-in default until
-        some card happened to appear.
+        Both declare :root with identical specificity, so source order decides. With the
+        theme emitted first, OVERLAY_CSS's :root defaults silently override every
+        configured colour on the FIRST paint.
+
+        The refresh loop now applies the theme on every poll rather than only on a
+        content change, so a document in the wrong order self-corrects within a couple of
+        seconds -- which makes this worth pinning down rather than less so: the failure
+        stopped being a stuck display and became a flash of the wrong theme on every
+        reload, which is exactly the kind of thing that gets waved through.
         """
         from pulse.overlay_assets import OVERLAY_CSS
 
@@ -2474,6 +2554,17 @@ class ClockFitTests(unittest.TestCase):
         assert match is not None, f"no clamped font-size in rule body: {body!r}"
         return float(match.group(1))
 
+    def test_both_lines_pin_their_line_height(self) -> None:
+        """`normal` is the FONT's line box, and a theme changes the font.
+
+        Measured on a kiosk at one size: EB Garamond 102px, DSEG14 111px, Inter 124px,
+        Vollkorn 142px. That 40px spread moved the date under the clock every time the
+        theme changed, which is a layout shift nobody asked a theme for.
+        """
+        for base in self.BASES:
+            with self.subTest(base=base):
+                self.assertRegex(self._rule_body(f".{base}"), r"line-height:\s*[\d.]+;")
+
     def test_neither_line_ever_wraps(self) -> None:
         """Stepping down is pointless if the browser is allowed to wrap instead."""
         for base in self.BASES:
@@ -2659,14 +2750,16 @@ class SleepModeTests(unittest.TestCase):
         css = _theme_css(self._theme(name="terminal"))
         self.assertIn(f"--overlay-sleep-color: {THEMES['terminal']['--overlay-sleep-color']};", css)
 
-    def test_a_theme_without_a_sleep_colour_inherits_the_stylesheet(self) -> None:
-        """Not emitted means the sheet's own :root applies -- which is the default.
+    def test_a_theme_without_a_sleep_colour_emits_the_stylesheet_default(self) -> None:
+        """The theme block restates the default rather than omitting it.
 
-        Asserting absence rather than a value on purpose: re-stating a default in the
-        theme block is exactly the duplication this indirection exists to remove.
+        Omitting it would mean inheriting whatever the last theme baked into the page's
+        <style> -- which for `terminal` is a dim amber, not this red. The duplication is
+        the point: the block has to be self-contained. It is read from the stylesheet
+        rather than restated in Python, so the two cannot drift.
         """
         css = _theme_css(self._theme(name="original"))
-        self.assertNotIn("--overlay-sleep-color", css)
+        self.assertIn(f"--overlay-sleep-color: {STYLE_TOKEN_DEFAULTS['--overlay-sleep-color']};", css)
         self.assertIn("--overlay-sleep-color: #b03030;", OVERLAY_CSS)
 
     def test_wake_seconds_of_zero_is_emitted_not_dropped(self) -> None:

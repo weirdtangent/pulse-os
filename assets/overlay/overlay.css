@@ -52,6 +52,12 @@
      pins its min-height to this rule's padding, and a border box would knock that
      calculation out by two pixels on the one pill that cannot afford it. */
   --overlay-badge-outline: transparent;
+  /* Every badge is the same height, and that height is a TOUCH TARGET -- these are
+     finger-operated wall panels, not pointers. The pills used to be whatever their
+     contents made them (29px for the emoji ones, 42px for the connectivity pill's
+     hand-tuned floor); levelling them at the larger of the two is what keeps Help and
+     Config as easy to hit as the pill that happened to be tallest. */
+  --overlay-badge-height: 2.6rem;
   /* The info card and the other modals. Separate from --overlay-ambient-bg because
      a panel holding settings wants to be readable, where an ambient card wants to
      stay out of the way of the photo behind it. */
@@ -179,7 +185,8 @@ body {
   gap: 0.6rem;
   align-items: center;
   font-size: 0.95rem;
-  min-height: 2.4rem;
+  /* Reserved from the same token as the pills it holds, so the two cannot drift. */
+  min-height: var(--overlay-badge-height);
   flex-shrink: 0;
 }
 
@@ -200,7 +207,22 @@ body {
      worst of all. A theme may move it, but not toward transparent. */
   background: var(--overlay-badge-bg);
   color: var(--overlay-badge-text);
-  box-shadow: inset 0 0 0 var(--overlay-border-width) var(--overlay-badge-outline);
+  /* A real border, transparent by default, rather than an inset shadow. Several badges
+     (earmuffs, speaker-offline, the weather tiers) declare a border of their own, so a
+     base that did not reserve the box meant those pills stood 2px taller than their
+     neighbours on the same row. Reserving it here makes every badge the same height and
+     leaves the variants setting nothing but a colour. */
+  border: var(--overlay-border-width) solid var(--overlay-badge-outline);
+  /* Height comes from the token, not from the contents. `line-height: normal` is
+     whatever is INSIDE the pill -- a colour emoji's line box is taller than text at the
+     same size, and each theme's face is taller or shorter again. Measured on a kiosk in
+     one theme, on one row: 29px for the emoji pills, 33px for earmuffs (its border),
+     42px for the connectivity pill. border-box so a variant's border eats into the
+     height rather than adding to it. */
+  box-sizing: border-box;
+  min-height: var(--overlay-badge-height);
+  line-height: 1.2;
+  justify-content: center;
   backdrop-filter: blur(var(--overlay-blur-badge));
   cursor: default;
   user-select: none;
@@ -238,12 +260,22 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Centred, not baseline-aligned. These numbers are set at 0.92em and sat next to a
+   full-size colour emoji; aligning baselines pushed the smaller text visibly above the
+   middle of the pill, so the one badge with no words in it was also the one that looked
+   misaligned. Every other badge centres its contents, and now so does this. */
 .overlay-market__move {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.1rem;
   font-size: 0.92em;
   font-weight: 600;
+  /* The badge's line-height is unitless, so it SCALES with this 0.92em and gives these
+     numbers a shorter line box than the words in every pill beside them -- which centres
+     them on a slightly different axis. Measured: 0.8px high, which is small enough to
+     look like imagination and big enough to see. Dividing it back out restores the row's
+     absolute line box while keeping the smaller glyphs that keep this pill narrow. */
+  line-height: calc(1.2 / 0.92);
 }
 
 .overlay-market__move--up {
@@ -263,14 +295,11 @@ body {
 .overlay-badge--network {
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
-  /* Every other badge on this bar is as tall as its emoji ICON's line box, which is
-     meaningfully taller than plain text at the same size — the emoji font's metrics,
-     not the text font's, are what set the height. This pill is the only one with no
-     emoji (it draws its own glyphs), so without this it renders ~5px short and sits
-     visibly low next to Help. 1.32em is that emoji line box measured on the fleet's
-     stack; 0.7rem is this rule's own vertical padding, which border-box folds into
-     min-height. Keep the two in step if the padding above ever changes. */
-  min-height: calc(1.32em + 0.7rem);
+  /* No min-height any more. This pill draws its own glyphs instead of carrying an emoji,
+     so it used to need a hand-tuned floor to match the emoji pills beside it -- a floor
+     derived from one font's emoji metrics, which stopped being right the moment themes
+     could change the face. The pinned line-height on .overlay-badge does the job for
+     every pill at once. */
 }
 
 .overlay-network__wifi {
@@ -1322,6 +1351,13 @@ body {
   font-weight: var(--overlay-clock-weight);
   letter-spacing: var(--overlay-clock-tracking);
   white-space: nowrap;
+  /* Pinned, because `normal` is the FONT's own line box and themes change the font.
+     Measured on a kiosk at the same 102.4px: EB Garamond 102px, DSEG14 111px, Inter
+     124px, IBM Plex Sans Condensed 133px, Vollkorn 142px -- a 40px spread that moved
+     the date under the clock by the same amount every time the theme changed. 1.15 is
+     what the fleet already renders (Liberation Sans at this size), so pinning it costs
+     no visible change on the default and makes every other face agree with it. */
+  line-height: 1.15;
 }
 
 .overlay-clock__time--tight {
@@ -1340,6 +1376,9 @@ body {
   font-size: clamp(1.3rem, 3vw, 2.2rem);
   font-weight: 400;
   opacity: 0.85;
+  /* Same reasoning as the time above: pinned so the card's total height is a function
+     of the layout rather than of whichever face the theme picked. */
+  line-height: 1.25;
   /* The clock sits in a fixed grid cell (403px on a 1280x720 kiosk) and the longest
      date it can render -- "Wednesday, September 30, 2026" -- is wider than that. A
      wrapped date pushes the card into two ragged lines, so it steps down a size
