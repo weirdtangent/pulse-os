@@ -395,16 +395,47 @@ class ThemeSurfaceTests(unittest.TestCase):
                     resolved["--overlay-badge-bg"].lower(),
                 )
 
-    def test_the_badge_outline_is_drawn_without_a_border_box(self) -> None:
-        """An inset shadow, not a border.
+    def test_every_badge_on_the_row_is_the_same_height(self) -> None:
+        """Three things conspired to make one row of pills three different heights.
 
-        .overlay-badge--network pins its min-height to the badge's own padding, and a
-        real border would knock that calculation out by two pixels on the one pill that
-        cannot afford it -- it is the only badge with no emoji to set its line box.
+        Measured on a kiosk, one theme, one row: 29px for the emoji pills, 33px for
+        earmuffs, 42px for the connectivity pill. The causes were a `line-height: normal`
+        that followed whatever was inside the pill (a colour emoji's line box is taller
+        than text, and each theme's face is different again), variants declaring a border
+        the base did not reserve room for, and a hand-tuned min-height on the one pill
+        with no emoji -- derived from one font's metrics, back when there was only one.
         """
         rule = OVERLAY_CSS.split(".overlay-badge {", 1)[1].split("}", 1)[0]
-        self.assertIn("inset 0 0 0 var(--overlay-border-width)", rule)
-        self.assertNotIn("border:", rule)
+        # One height for all of them, from a token, and border-box so a variant's border
+        # eats into it rather than adding to it.
+        self.assertIn("min-height: var(--overlay-badge-height);", rule)
+        self.assertIn("box-sizing: border-box;", rule)
+        self.assertRegex(rule, r"line-height:\s*[\d.]+;")
+        # The border box reserved on the base, so a variant only changes its colour.
+        self.assertIn("border: var(--overlay-border-width) solid var(--overlay-badge-outline);", rule)
+        # And the bespoke floor gone, rather than re-tuned for one more font.
+        network = OVERLAY_CSS.split(".overlay-badge--network {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("min-height:", network)
+
+    def test_the_badge_row_is_a_touch_target(self) -> None:
+        """These are finger-operated wall panels. 2.6rem is ~42px at the kiosk's root
+        size, which is roughly the smallest thing worth aiming at."""
+        height = _style_tokens()["--overlay-badge-height"]
+        self.assertTrue(height.endswith("rem"), height)
+        self.assertGreaterEqual(float(height.removesuffix("rem")), 2.5)
+
+    def test_the_bar_reserves_the_height_of_the_pills_it_holds(self) -> None:
+        bar = OVERLAY_CSS.split(".overlay-notification-bar {", 1)[1].split("}", 1)[0]
+        self.assertIn("min-height: var(--overlay-badge-height);", bar)
+
+    def test_the_market_pill_centres_its_numbers(self) -> None:
+        """It is the only badge with no words, and it was the only one baseline-aligned.
+
+        0.92em numbers baseline-aligned beside a full-size emoji sit visibly above the
+        middle of the pill.
+        """
+        rule = OVERLAY_CSS.split(".overlay-market__move {", 1)[1].split("}", 1)[0]
+        self.assertIn("align-items: center;", rule)
 
     def test_the_clock_colour_covers_all_three_of_its_lines(self) -> None:
         """Title, time and date, or a theme tints the clock and leaves its label white."""
@@ -2520,6 +2551,17 @@ class ClockFitTests(unittest.TestCase):
         match = re.search(r"font-size:\s*clamp\([^,]+,[^,]+,\s*([\d.]+)rem\)", body)
         assert match is not None, f"no clamped font-size in rule body: {body!r}"
         return float(match.group(1))
+
+    def test_both_lines_pin_their_line_height(self) -> None:
+        """`normal` is the FONT's line box, and a theme changes the font.
+
+        Measured on a kiosk at one size: EB Garamond 102px, DSEG14 111px, Inter 124px,
+        Vollkorn 142px. That 40px spread moved the date under the clock every time the
+        theme changed, which is a layout shift nobody asked a theme for.
+        """
+        for base in self.BASES:
+            with self.subTest(base=base):
+                self.assertRegex(self._rule_body(f".{base}"), r"line-height:\s*[\d.]+;")
 
     def test_neither_line_ever_wraps(self) -> None:
         """Stepping down is pointless if the browser is allowed to wrap instead."""
