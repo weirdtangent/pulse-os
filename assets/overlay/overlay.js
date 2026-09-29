@@ -224,14 +224,15 @@ window.PulseOverlay.initialize = function() {
   // 1280x720 kiosk. Measuring beats counting characters -- the overlay font is
   // proportional and configurable, so "Wednesday" and "May 1st" are not comparable by
   // length. Only runs when the text changes, i.e. once a day, not on every tick.
-  const dateFitClasses = [
-    'overlay-clock__date--tight',
-    'overlay-clock__date--tighter',
-    'overlay-clock__date--tightest',
-  ];
-  const fitClockDate = (el) => {
-    el.classList.remove(...dateFitClasses);
-    for (const className of dateFitClasses) {
+  const stepClasses = (base) => [`${base}--tight`, `${base}--tighter`, `${base}--tightest`];
+  const dateFitClasses = stepClasses('overlay-clock__date');
+  // The time needs the same treatment: a theme (or the font picker) can put a mono face
+  // behind it, and mono is wide enough that "12:00 AM" no longer fits the cell.
+  const timeFitClasses = stepClasses('overlay-clock__time');
+
+  const fitToCell = (el, classes) => {
+    el.classList.remove(...classes);
+    for (const className of classes) {
       if (el.scrollWidth <= el.clientWidth) {
         return;
       }
@@ -248,7 +249,11 @@ window.PulseOverlay.initialize = function() {
       const dateEl = node.querySelector('[data-clock-date]');
       if (timeEl) {
         try {
-          timeEl.textContent = formatWithZone(now, tz, timeOptions);
+          const timeText = formatWithZone(now, tz, timeOptions);
+          if (timeEl.textContent !== timeText) {
+            timeEl.textContent = timeText;
+            fitToCell(timeEl, timeFitClasses);
+          }
         } catch (err) {
           // Silently handle timezone formatting errors
         }
@@ -258,7 +263,7 @@ window.PulseOverlay.initialize = function() {
           const dateText = formatClockDate(now, tz);
           if (dateEl.textContent !== dateText) {
             dateEl.textContent = dateText;
-            fitClockDate(dateEl);
+            fitToCell(dateEl, dateFitClasses);
           }
         } catch (err) {
           // Silently handle timezone formatting errors
@@ -645,14 +650,18 @@ window.PulseOverlay.initialize = function() {
     }, 100);
   }
 
-  // The overlay font and the clock font are separate pickers posting separate actions.
-  const FONT_SELECT_ACTIONS = [
-    { attribute: '[data-font-select]', action: 'set_font' },
-    { attribute: '[data-clock-font-select]', action: 'set_clock_font' }
+  // The theme, the overlay font and the clock font are separate pickers posting
+  // separate actions. Each carries its own payload field because the server validates
+  // them against different lists -- a theme name is not a font and must not be
+  // accepted as one.
+  const CONTROL_SELECT_ACTIONS = [
+    { attribute: '[data-theme-select]', action: 'set_theme', field: 'theme' },
+    { attribute: '[data-font-select]', action: 'set_font', field: 'font' },
+    { attribute: '[data-clock-font-select]', action: 'set_clock_font', field: 'font' }
   ];
 
   const changeHandler = (e) => {
-    for (const { attribute, action } of FONT_SELECT_ACTIONS) {
+    for (const { attribute, action, field } of CONTROL_SELECT_ACTIONS) {
       const select = e.target.closest(attribute);
       if (!select) {
         continue;
@@ -661,7 +670,7 @@ window.PulseOverlay.initialize = function() {
       fetch(infoEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, font: select.value })
+        body: JSON.stringify({ action, [field]: select.value })
       }).finally(() => {
         select.disabled = false;
       });

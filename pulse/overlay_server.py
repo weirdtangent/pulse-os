@@ -87,6 +87,7 @@ class OverlayHttpServer:
         on_set_volume: Callable[[int], bool] | None = None,
         on_set_brightness: Callable[[int], bool] | None = None,
         get_device_levels: Callable[[], dict[str, Any]] | None = None,
+        on_set_theme: Callable[[str], bool] | None = None,
         on_set_font: Callable[[str], bool] | None = None,
         on_set_clock_font: Callable[[str], bool] | None = None,
         on_set_brightness_target: Callable[[str, int], bool] | None = None,
@@ -117,6 +118,7 @@ class OverlayHttpServer:
         self._on_set_volume = on_set_volume
         self._on_set_brightness = on_set_brightness
         self._get_device_levels = get_device_levels
+        self._on_set_theme = on_set_theme
         self._on_set_font = on_set_font
         self._on_set_clock_font = on_set_clock_font
         self._on_set_brightness_target = on_set_brightness_target
@@ -761,6 +763,17 @@ html, body {{
                         success = outer._on_set_brightness(target_value)
                     if not success:
                         self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Control request failed")
+                        return
+                    change = outer.state.update_info_card(outer._device_controls_payload())
+                    if outer._on_state_change:
+                        outer._on_state_change(change)
+                elif action == "set_theme":
+                    choice = str(data.get("theme") or "").strip()
+                    if not choice or not outer._on_set_theme:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Missing theme")
+                        return
+                    if not outer._on_set_theme(choice):
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Unknown theme")
                         return
                     change = outer.state.update_info_card(outer._device_controls_payload())
                     if outer._on_state_change:

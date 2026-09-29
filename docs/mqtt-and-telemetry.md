@@ -132,7 +132,9 @@ Use the `Day Brightness` and `Night Brightness` number entities to set the sunri
 
 ### Overlay font select
 
-`pulse-kiosk-mqtt.service` also publishes a `select` entity named `Overlay Font` so you can change the on-device clock/timer font directly from Home Assistant. The command topic is `pulse/<hostname>/overlay/font/set`, the state topic is `pulse/<hostname>/overlay/font/state`, and the options list is auto-generated from every font reported by `fc-list` plus a `System default` entry that maps back to the `PULSE_OVERLAY_FONT_FAMILY` env var. Installing new fonts on the kiosk (and restarting the MQTT service so discovery is re-published) automatically adds them to the select list. Picking a font triggers an overlay refresh immediately so the change is visible on the kiosk screen within a second or two.
+`pulse-kiosk-mqtt.service` also publishes a `select` entity named `Overlay Theme` for the overlay's whole look — colours, corner radii, blur and typeface. The command topic is `pulse/<hostname>/overlay/theme/set`, the state topic is `pulse/<hostname>/overlay/theme/state`, and the options are the themes listed in [the config reference](config-reference.md#themes). A pick is written back to `PULSE_OVERLAY_THEME` and reaches the display within a couple of seconds, with no restart and no page reload.
+
+A second `select` named `Overlay Font` picks the typeface on its own. The command topic is `pulse/<hostname>/overlay/font/set`, the state topic is `pulse/<hostname>/overlay/font/state`, and the options list is auto-generated from every font reported by `fc-list` plus a `Theme default` entry that hands the choice back to the theme. Installing new fonts on the kiosk (and restarting the MQTT service so discovery is re-published) automatically adds them to the select list. Picking a font triggers an overlay refresh immediately so the change is visible on the kiosk screen within a second or two. A pick beats the theme, so a theme whose typeface is half its character (`terminal`, `synthwave`) needs this back on `Theme default` to look right.
 
 ---
 
@@ -262,7 +264,8 @@ MQTT preference keys are short, API-friendly names. Config variables are the ful
 | `ha_pipeline` | `HOME_ASSISTANT_ASSIST_PIPELINE` | passthrough | `ha_` is shorthand for `HOME_ASSISTANT_` |
 | `llm_provider` | `PULSE_ASSISTANT_PROVIDER` | passthrough | `llm_` prefix clarifies LLM context |
 | `log_llm` | `PULSE_ASSISTANT_LOG_LLM` | `on`/`off` → `true`/`false` | Publish transcripts to MQTT |
-| `overlay_font` | `PULSE_OVERLAY_FONT_FAMILY` | passthrough | `font` → `FONT_FAMILY` (CSS terminology) |
+| `overlay_theme` | `PULSE_OVERLAY_THEME` | passthrough | named token set; the colours themselves live in `pulse/overlay_themes.py` |
+| `overlay_font` | `PULSE_OVERLAY_FONT` | passthrough | the pick, never the theme's own face |
 | `sound_alarm` | `PULSE_SOUND_ALARM` | passthrough | Sound ID for alarm events |
 | `sound_timer` | `PULSE_SOUND_TIMER` | passthrough | Sound ID for timer events |
 | `sound_reminder` | `PULSE_SOUND_REMINDER` | passthrough | Sound ID for reminder events |
@@ -276,7 +279,8 @@ The kiosk MQTT service exposes additional preferences that are persisted the sam
 | ---------- | --------------- | ----- |
 | `pulse/<hostname>/display/day_brightness/set` | `PULSE_DAY_BRIGHTNESS` | Daytime brightness target (%) |
 | `pulse/<hostname>/display/night_brightness/set` | `PULSE_NIGHT_BRIGHTNESS` | Nighttime brightness target (%) |
-| `pulse/<hostname>/overlay/font/set` | `PULSE_OVERLAY_FONT_FAMILY` | Overlay font selection |
+| `pulse/<hostname>/overlay/theme/set` | `PULSE_OVERLAY_THEME` | Overlay theme selection |
+| `pulse/<hostname>/overlay/font/set` | `PULSE_OVERLAY_FONT` | Overlay font selection |
 
 ### Naming rationale
 
@@ -284,7 +288,7 @@ The MQTT keys intentionally differ slightly from config variable names to be sho
 
 - **`ha_pipeline`** uses the common `ha_` abbreviation instead of the full `HOME_ASSISTANT_ASSIST_` prefix
 - **`llm_provider`** adds the `llm_` prefix (the config var is just `PULSE_ASSISTANT_PROVIDER`) to clarify context in MQTT topics
-- **`overlay_font`** maps to `PULSE_OVERLAY_FONT_FAMILY` since the config follows CSS `font-family` terminology
+- **`overlay_font`** maps to `PULSE_OVERLAY_FONT`, the pick — the theme's own face is never rewritten, so `Theme default` keeps its meaning
 
 Changes made via MQTT are debounced (2 second delay) before being written to `pulse.conf`, so rapid adjustments don't cause excessive disk I/O. A backup is created automatically before each write.
 

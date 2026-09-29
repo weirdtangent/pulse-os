@@ -10,6 +10,7 @@ from pathlib import Path
 from pulse.overlay import (
     CLOCK_DATE_PRESETS,
     KEY_LIBRARIES,
+    OVERLAY_FONT_DEFAULT_OPTION,
     ClockConfig,
     OverlaySnapshot,
     OverlayStateManager,
@@ -29,6 +30,7 @@ from pulse.overlay import (
     sleep_window,
 )
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
+from pulse.overlay_themes import DEFAULT_THEME, THEMES, normalize_theme, theme_names
 from pulse.weather_alerts import BANNER_ALWAYS
 
 
@@ -96,12 +98,202 @@ class StyleTokenTests(unittest.TestCase):
         self.assertEqual(len(set(values)), len(values))
 
 
+class ThemeRegistryTests(unittest.TestCase):
+    """The rules a theme has to obey, enforced so ten of them stay writable.
+
+    Most of these exist because a theme is authored by hand as a dict of strings, with
+    no compiler between it and four wall displays.
+    """
+
+    # Faces on a stock Debian image. A theme naming anything else renders as the
+    # fallback with no warning at all, so a new face means a font package in setup.sh
+    # in the same change -- which is exactly the thing that gets forgotten.
+    INSTALLED_FACES = {
+        "c059",
+        "cantarell",
+        "dejavu math tex gyre",
+        "dejavu sans",
+        "dejavu sans condensed",
+        "dejavu sans light",
+        "dejavu sans mono",
+        "dejavu serif",
+        "dejavu serif condensed",
+        "droid sans fallback",
+        "liberation mono",
+        "liberation sans",
+        "liberation sans narrow",
+        "liberation serif",
+        "nimbus mono ps",
+        "nimbus roman",
+        "nimbus sans",
+        "nimbus sans narrow",
+        "noto color emoji",
+        "noto mono",
+        "noto sans mono",
+        "p052",
+        "standard symbols ps",
+        "urw bookman",
+        "urw gothic",
+        "z003",
+    }
+    GENERICS = {"sans-serif", "serif", "monospace", "cursive", "fantasy", "system-ui"}
+
+    def test_the_default_theme_changes_nothing(self) -> None:
+        """`original` is the stylesheet, so it has nothing to say.
+
+        If it ever grows an entry, the stylesheet and the default theme have started
+        disagreeing about what the stock look is, and one of them is now dead code.
+        """
+        self.assertEqual(THEMES[DEFAULT_THEME], {})
+
+    def test_themes_only_set_tokens_the_stylesheet_declares(self) -> None:
+        """A typo'd token name is invisible: it renders as nothing at all."""
+        known = set(_style_tokens())
+        # Supplied at runtime from the theme plus the live picker, not by :root.
+        known |= {"--overlay-font-family", "--overlay-clock-font-family"}
+        for name, tokens in THEMES.items():
+            with self.subTest(theme=name):
+                self.assertEqual(set(tokens) - known, set())
+
+    def test_themes_name_fonts_that_are_installed(self) -> None:
+        for name, tokens in THEMES.items():
+            for key in ("--overlay-font-family", "--overlay-clock-font-family"):
+                stack = tokens.get(key)
+                if not stack:
+                    continue
+                faces = {entry.strip().strip("\"'").lower() for entry in stack.split(",")}
+                with self.subTest(theme=name, token=key):
+                    self.assertEqual(faces - self.INSTALLED_FACES - self.GENERICS, set())
+
+    def test_every_theme_ends_its_font_stack_in_a_generic(self) -> None:
+        """A stack with no generic has nowhere to go when its faces are all missing."""
+        for name, tokens in THEMES.items():
+            stack = tokens.get("--overlay-font-family")
+            if not stack:
+                continue
+            entries = {entry.strip().strip("\"'").lower() for entry in stack.split(",")}
+            with self.subTest(theme=name):
+                self.assertTrue(entries & self.GENERICS)
+
+    def test_status_colours_stay_distinct_within_every_theme(self) -> None:
+        """Severity is the only at-a-glance meaning the notification bar carries.
+
+        A speaker fault, a weather watch and a weather warning sit on the same strip, so
+        a theme that renders two of them the same colour has silently deleted one. The
+        accent is in the set because it marks ordinary card titles: a status colour that
+        matches it stops reading as a status at all.
+
+        `caution` is allowed to equal `watch`. They are both "amber, act on this", they
+        live on different pills (the network one and the weather one), and forcing them
+        apart would buy nothing but two near-identical ambers.
+        """
+        defaults = _style_tokens()
+        signals = ("--overlay-fault", "--overlay-severe", "--overlay-watch", "--overlay-accent-color")
+        for name in THEMES:
+            resolved = {**defaults, **THEMES[name]}
+            values = [resolved[key].lower() for key in signals]
+            with self.subTest(theme=name):
+                self.assertEqual(len(set(values)), len(values))
+
+    def test_gains_and_losses_never_render_the_same(self) -> None:
+        defaults = _style_tokens()
+        for name in THEMES:
+            resolved = {**defaults, **THEMES[name]}
+            with self.subTest(theme=name):
+                self.assertNotEqual(
+                    resolved["--overlay-positive"].lower(),
+                    resolved["--overlay-negative"].lower(),
+                )
+
+    def test_a_theme_that_darkens_the_surface_keeps_its_text_readable(self) -> None:
+        """Text and its own surface must not be the same colour. Crude, but it catches
+        the copy-paste that leaves a theme half-converted."""
+        defaults = _style_tokens()
+        for name in THEMES:
+            resolved = {**defaults, **THEMES[name]}
+            with self.subTest(theme=name):
+                self.assertNotEqual(
+                    resolved["--overlay-text-color"].lower(),
+                    resolved["--overlay-surface-solid"].lower(),
+                )
+
+    def test_unknown_names_resolve_to_the_default(self) -> None:
+        """A typo in pulse.conf must not take a display down."""
+        for bad in ("", None, "  ", "Terminal Green", "nope"):
+            with self.subTest(value=bad):
+                self.assertEqual(normalize_theme(bad), DEFAULT_THEME)
+
+    def test_names_are_matched_case_insensitively(self) -> None:
+        """Home Assistant and the on-screen picker both send the display label."""
+        self.assertEqual(normalize_theme("Solarized"), "solarized")
+        self.assertEqual(normalize_theme("  TERMINAL "), "terminal")
+
+    def test_the_default_leads_the_picker(self) -> None:
+        """ "Put it back" should not require hunting through an alphabetical list."""
+        names = theme_names()
+        self.assertEqual(names[0], DEFAULT_THEME)
+        self.assertEqual(sorted(names), sorted(THEMES))
+
+
+class ThemeCssTests(unittest.TestCase):
+    def _theme(self, **kw) -> OverlayTheme:
+        return OverlayTheme(**kw)  # type: ignore[arg-type]
+
+    def test_a_theme_emits_only_what_it_changes(self) -> None:
+        css = _theme_css(self._theme(name="original"))
+        # Both font properties always, because the stylesheet declares neither.
+        self.assertIn("--overlay-font-family:", css)
+        self.assertIn("--overlay-clock-font-family:", css)
+        self.assertNotIn("--overlay-ambient-bg", css)
+        self.assertNotIn("--overlay-radius-pill", css)
+
+    def test_a_named_theme_emits_its_tokens(self) -> None:
+        css = _theme_css(self._theme(name="terminal"))
+        self.assertIn("--overlay-radius-pill: 0;", css)
+        self.assertIn("--overlay-text-color: #ffb000;", css)
+
+    def test_accent_override_beats_the_theme(self) -> None:
+        """Each room on this fleet runs its own accent, so this path is load-bearing."""
+        css = _theme_css(self._theme(name="solarized", accent_color="#ff5c5c"))
+        self.assertIn("--overlay-accent-color: #ff5c5c;", css)
+        self.assertNotIn(f"--overlay-accent-color: {THEMES['solarized']['--overlay-accent-color']};", css)
+
+    def test_a_font_pick_beats_the_themes_face(self) -> None:
+        css = _theme_css(self._theme(name="terminal", font_family='"Nimbus Sans"'))
+        self.assertIn('--overlay-font-family: "Nimbus Sans";', css)
+
+    def test_the_clock_falls_back_through_theme_then_overlay_font(self) -> None:
+        # solarized names no clock face, so the clock follows the overlay font.
+        css = _theme_css(self._theme(name="solarized", font_family='"Nimbus Sans"'))
+        self.assertIn('--overlay-clock-font-family: "Nimbus Sans";', css)
+        # terminal names one, and it wins over the theme's overlay font.
+        css = _theme_css(self._theme(name="terminal"))
+        self.assertIn('--overlay-clock-font-family: "DejaVu Sans Mono"', css)
+
+    def test_an_unknown_theme_renders_the_default_rather_than_failing(self) -> None:
+        self.assertEqual(
+            _theme_css(self._theme(name="nope")),
+            _theme_css(self._theme(name=DEFAULT_THEME)),
+        )
+
+    def test_every_theme_produces_parseable_css(self) -> None:
+        """Each theme is hand-written, so a stray quote reaches the display unchecked."""
+        for name in THEMES:
+            css = _theme_css(self._theme(name=name))
+            with self.subTest(theme=name):
+                self.assertTrue(css.startswith(":root {"))
+                self.assertTrue(css.endswith("}"))
+                self.assertEqual(css.count("{"), 1)
+                self.assertEqual(css.count("}"), 1)
+                body = css[css.index("{") + 1 : css.rindex("}")]
+                for line in (ln.strip() for ln in body.splitlines() if ln.strip()):
+                    self.assertTrue(line.endswith(";"), f"{name}: {line}")
+                    self.assertTrue(line.startswith("--overlay-"), f"{name}: {line}")
+
+
 class OverlayRenderTests(unittest.TestCase):
     def setUp(self) -> None:
         self.theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
         )
@@ -120,9 +312,6 @@ class OverlayRenderTests(unittest.TestCase):
         from pulse.overlay_assets import OVERLAY_CSS
 
         theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#ff5c5c",
             show_notification_bar=True,
         )
@@ -175,9 +364,6 @@ class OverlayRenderTests(unittest.TestCase):
 
     def test_ticker_rendered_when_enabled(self) -> None:
         theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
             show_ticker=True,
@@ -204,9 +390,6 @@ class OverlayRenderTests(unittest.TestCase):
 
     def _ticker_theme(self) -> OverlayTheme:
         return OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
             show_ticker=True,
@@ -254,9 +437,6 @@ class OverlayRenderTests(unittest.TestCase):
 
     def test_ticker_label_mode_ticker_shows_symbol(self) -> None:
         theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_ticker=True,
             ticker_label_mode="ticker",
@@ -280,9 +460,6 @@ class OverlayRenderTests(unittest.TestCase):
 
     def test_ticker_label_mode_auto_names_indices_symbols_others(self) -> None:
         theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_ticker=True,
             ticker_label_mode="auto",
@@ -1205,9 +1382,6 @@ class HelpInfoCardTests(unittest.TestCase):
     def test_help_badge_in_notification_bar(self) -> None:
         """Test that the Help badge appears in the rendered notification bar."""
         theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
         )
@@ -1218,9 +1392,6 @@ class HelpInfoCardTests(unittest.TestCase):
     def test_help_info_card_renders_via_state(self) -> None:
         """Test that setting info_card type=help produces help content."""
         theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
         )
@@ -1423,7 +1594,7 @@ class DeviceControlsCardTests(unittest.TestCase):
             "volume": 45,
             "day_brightness": 85,
             "night_brightness": 25,
-            "fonts": ["System default", "Inter", "JetBrains Mono"],
+            "fonts": [OVERLAY_FONT_DEFAULT_OPTION, "Inter", "JetBrains Mono"],
             "font": "Inter",
             "home_supported": True,
             "reboot_supported": True,
@@ -1454,10 +1625,10 @@ class DeviceControlsCardTests(unittest.TestCase):
         self.assertIn("JetBrains Mono", html)
 
     def test_font_options_preview_in_their_own_face(self) -> None:
-        html = _build_device_controls_info_overlay(self._card(fonts=["System default", "DejaVu Sans"]))
+        html = _build_device_controls_info_overlay(self._card(fonts=[OVERLAY_FONT_DEFAULT_OPTION, "DejaVu Sans"]))
         self.assertIn("style=\"font-family: 'DejaVu Sans', sans-serif\"", html)
-        # "System default" is a sentinel, not a font, so it has nothing to preview.
-        self.assertNotIn("font-family: 'System default'", html)
+        # The default option is a sentinel, not a font, so it has nothing to preview.
+        self.assertNotIn(f"font-family: '{OVERLAY_FONT_DEFAULT_OPTION}'", html)
 
     def test_font_names_with_css_punctuation_get_no_preview(self) -> None:
         """Names come from fontconfig, so they are not trusted input for a style attribute."""
@@ -1560,9 +1731,6 @@ class OverlayThemeConstructionTests(unittest.TestCase):
 class ClockFontThemeTests(unittest.TestCase):
     def _theme(self, **kw) -> OverlayTheme:
         base = dict(
-            ambient_background="rgba(0,0,0,0.3)",
-            alert_background="rgba(0,0,0,0.6)",
-            text_color="#FFF",
             accent_color="#88C0D0",
             font_family='"Nimbus Sans"',
         )
@@ -1640,9 +1808,6 @@ class WeatherAlertOverlayTests(OverlayRenderTests):
 
     def _banner_theme(self, minutes: int = 15, rotate_seconds: int = 30) -> OverlayTheme:
         return OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
             weather_alert_banner_minutes=minutes,
@@ -1976,9 +2141,6 @@ class ClockDateFormatTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.theme = OverlayTheme(
-            ambient_background="rgba(0,0,0,0.32)",
-            alert_background="rgba(0,0,0,0.65)",
-            text_color="#FFFFFF",
             accent_color="#88C0D0",
             show_notification_bar=True,
         )
@@ -2055,8 +2217,18 @@ class ClockDateFormatTests(unittest.TestCase):
         self.assertEqual(in_js, set(CLOCK_DATE_TOKENS))
 
 
-class ClockDateFitTests(unittest.TestCase):
-    """The date steps down a size rather than wrapping; the two ends must agree."""
+class ClockFitTests(unittest.TestCase):
+    """Both clock lines step down a size rather than wrapping; the two ends must agree.
+
+    The time only joined the date here once themes existed. It got away without fitting
+    while the overlay font was always proportional -- a mono face is roughly half again
+    as wide at the same size, which put "PM" on a second line and pushed the date out of
+    the cell entirely.
+    """
+
+    # Both ladders are generated by stepClasses() in overlay.js from these suffixes.
+    STEPS = ("tight", "tighter", "tightest")
+    BASES = ("overlay-clock__date", "overlay-clock__time")
 
     @staticmethod
     def _rule_body(selector: str) -> str:
@@ -2069,9 +2241,14 @@ class ClockDateFitTests(unittest.TestCase):
         pattern = re.compile(rf"^{re.escape(selector)}\s*\{{([^}}]*)\}}", re.MULTILINE)
         return "\n".join(pattern.findall(OVERLAY_CSS))
 
-    def _fit_classes(self) -> list[str]:
-        block = OVERLAY_JS.split("const dateFitClasses = [", 1)[1].split("]", 1)[0]
-        return re.findall(r"'([^']+)'", block)
+    def _fit_classes(self, base: str) -> list[str]:
+        """The ladder the JS builds for this base, checked against the JS rather than
+        assumed: these class names exist in two files and only agree by convention."""
+        self.assertIn(f"stepClasses('{base}')", OVERLAY_JS)
+        helper = OVERLAY_JS.split("const stepClasses = ", 1)[1].split(";", 1)[0]
+        for step in self.STEPS:
+            self.assertIn(f"--{step}", helper)
+        return [f"{base}--{step}" for step in self.STEPS]
 
     @staticmethod
     def _clamp_max_rem(body: str) -> float:
@@ -2079,23 +2256,37 @@ class ClockDateFitTests(unittest.TestCase):
         assert match is not None, f"no clamped font-size in rule body: {body!r}"
         return float(match.group(1))
 
-    def test_the_date_never_wraps(self) -> None:
-        self.assertIn("white-space: nowrap", self._rule_body(".overlay-clock__date"))
+    def test_neither_line_ever_wraps(self) -> None:
+        """Stepping down is pointless if the browser is allowed to wrap instead."""
+        for base in self.BASES:
+            with self.subTest(base=base):
+                self.assertIn("white-space: nowrap", self._rule_body(f".{base}"))
 
     def test_every_step_down_class_is_styled(self) -> None:
         """A class the JS adds with no rule behind it would silently do nothing."""
-        classes = self._fit_classes()
-        self.assertTrue(classes, "overlay.js no longer declares any step-down classes")
-        for class_name in classes:
-            with self.subTest(class_name=class_name):
-                self.assertTrue(self._rule_body(f".{class_name}").strip())
+        for base in self.BASES:
+            for class_name in self._fit_classes(base):
+                with self.subTest(class_name=class_name):
+                    self.assertTrue(self._rule_body(f".{class_name}").strip())
 
     def test_the_steps_get_progressively_smaller(self) -> None:
         """Applied in order, so a later class that is not smaller would never help."""
-        sizes = [self._clamp_max_rem(self._rule_body(".overlay-clock__date"))]
-        sizes += [self._clamp_max_rem(self._rule_body(f".{name}")) for name in self._fit_classes()]
-        self.assertEqual(sizes, sorted(sizes, reverse=True))
-        self.assertEqual(len(set(sizes)), len(sizes), "two steps render at the same size")
+        for base in self.BASES:
+            sizes = [self._clamp_max_rem(self._rule_body(f".{base}"))]
+            sizes += [self._clamp_max_rem(self._rule_body(f".{name}")) for name in self._fit_classes(base)]
+            with self.subTest(base=base):
+                self.assertEqual(sizes, sorted(sizes, reverse=True))
+                self.assertEqual(len(set(sizes)), len(sizes), "two steps render at the same size")
+
+    def test_both_lines_are_refitted_when_their_text_changes(self) -> None:
+        """The fit runs on change, not on every tick -- but it has to run on BOTH.
+
+        The time was previously assigned unconditionally with no measurement at all,
+        which is how a mono face went unnoticed.
+        """
+        tick = OVERLAY_JS.split("const tick = ", 1)[1]
+        self.assertIn("fitToCell(timeEl, timeFitClasses)", tick)
+        self.assertIn("fitToCell(dateEl, dateFitClasses)", tick)
 
 
 class SleepModeTests(unittest.TestCase):
@@ -2103,9 +2294,6 @@ class SleepModeTests(unittest.TestCase):
 
     def _theme(self, **overrides) -> OverlayTheme:
         data = {
-            "ambient_background": "rgba(0,0,0,0.32)",
-            "alert_background": "rgba(0,0,0,0.65)",
-            "text_color": "#FFFFFF",
             "accent_color": "#88C0D0",
             "sleep_start": "20:00",
             "sleep_end": "07:00",
@@ -2196,7 +2384,7 @@ class SleepModeTests(unittest.TestCase):
             {"id": "a", "label": "Wake", "next_fire": soon, "time_of_day": "06:30"},
         )
         html = render_overlay_html(self._snapshot(alarms=alarms), self._theme())
-        block = html.split('class="overlay-sleep"', 1)[1]
+        block = self._body(html).split('class="overlay-sleep"', 1)[1]
         self.assertIn("6:30 AM", block)
         self.assertNotIn("8:30 AM", block)
 
@@ -2204,7 +2392,11 @@ class SleepModeTests(unittest.TestCase):
         soon = (datetime.now(UTC) + timedelta(hours=9)).isoformat()
         alarms = ({"id": "a", "label": "Wake", "next_fire": soon, "time_of_day": "06:30"},)
         html = render_overlay_html(self._snapshot(alarms=alarms), self._theme(), clock_hour12=False)
-        block = html.split('class="overlay-sleep"', 1)[1]
+        # Markup only. Splitting the RAW document here left the inlined overlay.js in the
+        # block, so this asserted "AM" is absent from two thousand lines of script as well
+        # as from the alarm line -- and duly broke the day a comment in that script
+        # mentioned a time.
+        block = self._body(html).split('class="overlay-sleep"', 1)[1]
         self.assertIn("06:30", block)
         self.assertNotIn("AM", block)
 
@@ -2244,13 +2436,20 @@ class SleepModeTests(unittest.TestCase):
         body = self._body(render_overlay_html(self._snapshot(), self._theme()))
         self.assertNotIn("data-sleep-hold", body)
 
-    def test_sleep_colour_reaches_the_theme_block(self) -> None:
-        css = _theme_css(self._theme(sleep_color="#7a1f1f"))
-        self.assertIn("--overlay-sleep-color: #7a1f1f;", css)
+    def test_sleep_colour_comes_from_the_theme(self) -> None:
+        """The night clock's colour is a theme token now, not a per-device variable."""
+        css = _theme_css(self._theme(name="terminal"))
+        self.assertIn(f"--overlay-sleep-color: {THEMES['terminal']['--overlay-sleep-color']};", css)
 
-    def test_blank_sleep_colour_falls_back_to_the_default(self) -> None:
-        css = _theme_css(self._theme(sleep_color=""))
-        self.assertIn("--overlay-sleep-color: #B03030;", css)
+    def test_a_theme_without_a_sleep_colour_inherits_the_stylesheet(self) -> None:
+        """Not emitted means the sheet's own :root applies -- which is the default.
+
+        Asserting absence rather than a value on purpose: re-stating a default in the
+        theme block is exactly the duplication this indirection exists to remove.
+        """
+        css = _theme_css(self._theme(name="original"))
+        self.assertNotIn("--overlay-sleep-color", css)
+        self.assertIn("--overlay-sleep-color: #b03030;", OVERLAY_CSS)
 
     def test_wake_seconds_of_zero_is_emitted_not_dropped(self) -> None:
         """0 is the 'nothing I do at night lights the room' setting, so it must survive
@@ -2317,9 +2516,6 @@ class SleepWakePersistenceTests(unittest.TestCase):
 
     def _theme(self, **overrides) -> OverlayTheme:
         data = {
-            "ambient_background": "rgba(0,0,0,0.32)",
-            "alert_background": "rgba(0,0,0,0.65)",
-            "text_color": "#FFFFFF",
             "accent_color": "#88C0D0",
             "sleep_start": "20:00",
             "sleep_end": "07:00",

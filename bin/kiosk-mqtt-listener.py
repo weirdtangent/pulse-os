@@ -28,8 +28,8 @@ from pulse.mqtt_discovery import build_button_entity, build_number_entity, build
 from pulse.network import check_network, status_payload
 from pulse.overlay import (
     DEFAULT_FONT_STACK,
-    DEFAULT_SLEEP_COLOR,
     DEFAULT_SLEEP_WAKE_SECONDS,
+    OVERLAY_FONT_DEFAULT_OPTION,
     ClockConfig,
     OverlayChange,
     OverlayStateManager,
@@ -38,6 +38,13 @@ from pulse.overlay import (
     resolve_clock_date_format,
 )
 from pulse.overlay_server import OverlayHttpServer, OverlayServerConfig
+from pulse.overlay_themes import (
+    is_known_theme,
+    normalize_theme,
+    theme_font_stack,
+    theme_label,
+    theme_names,
+)
 from pulse.sound_library import SoundLibrary
 from pulse.speaker import SpeakerConfig, check_speaker
 from pulse.stock_ticker import (
@@ -76,6 +83,8 @@ class Topics:
     overlay_refresh: str
     overlay_font_command: str
     overlay_font_state: str
+    overlay_theme_command: str
+    overlay_theme_state: str
 
 
 @dataclass(frozen=True)
@@ -117,15 +126,12 @@ class OverlayConfig:
     port: int
     allowed_origins: tuple[str, ...]
     clocks: tuple[ClockConfig, ...]
-    ambient_background: str
-    alert_background: str
-    text_color: str
-    accent_color: str
+    theme: str  # named token set from pulse/overlay_themes.py
+    accent_color: str  # per-device accent override; "" = the theme's accent
     show_notification_bar: bool
     clock_24h: bool
     clock_date_format: str
-    font_family: str  # configured default stack; never rewritten by a pick
-    font_choice: str  # overlay font picked on-screen or from HA ("" = use the default)
+    font_choice: str  # overlay font picked on-screen or from HA ("" = use the theme's)
     clock_font_choice: str  # clock font picked separately ("" = follow the overlay font)
     auth_token: str | None
     ticker_enabled: bool
@@ -166,7 +172,6 @@ class OverlayConfig:
     # dim clock. Either end empty disables it.
     sleep_start: str
     sleep_end: str
-    sleep_color: str
     sleep_wake_seconds: int  # seconds a tap restores the normal overlay; 0 = no wake
 
 
@@ -322,8 +327,7 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
     ),
 ]
 
-OVERLAY_FONT_DEFAULT_OPTION = "System default"
-# The clock's "inherit" choice, distinct from the overlay's "System default".
+# The clock's "inherit" choice, distinct from the overlay's "Theme default".
 OVERLAY_CLOCK_FONT_DEFAULT_OPTION = "Same as overlay"
 # Sentinel so _resolve_font_stack can tell "no argument" from an explicit None.
 _UNSET = object()
@@ -535,6 +539,8 @@ def load_config() -> EnvConfig:
         overlay_refresh=f"pulse/{hostname}/overlay/refresh",
         overlay_font_command=f"pulse/{hostname}/overlay/font/set",
         overlay_font_state=f"pulse/{hostname}/overlay/font/state",
+        overlay_theme_command=f"pulse/{hostname}/overlay/theme/set",
+        overlay_theme_state=f"pulse/{hostname}/overlay/theme/state",
     )
 
     devtools = DevToolsConfig(
@@ -557,11 +563,11 @@ def load_config() -> EnvConfig:
     )
     if resolved and resolved.timezone:
         overlay_clock_spec = f"{resolved.timezone}={friendly_name}"
-    overlay_font_stack = _with_generic_fallback((os.environ.get("PULSE_OVERLAY_FONT_FAMILY") or "").strip())
-    # Separate from the stack above on purpose: PULSE_OVERLAY_FONT_FAMILY is the configured
-    # default and is never rewritten, so "System default" always means the same thing and a
-    # font picked on-screen can always be undone. The two used to share one variable, which
-    # meant the first pick destroyed the default permanently.
+    overlay_theme = normalize_theme(os.environ.get("PULSE_OVERLAY_THEME"))
+    # Separate from the theme's own font on purpose: the theme is never rewritten, so
+    # "Theme default" always means the same thing and a font picked on-screen can always
+    # be undone. A pick used to be written over the configured default stack, which
+    # destroyed it permanently the first time anyone touched the picker.
     overlay_font_choice = (os.environ.get("PULSE_OVERLAY_FONT") or "").strip()
     overlay_clock_font_choice = (os.environ.get("PULSE_OVERLAY_CLOCK_FONT") or "").strip()
     overlay_clocks = parse_clock_config(
@@ -579,14 +585,11 @@ def load_config() -> EnvConfig:
         port=overlay_port,
         allowed_origins=overlay_allowed_origins,
         clocks=overlay_clocks,
-        ambient_background=os.environ.get("PULSE_OVERLAY_AMBIENT_BG", "rgba(0, 0, 0, 0.32)"),
-        alert_background=os.environ.get("PULSE_OVERLAY_ALERT_BG", "rgba(0, 0, 0, 0.65)"),
-        text_color=os.environ.get("PULSE_OVERLAY_TEXT_COLOR", "#FFFFFF"),
-        accent_color=os.environ.get("PULSE_OVERLAY_ACCENT_COLOR", "#88C0D0"),
+        theme=overlay_theme,
+        accent_color=(os.environ.get("PULSE_OVERLAY_ACCENT_COLOR") or "").strip(),
         show_notification_bar=parse_bool(os.environ.get("PULSE_OVERLAY_NOTIFICATION_BAR"), True),
         clock_24h=parse_bool(os.environ.get("PULSE_OVERLAY_CLOCK_24H"), False),
         clock_date_format=resolve_clock_date_format(os.environ.get("PULSE_OVERLAY_CLOCK_DATE_FORMAT")),
-        font_family=overlay_font_stack,
         font_choice=overlay_font_choice,
         clock_font_choice=overlay_clock_font_choice,
         auth_token=(os.environ.get("PULSE_OVERLAY_AUTH_TOKEN") or "").strip() or None,
@@ -617,7 +620,6 @@ def load_config() -> EnvConfig:
         weather_alerts_longitude=resolved.longitude if resolved else None,
         sleep_start=(os.environ.get("PULSE_SLEEP_START") or "").strip(),
         sleep_end=(os.environ.get("PULSE_SLEEP_END") or "").strip(),
-        sleep_color=(os.environ.get("PULSE_SLEEP_COLOR") or "").strip() or DEFAULT_SLEEP_COLOR,
         # Floor of 5s so a mistyped 1 can't make the wake useless; 0 still disables.
         sleep_wake_seconds=_parse_sleep_wake_seconds(os.environ.get("PULSE_SLEEP_WAKE_SECONDS")),
         speaker_alert=parse_bool(os.environ.get("PULSE_SPEAKER_ALERT"), True),
@@ -886,7 +888,8 @@ class KioskMqttListener:
         self._overlay_theme: OverlayTheme | None = None
         self._overlay_http: OverlayHttpServer | None = None
         self._overlay_topic_handlers: dict[str, Any] = {}
-        self._default_font_stack = (self.overlay_config.font_family or DEFAULT_FONT_STACK).strip() or DEFAULT_FONT_STACK
+        self._overlay_theme_name = self.overlay_config.theme
+        self._default_font_stack = self._theme_font_stack()
         self._overlay_font_override: str | None = self.overlay_config.font_choice or None
         self._overlay_clock_font_override: str | None = self.overlay_config.clock_font_choice or None
         # Fold the saved pick in at startup. These used to be the same config variable, so
@@ -994,6 +997,7 @@ class KioskMqttListener:
                 on_set_volume=self._handle_overlay_volume_request,
                 on_set_brightness=self._handle_overlay_brightness_request,
                 get_device_levels=self._collect_device_control_snapshot,
+                on_set_theme=self._handle_overlay_set_theme,
                 on_set_font=self._handle_overlay_set_font,
                 on_set_clock_font=self._handle_overlay_set_clock_font,
                 on_set_brightness_target=self._handle_overlay_set_brightness_target,
@@ -1576,6 +1580,8 @@ class KioskMqttListener:
             # no on-screen equivalent, which is backwards for a touchscreen on a wall.
             "day_brightness": self._day_brightness,
             "night_brightness": self._night_brightness,
+            "themes": [theme_label(name) for name in theme_names()],
+            "theme": theme_label(self._overlay_theme_name),
             "fonts": list(self._font_options),
             "font": self._overlay_font_override or OVERLAY_FONT_DEFAULT_OPTION,
             "clock_fonts": [OVERLAY_CLOCK_FONT_DEFAULT_OPTION, *self._font_options[1:]],
@@ -1583,6 +1589,14 @@ class KioskMqttListener:
             "home_supported": bool(self.config.pulse_url),
             "reboot_supported": True,
         }
+
+    def _handle_overlay_set_theme(self, choice: str) -> bool:
+        """Reuse the MQTT theme handler so the display and Home Assistant can't diverge."""
+        if not is_known_theme(choice):
+            self.log(f"overlay-theme: '{choice}' is not a known theme")
+            return False
+        self.handle_overlay_theme(choice.encode())
+        return True
 
     def _handle_overlay_set_clock_font(self, choice: str) -> bool:
         if choice != OVERLAY_CLOCK_FONT_DEFAULT_OPTION and choice not in self._font_option_set:
@@ -1701,6 +1715,10 @@ class KioskMqttListener:
         )
         self._safe_publish(client, self.config.topics.overlay_refresh, payload, qos=0, retain=False)
 
+    def _theme_font_stack(self) -> str:
+        """The active theme's font stack -- the base every pick sits in front of."""
+        return _with_generic_fallback(theme_font_stack(self._overlay_theme_name))
+
     def _resolve_font_stack(self, override: str | None = _UNSET) -> str:  # type: ignore[assignment]
         """Build a CSS stack: the chosen face first, then the configured default behind it.
 
@@ -1716,7 +1734,7 @@ class KioskMqttListener:
         return base_stack or DEFAULT_FONT_STACK
 
     def _resolve_clock_font_stack(self) -> str:
-        """The clock's stack, or "" when it should just inherit the overlay font."""
+        """The clock's stack, or "" to let the theme (then the overlay font) decide."""
         if not self._overlay_clock_font_override:
             return ""
         return self._resolve_font_stack(self._overlay_clock_font_override)
@@ -1730,9 +1748,7 @@ class KioskMqttListener:
         the weather-alert fields.
         """
         return OverlayTheme(
-            ambient_background=self.overlay_config.ambient_background,
-            alert_background=self.overlay_config.alert_background,
-            text_color=self.overlay_config.text_color,
+            name=self._overlay_theme_name,
             accent_color=self.overlay_config.accent_color,
             show_notification_bar=self.overlay_config.show_notification_bar,
             font_family=font_stack,
@@ -1745,9 +1761,31 @@ class KioskMqttListener:
             weather_alert_rotate_seconds=self.overlay_config.weather_alerts_rotate_seconds,
             sleep_start=self.overlay_config.sleep_start,
             sleep_end=self.overlay_config.sleep_end,
-            sleep_color=self.overlay_config.sleep_color,
             sleep_wake_seconds=self.overlay_config.sleep_wake_seconds,
         )
+
+    def _apply_overlay_theme_choice(self, reason: str) -> None:
+        """Rebuild and republish the theme after the name changed.
+
+        Unlike a font change this cannot short-circuit on "the stack is unchanged": a
+        theme moves colours, radii and blur as well, and two themes can easily share a
+        font. The whole point of themes being token sets is that this path never needs
+        the kiosk to reload -- the refresh loop copies the new --overlay-* values across
+        on its next poll.
+        """
+        self._default_font_stack = self._theme_font_stack()
+        self._current_font_stack = self._resolve_font_stack()
+        if not self.overlay_config.enabled:
+            return
+        self._overlay_theme = self._build_overlay_theme(self._current_font_stack)
+        if self._overlay_http:
+            self._overlay_http.theme = self._overlay_theme
+        # A theme can rename the fonts behind "Theme default", so the picker's own list
+        # is rebuilt here too -- otherwise it keeps offering the previous theme's face.
+        self._refresh_font_options()
+        if self.overlay_state:
+            snapshot = self.overlay_state.snapshot()
+            self._emit_overlay_refresh(snapshot.version, reason)
 
     def _apply_overlay_font_choice(self, reason: str) -> None:
         new_stack = self._resolve_font_stack()
@@ -1762,6 +1800,15 @@ class KioskMqttListener:
         if self.overlay_state:
             snapshot = self.overlay_state.snapshot()
             self._emit_overlay_refresh(snapshot.version, reason)
+
+    def _publish_overlay_theme_state(self, client: mqtt.Client | None) -> None:
+        self._safe_publish(
+            client,
+            self.config.topics.overlay_theme_state,
+            theme_label(self._overlay_theme_name),
+            qos=1,
+            retain=True,
+        )
 
     def _publish_overlay_font_state(self, client: mqtt.Client | None) -> None:
         state = self._overlay_font_override or OVERLAY_FONT_DEFAULT_OPTION
@@ -2480,6 +2527,17 @@ class KioskMqttListener:
             entity_category="config",
         )
 
+        theme_select = build_select_entity(
+            "Overlay Theme",
+            f"{self.config.hostname}_overlay_theme",
+            self.config.topics.overlay_theme_command,
+            self.config.topics.overlay_theme_state,
+            sanitized_hostname,
+            options=[theme_label(name) for name in theme_names()],
+            icon="mdi:palette",
+            entity_category="config",
+        )
+
         self._refresh_font_options()
         font_select = build_select_entity(
             "Overlay Font",
@@ -2509,6 +2567,7 @@ class KioskMqttListener:
             "Reboot": reboot_button,
             "Update": update_button,
             "Audio Volume": volume_control,
+            "Overlay Theme": theme_select,
             "Overlay Font": font_select,
             "Latest version": latest_version_sensor,
             **telemetry_components,
@@ -2620,6 +2679,7 @@ class KioskMqttListener:
             client.subscribe(self.config.topics.day_brightness)
             client.subscribe(self.config.topics.night_brightness)
         client.subscribe(self.config.topics.overlay_font_command)
+        client.subscribe(self.config.topics.overlay_theme_command)
         if self.overlay_state:
             client.subscribe(self.assistant_topics.schedules_state)
             client.subscribe(self.assistant_topics.alarms_active)
@@ -2636,6 +2696,7 @@ class KioskMqttListener:
         self.publish_device_definition(client)
         self.publish_availability(client, "online")
         self._publish_overlay_font_state(client)
+        self._publish_overlay_theme_state(client)
         if self._brightness_supported:
             self._publish_brightness_targets_state(client)
         self._publish_version_metadata()
@@ -2689,6 +2750,8 @@ class KioskMqttListener:
             self.handle_night_brightness(msg.payload)
         elif msg.topic == self.config.topics.overlay_font_command:
             self.handle_overlay_font(msg.payload)
+        elif msg.topic == self.config.topics.overlay_theme_command:
+            self.handle_overlay_theme(msg.payload)
         elif self.overlay_state and msg.topic == self.assistant_topics.info_card:
             self._handle_overlay_info_card(msg.payload)
         elif msg.topic == self.assistant_topics.heartbeat:
@@ -2860,6 +2923,28 @@ class KioskMqttListener:
         # shipped "Inter") vanished from the list the moment anything else was chosen.
         # Empty clears the override and restores the configured default.
         persist_preference("overlay_font", normalized_choice or "")
+
+    def handle_overlay_theme(self, payload: bytes) -> None:
+        """Handle a theme pick from Home Assistant or from the display."""
+        choice = payload.decode("utf-8", errors="ignore").strip()
+        if not choice:
+            self.log('overlay-theme: ignoring empty payload ""')
+            return
+        # Both sides send the display label ("Solarized"); the wire and pulse.conf carry
+        # the lowercase name. normalize_theme handles either, but an unknown value is
+        # rejected here rather than silently resolving to the default -- a picker that
+        # answers every mistake with "original" is impossible to debug from the wall.
+        if not is_known_theme(choice):
+            self.log(f"overlay-theme: '{choice}' is not a known theme")
+            return
+        normalized = normalize_theme(choice)
+        if normalized == self._overlay_theme_name:
+            return
+        self._overlay_theme_name = normalized
+        self.log(f"overlay-theme: set to '{normalized}'")
+        self._publish_overlay_theme_state(None)
+        self._apply_overlay_theme_choice(reason="theme")
+        persist_preference("overlay_theme", normalized)
 
     def handle_overlay_clock_font(self, payload: bytes) -> None:
         """Handle clock font selection. Empty/"Same as overlay" makes the clock inherit."""

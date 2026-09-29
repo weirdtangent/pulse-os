@@ -288,11 +288,14 @@ def update_config(var_name: str, value: str, *, logger: logging.Logger | None = 
 #   ha_pipeline       -> HOME_ASSISTANT_ASSIST_PIPELINE  (ha_ is shorthand for HOME_ASSISTANT_)
 #   llm_provider      -> PULSE_ASSISTANT_PROVIDER        (llm_ prefix clarifies context)
 #   log_llm           -> PULSE_ASSISTANT_LOG_LLM       -> on/off -> true/false
-#   overlay_font      -> PULSE_OVERLAY_FONT              (the on-screen/HA pick; the
-#                                                        configured default lives in
-#                                                        PULSE_OVERLAY_FONT_FAMILY and is
-#                                                        never rewritten, so "System
-#                                                        default" keeps its meaning)
+#   overlay_theme     -> PULSE_OVERLAY_THEME             (named token set; the colours,
+#                                                        shapes and fonts it carries live
+#                                                        in pulse/overlay_themes.py, not
+#                                                        in pulse.conf)
+#   overlay_font      -> PULSE_OVERLAY_FONT              (the on-screen/HA pick; the theme
+#                                                        supplies the default and is never
+#                                                        rewritten, so "Theme default"
+#                                                        keeps its meaning)
 #   overlay_clock_font-> PULSE_OVERLAY_CLOCK_FONT        (the clock is rendered at 100px+,
 #                                                        so it is chosen separately)
 #   sound_alarm       -> PULSE_SOUND_ALARM
@@ -321,7 +324,8 @@ PREFERENCE_TO_CONFIG: dict[str, tuple[str, Callable[[str], str]]] = {
     "groq_model": ("GROQ_MODEL", str),
     "mistral_model": ("MISTRAL_MODEL", str),
     "openrouter_model": ("OPENROUTER_MODEL", str),
-    # Overlay settings (font -> FONT_FAMILY matches CSS terminology)
+    # Overlay appearance
+    "overlay_theme": ("PULSE_OVERLAY_THEME", str),
     "overlay_font": ("PULSE_OVERLAY_FONT", str),
     "overlay_clock_font": ("PULSE_OVERLAY_CLOCK_FONT", str),
     # Sound preferences (sound_<kind> -> PULSE_SOUND_<KIND>)

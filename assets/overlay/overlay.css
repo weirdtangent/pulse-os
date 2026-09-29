@@ -1273,10 +1273,29 @@ body {
   font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
 }
 
+/* Same fixed grid cell as the date below, and the same treatment: step down rather
+   than wrap. The time got away without this while the overlay font was always
+   proportional -- "1:50 PM" fits 403px at 6.5rem in Nimbus Sans with room to spare. A
+   mono face is roughly half again as wide at the same size, so the terminal theme (and
+   picking any mono face in the font picker, which was already possible) pushed "PM"
+   onto a second line and shoved the date out of the cell entirely. */
 .overlay-clock__time {
   font-size: clamp(3.5rem, 8vw, 6.5rem);
   font-weight: var(--overlay-clock-weight);
   letter-spacing: var(--overlay-clock-tracking);
+  white-space: nowrap;
+}
+
+.overlay-clock__time--tight {
+  font-size: clamp(3rem, 6.8vw, 5.5rem);
+}
+
+.overlay-clock__time--tighter {
+  font-size: clamp(2.6rem, 5.8vw, 4.7rem);
+}
+
+.overlay-clock__time--tightest {
+  font-size: clamp(2.2rem, 5vw, 4rem);
 }
 
 .overlay-clock__date {

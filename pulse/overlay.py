@@ -45,17 +45,21 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pulse import __version__
 from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
+from pulse.overlay_themes import DEFAULT_THEME, resolve_theme
 from pulse.weather_alerts import BANNER_ALWAYS, TIER_RANK, banner_active
 
 DEFAULT_FONT_STACK = '"Inter", "Segoe UI", "Helvetica Neue", sans-serif, "Noto Color Emoji"'
 DEFAULT_CALENDAR_LOOKAHEAD_HOURS = 72
-# Mirrors the sentinel the listener publishes for the Home Assistant font select.
-OVERLAY_FONT_DEFAULT_OPTION = "System default"
+# The sentinel the font pickers carry for "no explicit pick". It named the system
+# default before themes existed; now the face behind it is the active theme's, and a
+# theme whose typeface is half its character (terminal, synthwave) is silently defeated
+# by a leftover pick -- so the option says which one it means.
+#
+# Defined here and imported by the listener rather than declared in both: the two copies
+# have to be byte-identical, because one side renders the option and the other compares
+# against it, and a drift shows up as a font picker that silently does nothing.
+OVERLAY_FONT_DEFAULT_OPTION = "Theme default"
 WEATHER_ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "weather" / "icons"
-# Sleep mode's clock colour. A dimmed red rather than #FF0000: pure red on black
-# fringes badly on the kiosk panels and reads worse at a glance, which is the whole
-# point of the mode.
-DEFAULT_SLEEP_COLOR = "#B03030"
 # Default seconds a tap holds the normal overlay open during the sleep window.
 DEFAULT_SLEEP_WAKE_SECONDS = 60
 
@@ -688,14 +692,27 @@ def _is_timezone_valid(zone_name: str) -> bool:
 
 @dataclass(frozen=True)
 class OverlayTheme:
-    """Styling knobs for the rendered overlay."""
+    """Styling and behaviour knobs for the rendered overlay.
 
-    ambient_background: str
-    alert_background: str
-    text_color: str
-    accent_color: str
+    The styling half is now just a theme NAME plus the handful of per-device overrides
+    that survived: everything else lives in pulse/overlay_themes.py as token overrides,
+    and the stylesheet's own :root carries the defaults those diff against. What used
+    to be four colour fields wired to four pulse.conf variables is one name, because a
+    display is picked from a list on the wall rather than assembled a colour at a time.
+    """
+
+    # Which token set. Unknown names resolve to the default rather than raising -- see
+    # resolve_theme() for why a kiosk must never fail closed on this value.
+    name: str = DEFAULT_THEME
+    # Per-device accent override, empty to use the theme's. Kept when the other colour
+    # variables went because this fleet genuinely uses it: each room runs a different
+    # accent, so it identifies the display rather than styling it.
+    accent_color: str = ""
     show_notification_bar: bool = True
-    font_family: str = DEFAULT_FONT_STACK
+    # The resolved stack for the live font pick, empty to use the theme's font. The
+    # pick wins over the theme on purpose: someone who chose a face on the wall did so
+    # more recently and more deliberately than whoever set the theme.
+    font_family: str = ""
     show_ticker: bool = False
     ticker_scroll_speed: int = 60  # pixels per second
     ticker_emoji: bool = True
@@ -715,9 +732,6 @@ class OverlayTheme:
     # human typed into pulse.conf and what gets echoed back in the config card.
     sleep_start: str = ""
     sleep_end: str = ""
-    # Deliberately not pure red: #FF0000 on black fringes on the kiosk panels and is
-    # genuinely harder to read at a glance than a dimmed red.
-    sleep_color: str = DEFAULT_SLEEP_COLOR
     # Seconds a tap restores the normal overlay before it slides back to the clock.
     # 0 disables tap-to-wake entirely.
     sleep_wake_seconds: int = 60
@@ -1534,17 +1548,34 @@ def render_overlay_html(
 
 
 def _theme_css(theme: OverlayTheme) -> str:
-    return (
-        ":root {\n"
-        f"  --overlay-text-color: {theme.text_color};\n"
-        f"  --overlay-ambient-bg: {theme.ambient_background};\n"
-        f"  --overlay-alert-bg: {theme.alert_background};\n"
-        f"  --overlay-accent-color: {theme.accent_color};\n"
-        f"  --overlay-font-family: {theme.font_family};\n"
-        f"  --overlay-clock-font-family: {theme.clock_font_family or theme.font_family};\n"
-        f"  --overlay-sleep-color: {theme.sleep_color or DEFAULT_SLEEP_COLOR};\n"
-        "}"
+    """The :root block that carries the active theme, appended after the static sheet.
+
+    Only what the theme actually changes is emitted. A theme that leaves a token alone
+    is not listed here at all, so the stylesheet's own default applies -- which is why
+    `original` emits nothing but the two font properties.
+
+    The font properties are always emitted because the stylesheet deliberately does not
+    declare them: they are the one part of the look assembled at runtime, from the
+    theme's face and whatever the live picker has chosen over it.
+    """
+    tokens = dict(resolve_theme(theme.name))
+
+    # Per-device overrides, applied over the theme rather than merged into it, so the
+    # theme definition stays the thing you read to know what a theme looks like.
+    if theme.accent_color:
+        tokens["--overlay-accent-color"] = theme.accent_color
+
+    font_stack = theme.font_family or tokens.get("--overlay-font-family") or DEFAULT_FONT_STACK
+    tokens["--overlay-font-family"] = font_stack
+    # An explicit clock pick, else the theme's clock face, else the overlay font. The
+    # clock is the one element rendered at 100px+, where a face chosen to stay legible
+    # in a 14px badge often reads badly, so a theme may name it separately.
+    tokens["--overlay-clock-font-family"] = (
+        theme.clock_font_family or tokens.get("--overlay-clock-font-family") or font_stack
     )
+
+    declarations = "".join(f"  {name}: {value};\n" for name, value in tokens.items())
+    return f":root {{\n{declarations}}}"
 
 
 def _build_clock_card(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
@@ -2599,6 +2630,43 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
             + "</div>"
         )
 
+    def _render_option_picker(
+        *,
+        entries: Any,
+        current: Any,
+        attribute: str,
+        label: str,
+        description: str,
+        size: int = 6,
+    ) -> str:
+        """A plain listbox. Same shape as the font picker, without the face previews.
+
+        Rendered inline (size=N) rather than as a dropdown for the same reason the font
+        list is: a native popup opens against the top edge and covers a 720px kiosk.
+        """
+        if not isinstance(entries, list) or not entries:
+            return ""
+        current_value = str(current or entries[0])
+        options = "".join(
+            f'<option value="{html_escape(str(name), quote=True)}"'
+            f"{' selected' if str(name) == current_value else ''}>{html_escape(str(name))}</option>"
+            for name in entries
+        )
+        return f"""
+  <div class="overlay-control">
+    <div class="overlay-control__header">
+      <div>
+        <div class="overlay-control__label">{html_escape(label)}</div>
+        <div class="overlay-control__description">{html_escape(description)}</div>
+      </div>
+    </div>
+    <select class="overlay-control__select" {attribute} size="{size}"
+            aria-label="{html_escape(label, quote=True)}">
+      {options}
+    </select>
+  </div>
+""".strip()
+
     def _render_font_picker(*, entries: Any, current: Any, attribute: str, label: str, description: str) -> str:
         if not isinstance(entries, list) or not entries:
             return ""
@@ -2622,6 +2690,14 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
     </select>
   </div>
 """.strip()
+
+    theme_markup = _render_option_picker(
+        entries=card.get("themes"),
+        current=card.get("theme"),
+        attribute="data-theme-select",
+        label="Theme",
+        description="Colours, shapes, and the typeface behind \u201cTheme default\u201d.",
+    )
 
     # Two pickers, because the clock is the one element rendered at 100px+ and a face
     # chosen to stay legible in a 14px badge often looks wrong that large.
@@ -2661,7 +2737,7 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
   <div class="overlay-info-card__header">
     <div>
       <div class="overlay-info-card__title">Device controls</div>
-      <div class="overlay-info-card__subtitle">Brightness, volume, font, and power.</div>
+      <div class="overlay-info-card__subtitle">Brightness, volume, theme, font, and power.</div>
     </div>
     <button class="overlay-info-card__close" data-info-card-close aria-label="Close device controls">&times;</button>
   </div>
@@ -2669,6 +2745,7 @@ def _build_device_controls_info_overlay(card: dict[str, Any]) -> str:
     {brightness_markup}
     {targets_markup}
     {volume_markup}
+    {theme_markup}
     {font_markup}
     {clock_font_markup}
     {actions_markup}
