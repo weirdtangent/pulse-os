@@ -19,10 +19,9 @@ are the only at-a-glance meaning the notification bar carries, and a theme shoul
 to want them changed rather than get it by accident. Themes with a palette strong
 enough that the stock reds and ambers would look pasted on do override them.
 
-Fonts here name faces that are actually installed on the fleet (Debian's DejaVu,
-Liberation, Nimbus and URW sets). A face that is missing renders as the fallback
-without any warning, so adding a theme that needs a new one means adding the font
-package to setup.sh in the same change.
+Fonts here name faces installed by config/apt/manual-packages.txt. A face that is
+missing renders as the fallback with no warning at all, so a theme that wants a new one
+means adding the package in the same change; a test checks the two agree.
 """
 
 from __future__ import annotations
@@ -33,20 +32,29 @@ DEFAULT_THEME = "original"
 # -- still lands somewhere sensible rather than on the browser's generic.
 _FALLBACK = '"DejaVu Sans", "Liberation Sans", sans-serif, "Noto Color Emoji"'
 
-# The faces a stock Debian image actually gives us, grouped by what they look like.
-# The honest picture is narrow: Liberation Sans, Nimbus Sans and DejaVu Sans are all
-# Helvetica/Arial-adjacent grotesques and will never read as very different from each
-# other. The genuine variety is in the mono, the condensed, the geometric and the three
-# serifs, so those carry the themes that need a face with an opinion.
-_MONO = f'"DejaVu Sans Mono", "Liberation Mono", monospace, {_FALLBACK}'
-_CONDENSED = f'"Liberation Sans Narrow", "Nimbus Sans Narrow", {_FALLBACK}'
-_GEOMETRIC = f'"URW Gothic", {_FALLBACK}'  # a Century Gothic clone
-_HUMANIST = f'"Cantarell", {_FALLBACK}'
+# The faces the fleet installs, grouped by what they look like.
+#
+# A stock Debian image alone would not support eleven themes: Liberation Sans, Nimbus
+# Sans and DejaVu Sans are all Helvetica/Arial-adjacent grotesques that never read as
+# meaningfully different, which left most themes sharing one look. The ten font packages
+# in config/apt/manual-packages.txt are what makes a face per theme possible, and they
+# cost ~95MB against 106GB free.
+_MONO = f'"JetBrains Mono", "DejaVu Sans Mono", monospace, {_FALLBACK}'
+_CONDENSED = f'"IBM Plex Sans Condensed", "Liberation Sans Narrow", {_FALLBACK}'
+_GEOMETRIC_ROUND = f'"Quicksand", "URW Gothic", {_FALLBACK}'
+_GEOMETRIC_HEAVY = f'"League Spartan", "URW Gothic", {_FALLBACK}'
+_HUMANIST = f'"Cabin", "Cantarell", {_FALLBACK}'
+_MODERN = f'"Manrope", "Inter", {_FALLBACK}'
+_PLEX = f'"IBM Plex Sans", {_FALLBACK}'
 _GROTESQUE = f'"Nimbus Sans", {_FALLBACK}'  # Helvetica
-_NEUTRAL = f'"Liberation Sans", {_FALLBACK}'  # Arial
-_WORKHORSE = f'"DejaVu Sans", {_FALLBACK}'  # widest glyphs of the three
-_SERIF_WARM = f'"URW Bookman", "P052", serif, {_FALLBACK}'
-_SERIF_CALM = f'"P052", "C059", serif, {_FALLBACK}'  # Palatino
+_SERIF_WARM = f'"Vollkorn", "URW Bookman", serif, {_FALLBACK}'
+_SERIF_CALM = f'"EB Garamond", "P052", serif, {_FALLBACK}'
+
+# Seven-segment LCD, for the clock and nothing else. DSEG14 rather than DSEG7: seven
+# segments cannot form an M, so DSEG7 renders a 12-hour "1:53 PM" as "1:53 Pn". Even
+# DSEG14 turns ordinary prose into unreadable blocks, which is why this is only ever
+# assigned to --overlay-clock-font-family.
+_LCD = f'"DSEG14 Classic", "DSEG7 Classic", {_MONO}'
 
 
 THEMES: dict[str, dict[str, str]] = {
@@ -80,8 +88,9 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-text-color": "#e8edf2",
         "--overlay-accent-color": "#9fb3c8",
         "--overlay-accent-text": "#10161d",
-        # The most anonymous face available, which is the whole brief.
-        "--overlay-font-family": _NEUTRAL,
+        # Quiet modern geometric. The brief is "stop asking for attention", and
+        # Manrope is the least opinionated face here that still looks designed.
+        "--overlay-font-family": _MODERN,
         "--overlay-ambient-bg": "rgba(17, 24, 32, 0.58)",
         "--overlay-alert-bg": "rgba(17, 24, 32, 0.84)",
         "--overlay-surface-solid": "#1b232d",
@@ -104,6 +113,9 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-radius-button": "0.3rem",
         "--overlay-radius-button-lg": "0.3rem",
         "--overlay-radius-group": "0.35rem",
+        # The one theme left on a Helvetica clone, and deliberately: Helvetica is the
+        # photo-caption face, which is exactly what a greyscale overlay over a
+        # photograph is.
         "--overlay-font-family": _GROTESQUE,
         "--overlay-clock-weight": "200",
         "--overlay-sleep-color": "#8a8a8a",
@@ -120,8 +132,9 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-text-color": "#eee8d5",
         "--overlay-accent-color": "#2aa198",
         "--overlay-accent-text": "#002b36",
-        # Wide, even glyphs -- the palette is the point, so the face just has to be clear.
-        "--overlay-font-family": _WORKHORSE,
+        # IBM's own face on a palette every developer recognises. It has enough
+        # character to be identifiable without competing with the colours.
+        "--overlay-font-family": _PLEX,
         "--overlay-ambient-bg": "rgba(0, 43, 54, 0.70)",
         "--overlay-alert-bg": "rgba(0, 43, 54, 0.90)",
         "--overlay-surface-solid": "#073642",
@@ -169,7 +182,11 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-shadow-card": "none",
         "--overlay-shadow-panel": "none",
         "--overlay-font-family": _MONO,
-        "--overlay-clock-font-family": _MONO,
+        # The one place a seven-segment face belongs: digits, a colon and AM/PM, at
+        # 100px+, which is what the format was designed for. The date underneath goes
+        # back to the mono face, because DSEG renders "Tuesday, September 29" as blocks.
+        "--overlay-clock-font-family": _LCD,
+        "--overlay-clock-date-font-family": _MONO,
         "--overlay-title-tracking": "0.22em",
         "--overlay-clock-weight": "400",
         "--overlay-clock-tracking": "0",
@@ -205,14 +222,14 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-blur-panel": "24px",
         "--overlay-shadow-card": "0 0 0 1px rgba(0, 229, 255, 0.22), 0 0.5rem 2rem rgba(0, 0, 0, 0.55)",
         "--overlay-shadow-panel": "0 0 0 1px rgba(0, 229, 255, 0.22), 0 1.5rem 3rem rgba(0, 0, 0, 0.6)",
-        "--overlay-font-family": _CONDENSED,
+        "--overlay-font-family": _CONDENSED,  # IBM Plex Sans Condensed: tight and technical
         "--overlay-title-tracking": "0.16em",
         "--overlay-clock-weight": "200",
         "--overlay-sleep-color": "#0d6b7a",
     },
-    # Magenta and violet, set in URW Gothic -- a Century Gothic clone, which is the
-    # geometric face the look actually depends on and one of the few interesting
-    # typefaces already on a stock Debian image.
+    # Magenta and violet, set in Quicksand. The look depends on the face as much as
+    # the palette: rounded geometry reads as the era, where a Helvetica clone would
+    # just read as a purple overlay.
     "synthwave": {
         "--overlay-tint-rgb": "255, 214, 255",
         "--overlay-text-color": "#f8e6ff",
@@ -227,19 +244,22 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-fault": "#ff7847",
         "--overlay-severe": "#ff2e63",
         "--overlay-watch": "#ffd166",
-        "--overlay-font-family": _GEOMETRIC,
+        # Quicksand's rounded geometry is closer to the era than a Century Gothic
+        # clone: the look is Miami, not 1990s corporate.
+        "--overlay-font-family": _GEOMETRIC_ROUND,
         "--overlay-title-tracking": "0.18em",
         "--overlay-clock-weight": "200",
         "--overlay-sleep-color": "#7a2f66",
     },
-    # Warm end of the spectrum. The one theme that reads as lamplight rather than
-    # screen light, which is the point in a room used in the evening.
+    # Warm end of the spectrum, set in Vollkorn. The one theme that reads as lamplight
+    # rather than screen light, which is the point in a room used in the evening.
     "ember": {
         "--overlay-tint-rgb": "255, 233, 214",
         "--overlay-text-color": "#fff0e4",
         "--overlay-accent-color": "#ff8c42",
         "--overlay-accent-text": "#24110a",
-        # A serif, and the one theme that wants one: Bookman is what lamplight looks like set in type.
+        # A serif, and one of two themes that want one: Vollkorn has the weight and
+        # warmth that Garamond deliberately does not.
         "--overlay-font-family": _SERIF_WARM,
         "--overlay-ambient-bg": "rgba(32, 16, 10, 0.66)",
         "--overlay-alert-bg": "rgba(32, 16, 10, 0.88)",
@@ -252,14 +272,14 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-watch": "#ffb020",
         "--overlay-sleep-color": "#8a3a1a",
     },
-    # Cool green, low chroma. Sits well under photographs, which is where this overlay
-    # spends most of its life.
+    # Cool green and low chroma, set in EB Garamond. Sits well under photographs,
+    # which is where this overlay spends most of its life.
     "forest": {
         "--overlay-tint-rgb": "222, 238, 226",
         "--overlay-text-color": "#eaf4ec",
         "--overlay-accent-color": "#7fc99a",
         "--overlay-accent-text": "#0c1a12",
-        # Palatino. Calm and organic without Bookman's heft.
+        # Calm and organic, without Vollkorn's heft.
         "--overlay-font-family": _SERIF_CALM,
         "--overlay-ambient-bg": "rgba(12, 26, 18, 0.62)",
         "--overlay-alert-bg": "rgba(12, 26, 18, 0.86)",
@@ -279,8 +299,9 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-text-color": "#ffffff",
         "--overlay-accent-color": "#ffd400",
         "--overlay-accent-text": "#000000",
-        # Widest, most open glyphs installed -- picked for legibility, not character.
-        "--overlay-font-family": _WORKHORSE,
+        # Heavy geometric. Weight and open counters are what survive being read from
+        # across a room, which is this theme's entire job.
+        "--overlay-font-family": _GEOMETRIC_HEAVY,
         "--overlay-ambient-bg": "rgba(0, 0, 0, 0.92)",
         "--overlay-alert-bg": "rgba(0, 0, 0, 0.97)",
         "--overlay-surface-solid": "#000000",
