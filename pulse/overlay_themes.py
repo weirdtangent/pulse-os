@@ -227,9 +227,9 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-clock-weight": "200",
         "--overlay-sleep-color": "#0d6b7a",
     },
-    # Magenta and violet, set in URW Gothic -- a Century Gothic clone, which is the
-    # geometric face the look actually depends on and one of the few interesting
-    # typefaces already on a stock Debian image.
+    # Magenta and violet, set in Quicksand. The look depends on the face as much as
+    # the palette: rounded geometry reads as the era, where a Helvetica clone would
+    # just read as a purple overlay.
     "synthwave": {
         "--overlay-tint-rgb": "255, 214, 255",
         "--overlay-text-color": "#f8e6ff",
@@ -251,14 +251,15 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-clock-weight": "200",
         "--overlay-sleep-color": "#7a2f66",
     },
-    # Warm end of the spectrum. The one theme that reads as lamplight rather than
-    # screen light, which is the point in a room used in the evening.
+    # Warm end of the spectrum, set in Vollkorn. The one theme that reads as lamplight
+    # rather than screen light, which is the point in a room used in the evening.
     "ember": {
         "--overlay-tint-rgb": "255, 233, 214",
         "--overlay-text-color": "#fff0e4",
         "--overlay-accent-color": "#ff8c42",
         "--overlay-accent-text": "#24110a",
-        # A serif, and the one theme that wants one: Bookman is what lamplight looks like set in type.
+        # A serif, and one of two themes that want one: Vollkorn has the weight and
+        # warmth that Garamond deliberately does not.
         "--overlay-font-family": _SERIF_WARM,
         "--overlay-ambient-bg": "rgba(32, 16, 10, 0.66)",
         "--overlay-alert-bg": "rgba(32, 16, 10, 0.88)",
@@ -271,14 +272,14 @@ THEMES: dict[str, dict[str, str]] = {
         "--overlay-watch": "#ffb020",
         "--overlay-sleep-color": "#8a3a1a",
     },
-    # Cool green, low chroma. Sits well under photographs, which is where this overlay
-    # spends most of its life.
+    # Cool green and low chroma, set in EB Garamond. Sits well under photographs,
+    # which is where this overlay spends most of its life.
     "forest": {
         "--overlay-tint-rgb": "222, 238, 226",
         "--overlay-text-color": "#eaf4ec",
         "--overlay-accent-color": "#7fc99a",
         "--overlay-accent-text": "#0c1a12",
-        # Palatino. Calm and organic without Bookman's heft.
+        # Calm and organic, without Vollkorn's heft.
         "--overlay-font-family": _SERIF_CALM,
         "--overlay-ambient-bg": "rgba(12, 26, 18, 0.62)",
         "--overlay-alert-bg": "rgba(12, 26, 18, 0.86)",

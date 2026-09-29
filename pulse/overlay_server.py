@@ -349,13 +349,29 @@ html, body {{
     const open = text.indexOf('{{', rootAt);
     const close = text.indexOf('}}', open);
     if (open < 0 || close < 0) return;
+    // Collect first, apply second. A theme block only declares what that theme
+    // CHANGES, so the set shrinks when you switch to a plainer theme -- and these
+    // properties live on documentElement's inline style, which beats the stylesheet.
+    // Setting the new ones without clearing the old leaves every token the previous
+    // theme set and this one does not: switching away from `terminal` kept square
+    // pills, no blur and a mono clock date indefinitely, because nothing ever put
+    // them back. Collecting first means a malformed block leaves the live theme
+    // alone rather than stripping it to the stylesheet defaults.
+    const next = [];
     text.slice(open + 1, close).split(';').forEach((declaration) => {{
       const colon = declaration.indexOf(':');
       if (colon < 0) return;
       const name = declaration.slice(0, colon).trim();
       if (name.indexOf('--overlay-') !== 0) return;
-      document.documentElement.style.setProperty(name, declaration.slice(colon + 1).trim());
+      next.push([name, declaration.slice(colon + 1).trim()]);
     }});
+    if (!next.length) return;
+    const inline = document.documentElement.style;
+    for (let i = inline.length - 1; i >= 0; i--) {{
+      const prop = inline[i];
+      if (prop.indexOf('--overlay-') === 0) inline.removeProperty(prop);
+    }}
+    next.forEach(([name, value]) => inline.setProperty(name, value));
   }}
 
   async function refreshOverlay() {{

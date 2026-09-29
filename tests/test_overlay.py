@@ -203,15 +203,18 @@ class ThemeRegistryTests(unittest.TestCase):
         missing = sorted(pkg for pkg in self.PACKAGE_FACES if pkg not in packages)
         self.assertEqual(missing, [])
 
-    def test_the_lcd_face_is_never_used_for_body_text(self) -> None:
+    def test_the_lcd_face_is_never_used_for_prose(self) -> None:
         """Seven- and fourteen-segment faces render prose as unreadable blocks.
 
         DSEG is only ever legitimate on --overlay-clock-font-family, where the content
-        is digits, a colon and AM/PM.
+        is digits, a colon and AM/PM. Both prose tokens are checked, including the clock
+        DATE: that one is the whole reason --overlay-clock-date-font-family exists, so
+        guarding only the body font would leave the exact hole this split was for.
         """
         for name, tokens in THEMES.items():
-            with self.subTest(theme=name):
-                self.assertNotIn("DSEG", tokens.get("--overlay-font-family", ""))
+            for key in ("--overlay-font-family", "--overlay-clock-date-font-family"):
+                with self.subTest(theme=name, token=key):
+                    self.assertNotIn("DSEG", tokens.get(key, ""))
 
     def test_every_theme_ends_its_font_stack_in_a_generic(self) -> None:
         """A stack with no generic has nowhere to go when its faces are all missing."""
@@ -281,6 +284,44 @@ class ThemeRegistryTests(unittest.TestCase):
         names = theme_names()
         self.assertEqual(names[0], DEFAULT_THEME)
         self.assertEqual(sorted(names), sorted(THEMES))
+
+
+class ThemeSwitchTests(unittest.TestCase):
+    """Switching to a plainer theme has to UNSET what the previous one set.
+
+    A theme block declares only what that theme changes, and the refresh loop copies
+    those onto documentElement's inline style, which beats the stylesheet. So the set
+    shrinks when you switch to a theme that overrides less -- and without clearing
+    first, every token the old theme set and the new one does not simply stays.
+    Switching away from `terminal` kept square pills, no blur and a mono clock date
+    indefinitely, because nothing ever put them back.
+    """
+
+    def _apply_block(self) -> str:
+        """The body of applyThemeVariables, read from overlay_server.py's source.
+
+        Unlike overlay.js this script is a Python f-string inside a request handler, so
+        there is no module constant to import -- and the braces in it are doubled, which
+        is why the assertions below stick to brace-free fragments.
+        """
+        source = (Path(__file__).resolve().parent.parent / "pulse" / "overlay_server.py").read_text(encoding="utf-8")
+        return source.split("function applyThemeVariables", 1)[1].split("\n  }}", 1)[0]
+
+    def test_previous_overlay_properties_are_cleared_first(self) -> None:
+        block = self._apply_block()
+        self.assertIn("removeProperty", block)
+
+    def test_a_malformed_block_leaves_the_live_theme_alone(self) -> None:
+        """Clearing before parsing would strip a kiosk to the stylesheet defaults on a
+        single bad response, which is worse than showing a stale theme."""
+        block = self._apply_block()
+        self.assertLess(block.index("next.push"), block.index("removeProperty"))
+        self.assertIn("if (!next.length) return;", block)
+
+    def test_themes_that_override_shape_are_actually_reversible(self) -> None:
+        """The scenario above, stated as data: terminal sets tokens `original` does not."""
+        only_in_terminal = set(THEMES["terminal"]) - set(THEMES[DEFAULT_THEME])
+        self.assertIn("--overlay-radius-pill", only_in_terminal)
 
 
 class ThemeCssTests(unittest.TestCase):
