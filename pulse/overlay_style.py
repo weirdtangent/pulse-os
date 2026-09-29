@@ -15,6 +15,11 @@ import re
 
 from pulse.overlay_assets import OVERLAY_CSS
 
+# This module exists to export one constant. Declared explicitly because a module-level
+# name that is only read from OTHER modules reads as dead code to intra-file analysis --
+# CodeQL flagged it as an unused global.
+__all__ = ["STYLE_TOKEN_DEFAULTS"]
+
 _ROOT_BLOCK_RE = re.compile(r":root\s*\{(.*?)\n\}", re.DOTALL)
 _DECLARATION_RE = re.compile(r"^\s*(--overlay-[a-z0-9-]+)\s*:\s*(.+?);\s*$", re.MULTILINE)
 

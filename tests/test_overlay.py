@@ -597,13 +597,15 @@ class OverlayRenderTests(unittest.TestCase):
     def test_theme_css_wins_over_the_static_stylesheet(self) -> None:
         """The theme block must come AFTER OVERLAY_CSS in the rendered document.
 
-        Both declare :root with identical specificity, so source order decides. With
-        the theme emitted first, OVERLAY_CSS's :root defaults silently overrode every
-        configured colour on initial render, and the display only picked the real theme
-        up when the refresh loop next copied it onto documentElement -- which happens
-        solely on an overlay CONTENT change. Net effect: a kiosk showed its configured
-        accent until the page reloaded, then reverted to the built-in default until
-        some card happened to appear.
+        Both declare :root with identical specificity, so source order decides. With the
+        theme emitted first, OVERLAY_CSS's :root defaults silently override every
+        configured colour on the FIRST paint.
+
+        The refresh loop now applies the theme on every poll rather than only on a
+        content change, so a document in the wrong order self-corrects within a couple of
+        seconds -- which makes this worth pinning down rather than less so: the failure
+        stopped being a stuck display and became a flash of the wrong theme on every
+        reload, which is exactly the kind of thing that gets waved through.
         """
         from pulse.overlay_assets import OVERLAY_CSS
 
