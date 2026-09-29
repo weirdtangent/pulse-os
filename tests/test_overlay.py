@@ -446,6 +446,25 @@ class ThemeSwitchTests(unittest.TestCase):
         self.assertLess(block.index("next.push"), block.index("removeProperty"))
         self.assertIn("if (!next.length) return;", block)
 
+    def test_a_theme_change_does_not_wait_for_a_content_change(self) -> None:
+        """applyThemeVariables runs on every poll, not inside the version check.
+
+        A theme change does not touch the overlay's CONTENT, so the snapshot version does
+        not move. With the call inside `if (newVersion !== currentVersion)`, the backend
+        served the new :root and the client never read it -- picking a theme on the wall
+        did nothing until something unrelated happened to redraw the overlay.
+        """
+        source = (Path(__file__).resolve().parent.parent / "pulse" / "overlay_server.py").read_text(encoding="utf-8")
+        loop = source.split("async function refreshOverlay", 1)[1]
+        apply_at = loop.index("applyThemeVariables(doc);")
+        gate_at = loop.index("if (newVersion && newVersion !== currentVersion)")
+        self.assertLess(apply_at, gate_at, "theme application is gated on a version change")
+
+    def test_the_every_poll_apply_short_circuits_when_nothing_changed(self) -> None:
+        """Otherwise it rewrites a dozen custom properties 30x a minute, forever, on a Pi."""
+        block = self._apply_block()
+        self.assertIn("if (themeText === lastThemeText) return;", block)
+
     def test_themes_that_override_shape_are_actually_reversible(self) -> None:
         """The scenario above, stated as data: terminal sets tokens `original` does not."""
         only_in_terminal = set(THEMES["terminal"]) - set(THEMES[DEFAULT_THEME])

@@ -334,6 +334,8 @@ html, body {{
   // Parsed by hand rather than with a regex: this whole script lives inside a Python
   // f-string, where every brace and backslash has to be doubled, and a regex full of them
   // is a trap for the next person editing it.
+  let lastThemeText = null;
+
   function applyThemeVariables(doc) {{
     const style = doc.querySelector('style');
     if (!style) return;
@@ -349,6 +351,12 @@ html, body {{
     const open = text.indexOf('{{', rootAt);
     const close = text.indexOf('}}', open);
     if (open < 0 || close < 0) return;
+    // This now runs on every poll, not only when the overlay CONTENT changed, so bail
+    // as early as possible when nothing moved: a string compare beats writing a dozen
+    // custom properties onto documentElement thirty times a minute, forever, on a Pi.
+    const themeText = text.slice(open + 1, close);
+    if (themeText === lastThemeText) return;
+    lastThemeText = themeText;
     // Collect first, apply second. A theme block only declares what that theme
     // CHANGES, so the set shrinks when you switch to a plainer theme -- and these
     // properties live on documentElement's inline style, which beats the stylesheet.
@@ -358,7 +366,7 @@ html, body {{
     // them back. Collecting first means a malformed block leaves the live theme
     // alone rather than stripping it to the stylesheet defaults.
     const next = [];
-    text.slice(open + 1, close).split(';').forEach((declaration) => {{
+    themeText.split(';').forEach((declaration) => {{
       const colon = declaration.indexOf(':');
       if (colon < 0) return;
       const name = declaration.slice(0, colon).trim();
@@ -402,6 +410,15 @@ html, body {{
 
       const newVersion = newRoot.dataset.version;
 
+      // Themes are applied on every poll, deliberately OUTSIDE the version check below.
+      // A theme change does not touch the overlay's content, so its version does not
+      // move -- pick `terminal` on the wall and the backend duly serves the new
+      // :root, but a client that only reads the document when the version changed
+      // never looks at it, and the display keeps the old theme until something
+      // unrelated happens to redraw. The early-out above makes the common case a
+      // string compare.
+      applyThemeVariables(doc);
+
       // Only update if version changed
       if (newVersion && newVersion !== currentVersion) {{
         console.log(`Overlay updated (v${{currentVersion}} -> v${{newVersion}})`);
@@ -425,14 +442,6 @@ html, body {{
 
         // Append the entire pulse-overlay-root element to preserve its CSS classes and structure
         overlayContainer.appendChild(newRoot);
-
-        // Carry over the theme custom properties. This loop swaps body markup only and
-        // never touches the page's <style>, so a theme change served by the backend --
-        // picking a new font, most visibly -- was rendered into HTML nobody read, and the
-        // display kept its boot-time font until the page happened to reload. Copying just
-        // the :root --overlay-* declarations onto the element's inline style is enough:
-        // they are the whole of what the theme controls, and inline wins over the sheet.
-        applyThemeVariables(doc);
 
         const nextCard = overlayContainer.querySelector('.overlay-info-card');
         const nextBody = overlayContainer.querySelector('.overlay-info-card__body');
