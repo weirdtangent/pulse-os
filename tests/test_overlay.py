@@ -286,6 +286,134 @@ class ThemeRegistryTests(unittest.TestCase):
         self.assertEqual(sorted(names), sorted(THEMES))
 
 
+class ThemeSurfaceTests(unittest.TestCase):
+    """The surfaces a theme moves independently: the badge row, the panel, the clock.
+
+    Each of these used to be hardwired to one of the three core backgrounds, so a theme
+    could not tint its pills without also tinting the alert cards and the ticker. They
+    still default to what they were, which is what these tests pin down first.
+    """
+
+    DEFAULTS = {
+        "--overlay-badge-bg": "var(--overlay-alert-bg)",
+        "--overlay-badge-text": "var(--overlay-text-color)",
+        # Transparent, so the outline costs nothing until a theme asks for it.
+        "--overlay-badge-outline": "transparent",
+        "--overlay-panel-bg": "var(--overlay-ambient-bg)",
+        "--overlay-clock-color": "var(--overlay-text-color)",
+    }
+
+    @staticmethod
+    def _alpha(value: str) -> float | None:
+        """Alpha of a colour, or None for a form this cannot read.
+
+        Fails closed rather than assuming opaque. Theme values are unrestricted CSS
+        strings, so treating everything unrecognised as 1.0 would wave through exactly
+        the values that break the guard below -- `transparent`, `#00000000`, an
+        `hsla(..., 0)` -- while looking like it had checked them.
+
+        Counting rgba() components does not work either: the stylesheet writes its own
+        colours as `rgba(var(--overlay-scrim-rgb), 0.65)`, where the three channels are
+        a single token. The alpha is whatever follows the last comma.
+        """
+        text = value.strip().lower()
+        if text == "transparent":
+            return 0.0
+        if text.startswith("rgba(") or text.startswith("hsla("):
+            inner = text[text.index("(") + 1 : text.rindex(")")]
+            try:
+                return float(inner.rsplit(",", 1)[1].strip().rstrip("%"))
+            except (IndexError, ValueError):
+                return None
+        if text.startswith("rgb(") or text.startswith("hsl(") or text.startswith("color-mix("):
+            return 1.0
+        if text.startswith("#"):
+            digits = text[1:]
+            if len(digits) in (3, 6):
+                return 1.0
+            if len(digits) == 4:
+                return int(digits[3] * 2, 16) / 255
+            if len(digits) == 8:
+                return int(digits[6:8], 16) / 255
+            return None
+        return None
+
+    def test_each_new_surface_defaults_to_what_it_replaced(self) -> None:
+        """A theme that says nothing has to render exactly as it did before the split."""
+        tokens = _style_tokens()
+        for name, expected in self.DEFAULTS.items():
+            with self.subTest(token=name):
+                self.assertEqual(tokens[name], expected)
+
+    def test_the_badge_row_never_goes_translucent(self) -> None:
+        """The badge row is permanent and sits over whatever photo or camera feed is up.
+
+        A bright sky washes its text out -- coloured text like the market pill worst of
+        all -- which is why it takes the opaque-biased background rather than the
+        lighter ambient one. A theme may retint it; a theme that makes it see-through
+        has broken the one row that is always on screen.
+        """
+        default = self._alpha(_style_tokens()["--overlay-alert-bg"])
+        assert default is not None
+        for name, overrides in THEMES.items():
+            value = overrides.get("--overlay-badge-bg")
+            if value is None:
+                continue
+            alpha = self._alpha(value)
+            with self.subTest(theme=name):
+                self.assertIsNotNone(alpha, f"unreadable colour form: {value!r}")
+                assert alpha is not None  # narrowing; the assertion above is the real check
+                self.assertGreaterEqual(alpha, default)
+
+    def test_the_opacity_guard_reads_the_forms_a_theme_can_write(self) -> None:
+        """Including the ones that would sneak an invisible badge row past it."""
+        for value, expected in (
+            ("rgba(var(--overlay-scrim-rgb), 0.65)", 0.65),
+            ("rgba(8, 6, 0, 0.92)", 0.92),
+            ("#000000", 1.0),
+            ("#fff", 1.0),
+            ("transparent", 0.0),
+            ("#00000000", 0.0),
+            ("hsla(200, 50%, 10%, 0)", 0.0),
+        ):
+            alpha = self._alpha(value)
+            with self.subTest(value=value):
+                self.assertIsNotNone(alpha)
+                assert alpha is not None  # narrowing
+                self.assertAlmostEqual(alpha, expected, places=2)
+        for unreadable in ("var(--something-else)", "#12345", "chartreuse"):
+            with self.subTest(value=unreadable):
+                self.assertIsNone(self._alpha(unreadable))
+
+    def test_no_theme_hides_its_badge_text_in_its_badge_background(self) -> None:
+        for name, overrides in THEMES.items():
+            resolved = {**_style_tokens(), **overrides}
+            with self.subTest(theme=name):
+                self.assertNotEqual(
+                    resolved["--overlay-badge-text"].lower(),
+                    resolved["--overlay-badge-bg"].lower(),
+                )
+
+    def test_the_badge_outline_is_drawn_without_a_border_box(self) -> None:
+        """An inset shadow, not a border.
+
+        .overlay-badge--network pins its min-height to the badge's own padding, and a
+        real border would knock that calculation out by two pixels on the one pill that
+        cannot afford it -- it is the only badge with no emoji to set its line box.
+        """
+        rule = OVERLAY_CSS.split(".overlay-badge {", 1)[1].split("}", 1)[0]
+        self.assertIn("inset 0 0 0 var(--overlay-border-width)", rule)
+        self.assertNotIn("border:", rule)
+
+    def test_the_clock_colour_covers_all_three_of_its_lines(self) -> None:
+        """Title, time and date, or a theme tints the clock and leaves its label white."""
+        selectors = OVERLAY_CSS.split("color: var(--overlay-clock-color)", 1)[0]
+        selectors = selectors[selectors.rindex("}") :]
+        for part in ("overlay-card__title", "overlay-clock__time", "overlay-clock__date"):
+            with self.subTest(part=part):
+                self.assertIn(part, selectors)
+
+
 class ThemeSwitchTests(unittest.TestCase):
     """Switching to a plainer theme has to UNSET what the previous one set.
 
