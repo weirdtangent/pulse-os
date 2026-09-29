@@ -75,7 +75,9 @@ class StyleTokenTests(unittest.TestCase):
     def test_every_token_is_used(self) -> None:
         """A token nothing reads is a promise to theme authors that isn't kept."""
         body = self._rule_body()
-        unused = [name for name in _style_tokens() if f"var({name})" not in body]
+        # Either form counts: some tokens are read with a fallback, because the value
+        # they default to is itself supplied at runtime rather than by :root.
+        unused = [name for name in _style_tokens() if f"var({name})" not in body and f"var({name}," not in body]
         self.assertEqual(unused, [])
 
     def test_status_colours_stay_distinct(self) -> None:
@@ -105,37 +107,47 @@ class ThemeRegistryTests(unittest.TestCase):
     no compiler between it and four wall displays.
     """
 
-    # Faces on a stock Debian image. A theme naming anything else renders as the
-    # fallback with no warning at all, so a new face means a font package in setup.sh
-    # in the same change -- which is exactly the thing that gets forgotten.
-    INSTALLED_FACES = {
-        "c059",
+    # Families each font package provides, for the faces the themes actually name.
+    # Package name and family name are unrelated strings, so this map is the only place
+    # the two are connected -- and test_theme_fonts_are_installed_by_setup below checks
+    # every package here is really in the apt list, which is what stops a theme naming a
+    # face that silently falls back on the fleet.
+    PACKAGE_FACES = {
+        "fonts-dejavu": {"dejavu sans", "dejavu sans mono", "dejavu serif"},
+        "fonts-cabin": {"cabin"},
+        "fonts-dseg": {"dseg14 classic", "dseg7 classic"},
+        "fonts-ebgaramond": {"eb garamond"},
+        "fonts-ibm-plex": {"ibm plex sans", "ibm plex sans condensed", "ibm plex mono"},
+        "fonts-inter": {"inter"},
+        "fonts-jetbrains-mono": {"jetbrains mono"},
+        "fonts-league-spartan": {"league spartan"},
+        "fonts-manrope": {"manrope"},
+        "fonts-quicksand": {"quicksand"},
+        "fonts-vollkorn": {"vollkorn"},
+        "fonts-noto-color-emoji": {"noto color emoji"},
+    }
+    # Shipped with the Raspberry Pi OS image rather than installed by us, so these are
+    # not in manual-packages.txt and cannot be checked against it.
+    STOCK_FACES = {
         "cantarell",
-        "dejavu math tex gyre",
-        "dejavu sans",
-        "dejavu sans condensed",
-        "dejavu sans light",
-        "dejavu sans mono",
-        "dejavu serif",
-        "dejavu serif condensed",
-        "droid sans fallback",
-        "liberation mono",
         "liberation sans",
         "liberation sans narrow",
+        "liberation mono",
         "liberation serif",
-        "nimbus mono ps",
-        "nimbus roman",
         "nimbus sans",
         "nimbus sans narrow",
-        "noto color emoji",
+        "nimbus roman",
+        "nimbus mono ps",
+        "urw gothic",
+        "urw bookman",
+        "p052",
+        "c059",
+        "z003",
         "noto mono",
         "noto sans mono",
-        "p052",
-        "standard symbols ps",
-        "urw bookman",
-        "urw gothic",
-        "z003",
+        "droid sans fallback",
     }
+
     GENERICS = {"sans-serif", "serif", "monospace", "cursive", "fantasy", "system-ui"}
 
     def test_the_default_theme_changes_nothing(self) -> None:
@@ -155,15 +167,51 @@ class ThemeRegistryTests(unittest.TestCase):
             with self.subTest(theme=name):
                 self.assertEqual(set(tokens) - known, set())
 
+    @staticmethod
+    def _apt_packages() -> set[str]:
+        path = Path(__file__).resolve().parent.parent / "config" / "apt" / "manual-packages.txt"
+        return {
+            line.strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
     def test_themes_name_fonts_that_are_installed(self) -> None:
+        available = set(self.STOCK_FACES)
+        for faces in self.PACKAGE_FACES.values():
+            available |= faces
         for name, tokens in THEMES.items():
-            for key in ("--overlay-font-family", "--overlay-clock-font-family"):
+            for key in (
+                "--overlay-font-family",
+                "--overlay-clock-font-family",
+                "--overlay-clock-date-font-family",
+            ):
                 stack = tokens.get(key)
                 if not stack:
                     continue
                 faces = {entry.strip().strip("\"'").lower() for entry in stack.split(",")}
                 with self.subTest(theme=name, token=key):
-                    self.assertEqual(faces - self.INSTALLED_FACES - self.GENERICS, set())
+                    self.assertEqual(faces - available - self.GENERICS, set())
+
+    def test_theme_fonts_are_installed_by_setup(self) -> None:
+        """Every font package the themes rely on is in the apt list setup.sh reads.
+
+        Dropping one would not fail anything at build time -- the kiosks would just
+        quietly render the fallback, on four wall displays, with no error anywhere.
+        """
+        packages = self._apt_packages()
+        missing = sorted(pkg for pkg in self.PACKAGE_FACES if pkg not in packages)
+        self.assertEqual(missing, [])
+
+    def test_the_lcd_face_is_never_used_for_body_text(self) -> None:
+        """Seven- and fourteen-segment faces render prose as unreadable blocks.
+
+        DSEG is only ever legitimate on --overlay-clock-font-family, where the content
+        is digits, a colon and AM/PM.
+        """
+        for name, tokens in THEMES.items():
+            with self.subTest(theme=name):
+                self.assertNotIn("DSEG", tokens.get("--overlay-font-family", ""))
 
     def test_every_theme_ends_its_font_stack_in_a_generic(self) -> None:
         """A stack with no generic has nowhere to go when its faces are all missing."""
@@ -268,7 +316,8 @@ class ThemeCssTests(unittest.TestCase):
         self.assertIn('--overlay-clock-font-family: "Nimbus Sans";', css)
         # terminal names one, and it wins over the theme's overlay font.
         css = _theme_css(self._theme(name="terminal"))
-        self.assertIn('--overlay-clock-font-family: "DejaVu Sans Mono"', css)
+        self.assertIn('--overlay-clock-font-family: "DSEG14 Classic"', css)
+        self.assertIn('--overlay-font-family: "JetBrains Mono"', css)
 
     def test_an_unknown_theme_renders_the_default_rather_than_failing(self) -> None:
         self.assertEqual(

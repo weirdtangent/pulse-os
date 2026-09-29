@@ -93,12 +93,42 @@ Three things are worth knowing before writing one:
   border, hover and subtle surface in the sheet at whatever alpha each already uses, so
   a theme sets it once instead of listing twenty shades.
 - **Fonts have to exist on the Pi.** A missing face renders as the fallback with no
-  warning. The stock Debian image has the DejaVu, Liberation, Nimbus and URW families
-  and nothing else, so a theme that needs something new means adding the font package
-  to `setup.sh` in the same change.
+  warning at all. `config/apt/manual-packages.txt` installs the ten font packages the
+  themes use; a theme that needs a new face means adding the package there in the same
+  change, and `ThemeRegistryTests` checks the two agree.
 
 Per-device overrides are applied over the theme: `PULSE_OVERLAY_ACCENT_COLOR` for the
 accent, and the two font pickers for the typeface.
+
+### Typefaces
+
+A stock Raspberry Pi OS image cannot carry eleven themes: Liberation Sans, Nimbus Sans
+and DejaVu Sans are all Helvetica/Arial-adjacent grotesques that never read as
+meaningfully different, so most themes ended up looking the same. Ten font packages
+(~95 MB) fix that, and each theme gets a face chosen for it:
+
+| Theme | Face | |
+| --- | --- | --- |
+| `original` | Inter | The stock font stack has named Inter since the beginning; it is finally installed. |
+| `nord` | Cabin | Humanist, softer terminals. |
+| `slate` | Manrope | Quiet modern geometric. |
+| `noir` | Nimbus Sans | Helvetica — the photo-caption face, which is what this theme is. |
+| `solarized` | IBM Plex Sans | IBM's face on a palette every developer recognises. |
+| `terminal` | JetBrains Mono, with **DSEG14 Classic** on the clock | See below. |
+| `neon` | IBM Plex Sans Condensed | Tight and technical. |
+| `synthwave` | Quicksand | Rounded geometry: Miami, not 1990s corporate. |
+| `ember` | Vollkorn | Warm, sturdy serif. |
+| `forest` | EB Garamond | Calm serif. |
+| `contrast` | League Spartan | Heavy geometric; weight and open counters survive distance. |
+
+Two things about the LCD face on `terminal`:
+
+- It is **DSEG14**, not DSEG7. Seven segments cannot form an M, so DSEG7 renders a
+  12-hour `1:53 PM` as `1:53 Pn`.
+- It is assigned to `--overlay-clock-font-family` only. Even DSEG14 renders prose as
+  unreadable blocks, so the date underneath uses
+  `--overlay-clock-date-font-family` — which exists for exactly this, and defaults to
+  the clock font so a theme that says nothing is unaffected.
 
 ## Sleep mode
 

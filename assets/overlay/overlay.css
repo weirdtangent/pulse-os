@@ -117,6 +117,11 @@
   --overlay-clock-weight: 300;
   --overlay-clock-tracking: -0.03em;
   --overlay-sleep-clock-weight: 200;
+  /* The date under the clock, which follows the clock's face by default but does not
+     have to. A theme may put a display face on the TIME that cannot set prose at all --
+     a seven-segment LCD renders "Tuesday" as blocks -- and then needs somewhere for the
+     date to go. Defaults to the clock font, so a theme that says nothing is unchanged. */
+  --overlay-clock-date-font-family: var(--overlay-clock-font-family);
 }
 
 html {
@@ -1268,9 +1273,12 @@ body {
 /* The clock gets its own family. It is the one thing on screen rendered at 100px+, where a
    face picked for legibility in a 14px badge often reads badly, so the two are chosen
    separately. Falls back to the overlay font when no clock font is set. */
-.overlay-clock__time,
-.overlay-clock__date {
+.overlay-clock__time {
   font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
+}
+
+.overlay-clock__date {
+  font-family: var(--overlay-clock-date-font-family, var(--overlay-font-family));
 }
 
 /* Same fixed grid cell as the date below, and the same treatment: step down rather
@@ -2089,7 +2097,7 @@ body {
 }
 
 .overlay-sleep__date {
-  font-family: var(--overlay-clock-font-family, var(--overlay-font-family));
+  font-family: var(--overlay-clock-date-font-family, var(--overlay-font-family));
   font-size: clamp(1.2rem, 3.2vw, 2.6rem);
   font-weight: 400;
   /* Dimmer than the time on purpose -- at 3am the time is the only thing being read,
