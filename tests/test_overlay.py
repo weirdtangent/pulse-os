@@ -32,6 +32,70 @@ from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
 from pulse.weather_alerts import BANNER_ALWAYS
 
 
+def _style_tokens() -> dict[str, str]:
+    """The `--overlay-*` defaults declared in the stylesheet's own :root block."""
+    root = OVERLAY_CSS[OVERLAY_CSS.index(":root {") :]
+    root = root[: root.index("\n}")]
+    return dict(re.findall(r"^\s*(--overlay-[a-z0-9-]+):\s*(.+?);\s*$", root, re.M))
+
+
+class StyleTokenTests(unittest.TestCase):
+    """Themes are token sets, so the tokens have to be the only way to say a colour.
+
+    The refresh loop in overlay_server.py copies `--overlay-*` custom properties onto
+    documentElement and nothing else -- it never replaces the stylesheet. So a token
+    change reaches a running kiosk within one poll, and a new RULE does not reach it
+    until the page reloads. A colour hardcoded into a rule is therefore not merely
+    untidy: it is unreachable by every theme, and the theme that needs it different
+    will look broken on four wall displays until somebody notices.
+
+    That is a rule you cannot enforce by review alone across a 2000-line sheet, so it
+    is enforced here.
+    """
+
+    # The graystorm wordmark, which is brand rather than theme: the gradient IS the
+    # identity, and a theme recolouring it would be claiming to be a different product.
+    BRAND_LITERALS = {"#ff6b35", "#ffd700", "#00d4ff"}
+
+    def _rule_body(self) -> str:
+        """Everything after the :root token block -- i.e. the rules."""
+        root_at = OVERLAY_CSS.index(":root {")
+        return OVERLAY_CSS[OVERLAY_CSS.index("\n}", root_at) + 2 :]
+
+    def test_rules_carry_no_hardcoded_colours(self) -> None:
+        body = re.sub(r"/\*.*?\*/", "", self._rule_body(), flags=re.S)
+        # Fallbacks inside var() are the pre-token defaults and never render, since
+        # :root always defines the property they name.
+        body = re.sub(r"var\(--overlay-[a-z0-9-]+,[^()]*(?:\([^()]*\)[^()]*)*\)", "", body)
+        found = {literal.lower() for literal in re.findall(r"#[0-9a-fA-F]{3,8}\b|rgba?\([0-9][^)]*\)", body)}
+        self.assertEqual(found - self.BRAND_LITERALS, set())
+
+    def test_every_token_is_used(self) -> None:
+        """A token nothing reads is a promise to theme authors that isn't kept."""
+        body = self._rule_body()
+        unused = [name for name in _style_tokens() if f"var({name})" not in body]
+        self.assertEqual(unused, [])
+
+    def test_status_colours_stay_distinct(self) -> None:
+        """Severity is the only at-a-glance signal the notification bar has.
+
+        watch must not equal warning, a speaker fault must not equal either, and none of
+        them may collide with the accent -- which marks ordinary card titles.
+        """
+        tokens = _style_tokens()
+        signals = [
+            "--overlay-positive",
+            "--overlay-negative",
+            "--overlay-caution",
+            "--overlay-fault",
+            "--overlay-severe",
+            "--overlay-watch",
+            "--overlay-accent-color",
+        ]
+        values = [tokens[name].lower() for name in signals]
+        self.assertEqual(len(set(values)), len(values))
+
+
 class OverlayRenderTests(unittest.TestCase):
     def setUp(self) -> None:
         self.theme = OverlayTheme(
@@ -2222,10 +2286,17 @@ class SleepModeTests(unittest.TestCase):
 
     def test_css_covers_the_photos_rather_than_tinting_them(self) -> None:
         """The photos underneath are the actual light source; a translucent scrim would
-        leave the room lit no matter what colour the clock is."""
+        leave the room lit no matter what colour the clock is.
+
+        Asserted through the token rather than against a literal, because the colour now
+        lives in :root -- but the OPACITY is the guarantee, so that is checked on the
+        token's own value. A theme is free to pick a different near-black; one that picks
+        an rgba() would quietly hand the room back its light source.
+        """
         block = OVERLAY_CSS.split(".overlay-root--sleep {", 1)[1].split("}", 1)[0]
-        self.assertIn("#000000", block)
+        self.assertIn("var(--overlay-sleep-bg)", block)
         self.assertIn("!important", block)
+        self.assertNotIn("rgba", _style_tokens()["--overlay-sleep-bg"])
 
     def test_css_hides_every_other_overlay_surface(self) -> None:
         selectors = OVERLAY_CSS.split(".overlay-root--sleep .overlay-grid,", 1)[1].split("{", 1)[0]

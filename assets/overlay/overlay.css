@@ -1,8 +1,122 @@
+/* ===========================================================================
+   Style tokens
+   ---------------------------------------------------------------------------
+   Every value a theme is allowed to change lives here and nowhere else. The rest
+   of this sheet is layout, and layout is not a theme.
+
+   This block is the ONLY thing a theme rewrites. pulse/overlay.py appends a second
+   :root after this one carrying the active theme's overrides, and the refresh loop
+   in overlay_server.py copies --overlay-* properties onto documentElement every
+   couple of seconds -- so a token change lands live, with no page reload, while a
+   new RULE does not land until the kiosk reloads. That is the whole reason themes
+   are token sets: anything a theme needs to say has to be sayable here.
+
+   Adding a token is cheap; adding a rule a theme depends on is not. Prefer a token.
+   =========================================================================== */
 :root {
+  /* ---- Channels ----------------------------------------------------------
+     RGB triples, not colours, so every translucent surface, border and hover in
+     the sheet can be re-based by a theme while keeping its own alpha. The sheet
+     uses ~20 distinct white-at-N% values; as separate tokens that would be 20
+     things a theme author has to fill in, which is how you end up with no themes.
+     One triple and the whole chrome follows. */
+  --overlay-tint-rgb: 255, 255, 255;
+  --overlay-scrim-rgb: 0, 0, 0;
+
+  /* ---- Core surfaces and text ---- */
   --overlay-text-color: #ffffff;
-  --overlay-ambient-bg: rgba(0, 0, 0, 0.32);
-  --overlay-alert-bg: rgba(0, 0, 0, 0.65);
+  --overlay-ambient-bg: rgba(var(--overlay-scrim-rgb), 0.32);
+  --overlay-alert-bg: rgba(var(--overlay-scrim-rgb), 0.65);
   --overlay-accent-color: #88C0D0;
+  /* Foreground for the one place the accent is used as a BACKGROUND (the checked
+     option in the font list). Deliberately not --overlay-text-color: white on
+     #88C0D0 is unreadable, so a theme changing the accent must change this too. */
+  --overlay-accent-text: #10233a;
+  /* The one opaque panel in the sheet -- the now-playing transport bar, which sits
+     under a finger and needs a hit target that does not shift with the wallpaper. */
+  --overlay-surface-solid: #2a2a2a;
+
+  /* ---- Status colours ----------------------------------------------------
+     These carry meaning, not style. A theme may retune them to fit its palette but
+     must keep them distinguishable from each other and from the accent: they are
+     the only at-a-glance signal the badges have. See the notes at each use site for
+     what each one is deliberately NOT. */
+  --overlay-positive: #4caf50;
+  --overlay-negative: #ff5c5c;
+  --overlay-negative-rgb: 255, 92, 92;
+  /* One WiFi bar -- the rung where this fleet's roam stalls. Amber, not red. */
+  --overlay-caution: #e0a030;
+  /* A broken speaker. Amber-orange, deliberately not --overlay-severe: red on the
+     notification bar already means "earmuffs are on", a user choice. */
+  --overlay-fault: #cb4b16;
+  --overlay-fault-rgb: 203, 75, 22;
+  /* Weather WARNING, armed reboot, earmuffs-on. The strongest thing on the bar. */
+  --overlay-severe: #dc322f;
+  --overlay-severe-rgb: 220, 50, 47;
+  /* Weather WATCH -- a step below severe, and it has to stay a step below. */
+  --overlay-watch: #b58900;
+  /* Text on any of the status colours above when they are used as a chip
+     background. One token because every such chip is dark enough to want the same
+     foreground; a light theme would need to revisit this. */
+  --overlay-severity-text: #ffffff;
+  /* The whole-badge background when the network is gone. Darker and less saturated
+     than --overlay-severe so it reads as "dead" rather than "urgent". */
+  --overlay-offline-bg: rgba(120, 20, 20, 0.7);
+
+  /* ---- Alarm-list control colours ---------------------------------------
+     Green/amber/red on the per-alarm and per-day buttons. Separate from the status
+     colours above because these are interactive affordances, not alerts: they are
+     read as "this one is on / this one is off", and they sit inside a card rather
+     than on the always-visible bar. */
+  --overlay-alarm-active-rgb: 52, 199, 89;
+  --overlay-alarm-paused-rgb: 255, 59, 48;
+  --overlay-alarm-pause-rgb: 255, 214, 10;
+  /* The ringing-alarm glow. Pure red on purpose -- this is the one moment the
+     display is trying to wake somebody up. */
+  --overlay-ringing-rgb: 255, 0, 0;
+
+  /* ---- Sleep mode ---- */
+  /* Opaque, because the photos underneath are the actual light source in a dark
+     room; covering them is what buys the darkness. */
+  --overlay-sleep-bg: #000000;
+  /* Deliberately not pure red: #FF0000 on these panels fringes and reads worse
+     than a dimmed red. Overridden per-device by PULSE_SLEEP_COLOR. */
+  --overlay-sleep-color: #b03030;
+
+  /* ---- Shape ------------------------------------------------------------
+     A role scale, not one token per value. Themes move 2-3 of these (a retro theme
+     sets pill/card/control to 0 and gets square chrome everywhere) and inherit the
+     rest, which is only workable because the scale is short. */
+  --overlay-radius-pill: 999px;
+  --overlay-radius-round: 50%;
+  --overlay-radius-panel: 1.5rem;
+  --overlay-radius-card: 1.2rem;
+  --overlay-radius-group: 0.9rem;
+  --overlay-radius-button-lg: 0.85rem;
+  --overlay-radius-control: 0.65rem;
+  --overlay-radius-button: 0.5rem;
+  --overlay-radius-sm: 0.45rem;
+  --overlay-radius-xs: 0.15rem;
+  --overlay-border-width: 1px;
+
+  /* ---- Depth ------------------------------------------------------------
+     The blur is what makes a translucent card readable over an arbitrary photo, so
+     a theme setting these to 0 must compensate with a more opaque surface. */
+  --overlay-blur-badge: 12px;
+  --overlay-blur-card: 14px;
+  --overlay-blur-panel: 18px;
+  --overlay-shadow-card: 0 0.6rem 1.8rem rgba(var(--overlay-scrim-rgb), 0.35);
+  --overlay-shadow-panel: 0 1.5rem 3rem rgba(var(--overlay-scrim-rgb), 0.45);
+
+  /* ---- Type -------------------------------------------------------------
+     Per-element font sizes and weights are NOT tokens: a theme that restyles every
+     600 into a 400 is not a theme, it is a bug. Only the choices that read as
+     house style are here. */
+  --overlay-title-transform: uppercase;
+  --overlay-title-tracking: 0.08em;
+  --overlay-clock-weight: 300;
+  --overlay-clock-tracking: -0.03em;
+  --overlay-sleep-clock-weight: 200;
 }
 
 html {
@@ -49,12 +163,12 @@ body {
   gap: 0.35rem;
   align-items: center;
   padding: 0.35rem 0.65rem;
-  border-radius: 999px;
+  border-radius: var(--overlay-radius-pill);
   /* The opaque-biased background the ticker bar uses, not the lighter ambient one the
      cards use: badges sit over whatever photo or camera feed is on screen, and a bright
      sky washes their text out — colored text (the market pill) worst of all. */
-  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
-  backdrop-filter: blur(12px);
+  background: var(--overlay-alert-bg);
+  backdrop-filter: blur(var(--overlay-blur-badge));
   cursor: default;
   user-select: none;
   transition: background 0.2s ease, transform 0.2s ease;
@@ -65,22 +179,22 @@ body {
 }
 
 .overlay-badge[role="button"]:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(var(--overlay-tint-rgb), 0.2);
   transform: translateY(-1px);
 }
 
 .overlay-badge.overlay-badge--earmuffs-enabled {
-  background: #dc322f !important;
-  border: 1px solid rgba(255, 255, 255, 0.5) !important;
-  color: #ffffff !important;
-  box-shadow: 0 0 8px rgba(220, 50, 47, 0.6);
+  background: var(--overlay-severe) !important;
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.5) !important;
+  color: var(--overlay-severity-text) !important;
+  box-shadow: 0 0 8px rgba(var(--overlay-severe-rgb), 0.6);
 }
 
 .overlay-badge.overlay-badge--earmuffs-enabled:hover {
-  background: #c92a27 !important;
+  background: color-mix(in srgb, var(--overlay-severe) 91%, black) !important;
   transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.7) !important;
-  box-shadow: 0 0 12px rgba(220, 50, 47, 0.8);
+  border-color: rgba(var(--overlay-tint-rgb), 0.7) !important;
+  box-shadow: 0 0 12px rgba(var(--overlay-severe-rgb), 0.8);
 }
 
 /* Market summary pill — rides alongside the ticker bar, so it borrows the bar's
@@ -100,11 +214,11 @@ body {
 }
 
 .overlay-market__move--up {
-  color: #4caf50;
+  color: var(--overlay-positive);
 }
 
 .overlay-market__move--down {
-  color: #ff5c5c;
+  color: var(--overlay-negative);
 }
 
 /* Connectivity pill — pinned leftmost, and the only badge here with no text at all.
@@ -141,7 +255,7 @@ body {
 .overlay-network__bar {
   width: 0.22rem;
   border-radius: 0.08rem;
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(var(--overlay-tint-rgb), 0.28);
   transition: background 0.3s ease;
 }
 
@@ -151,21 +265,21 @@ body {
 .overlay-network__bar:nth-child(4) { height: 100%; }
 
 .overlay-network__bar--on {
-  background: #4caf50;
+  background: var(--overlay-positive);
 }
 
 /* One bar is not "a bit worse than two", it is the state where this fleet's roam
    stalls and power-save drops start, so it gets amber — a warning you can act on
    while the display is still usable, rather than after it has fallen off the network. */
 .overlay-network__wifi--weak .overlay-network__bar--on {
-  background: #e0a030;
+  background: var(--overlay-caution);
 }
 
 /* Kept bright enough to still read as a signal meter under the slash. Dropped much
    further the rungs disappear and the pill becomes an unexplained red streak — the
    shape has to survive, because the shape is what says "this is the WiFi". */
 .overlay-network__wifi--off .overlay-network__bar {
-  background: rgba(255, 92, 92, 0.55);
+  background: rgba(var(--overlay-negative-rgb), 0.55);
 }
 
 /* The crossed-out state. A diagonal rule over the (all-unlit) rungs rather than a
@@ -177,22 +291,22 @@ body {
   right: -0.1rem;
   top: 50%;
   height: 2px;
-  background: #ff5c5c;
+  background: var(--overlay-negative);
   border-radius: 2px;
   transform: rotate(-35deg);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 1px rgba(var(--overlay-scrim-rgb), 0.55);
 }
 
 .overlay-network__eth {
   width: 0.5rem;
   height: 0.5rem;
-  border-radius: 50%;
+  border-radius: var(--overlay-radius-round);
   flex-shrink: 0;
   transition: background 0.3s ease;
 }
 
 .overlay-network__eth--up {
-  background: #4caf50;
+  background: var(--overlay-positive);
 }
 
 /* Red is reserved for a cable that is plugged in and has stopped working. Every kiosk
@@ -200,12 +314,12 @@ body {
    quiet grey — a permanent red dot on four displays would teach everyone to stop
    looking at this pill, and the one Ethernet fault worth catching would go unseen. */
 .overlay-network__eth--down {
-  background: #ff5c5c;
-  box-shadow: 0 0 6px rgba(255, 92, 92, 0.7);
+  background: var(--overlay-negative);
+  box-shadow: 0 0 6px rgba(var(--overlay-negative-rgb), 0.7);
 }
 
 .overlay-network__eth--absent {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(var(--overlay-tint-rgb), 0.22);
 }
 
 /* No pulse animation here, unlike the speaker and weather-alert badges. Those appear
@@ -213,8 +327,8 @@ body {
    present, and anything that moves on it permanently would be a distraction in the
    room rather than a signal. */
 .overlay-badge.overlay-badge--network-offline {
-  background: rgba(120, 20, 20, 0.7);
-  border: 1px solid rgba(255, 92, 92, 0.45);
+  background: var(--overlay-offline-bg);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-negative-rgb), 0.45);
 }
 
 /* Speaker-offline badge — the one badge on this bar that reports a fault, so it gets
@@ -222,9 +336,9 @@ body {
    red on this bar already means "earmuffs are on", a deliberate user choice, and a
    broken speaker shouldn't read as the same kind of thing at a glance. */
 .overlay-badge.overlay-badge--speaker-offline {
-  background: #cb4b16 !important;
-  border: 1px solid rgba(255, 255, 255, 0.5) !important;
-  color: #ffffff !important;
+  background: var(--overlay-fault) !important;
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.5) !important;
+  color: var(--overlay-severity-text) !important;
   animation: overlaySpeakerOfflinePulse 2.4s ease-in-out infinite alternate;
 }
 
@@ -233,10 +347,10 @@ body {
    passing glance without strobing at whoever is sitting in the room. */
 @keyframes overlaySpeakerOfflinePulse {
   from {
-    box-shadow: 0 0 0 rgba(203, 75, 22, 0.35);
+    box-shadow: 0 0 0 rgba(var(--overlay-fault-rgb), 0.35);
   }
   to {
-    box-shadow: 0 0 14px rgba(203, 75, 22, 0.75);
+    box-shadow: 0 0 14px rgba(var(--overlay-fault-rgb), 0.75);
   }
 }
 
@@ -252,7 +366,7 @@ body {
    would spend the display's alarm vocabulary on "it might get windy". Those keep the
    neutral badge background and rely on the ⚠ glyph alone. */
 .overlay-badge--weather-alert {
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.25);
 }
 
 /* Red, despite red already meaning "earmuffs are on" elsewhere on this bar. A warning
@@ -260,16 +374,16 @@ body {
    stronger claim to red than a user preference toggle; the ⚠ glyph and the event name
    keep the two from being confused at a glance. */
 .overlay-badge.overlay-badge--weather-alert-warning {
-  background: #dc322f !important;
-  border-color: rgba(255, 255, 255, 0.55) !important;
-  color: #ffffff !important;
+  background: var(--overlay-severe) !important;
+  border-color: rgba(var(--overlay-tint-rgb), 0.55) !important;
+  color: var(--overlay-severity-text) !important;
   animation: overlayWeatherAlertPulse 2.4s ease-in-out infinite alternate;
 }
 
 .overlay-badge.overlay-badge--weather-alert-watch {
-  background: #b58900 !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  color: #ffffff !important;
+  background: var(--overlay-watch) !important;
+  border-color: rgba(var(--overlay-tint-rgb), 0.5) !important;
+  color: var(--overlay-severity-text) !important;
 }
 
 /* Same slow, dim cadence as the speaker-offline badge and for the same reason: a warning
@@ -277,10 +391,10 @@ body {
    is sitting in the room. */
 @keyframes overlayWeatherAlertPulse {
   from {
-    box-shadow: 0 0 0 rgba(220, 50, 47, 0.35);
+    box-shadow: 0 0 0 rgba(var(--overlay-severe-rgb), 0.35);
   }
   to {
-    box-shadow: 0 0 14px rgba(220, 50, 47, 0.75);
+    box-shadow: 0 0 14px rgba(var(--overlay-severe-rgb), 0.75);
   }
 }
 
@@ -301,10 +415,10 @@ body {
   gap: 0.6rem;
   flex-shrink: 0;
   padding: 0.55rem 1rem;
-  border-radius: 0.75rem;
-  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(12px);
+  border-radius: var(--overlay-radius-button-lg);
+  background: var(--overlay-alert-bg);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.25);
+  backdrop-filter: blur(var(--overlay-blur-badge));
   cursor: pointer;
   user-select: none;
   font-size: 1.05rem;
@@ -318,15 +432,15 @@ body {
 }
 
 .overlay-weather-banner--warning {
-  background: #dc322f;
-  border-color: rgba(255, 255, 255, 0.55);
-  color: #ffffff;
+  background: var(--overlay-severe);
+  border-color: rgba(var(--overlay-tint-rgb), 0.55);
+  color: var(--overlay-severity-text);
 }
 
 .overlay-weather-banner--watch {
-  background: #b58900;
-  border-color: rgba(255, 255, 255, 0.5);
-  color: #ffffff;
+  background: var(--overlay-watch);
+  border-color: rgba(var(--overlay-tint-rgb), 0.5);
+  color: var(--overlay-severity-text);
 }
 
 .overlay-weather-banner__icon {
@@ -347,8 +461,8 @@ body {
 .overlay-weather-banner__count {
   flex: 0 0 auto;
   padding: 0.05rem 0.45rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
+  border-radius: var(--overlay-radius-pill);
+  background: rgba(var(--overlay-tint-rgb), 0.22);
   font-size: 0.78em;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -384,13 +498,13 @@ body {
   flex-shrink: 0;
   padding-top: 0.9rem;
   margin-top: 0.6rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.15);
 }
 
 .overlay-alert-nav__button {
   padding: 0.4rem 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--overlay-radius-pill);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.35);
   cursor: pointer;
   user-select: none;
   font-size: 0.95rem;
@@ -398,7 +512,7 @@ body {
 }
 
 .overlay-alert-nav__button:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(var(--overlay-tint-rgb), 0.2);
 }
 
 /* Alert detail card — the thing behind a tap on the pill or the banner. */
@@ -410,15 +524,15 @@ body {
 
 .overlay-alert {
   padding-left: 0.9rem;
-  border-left: 4px solid rgba(255, 255, 255, 0.3);
+  border-left: 4px solid rgba(var(--overlay-tint-rgb), 0.3);
 }
 
 .overlay-alert--warning {
-  border-left-color: #dc322f;
+  border-left-color: var(--overlay-severe);
 }
 
 .overlay-alert--watch {
-  border-left-color: #b58900;
+  border-left-color: var(--overlay-watch);
 }
 
 .overlay-alert__event {
@@ -453,8 +567,8 @@ body {
 .overlay-alert__instruction {
   margin-top: 0.75rem;
   padding: 0.6rem 0.85rem;
-  border-radius: 0.6rem;
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--overlay-radius-control);
+  background: rgba(var(--overlay-tint-rgb), 0.1);
   font-weight: 600;
 }
 
@@ -483,22 +597,22 @@ body {
   grid-column: 2 / 4;
   grid-row: 1 / 4;
   background: var(--overlay-ambient-bg);
-  backdrop-filter: blur(18px);
-  border-radius: 1.5rem;
+  backdrop-filter: blur(var(--overlay-blur-panel));
+  border-radius: var(--overlay-radius-panel);
   padding: 2.5rem;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 1.2rem;
-  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.45);
+  box-shadow: var(--overlay-shadow-panel);
   /* Ensure info card doesn't create visual artifacts in other grid cells */
   contain: layout style paint;
 }
 
 .overlay-info-card__title {
   font-size: 1rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: var(--overlay-title-tracking);
+  text-transform: var(--overlay-title-transform);
   color: var(--overlay-accent-color);
   opacity: 0.9;
 }
@@ -531,9 +645,9 @@ body {
 
 .overlay-info-card__close {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.4);
   color: inherit;
-  border-radius: 999px;
+  border-radius: var(--overlay-radius-pill);
   width: 2.2rem;
   height: 2.2rem;
   font-size: 1.2rem;
@@ -541,7 +655,7 @@ body {
 }
 
 .overlay-info-card__close:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--overlay-tint-rgb), 0.15);
 }
 
 .overlay-info-card__body {
@@ -560,16 +674,16 @@ body {
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.75rem 0.9rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--overlay-radius-group);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.12);
+  background: rgba(var(--overlay-tint-rgb), 0.04);
 }
 
 .overlay-control-group__title {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: var(--overlay-title-transform);
   opacity: 0.75;
 }
 
@@ -579,9 +693,9 @@ body {
 .overlay-control__select {
   width: 100%;
   padding: 0.35rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--overlay-radius-control);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.25);
+  background: rgba(var(--overlay-scrim-rgb), 0.35);
   color: inherit;
   font: inherit;
   font-size: 0.95rem;
@@ -591,7 +705,7 @@ body {
 
 .overlay-control__select option {
   padding: 0.4rem 0.55rem;
-  border-radius: 0.45rem;
+  border-radius: var(--overlay-radius-sm);
   /* Touch targets: this is a finger on a wall display, not a mouse. */
   min-height: 2rem;
   background: transparent;
@@ -600,7 +714,7 @@ body {
 
 .overlay-control__select option:checked {
   background: var(--overlay-accent-color);
-  color: #10233a;
+  color: var(--overlay-accent-text);
   font-weight: 600;
 }
 
@@ -617,13 +731,13 @@ body {
 /* Reboot is destructive enough to look it, but only shouts once armed — an always-red
    button on a wall display becomes wallpaper. */
 .overlay-button--danger {
-  border-color: rgba(220, 50, 47, 0.6);
+  border-color: rgba(var(--overlay-severe-rgb), 0.6);
 }
 
 .overlay-button--danger.overlay-button--armed {
-  background: #dc322f;
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #ffffff;
+  background: var(--overlay-severe);
+  border-color: rgba(var(--overlay-tint-rgb), 0.6);
+  color: var(--overlay-severity-text);
   font-weight: 600;
 }
 
@@ -638,9 +752,9 @@ body {
   flex-direction: column;
   gap: 0.6rem;
   padding: 0.9rem 1rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--overlay-radius-group);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.12);
+  background: rgba(var(--overlay-tint-rgb), 0.05);
 }
 
 .overlay-control__header {
@@ -683,9 +797,9 @@ body {
 .overlay-icon-button {
   width: 2.4rem;
   height: 2.4rem;
-  border-radius: 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--overlay-radius-control);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.35);
+  background: rgba(var(--overlay-tint-rgb), 0.08);
   color: inherit;
   display: flex;
   align-items: center;
@@ -695,8 +809,8 @@ body {
 }
 
 .overlay-icon-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(var(--overlay-tint-rgb), 0.18);
+  border-color: rgba(var(--overlay-tint-rgb), 0.55);
 }
 
 .overlay-icon-button:disabled {
@@ -773,7 +887,7 @@ body {
 }
 
 .overlay-weather__divider {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.2);
   margin-bottom: 0.8rem;
 }
 
@@ -851,20 +965,20 @@ body {
   display: inline-block;
   margin-left: 0.4rem;
   padding: 0.1rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--overlay-radius-pill);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.3);
   font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: var(--overlay-title-transform);
+  letter-spacing: var(--overlay-title-tracking);
 }
 
 .overlay-info-card__alarm-delete {
   border: none;
-  background: rgba(255, 59, 48, 0.25);
-  color: #fff;
+  background: rgba(var(--overlay-alarm-paused-rgb), 0.25);
+  color: var(--overlay-severity-text);
   width: 2.4rem;
   height: 2.4rem;
-  border-radius: 0.8rem;
+  border-radius: var(--overlay-radius-button-lg);
   font-size: 1.25rem;
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
@@ -877,16 +991,16 @@ body {
   border: none;
   width: 2.4rem;
   height: 2.4rem;
-  border-radius: 0.8rem;
+  border-radius: var(--overlay-radius-button-lg);
   font-size: 1.25rem;
   cursor: pointer;
-  color: #fff;
-  background: rgba(255, 214, 10, 0.25);
+  color: var(--overlay-severity-text);
+  background: rgba(var(--overlay-alarm-pause-rgb), 0.25);
   transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .overlay-info-card__alarm-toggle[data-toggle-alarm="resume"] {
-  background: rgba(52, 199, 89, 0.3);
+  background: rgba(var(--overlay-alarm-active-rgb), 0.3);
 }
 
 .overlay-info-card__alarm-delete:hover,
@@ -895,15 +1009,15 @@ body {
 }
 
 .overlay-info-card__alarm-delete:hover {
-  background: rgba(255, 82, 69, 0.35);
+  background: rgba(var(--overlay-alarm-paused-rgb), 0.35);
 }
 
 .overlay-info-card__alarm-toggle:hover[data-toggle-alarm="resume"] {
-  background: rgba(52, 199, 89, 0.45);
+  background: rgba(var(--overlay-alarm-active-rgb), 0.45);
 }
 
 .overlay-info-card__alarm-toggle:hover[data-toggle-alarm="pause"] {
-  background: rgba(255, 214, 10, 0.4);
+  background: rgba(var(--overlay-alarm-pause-rgb), 0.4);
 }
 
 /* Per-alarm fire times container */
@@ -914,7 +1028,7 @@ body {
   margin-top: 0.75rem;
   margin-bottom: 0.5rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.1);
 }
 
 /* Fire time buttons - 48px height (2x larger) */
@@ -922,9 +1036,9 @@ body {
   height: 48px;
   min-width: 90px;
   padding: 0 0.9rem;
-  border-radius: 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff;
+  border-radius: var(--overlay-radius-control);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.25);
+  color: var(--overlay-severity-text);
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
@@ -937,25 +1051,25 @@ body {
 
 /* Green = active (will fire) - shows pause icon ⏸️ */
 .overlay-info-card__pause-day[data-paused="false"] {
-  background: rgba(52, 199, 89, 0.3);
-  border-color: rgba(52, 199, 89, 0.5);
+  background: rgba(var(--overlay-alarm-active-rgb), 0.3);
+  border-color: rgba(var(--overlay-alarm-active-rgb), 0.5);
 }
 
 .overlay-info-card__pause-day[data-paused="false"]:hover {
-  background: rgba(52, 199, 89, 0.45);
-  border-color: rgba(52, 199, 89, 0.7);
+  background: rgba(var(--overlay-alarm-active-rgb), 0.45);
+  border-color: rgba(var(--overlay-alarm-active-rgb), 0.7);
   transform: translateY(-1px);
 }
 
 /* Red = paused (won't fire) - shows play icon ▶️ */
 .overlay-info-card__pause-day[data-paused="true"] {
-  background: rgba(255, 59, 48, 0.3);
-  border-color: rgba(255, 59, 48, 0.5);
+  background: rgba(var(--overlay-alarm-paused-rgb), 0.3);
+  border-color: rgba(var(--overlay-alarm-paused-rgb), 0.5);
 }
 
 .overlay-info-card__pause-day[data-paused="true"]:hover {
-  background: rgba(255, 59, 48, 0.45);
-  border-color: rgba(255, 59, 48, 0.7);
+  background: rgba(var(--overlay-alarm-paused-rgb), 0.45);
+  border-color: rgba(var(--overlay-alarm-paused-rgb), 0.7);
   transform: translateY(-1px);
 }
 
@@ -975,7 +1089,7 @@ body {
 
 .overlay-info-card__date-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--overlay-tint-rgb), 0.15);
   margin: 0.8rem 0.2rem;
 }
 
@@ -983,19 +1097,19 @@ body {
   flex: 0 0 auto;
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: 0.6rem;
+  border-radius: var(--overlay-radius-control);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   margin-right: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.2);
 }
 
 .overlay-info-card__calendar-icon-month {
   font-size: 0.7rem;
   font-weight: 600;
-  text-transform: uppercase;
+  text-transform: var(--overlay-title-transform);
   letter-spacing: 0.05em;
   opacity: 0.9;
   line-height: 1;
@@ -1077,7 +1191,7 @@ body {
 .overlay-info-card__text::-webkit-scrollbar-thumb,
 .overlay-info-card__body::-webkit-scrollbar-thumb {
   background-color: var(--overlay-accent-color);
-  border-radius: 999px;
+  border-radius: var(--overlay-radius-pill);
   border: 3px solid transparent;
   background-clip: content-box;
 }
@@ -1100,10 +1214,10 @@ body {
 
 .overlay-card {
   padding: 1rem 1.2rem;
-  border-radius: 1.2rem;
-  backdrop-filter: blur(14px);
+  border-radius: var(--overlay-radius-card);
+  backdrop-filter: blur(var(--overlay-blur-card));
   color: inherit;
-  box-shadow: 0 0.6rem 1.8rem rgba(0, 0, 0, 0.35);
+  box-shadow: var(--overlay-shadow-card);
 }
 
 .overlay-card--timer,
@@ -1122,8 +1236,8 @@ body {
 
 .overlay-card__title {
   font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: var(--overlay-title-transform);
+  letter-spacing: var(--overlay-title-tracking);
   margin-bottom: 0.25rem;
   color: var(--overlay-accent-color);
 }
@@ -1140,15 +1254,15 @@ body {
    a shadow so the card holds up over an arbitrary background. The accent still marks
    titles on the backed cards, where it reads fine. */
 .overlay-card--clock .overlay-card__title {
-  color: var(--overlay-text-color, #ffffff);
+  color: var(--overlay-text-color);
 }
 
 .overlay-card--clock .overlay-card__title,
 .overlay-card--clock .overlay-clock__time,
 .overlay-card--clock .overlay-clock__date {
   text-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.85),
-    0 0 14px rgba(0, 0, 0, 0.55);
+    0 1px 3px rgba(var(--overlay-scrim-rgb), 0.85),
+    0 0 14px rgba(var(--overlay-scrim-rgb), 0.55);
 }
 
 /* The clock gets its own family. It is the one thing on screen rendered at 100px+, where a
@@ -1161,8 +1275,8 @@ body {
 
 .overlay-clock__time {
   font-size: clamp(3.5rem, 8vw, 6.5rem);
-  font-weight: 300;
-  letter-spacing: -0.03em;
+  font-weight: var(--overlay-clock-weight);
+  letter-spacing: var(--overlay-clock-tracking);
 }
 
 .overlay-clock__date {
@@ -1194,7 +1308,7 @@ body {
 
 .overlay-card--alert {
   background: var(--overlay-alert-bg);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.2);
 }
 
 .overlay-card--ringing {
@@ -1237,7 +1351,7 @@ body {
   font-weight: 600;
   line-height: 1.1;
   white-space: nowrap;
-  border-radius: 0.85rem;
+  border-radius: var(--overlay-radius-button-lg);
 }
 
 .overlay-card--reminder {
@@ -1307,8 +1421,8 @@ body {
   height: 2rem;
   padding: 0;
   border: none;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 50%;
+  background: rgba(var(--overlay-scrim-rgb), 0.3);
+  border-radius: var(--overlay-radius-round);
   color: inherit;
   opacity: 0.6;
   cursor: pointer;
@@ -1321,7 +1435,7 @@ body {
 .overlay-timer__cancel:hover,
 .overlay-timer__cancel:focus {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--overlay-scrim-rgb), 0.5);
 }
 
 .overlay-timer__cancel svg {
@@ -1349,7 +1463,7 @@ body {
 .overlay-now-playing__art {
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: 0.4rem;
+  border-radius: var(--overlay-radius-sm);
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -1364,8 +1478,8 @@ body {
 
 .overlay-now-playing__bar {
   width: 0.3rem;
-  background: var(--overlay-accent-color, #88C0D0);
-  border-radius: 0.15rem;
+  background: var(--overlay-accent-color);
+  border-radius: var(--overlay-radius-xs);
   opacity: 0.8;
   animation: overlayNowPlayingBar 1s ease-in-out infinite;
 }
@@ -1407,15 +1521,15 @@ body {
   gap: 1.6rem;
   margin-top: 0.6rem;
   padding: 0.4rem 1.2rem;
-  background: #2a2a2a;
-  border-radius: 2rem;
+  background: var(--overlay-surface-solid);
+  border-radius: var(--overlay-radius-pill);
   border-top: none;
 }
 
 .overlay-now-playing__control {
   background: transparent;
   border: none;
-  color: #FFFFFF;
+  color: var(--overlay-text-color);
   font-size: 1.3rem;
   cursor: pointer;
   opacity: 0.85;
@@ -1445,8 +1559,8 @@ body {
 
 .overlay-now-playing__control:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px var(--overlay-accent-color, #88C0D0);
-  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--overlay-accent-color);
+  border-radius: var(--overlay-radius-round);
 }
 
 .overlay-now-playing__control:disabled {
@@ -1462,9 +1576,9 @@ body {
 .overlay-button {
   margin-top: 1rem;
   padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 0.5rem;
+  background: rgba(var(--overlay-tint-rgb), 0.2);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.3);
+  border-radius: var(--overlay-radius-button);
   color: inherit;
   font-size: 1rem;
   font-weight: 500;
@@ -1473,12 +1587,12 @@ body {
 }
 
 .overlay-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(var(--overlay-tint-rgb), 0.3);
+  border-color: rgba(var(--overlay-tint-rgb), 0.4);
 }
 
 .overlay-button:active {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(var(--overlay-tint-rgb), 0.25);
 }
 
 .overlay-button--small {
@@ -1488,15 +1602,15 @@ body {
 
 .overlay-button--ghost {
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(var(--overlay-tint-rgb), 0.25);
 }
 
 .overlay-button--ghost:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--overlay-tint-rgb), 0.15);
 }
 
 .overlay-button--ghost:active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--overlay-tint-rgb), 0.1);
 }
 
 .overlay-button--primary {
@@ -1505,7 +1619,7 @@ body {
   padding: 1.1rem 1.5rem;
   font-size: clamp(1.4rem, 3vw, 2.6rem);
   font-weight: 600;
-  border-radius: 0.85rem;
+  border-radius: var(--overlay-radius-button-lg);
 }
 
 .overlay-reminder__actions .overlay-button {
@@ -1596,9 +1710,9 @@ body {
   width: 48px;
   height: 48px;
   margin: 0 auto 1.5rem;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top-color: var(--overlay-accent-color, #88C0D0);
-  border-radius: 50%;
+  border: 4px solid rgba(var(--overlay-tint-rgb), 0.2);
+  border-top-color: var(--overlay-accent-color);
+  border-radius: var(--overlay-radius-round);
   animation: overlaySpinner 0.8s linear infinite;
 }
 
@@ -1614,9 +1728,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0.65rem 0.75rem;
-  border-radius: 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--overlay-radius-control);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.12);
+  background: rgba(var(--overlay-tint-rgb), 0.06);
 }
 
 .overlay-sound-row__body {
@@ -1649,10 +1763,10 @@ body {
 
 @keyframes overlayPulse {
   from {
-    box-shadow: 0 0 0 rgba(255, 0, 0, 0.35);
+    box-shadow: 0 0 0 rgba(var(--overlay-ringing-rgb), 0.35);
   }
   to {
-    box-shadow: 0 0 25px rgba(255, 0, 0, 0.65);
+    box-shadow: 0 0 25px rgba(var(--overlay-ringing-rgb), 0.65);
   }
 }
 
@@ -1690,7 +1804,7 @@ body {
   display: inline-block;
   font-size: 1.55rem;
   line-height: 1.1;
-  text-transform: uppercase;
+  text-transform: var(--overlay-title-transform);
   letter-spacing: 0.16em;
   /* The gradient the old SVG stroke used, so the wordmark reads as the same brand. */
   background: linear-gradient(100deg, #ff6b35 0%, #ffd700 45%, #00d4ff 100%);
@@ -1725,15 +1839,15 @@ body {
 .overlay-config-about {
   margin-top: 2rem;
   padding-top: 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.15);
 }
 
 .overlay-config-about__title {
   font-size: 0.9rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--overlay-tint-rgb), 0.9);
   margin-bottom: 1rem;
-  text-transform: uppercase;
+  text-transform: var(--overlay-title-transform);
   letter-spacing: 0.05em;
 }
 
@@ -1748,15 +1862,15 @@ body {
 .overlay-config-about__label {
   font-size: 0.75rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--overlay-tint-rgb), 0.6);
   margin-bottom: 0.25rem;
-  text-transform: uppercase;
+  text-transform: var(--overlay-title-transform);
   letter-spacing: 0.05em;
 }
 
 .overlay-config-about__value {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--overlay-tint-rgb), 0.85);
   line-height: 1.4;
 }
 
@@ -1770,7 +1884,7 @@ body {
 
 .overlay-help-section {
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.1);
 }
 
 .overlay-help-section:last-child {
@@ -1781,13 +1895,13 @@ body {
 .overlay-help-section__title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--overlay-tint-rgb), 0.95);
   margin-bottom: 0.2rem;
 }
 
 .overlay-help-section__desc {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--overlay-tint-rgb), 0.6);
   margin-bottom: 0.5rem;
 }
 
@@ -1802,10 +1916,10 @@ body {
 
 .overlay-help-section__examples li {
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+  color: rgba(var(--overlay-tint-rgb), 0.85);
+  background: rgba(var(--overlay-tint-rgb), 0.08);
+  border: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.12);
+  border-radius: var(--overlay-radius-sm);
   padding: 0.3rem 0.6rem;
   white-space: nowrap;
 }
@@ -1830,11 +1944,11 @@ body {
   z-index: 40;
   pointer-events: none;
   /* Match the overlay cards / now-playing box, biased opaque for legibility over photos. */
-  background: var(--overlay-alert-bg, rgba(0, 0, 0, 0.65));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--overlay-text-color, #ffffff);
+  background: var(--overlay-alert-bg);
+  backdrop-filter: blur(var(--overlay-blur-badge));
+  -webkit-backdrop-filter: blur(var(--overlay-blur-badge));
+  border-top: var(--overlay-border-width) solid rgba(var(--overlay-tint-rgb), 0.12);
+  color: var(--overlay-text-color);
   font-size: 2.6vh;
   line-height: 1;
   white-space: nowrap;
@@ -1880,11 +1994,11 @@ body {
 }
 
 .pulse-ticker__item--up .pulse-ticker__change {
-  color: #4caf50;
+  color: var(--overlay-positive);
 }
 
 .pulse-ticker__item--down .pulse-ticker__change {
-  color: #ff5c5c;
+  color: var(--overlay-negative);
 }
 
 .pulse-ticker__ah {
@@ -1922,7 +2036,7 @@ body {
    100vw/100vh body with no margin, so painting it opaque covers the viewport -- html
    and body can stay transparent underneath. */
 .overlay-root--sleep {
-  background: #000000 !important;
+  background: var(--overlay-sleep-bg) !important;
 }
 
 .overlay-root--sleep .overlay-grid,
@@ -1939,7 +2053,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 1.5vh;
-  color: var(--overlay-sleep-color, #b03030);
+  color: var(--overlay-sleep-color);
   /* No text-shadow, unlike the day clock: there is nothing behind it to separate from,
      and a glow on a dark panel just smears. */
   text-shadow: none;
@@ -1950,7 +2064,7 @@ body {
   /* Roughly double the day clock. The ceiling is what keeps "12:00" off the bezels on
      a 1280x720 kiosk; the vw term is what makes it fill a larger panel. */
   font-size: clamp(6rem, 22vw, 18rem);
-  font-weight: 200;
+  font-weight: var(--overlay-sleep-clock-weight);
   letter-spacing: -0.04em;
   line-height: 1;
 }
