@@ -30,6 +30,7 @@ from pulse.overlay import (
     sleep_window,
 )
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
+from pulse.overlay_style import STYLE_TOKEN_DEFAULTS
 from pulse.overlay_themes import DEFAULT_THEME, THEMES, normalize_theme, theme_names
 from pulse.weather_alerts import BANNER_ALWAYS
 
@@ -475,13 +476,40 @@ class ThemeCssTests(unittest.TestCase):
     def _theme(self, **kw) -> OverlayTheme:
         return OverlayTheme(**kw)  # type: ignore[arg-type]
 
-    def test_a_theme_emits_only_what_it_changes(self) -> None:
+    def test_a_theme_block_carries_the_complete_token_set(self) -> None:
+        """Every token, every time -- not just the ones this theme changes.
+
+        The block is appended to the document's <style>, which is baked at page load and
+        never replaced; only the custom properties are copied across on a refresh. So a
+        block that carries a diff leaves the PREVIOUS theme's values standing for every
+        token the new one is silent about. Switch to `terminal` on a kiosk and every
+        theme picked afterwards inherited its square pills from a frozen copy of its
+        :root, until the page happened to reload.
+        """
         css = _theme_css(self._theme(name="original"))
-        # Both font properties always, because the stylesheet declares neither.
+        for token in STYLE_TOKEN_DEFAULTS:
+            with self.subTest(token=token):
+                self.assertIn(f"{token}:", css)
+        # Plus the two the stylesheet deliberately does not declare, because they are
+        # assembled at runtime from the theme and the live font picker.
         self.assertIn("--overlay-font-family:", css)
         self.assertIn("--overlay-clock-font-family:", css)
-        self.assertNotIn("--overlay-ambient-bg", css)
-        self.assertNotIn("--overlay-radius-pill", css)
+
+    def test_switching_themes_cannot_leave_a_token_behind(self) -> None:
+        """Stated as the property that matters: any two blocks name the same tokens."""
+        names = [
+            line.split(":")[0].strip()
+            for line in _theme_css(self._theme(name="terminal")).splitlines()
+            if "--overlay-" in line
+        ]
+        for other in THEMES:
+            with self.subTest(theme=other):
+                theirs = [
+                    line.split(":")[0].strip()
+                    for line in _theme_css(self._theme(name=other)).splitlines()
+                    if "--overlay-" in line
+                ]
+                self.assertEqual(sorted(theirs), sorted(names))
 
     def test_a_named_theme_emits_its_tokens(self) -> None:
         css = _theme_css(self._theme(name="terminal"))
@@ -2678,14 +2706,16 @@ class SleepModeTests(unittest.TestCase):
         css = _theme_css(self._theme(name="terminal"))
         self.assertIn(f"--overlay-sleep-color: {THEMES['terminal']['--overlay-sleep-color']};", css)
 
-    def test_a_theme_without_a_sleep_colour_inherits_the_stylesheet(self) -> None:
-        """Not emitted means the sheet's own :root applies -- which is the default.
+    def test_a_theme_without_a_sleep_colour_emits_the_stylesheet_default(self) -> None:
+        """The theme block restates the default rather than omitting it.
 
-        Asserting absence rather than a value on purpose: re-stating a default in the
-        theme block is exactly the duplication this indirection exists to remove.
+        Omitting it would mean inheriting whatever the last theme baked into the page's
+        <style> -- which for `terminal` is a dim amber, not this red. The duplication is
+        the point: the block has to be self-contained. It is read from the stylesheet
+        rather than restated in Python, so the two cannot drift.
         """
         css = _theme_css(self._theme(name="original"))
-        self.assertNotIn("--overlay-sleep-color", css)
+        self.assertIn(f"--overlay-sleep-color: {STYLE_TOKEN_DEFAULTS['--overlay-sleep-color']};", css)
         self.assertIn("--overlay-sleep-color: #b03030;", OVERLAY_CSS)
 
     def test_wake_seconds_of_zero_is_emitted_not_dropped(self) -> None:

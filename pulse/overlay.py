@@ -45,6 +45,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pulse import __version__
 from pulse.assistant.schedule_service import parse_day_tokens
 from pulse.overlay_assets import OVERLAY_CSS, OVERLAY_JS
+from pulse.overlay_style import STYLE_TOKEN_DEFAULTS
 from pulse.overlay_themes import DEFAULT_THEME, resolve_theme
 from pulse.weather_alerts import BANNER_ALWAYS, TIER_RANK, banner_active
 
@@ -1558,7 +1559,21 @@ def _theme_css(theme: OverlayTheme) -> str:
     declare them: they are the one part of the look assembled at runtime, from the
     theme's face and whatever the live picker has chosen over it.
     """
-    tokens = dict(resolve_theme(theme.name))
+    # The FULL token set, not just this theme's overrides.
+    #
+    # The diff was the bug. The theme block is appended to the document's <style>, and
+    # that <style> is baked at page load and never replaced -- only the --overlay-*
+    # custom properties are copied across on a refresh. So "clear the inline properties
+    # and fall back to the stylesheet default" is only true when the baked block happens
+    # to be the stylesheet's own: switch to `terminal` on a kiosk, and every theme picked
+    # afterwards inherited its square pills and its flat panel from a frozen copy of
+    # terminal's :root, until the page next reloaded.
+    #
+    # Emitting everything makes the block self-contained: whatever is baked in, applying
+    # this set fully determines the look. Theme definitions stay diffs -- that is what
+    # keeps them writable -- but what goes over the wire is resolved. It costs about 2KB
+    # per poll, against the base64 weather icons already in the same document.
+    tokens = {**STYLE_TOKEN_DEFAULTS, **resolve_theme(theme.name)}
 
     # Per-device overrides, applied over the theme rather than merged into it, so the
     # theme definition stays the thing you read to know what a theme looks like.
