@@ -81,7 +81,7 @@ against `assets/overlay/overlay.css`, so name only what actually changes — `or
 deliberately empty, and every other theme is a diff against the stylesheet's own
 `:root`.
 
-Three things are worth knowing before writing one:
+Four things are worth knowing before writing one:
 
 - **Status colours are optional.** Leave `--overlay-positive`, `--overlay-negative`,
   `--overlay-caution`, `--overlay-fault`, `--overlay-severe` and `--overlay-watch` out
@@ -92,7 +92,8 @@ Three things are worth knowing before writing one:
 - **Translucent chrome comes from one triple.** `--overlay-tint-rgb` re-bases every
   border, hover and subtle surface in the sheet at whatever alpha each already uses, so
   a theme sets it once instead of listing twenty shades.
-- **Four surfaces move on their own.** `--overlay-badge-bg`, `--overlay-badge-text` and
+- **The badges, the panel and the clock move on their own.** `--overlay-badge-bg`,
+  `--overlay-badge-text` and
   `--overlay-badge-outline` for the notification pills, `--overlay-panel-bg` for the
   info card and the other modals, and `--overlay-clock-color` for the clock. Each
   defaults to the core background it used to be hardwired to, so a theme that says

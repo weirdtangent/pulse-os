@@ -297,26 +297,46 @@ class ThemeSurfaceTests(unittest.TestCase):
     DEFAULTS = {
         "--overlay-badge-bg": "var(--overlay-alert-bg)",
         "--overlay-badge-text": "var(--overlay-text-color)",
+        # Transparent, so the outline costs nothing until a theme asks for it.
+        "--overlay-badge-outline": "transparent",
         "--overlay-panel-bg": "var(--overlay-ambient-bg)",
         "--overlay-clock-color": "var(--overlay-text-color)",
     }
 
     @staticmethod
-    def _alpha(value: str) -> float:
-        """Alpha of an rgba() value; 1.0 for anything opaque, including hex.
+    def _alpha(value: str) -> float | None:
+        """Alpha of a colour, or None for a form this cannot read.
 
-        Counting components does not work here: the stylesheet writes its own colours as
-        `rgba(var(--overlay-scrim-rgb), 0.65)`, where the channels are one token rather
-        than three. The alpha is simply whatever follows the last comma.
+        Fails closed rather than assuming opaque. Theme values are unrestricted CSS
+        strings, so treating everything unrecognised as 1.0 would wave through exactly
+        the values that break the guard below -- `transparent`, `#00000000`, an
+        `hsla(..., 0)` -- while looking like it had checked them.
+
+        Counting rgba() components does not work either: the stylesheet writes its own
+        colours as `rgba(var(--overlay-scrim-rgb), 0.65)`, where the three channels are
+        a single token. The alpha is whatever follows the last comma.
         """
-        text = value.strip()
-        if not text.lower().startswith("rgba("):
+        text = value.strip().lower()
+        if text == "transparent":
+            return 0.0
+        if text.startswith("rgba(") or text.startswith("hsla("):
+            inner = text[text.index("(") + 1 : text.rindex(")")]
+            try:
+                return float(inner.rsplit(",", 1)[1].strip().rstrip("%"))
+            except (IndexError, ValueError):
+                return None
+        if text.startswith("rgb(") or text.startswith("hsl(") or text.startswith("color-mix("):
             return 1.0
-        inner = text[text.index("(") + 1 : text.rindex(")")]
-        try:
-            return float(inner.rsplit(",", 1)[1].strip())
-        except (IndexError, ValueError):
-            return 1.0
+        if text.startswith("#"):
+            digits = text[1:]
+            if len(digits) in (3, 6):
+                return 1.0
+            if len(digits) == 4:
+                return int(digits[3] * 2, 16) / 255
+            if len(digits) == 8:
+                return int(digits[6:8], 16) / 255
+            return None
+        return None
 
     def test_each_new_surface_defaults_to_what_it_replaced(self) -> None:
         """A theme that says nothing has to render exactly as it did before the split."""
@@ -334,12 +354,36 @@ class ThemeSurfaceTests(unittest.TestCase):
         has broken the one row that is always on screen.
         """
         default = self._alpha(_style_tokens()["--overlay-alert-bg"])
+        assert default is not None
         for name, overrides in THEMES.items():
             value = overrides.get("--overlay-badge-bg")
             if value is None:
                 continue
+            alpha = self._alpha(value)
             with self.subTest(theme=name):
-                self.assertGreaterEqual(self._alpha(value), default)
+                self.assertIsNotNone(alpha, f"unreadable colour form: {value!r}")
+                assert alpha is not None  # narrowing; the assertion above is the real check
+                self.assertGreaterEqual(alpha, default)
+
+    def test_the_opacity_guard_reads_the_forms_a_theme_can_write(self) -> None:
+        """Including the ones that would sneak an invisible badge row past it."""
+        for value, expected in (
+            ("rgba(var(--overlay-scrim-rgb), 0.65)", 0.65),
+            ("rgba(8, 6, 0, 0.92)", 0.92),
+            ("#000000", 1.0),
+            ("#fff", 1.0),
+            ("transparent", 0.0),
+            ("#00000000", 0.0),
+            ("hsla(200, 50%, 10%, 0)", 0.0),
+        ):
+            alpha = self._alpha(value)
+            with self.subTest(value=value):
+                self.assertIsNotNone(alpha)
+                assert alpha is not None  # narrowing
+                self.assertAlmostEqual(alpha, expected, places=2)
+        for unreadable in ("var(--something-else)", "#12345", "chartreuse"):
+            with self.subTest(value=unreadable):
+                self.assertIsNone(self._alpha(unreadable))
 
     def test_no_theme_hides_its_badge_text_in_its_badge_background(self) -> None:
         for name, overrides in THEMES.items():
