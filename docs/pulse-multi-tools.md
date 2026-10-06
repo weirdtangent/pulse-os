@@ -36,4 +36,3 @@ bin/tools/pulse-reboot [hosts...]
 - Reboots each host via SSH.
 - Hosts: CLI list or `pulse-devices.conf` if omitted.
 - Env: `REPO_DIR` (default `/opt/pulse-os`), `DEVICES_FILE` to override list path.
-

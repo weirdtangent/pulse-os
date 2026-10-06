@@ -48,4 +48,3 @@ fi
 echo "$now $REASON" >> "$HISTORY_FILE"
 log_msg "Rebooting (reason: ${REASON})"
 exec /sbin/reboot
-

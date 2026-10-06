@@ -32,4 +32,3 @@ fi
 args+=("$@")
 
 exec /usr/bin/python3 -u /opt/pulse-os/bin/pulse-assistant.py "${args[@]}"
-

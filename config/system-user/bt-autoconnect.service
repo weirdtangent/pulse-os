@@ -11,4 +11,3 @@ ExecStart=/home/pulse/bin/bt-autoconnect.sh
 # This service is started by bt-autoconnect.timer, so this section is minimal
 # The timer handles the actual enablement
 WantedBy=default.target
-

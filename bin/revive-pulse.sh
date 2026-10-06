@@ -73,4 +73,3 @@ else
     /sbin/reboot
   fi
 fi
-

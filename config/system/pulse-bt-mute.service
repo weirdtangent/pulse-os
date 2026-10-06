@@ -12,4 +12,3 @@ TimeoutSec=5
 
 [Install]
 WantedBy=shutdown.target reboot.target halt.target
-

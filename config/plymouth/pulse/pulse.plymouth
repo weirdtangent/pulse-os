@@ -6,4 +6,3 @@ ModuleName=script
 [script]
 ImageDir=/usr/share/plymouth/themes/pulse
 ScriptFile=/usr/share/plymouth/themes/pulse/pulse.script
-

@@ -236,7 +236,7 @@ module plate_inset() {
 
     // 3-hole board mounts + counterbores
     // holes_on_circle(12, bolt_circle_d, hole_clearance, plate_thickness, mount_offset_deg);
-      
+
     // teardrop vent rings (tips point outward, bridge cleanly)
     for (i=[0:3]) {
       teardrops_on_circle(
@@ -256,7 +256,7 @@ module plate_inset() {
     //                                 tip_len=vent_clearance*0.6, orient_deg=0);
     // Or, if you prefer a round center:
     translate([0,0,-0.1]) cylinder(d=vent_clearance, h=plate_thickness+0.2, $fn=48);
-    
+
     counterbores_on_circle(3, bolt_circle_d, cbore_d, cbore_depth_,
                            plate_thickness - cbore_depth_, mount_offset_deg);
 
