@@ -187,7 +187,7 @@ module plate_inset() {
         plate_thickness,
         vent_offset_deg
       );
-      vent_circle_d = vent_circle_d - 100;  
+      vent_circle_d = vent_circle_d - 100;
       vent_holes = vent_holes - 1;
     }
     counterbores_on_circle(3, bolt_circle_d, cbore_d, cbore_depth_,

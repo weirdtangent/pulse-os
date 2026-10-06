@@ -94,4 +94,3 @@ if [ "${#extra_args[@]}" -gt 0 ]; then
 fi
 
 exec "${cmd[@]}"
-

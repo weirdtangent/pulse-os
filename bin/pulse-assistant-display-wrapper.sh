@@ -36,4 +36,3 @@ export XAUTHORITY="${XAUTHORITY:-/home/${PULSE_USER:-pulse}/.Xauthority}"
 wait_for_display
 
 exec /usr/bin/python3 -u /opt/pulse-os/bin/pulse-assistant-display.py "$@"
-

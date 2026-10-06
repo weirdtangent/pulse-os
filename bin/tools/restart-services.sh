@@ -109,4 +109,3 @@ if [[ "$HAVE_USER_MANAGER" -eq 1 ]]; then
 fi
 
 log "All requested services processed."
-

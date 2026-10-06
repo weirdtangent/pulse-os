@@ -44,4 +44,3 @@ Hide host-specific noise:
 ```
 bin/tools/pulse-config-align.py --ignore-var PULSE_HOSTNAME --ignore-var PULSE_BT_MAC pulse-office pulse-bedroom
 ```
-

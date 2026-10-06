@@ -252,5 +252,3 @@ Alternative: dedicate an entire dashboard/view per feed and use `secondary_urls`
 - Include source/title text in the `sensor` attributes so overlays or other cards can display credits.
 - For very slow APIs, cache images on Home Assistant via the `download_file` service or by writing into `config/www/public-playlists/`. Then point your sensor at `/local/public-playlists/<name>.jpg` and let Home Assistant serve it reliably.
 - All collections above are CC0 or public domain, but keeping the original attribution visible is good etiquette and helps debugging when users ask, “What am I looking at?”
-
-

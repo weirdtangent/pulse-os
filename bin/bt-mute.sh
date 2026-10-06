@@ -17,4 +17,3 @@ if command -v pw-cli >/dev/null 2>&1 && pw-cli info &>/dev/null; then
     pactl set-sink-mute "$SINK" 1 >/dev/null 2>&1 || true
   fi
 fi
-

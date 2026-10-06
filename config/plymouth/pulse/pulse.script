@@ -29,4 +29,3 @@ Plymouth.SetRefreshFunction (draw_splash);
 Plymouth.SetBootProgressFunction (draw_splash);
 Plymouth.SetUpdateFunction (draw_splash);
 draw_splash ();
-

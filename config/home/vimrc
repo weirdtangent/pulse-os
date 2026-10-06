@@ -108,4 +108,3 @@ au BufReadPost * if expand('%:p') !~# '\m/\.git/' && line("'\"") > 1 && line("'\
 " comment continuation
 set formatoptions+=r
 set formatoptions+=o
-
