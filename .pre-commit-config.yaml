@@ -3,8 +3,12 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # Raw framebuffer images (.rgb) have no magic bytes, so identify tags
+      # them as text; exclude them from every hook that rewrites content.
       - id: trailing-whitespace
+        exclude: '\.rgb$'
       - id: end-of-file-fixer
+        exclude: '\.rgb$'
       - id: check-yaml
       - id: check-json
       - id: check-toml
@@ -14,6 +18,7 @@ repos:
       - id: detect-private-key
       - id: mixed-line-ending
         args: ['--fix=lf']
+        exclude: '\.rgb$'
 
   # Python linting with Ruff - runs on ALL Python files
   - repo: local
