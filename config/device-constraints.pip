@@ -103,7 +103,7 @@ tzdata==2026.4
     #   x-wr-timezone
 websocket==0.2.1
     # via pulse-os
-websockets==17.1
+websockets==17.2
     # via pulse-os
 wyoming==1.10.2
     # via pulse-os

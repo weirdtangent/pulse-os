@@ -17,7 +17,7 @@ dependencies = [
     "paho-mqtt==2.1.0",
     "psutil==7.2.2",
     "websocket==0.2.1",
-    "websockets==17.1",
+    "websockets==17.2",
     "wyoming==1.10.2",
     "openlocationcode==1.0.1",
 ]
@@ -50,12 +50,12 @@ docstring-code-format = true
 
 [dependency-groups]
 dev = [
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     "pip-audit>=2.10.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.0.0",
-    "ruff==0.16.9",
+    "ruff==0.16.10",
     "types-requests>=2.33.0.20260906",
 ]
 
