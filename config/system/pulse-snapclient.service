@@ -16,6 +16,15 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 20); do [ -S "$PULSE_SOCKET" ] && exit
 ExecStart=/opt/pulse-os/bin/pulse-snapclient.sh
 Restart=always
 RestartSec=3
+# Back off when snapclient crashes repeatedly. 0.35.0 segfaults during rapid
+# reconnect churn on a degraded Wi-Fi link (one kiosk: 15 SEGVs in ~2h), and a
+# flat 3s restart just rejoins the same churn. The delay grows from 3s to 30s over
+# 4 consecutive restarts. systemd's restart counter is only reset by an explicit
+# start/restart (setup.sh, the audio watchdog, a manual restart), so after a storm
+# a later one-off crash also waits 30s -- an acceptable gap for a speaker.
+# Requires systemd >= 254 (trixie); older systemd warns and ignores both keys.
+RestartSteps=4
+RestartMaxDelaySec=30
 StandardOutput=journal
 StandardError=journal
 
