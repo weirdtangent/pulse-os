@@ -55,8 +55,8 @@ dev = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.0.0",
-    "ruff==0.16.10",
-    "types-requests>=2.33.0.20260906",
+    "ruff==0.17.0",
+    "types-requests>=2.33.0.20261006",
 ]
 
 [tool.pytest.ini_options]
