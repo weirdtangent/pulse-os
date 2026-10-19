@@ -71,17 +71,30 @@ fi
 
 cmd=(
     "$SNAPCLIENT_BIN"
-    --host "$SNAPCAST_HOST"
-    --port "$SNAPCAST_PORT"
     --hostID "$SNAPCLIENT_HOST_ID"
     --soundcard "$SNAPCLIENT_SOUNDCARD"
 )
+
+# snapclient 0.35 deprecates --host/--port in favour of a positional
+# tcp://host:port url (and logs a warning on every start if they are used).
+# Older clients (0.26 on bluesnap, 0.31) have no url argument, so probe.
+snapclient_help="$("$SNAPCLIENT_BIN" --help 2>&1 || true)"
+server_url=""
+if grep -q -- "use \[url\]" <<<"$snapclient_help"; then
+    url_host="$SNAPCAST_HOST"
+    if [[ "$url_host" == *:* && "$url_host" != \[* ]]; then
+        url_host="[$url_host]" # bare IPv6 literal
+    fi
+    server_url="tcp://${url_host}:${SNAPCAST_PORT}"
+else
+    cmd+=(--host "$SNAPCAST_HOST" --port "$SNAPCAST_PORT")
+fi
 
 # snapclient 0.35 REMOVED --controlPort (no replacement; it moved to a url-based
 # connection scheme) and exits Fatal on an unknown argument. The fleet is upgraded
 # room by room, so this script has to run against 0.26 (bluesnap), 0.31 and 0.35 at
 # the same time -- probe the binary instead of assuming a version.
-if "$SNAPCLIENT_BIN" --help 2>&1 | grep -q -- "--controlPort"; then
+if grep -q -- "--controlPort" <<<"$snapclient_help"; then
     cmd+=(--controlPort "$SNAPCAST_CONTROL_PORT")
 fi
 
@@ -91,6 +104,10 @@ fi
 
 if [ "${#extra_args[@]}" -gt 0 ]; then
     cmd+=("${extra_args[@]}")
+fi
+
+if [ -n "$server_url" ]; then
+    cmd+=("$server_url")
 fi
 
 exec "${cmd[@]}"
