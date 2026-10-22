@@ -164,6 +164,7 @@ class OverlayConfig:
     outdoor_weather_interval: int  # seconds between Open-Meteo polls
     outdoor_weather_units: str  # PULSE_WEATHER_UNITS: auto | imperial | metric
     outdoor_weather_base_url: str  # PULSE_WEATHER_BASE_URL, shared with the assistant
+    outdoor_weather_nws: bool  # location is in the US, so NWS station observations exist
     speaker_alert: bool  # show a badge when the configured speaker is unreachable
     speaker_interval: int  # seconds between reachability checks
     # Reused from the Bluetooth autoconnect settings — the badge and bin/bt-autoconnect.sh
@@ -628,6 +629,7 @@ def load_config() -> EnvConfig:
         # keeps a typo from hammering a free service for numbers that cannot have changed.
         outdoor_weather_interval=max(300, parse_int(os.environ.get("PULSE_OVERLAY_OUTDOOR_TEMP_INTERVAL"), 900)),
         outdoor_weather_units=(os.environ.get("PULSE_WEATHER_UNITS") or "auto").strip().lower(),
+        outdoor_weather_nws=bool(resolved and (resolved.country_code or "").upper() == "US"),
         outdoor_weather_base_url=(
             os.environ.get("PULSE_WEATHER_BASE_URL") or "https://api.open-meteo.com/v1/forecast"
         ).strip(),
@@ -976,6 +978,10 @@ class KioskMqttListener:
                     self.overlay_config.weather_alerts_longitude,
                     units=self.overlay_config.outdoor_weather_units,
                     base_url=self.overlay_config.outdoor_weather_base_url,
+                    # Measured temperature from the nearest NWS station; US-only, so
+                    # elsewhere the Open-Meteo model reading stands alone.
+                    use_nws=self.overlay_config.outdoor_weather_nws,
+                    contact=self.overlay_config.weather_alerts_contact,
                     log=self.log,
                 )
             elif self.overlay_config.outdoor_weather_enabled:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pulse.outdoor_weather as ow
 import pytest
@@ -11,16 +13,41 @@ def _payload(temp=43.9, code=0, is_day=1) -> dict:
     return {"current": {"time": "2026-10-22T08:45", "temperature_2m": temp, "weather_code": code, "is_day": is_day}}
 
 
+def _observation(celsius=8.0, *, age_minutes=20, qc="V", unit="wmoUnit:degC") -> dict:
+    stamp = (datetime.now(UTC) - timedelta(minutes=age_minutes)).isoformat()
+    return {
+        "properties": {"timestamp": stamp, "temperature": {"unitCode": unit, "value": celsius, "qualityControl": qc}}
+    }
+
+
 class _Feed:
-    """Stateful MockTransport handler: swap the payload between fetches, or force an error."""
+    """Stateful MockTransport handler routing Open-Meteo and NWS URLs; swap payloads or fail."""
 
     def __init__(self) -> None:
         self.payload: dict = _payload()
+        self.observation: dict = _observation()
         self.fail = False
+        self.nws_fail = False
         self.requests: list[httpx.Request] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if request.url.host == "api.weather.gov":
+            if self.nws_fail:
+                return httpx.Response(503)
+            path = request.url.path
+            if path.startswith("/points/"):
+                return httpx.Response(
+                    200,
+                    json={"properties": {"observationStations": "https://api.weather.gov/gridpoints/XXX/1,1/stations"}},
+                )
+            if path.endswith("/stations"):
+                return httpx.Response(
+                    200, json={"features": [{"properties": {"stationIdentifier": "KXYZ", "name": "Test"}}]}
+                )
+            if path == "/stations/KXYZ/observations/latest":
+                return httpx.Response(200, json=self.observation)
+            return httpx.Response(404)
         if self.fail:
             return httpx.Response(503)
         return httpx.Response(200, json=self.payload)
@@ -95,3 +122,74 @@ def test_fetch_error_drops_a_stale_reading(feed: _Feed, monkeypatch) -> None:
     real_time = ow.time.time
     monkeypatch.setattr(ow.time, "time", lambda: real_time() + ow.MAX_STALE_SECONDS + 1)
     assert client.fetch() is None
+
+
+def _nws_client(**kwargs) -> ow.OutdoorWeatherClient:
+    return ow.OutdoorWeatherClient(40.71, -74.01, use_nws=True, log=lambda _: None, **kwargs)
+
+
+def test_station_temperature_wins_over_the_model(feed: _Feed) -> None:
+    # The model ran ~8F warm on an inversion morning; a thermometer reading beats it.
+    feed.payload = _payload(temp=54.3)
+    feed.observation = _observation(8.0)  # 46.4F
+    reading = _nws_client().fetch()
+    assert reading is not None
+    assert (reading["temp"], reading["source"]) == (46, "KXYZ")
+    # The sky still comes from Open-Meteo.
+    assert (reading["icon"], reading["condition"]) == ("\u2600\ufe0f", "Clear")
+
+
+def test_station_temperature_in_celsius(feed: _Feed) -> None:
+    feed.observation = _observation(8.4)
+    reading = _nws_client(units="metric").fetch()
+    assert reading is not None
+    assert (reading["temp"], reading["unit"]) == (8, "C")
+
+
+def test_station_is_looked_up_once(feed: _Feed) -> None:
+    client = _nws_client()
+    client.fetch()
+    client.fetch()
+    assert sum(r.url.path.startswith("/points/") for r in feed.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        _observation(None),
+        _observation(8.0, qc="X"),
+        _observation(8.0, qc="Q"),
+        _observation(8.0, age_minutes=180),
+        _observation(46.4, unit="wmoUnit:degF"),
+        {"properties": {}},
+    ],
+)
+def test_unusable_observation_falls_back_to_the_model(feed: _Feed, observation: dict) -> None:
+    feed.payload = _payload(temp=54.3)
+    feed.observation = observation
+    reading = _nws_client().fetch()
+    assert reading is not None
+    assert reading["temp"] == 54
+    assert "source" not in reading
+
+
+def test_nws_outage_falls_back_to_the_model_and_retries_the_lookup(feed: _Feed) -> None:
+    feed.nws_fail = True
+    client = _nws_client()
+    reading = client.fetch()
+    assert reading is not None and reading["temp"] == 44
+    feed.nws_fail = False
+    reading = client.fetch()
+    assert reading is not None and reading["source"] == "KXYZ"
+
+
+def test_station_alone_still_shows_a_temperature(feed: _Feed) -> None:
+    feed.fail = True
+    reading = _nws_client().fetch()
+    assert reading is not None
+    assert (reading["temp"], reading["icon"], reading["condition"]) == (46, "", "")
+
+
+def test_nws_is_not_called_outside_the_us(feed: _Feed) -> None:
+    ow.OutdoorWeatherClient(40.71, -74.01, log=lambda _: None).fetch()
+    assert all(r.url.host != "api.weather.gov" for r in feed.requests)
