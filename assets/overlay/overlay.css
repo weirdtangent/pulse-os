@@ -1336,7 +1336,15 @@ body {
    pixels -- the badges have exactly that problem (see .overlay-badge min-height). */
 .overlay-clock__weather {
   line-height: 1;
+}
+
+/* The whole title stays on one line, not just the weather span: a long room name plus
+   "Partly cloudy" can outrun the cell, and a wrap anywhere in the row would add a line
+   and push the time down. The condition is last on purpose -- it is what gets clipped. */
+.overlay-card--clock .overlay-card__title {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .overlay-clock__weather-sep {
