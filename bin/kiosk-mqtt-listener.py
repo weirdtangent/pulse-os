@@ -26,6 +26,7 @@ from pulse.config_persist import ConfigPersister, persist_preference
 from pulse.location_resolver import resolve_location
 from pulse.mqtt_discovery import build_button_entity, build_number_entity, build_select_entity
 from pulse.network import check_network, status_payload
+from pulse.outdoor_weather import OutdoorWeatherClient
 from pulse.overlay import (
     DEFAULT_FONT_STACK,
     DEFAULT_SLEEP_WAKE_SECONDS,
@@ -159,6 +160,10 @@ class OverlayConfig:
     # disables the feature rather than guessing at coordinates.
     weather_alerts_latitude: float | None
     weather_alerts_longitude: float | None
+    outdoor_weather_enabled: bool  # current temp + sky beside the room name over the clock
+    outdoor_weather_interval: int  # seconds between Open-Meteo polls
+    outdoor_weather_units: str  # PULSE_WEATHER_UNITS: auto | imperial | metric
+    outdoor_weather_base_url: str  # PULSE_WEATHER_BASE_URL, shared with the assistant
     speaker_alert: bool  # show a badge when the configured speaker is unreachable
     speaker_interval: int  # seconds between reachability checks
     # Reused from the Bluetooth autoconnect settings — the badge and bin/bt-autoconnect.sh
@@ -618,6 +623,14 @@ def load_config() -> EnvConfig:
         weather_alerts_sound_id=(os.environ.get("PULSE_SOUND_WEATHER_ALERT") or "notify-two-tone").strip(),
         weather_alerts_latitude=resolved.latitude if resolved else None,
         weather_alerts_longitude=resolved.longitude if resolved else None,
+        outdoor_weather_enabled=parse_bool(os.environ.get("PULSE_OVERLAY_OUTDOOR_TEMP"), True),
+        # Open-Meteo only refreshes its current conditions every 15 minutes, so the floor
+        # keeps a typo from hammering a free service for numbers that cannot have changed.
+        outdoor_weather_interval=max(300, parse_int(os.environ.get("PULSE_OVERLAY_OUTDOOR_TEMP_INTERVAL"), 900)),
+        outdoor_weather_units=(os.environ.get("PULSE_WEATHER_UNITS") or "auto").strip().lower(),
+        outdoor_weather_base_url=(
+            os.environ.get("PULSE_WEATHER_BASE_URL") or "https://api.open-meteo.com/v1/forecast"
+        ).strip(),
         sleep_start=(os.environ.get("PULSE_SLEEP_START") or "").strip(),
         sleep_end=(os.environ.get("PULSE_SLEEP_END") or "").strip(),
         # Floor of 5s so a mistyped 1 can't make the wake useless; 0 still disables.
@@ -857,6 +870,10 @@ class KioskMqttListener:
         self._weather_alerts_stop_event = threading.Event()
         self._weather_alert_client: WeatherAlertClient | None = None
         self._weather_alert_sound_path: Path | None = None
+        self._outdoor_weather_lock = threading.Lock()
+        self._outdoor_weather_thread: threading.Thread | None = None
+        self._outdoor_weather_stop_event = threading.Event()
+        self._outdoor_weather_client: OutdoorWeatherClient | None = None
         self._speaker_lock = threading.Lock()
         self._speaker_thread: threading.Thread | None = None
         self._speaker_stop_event = threading.Event()
@@ -948,6 +965,21 @@ class KioskMqttListener:
                 self.log("weather-alerts: enabled but PULSE_LOCATION did not resolve — alerts disabled")
             if self._weather_alert_client and self.overlay_config.weather_alerts_sound:
                 self._weather_alert_sound_path = self._resolve_weather_alert_sound()
+            # Same coordinates as the alerts: both resolve PULSE_LOCATION once at startup.
+            if (
+                self.overlay_config.outdoor_weather_enabled
+                and self.overlay_config.weather_alerts_latitude is not None
+                and self.overlay_config.weather_alerts_longitude is not None
+            ):
+                self._outdoor_weather_client = OutdoorWeatherClient(
+                    self.overlay_config.weather_alerts_latitude,
+                    self.overlay_config.weather_alerts_longitude,
+                    units=self.overlay_config.outdoor_weather_units,
+                    base_url=self.overlay_config.outdoor_weather_base_url,
+                    log=self.log,
+                )
+            elif self.overlay_config.outdoor_weather_enabled:
+                self.log("outdoor-weather: enabled but PULSE_LOCATION did not resolve — temperature hidden")
             self._overlay_theme = self._build_overlay_theme(self._current_font_stack)
             self._overlay_topic_handlers = {
                 self.assistant_topics.schedules_state: self._handle_overlay_schedule_state,
@@ -1154,6 +1186,46 @@ class KioskMqttListener:
                 except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
                     self.log(f"weather-alerts: poll loop error: {exc}")
                 if self._weather_alerts_stop_event.wait(self.overlay_config.weather_alerts_interval):
+                    break
+        finally:
+            client.close()
+
+    def start_outdoor_weather(self) -> None:
+        if not self._outdoor_weather_client or not self.overlay_state:
+            return
+        with self._outdoor_weather_lock:
+            if self._outdoor_weather_thread and self._outdoor_weather_thread.is_alive():
+                return
+            self._outdoor_weather_stop_event.clear()
+            thread = threading.Thread(target=self._outdoor_weather_loop, name="pulse-outdoor-weather", daemon=True)
+            self._outdoor_weather_thread = thread
+            thread.start()
+
+    def stop_outdoor_weather(self) -> None:
+        # Signal + join only; the worker closes its own httpx client, as with the alerts.
+        with self._outdoor_weather_lock:
+            if not self._outdoor_weather_thread:
+                return
+            self._outdoor_weather_stop_event.set()
+            self._outdoor_weather_thread.join(timeout=15)
+            self._outdoor_weather_thread = None
+
+    def _outdoor_weather_loop(self) -> None:
+        client = self._outdoor_weather_client
+        state = self.overlay_state
+        if not client or not state:
+            return
+        try:
+            while not self._outdoor_weather_stop_event.is_set():
+                try:
+                    change = state.set_outdoor_weather(client.fetch())
+                    # Bumps only when the rendered text changes, so a steady 44°F doesn't
+                    # reload the photo card every poll.
+                    if change.changed:
+                        self._emit_overlay_refresh(change.version, change.reason)
+                except Exception as exc:  # nosec B110 - never let a fetch error kill the loop
+                    self.log(f"outdoor-weather: poll loop error: {exc}")
+                if self._outdoor_weather_stop_event.wait(self.overlay_config.outdoor_weather_interval):
                     break
         finally:
             client.close()
@@ -2712,6 +2784,7 @@ class KioskMqttListener:
         self.start_telemetry()
         self.start_ticker()
         self.start_weather_alerts()
+        self.start_outdoor_weather()
         self.start_speaker_monitor()
         self.start_network_monitor()
         if self.overlay_state:
@@ -3087,6 +3160,7 @@ def main():
     atexit.register(listener.stop_telemetry)
     atexit.register(listener.stop_ticker)
     atexit.register(listener.stop_weather_alerts)
+    atexit.register(listener.stop_outdoor_weather)
     atexit.register(listener.stop_speaker_monitor)
     atexit.register(listener.stop_network_monitor)
     atexit.register(listener.stop_overlay_server)
