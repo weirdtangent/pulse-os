@@ -114,6 +114,9 @@ class OverlaySnapshot:
     # replaces the overlay iframe's whole srcdoc on every refresh, which builds a NEW
     # window and would otherwise throw away an in-progress wake.
     sleep_wake_until: float = 0.0
+    # Current outdoor reading from pulse/outdoor_weather.py ({"temp", "unit", "icon",
+    # "condition"}), shown in the clock card's title row; None hides it.
+    outdoor_weather: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -205,6 +208,7 @@ class OverlayStateManager:
         self._speaker_offline: dict[str, Any] | None = None
         self._weather_alerts: tuple[dict[str, Any], ...] = ()
         self._network: dict[str, Any] | None = None
+        self._outdoor_weather: dict[str, Any] | None = None
         self._sleep_wake_until = 0.0
         self._version = 0
         self._last_reason = "init"
@@ -227,6 +231,7 @@ class OverlayStateManager:
             "speaker_offline": "",
             "weather_alerts": "",
             "network": "",
+            "outdoor_weather": "",
         }
 
     @property
@@ -606,6 +611,26 @@ class OverlayStateManager:
             self._signatures["weather_alerts"] = signature
             return self._bump("weather_alerts")
 
+    def set_outdoor_weather(self, reading: dict[str, Any] | None) -> OverlayChange:
+        """Store the current outdoor reading shown beside the clock's room name.
+
+        Signed on the rendered fields only, not on `fetched_at`: every poll carries a new
+        timestamp, and signing it would reload the photo card each time even though the
+        same "44°F · Clear" is on screen.
+        """
+        normalized = dict(reading) if reading else None
+        signature = (
+            ":".join(str(normalized.get(key, "")) for key in ("temp", "unit", "icon", "condition"))
+            if normalized
+            else ""
+        )
+        with self._lock:
+            self._outdoor_weather = normalized
+            if signature == self._signatures["outdoor_weather"]:
+                return OverlayChange(False, self._version, "outdoor_weather")
+            self._signatures["outdoor_weather"] = signature
+            return self._bump("outdoor_weather")
+
     def snapshot(self) -> OverlaySnapshot:
         with self._lock:
             return OverlaySnapshot(
@@ -634,6 +659,7 @@ class OverlayStateManager:
                 weather_alerts=tuple(copy.deepcopy(item) for item in self._weather_alerts),
                 network=copy.deepcopy(self._network),
                 sleep_wake_until=self._sleep_wake_until,
+                outdoor_weather=copy.deepcopy(self._outdoor_weather),
             )
 
     def _bump(self, reason: str) -> OverlayChange:
@@ -1601,7 +1627,7 @@ def _build_clock_card(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
     # Only support single clock
     clock = clocks[0]
     tz_attr = clock.timezone or ""
-    label = html_escape(clock.label or "Clock")
+    label = html_escape(clock.label or "Clock") + _outdoor_weather_markup(snapshot.outdoor_weather)
     tz_attr_escaped = html_escape(tz_attr, quote=True)
     card = f"""
 <div class="overlay-card overlay-card--clock" data-clock data-tz="{tz_attr_escaped}">
@@ -1611,6 +1637,28 @@ def _build_clock_card(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:
 </div>
 """.strip()
     return [(CLOCK_POSITION, card)]
+
+
+def _outdoor_weather_markup(reading: dict[str, Any] | None) -> str:
+    """ " · ☀️ 44°F · Clear" for the clock's title row, or "" when there is no reading.
+
+    It rides in the title row rather than on a line of its own on purpose: the clock card
+    may only grow upward, because the stock ticker can sit directly beneath it, and the
+    clock cell is top-anchored, so any added line would push the time and date down.
+    """
+    if not reading:
+        return ""
+    temp = reading.get("temp")
+    if not isinstance(temp, (int, float)) or isinstance(temp, bool):
+        return ""
+    sep = '<span class="overlay-clock__weather-sep" aria-hidden="true">\u00b7</span>'
+    unit = html_escape(str(reading.get("unit") or ""))
+    icon = html_escape(str(reading.get("icon") or ""))
+    condition = html_escape(str(reading.get("condition") or ""))
+    parts = f"{icon} {round(temp)}\u00b0{unit}" if icon else f"{round(temp)}\u00b0{unit}"
+    if condition:
+        parts += f" {sep} {condition}"
+    return f' {sep} <span class="overlay-clock__weather" data-clock-weather>{parts}</span>'
 
 
 def _build_timer_cards(snapshot: OverlaySnapshot) -> list[tuple[str, str]]:

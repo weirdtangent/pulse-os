@@ -893,6 +893,44 @@ class OverlayRenderTests(unittest.TestCase):
         html = render_overlay_html(snapshot, self.theme)
         self.assertLess(html.index(self._SPEAKER_PILL_MARKUP), html.index("Alarm ringing"))
 
+    # --- Outdoor weather (clock title row) --------------------------------------
+    _OUTDOOR = {"temp": 44, "unit": "F", "icon": "\u2600\ufe0f", "condition": "Clear", "fetched_at": 1.0}
+
+    def test_outdoor_weather_rides_in_the_clock_title_row(self) -> None:
+        # Inline with the room name, never on a line of its own: the clock cell is
+        # top-anchored and the ticker can sit beneath it, so an extra line would push the
+        # time and date down into it.
+        html = render_overlay_html(self._snapshot(outdoor_weather=self._OUTDOOR), self.theme)
+        title = re.search(r'<div class="overlay-card__title">(.*?)</div>', html, re.S)
+        assert title is not None
+        self.assertIn("Local", title.group(1))
+        self.assertIn("\u2600\ufe0f 44\u00b0F", title.group(1))
+        self.assertIn("Clear", title.group(1))
+
+    def test_outdoor_weather_absent_without_a_reading(self) -> None:
+        html = render_overlay_html(self._snapshot(outdoor_weather=None), self.theme)
+        self.assertNotIn("data-clock-weather", html)
+
+    def test_outdoor_weather_without_condition_shows_just_the_temperature(self) -> None:
+        reading = {"temp": 10, "unit": "C", "icon": "", "condition": ""}
+        html = render_overlay_html(self._snapshot(outdoor_weather=reading), self.theme)
+        self.assertIn("data-clock-weather>10\u00b0C</span>", html)
+
+    def test_outdoor_weather_is_escaped(self) -> None:
+        reading = {"temp": 44, "unit": "F", "icon": "", "condition": "<b>Clear</b>"}
+        html = render_overlay_html(self._snapshot(outdoor_weather=reading), self.theme)
+        self.assertNotIn("<b>Clear</b>", html)
+
+    def test_outdoor_weather_signature_ignores_fetch_time(self) -> None:
+        # Every poll carries a new fetched_at; signing it would reload the photo card on
+        # every poll while the same text sits on screen.
+        manager = OverlayStateManager()
+        self.assertTrue(manager.set_outdoor_weather(self._OUTDOOR).changed)
+        self.assertFalse(manager.set_outdoor_weather({**self._OUTDOOR, "fetched_at": 2.0}).changed)
+        self.assertTrue(manager.set_outdoor_weather({**self._OUTDOOR, "temp": 45}).changed)
+        self.assertTrue(manager.set_outdoor_weather(None).changed)
+        self.assertIsNone(manager.snapshot().outdoor_weather)
+
     # --- Connectivity pill (notification bar) -----------------------------------
     _NETWORK_PILL_MARKUP = 'data-badge-action="show_network"'
 

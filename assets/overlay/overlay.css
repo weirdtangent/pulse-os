@@ -1329,6 +1329,28 @@ body {
     0 0 14px rgba(var(--overlay-scrim-rgb), 0.55);
 }
 
+/* Outdoor temperature and sky, sharing the title row with the room name. Kept inline
+   rather than on its own line: the clock may only grow upward (the ticker can sit right
+   beneath it), and the cell is top-anchored, so a new line would push the time down. The
+   line-height is pinned so the emoji's taller line box cannot do the same thing by a few
+   pixels -- the badges have exactly that problem (see .overlay-badge min-height). */
+.overlay-clock__weather {
+  line-height: 1;
+}
+
+/* The whole title stays on one line, not just the weather span: a long room name plus
+   "Partly cloudy" can outrun the cell, and a wrap anywhere in the row would add a line
+   and push the time down. The condition is last on purpose -- it is what gets clipped. */
+.overlay-card--clock .overlay-card__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-clock__weather-sep {
+  opacity: 0.6;
+}
+
 /* The clock gets its own family. It is the one thing on screen rendered at 100px+, where a
    face picked for legibility in a 14px badge often reads badly, so the two are chosen
    separately. Falls back to the overlay font when no clock font is set. */

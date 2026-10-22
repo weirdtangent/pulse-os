@@ -45,6 +45,8 @@ This guide lists every `pulse.conf` variable, its default value from `pulse.conf
 | `PULSE_OVERLAY_NOTIFICATION_BAR` | `true` | Toggles the badge row at the top of the overlay. |
 | `PULSE_OVERLAY_CLOCK_24H` | `false` | Forces 24-hour clock labels when `true`. |
 | `PULSE_OVERLAY_CLOCK_DATE_FORMAT` | `long` | Date under the clock. A preset name — `long` (Tuesday, September 1, 2026), `long-no-year`, `ordinal` (Tuesday, September 1st), `ordinal-year`, `day-first` (Tuesday 1 September 2026), `day-first-no-year` — or a template of `{weekday}` `{month}` `{day}` `{ordinal}` `{year}`, e.g. `{weekday}, {day} {month}`. Unrecognised values fall back to `long`. |
+| `PULSE_OVERLAY_OUTDOOR_TEMP` | `true` | Shows the current outdoor temperature and sky beside the room name above the clock, for `PULSE_LOCATION` in `PULSE_WEATHER_UNITS`. In the US the temperature is the nearest NWS station's measured reading; otherwise, or when the station is silent, Open-Meteo's model value. The sky comes from Open-Meteo. Hidden when the location doesn't resolve or the last reading is over an hour old. |
+| `PULSE_OVERLAY_OUTDOOR_TEMP_INTERVAL` | `900` | Seconds between outdoor-temperature polls (min 300; Open-Meteo refreshes every 15 minutes). |
 | `PULSE_OVERLAY_AUTH_TOKEN` | _(unset)_ | Bearer token for overlay POST endpoints. When set, state-changing requests require `Authorization: Bearer <token>`. |
 
 ## Themes
