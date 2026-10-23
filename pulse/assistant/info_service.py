@@ -295,7 +295,13 @@ class InfoService:
         current_temp = _format_temp(forecast.current.temperature) if forecast.current else None
         today = forecast.days[0] if forecast.days else None
         high = _format_temp(today.temp_high) if today else None
-        if current_temp and high:
+        # Compare the rounded values that get spoken: 65.6 vs 66.2 both say "66".
+        if current_temp and high and int(current_temp) == int(high):
+            spoken = f"Right now it's {current_temp} degrees, which is today's expected high."
+        elif current_temp and high and int(current_temp) > int(high):
+            # The station reading can beat the model's forecast high.
+            spoken = f"Right now it's {current_temp} degrees, already above today's expected high of {high}."
+        elif current_temp and high:
             spoken = f"Right now it's {current_temp} degrees, with an expected high of {high} today."
         elif current_temp:
             spoken = f"Right now it's {current_temp} degrees."

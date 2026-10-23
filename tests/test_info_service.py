@@ -971,3 +971,21 @@ class TestMaybeAnswerTemperature:
         response = await svc.maybe_answer(text)
         assert response is not None
         assert "Tomorrow" in response.text
+
+    @pytest.mark.parametrize(
+        ("now", "expected"),
+        [
+            (72.0, "Right now it's 72 degrees, which is today's expected high."),
+            (71.6, "Right now it's 72 degrees, which is today's expected high."),
+            (75.0, "Right now it's 75 degrees, already above today's expected high of 72."),
+            (66.0, "Right now it's 66 degrees, with an expected high of 72 today."),
+        ],
+    )
+    async def test_current_at_or_above_high(self, now, expected):
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=now, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("what is the temperature")
+        assert response.text == expected
