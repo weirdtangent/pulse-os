@@ -6,6 +6,7 @@ import math
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from pulse.assistant import info_service
 from pulse.assistant.config import InfoConfig, NewsConfig, SportsConfig, WeatherConfig
 from pulse.assistant.info_service import (
     InfoService,
@@ -864,6 +865,11 @@ class TestFormatTeamSnapshot:
 
 
 class TestMaybeAnswerTemperature:
+    @pytest.fixture(autouse=True)
+    def _midday(self, monkeypatch):
+        # The answer switches to tonight's low in the evening; pin the clock to midday.
+        monkeypatch.setattr(info_service, "_local_hour", lambda: 12)
+
     @pytest.mark.parametrize(
         "text",
         [
@@ -989,3 +995,48 @@ class TestMaybeAnswerTemperature:
 
         response = await svc.maybe_answer("what is the temperature")
         assert response.text == expected
+
+    @pytest.mark.parametrize(
+        ("hour", "now", "expected"),
+        [
+            # Evening: tonight's low is TOMORROW's daily minimum (55 in _make_forecast).
+            (20, 61.0, "Right now it's 61 degrees, with an expected low of 55 tonight."),
+            (20, 55.4, "Right now it's 55 degrees, which is tonight's expected low."),
+            (20, 52.0, "Right now it's 52 degrees, already below tonight's expected low of 55."),
+            # After midnight the coming pre-dawn low is today's minimum (58).
+            (2, 61.0, "Right now it's 61 degrees, with an expected low of 58 tonight."),
+            # Daytime boundaries still talk about the high.
+            (5, 61.0, "Right now it's 61 degrees, with an expected high of 72 today."),
+            (16, 61.0, "Right now it's 61 degrees, with an expected high of 72 today."),
+        ],
+    )
+    async def test_night_reports_tonights_low(self, monkeypatch, hour, now, expected):
+        monkeypatch.setattr(info_service, "_local_hour", lambda: hour)
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=now, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("what is the temperature")
+        assert response.text == expected
+
+    async def test_evening_without_tomorrow_falls_back_to_the_high(self, monkeypatch):
+        monkeypatch.setattr(info_service, "_local_hour", lambda: 20)
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=61, weather_code=0, windspeed=0, time=None)
+        forecast = _make_forecast(days=[WeatherDay("2025-01-01", 72, 58, 20, 0)], current=current)
+        weather.forecast = AsyncMock(return_value=forecast)
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("what is the temperature")
+        assert response.text == "Right now it's 61 degrees, with an expected high of 72 today."
+
+    async def test_evening_display_shows_the_low(self, monkeypatch):
+        monkeypatch.setattr(info_service, "_local_hour", lambda: 20)
+        weather = AsyncMock()
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=None))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("what is the temperature")
+        assert response.text == "Tonight's expected low is 55 degrees."
+        assert response.display == "Low tonight: 55°F"
