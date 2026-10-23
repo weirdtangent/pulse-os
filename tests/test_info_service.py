@@ -872,6 +872,7 @@ class TestMaybeAnswerTemperature:
             "how hot is it",
             "how cold is it outside",
             "how many degrees is it",
+            "what is the temperature.",
         ],
     )
     def test_is_temperature_only(self, text):
@@ -886,6 +887,7 @@ class TestMaybeAnswerTemperature:
             "what s the high today",
             "turn on the warm lights",
             "i will attempt it",
+            "what is the temperature tomorrow.",
         ],
     )
     def test_not_temperature_only(self, text):
@@ -958,3 +960,14 @@ class TestMaybeAnswerTemperature:
         response = await svc.maybe_answer("what's the weather")
         assert "around 49 degrees" in response.text
         assert "57" not in response.text
+
+    @pytest.mark.parametrize("text", ["what's the temp tomorrow?", "How hot is it this weekend?"])
+    async def test_temperature_with_forecast_word_gets_forecast(self, text):
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=57, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer(text)
+        assert response is not None
+        assert "Tomorrow" in response.text

@@ -179,13 +179,13 @@ class InfoService:
         return None
 
     def _is_weather(self, text: str) -> bool:
-        return any(keyword in text for keyword in WEATHER_KEYWORDS)
+        return any(keyword in text for keyword in WEATHER_KEYWORDS) or self._mentions_temperature(text)
 
     def _is_temperature_only(self, text: str) -> bool:
-        words = set(text.split())
-        if words & FORECAST_ONLY_WORDS:
-            return False
-        return bool(words & TEMPERATURE_WORDS) or any(phrase in text for phrase in TEMPERATURE_PHRASES)
+        return self._mentions_temperature(text) and not (_words(text) & FORECAST_ONLY_WORDS)
+
+    def _mentions_temperature(self, text: str) -> bool:
+        return bool(_words(text) & TEMPERATURE_WORDS) or any(phrase in text for phrase in TEMPERATURE_PHRASES)
 
     def _is_news(self, text: str) -> bool:
         return any(keyword in text for keyword in NEWS_KEYWORDS)
@@ -421,6 +421,12 @@ def _normalize_text(value: str) -> str:
     value = re.sub(r"[^\w\s+\.]", " ", value)
     value = re.sub(r"\s+", " ", value).strip()
     return value
+
+
+def _words(text: str) -> set[str]:
+    # _normalize_text keeps periods (for "f1", "st. louis"), and speech-to-text ends a
+    # sentence with one: "temperature." must still match "temperature".
+    return {word.strip(".") for word in text.split()}
 
 
 def _describe_day(date_str: str, idx: int) -> str:
