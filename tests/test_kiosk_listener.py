@@ -310,3 +310,25 @@ def test_sleep_wake_endpoint_is_wired_into_the_server_config() -> None:
     source = _LISTENER.read_text(encoding="utf-8")
     assert 'self._overlay_sleep_wake_endpoint = f"{base_overlay_url}/overlay/sleep-wake"' in source
     assert "sleep_wake_endpoint=self._overlay_sleep_wake_endpoint," in source
+
+
+# -- playback state (gates the assistant's wake word) -------------------------
+
+
+@pytest.mark.parametrize(
+    ("entity", "text", "ha_state", "expected"),
+    [
+        ("media_player.office", "Depeche Mode — Waiting for the Night", "playing", "playing"),
+        ("media_player.office", "Song", "buffering", "playing"),
+        # Paused (snapcast reports idle, already mapped to paused) keeps its text for the
+        # overlay card but must not mute the wake word.
+        ("media_player.office", "Depeche Mode — Waiting for the Night", "paused", "paused"),
+        ("media_player.office", "", "idle", "idle"),
+        # A sensor entity's state is the text itself; there is no paused state to read.
+        ("sensor.office_now_playing", "Song", "song", "playing"),
+        ("sensor.office_now_playing", "", "", "idle"),
+    ],
+)
+def test_playback_state(listener, entity, text, ha_state, expected):
+    stub = SimpleNamespace(config=SimpleNamespace(media_player_entity=entity))
+    assert listener.KioskMqttListener._playback_state(stub, text, ha_state) == expected

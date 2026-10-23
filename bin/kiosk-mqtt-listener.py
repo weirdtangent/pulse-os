@@ -230,6 +230,8 @@ DEFAULT_VERSION_CHECKS_PER_DAY = 12
 ALLOWED_VERSION_CHECK_COUNTS = {2, 4, 6, 8, 12, 24}
 DEFAULT_TELEMETRY_INTERVAL_SECONDS = 15
 MIN_TELEMETRY_INTERVAL_SECONDS = 5
+PLAYING_STATES = frozenset({"playing", "buffering", "on"})
+
 TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
     TelemetryDescriptor(
         key="uptime_hours",
@@ -330,6 +332,19 @@ TELEMETRY_SENSORS: list[TelemetryDescriptor] = [
         icon="mdi:music-note",
         precision=None,
         entity_category=None,
+    ),
+    # "playing", "paused" or "idle". now_playing keeps its text while paused so the overlay
+    # card stays up; the assistant mutes the wake word only while this says "playing".
+    TelemetryDescriptor(
+        key="playback_state",
+        name="Playback State",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        icon="mdi:play-pause",
+        precision=None,
+        entity_category=None,
+        expose_sensor=False,
     ),
 ]
 
@@ -1627,6 +1642,7 @@ class KioskMqttListener:
 
         now_playing, now_playing_state, now_playing_image = self._collect_now_playing_text()
         metrics["now_playing"] = now_playing
+        metrics["playback_state"] = self._playback_state(now_playing, now_playing_state)
 
         if self.overlay_state:
             change = self.overlay_state.update_now_playing(
@@ -1707,6 +1723,14 @@ class KioskMqttListener:
         self.log("reboot: requested from the device controls card")
         self.handle_reboot()
         return True
+
+    def _playback_state(self, text: str, ha_state: str) -> str:
+        if not text:
+            return "idle"
+        # A sensor entity's state IS the now-playing text; it has no paused state to report.
+        if (self.config.media_player_entity or "").startswith("sensor.") or ha_state in PLAYING_STATES:
+            return "playing"
+        return "paused"
 
     def _collect_now_playing_text(self) -> tuple[str, str, str]:
         """Return (display_text, ha_state, image_data_uri) for the media player."""

@@ -197,7 +197,7 @@ class PulseAssistant:
             wake_detector=self.wake_detector,
             alert_topics=self.config.alert_topics,
             intercom_topic=self.config.intercom_topic,
-            playback_topic=f"pulse/{self.config.hostname}/telemetry/now_playing",
+            playback_topic=f"pulse/{self.config.hostname}/telemetry/playback_state",
             kiosk_availability_topic=f"homeassistant/device/{self.config.hostname}/availability",
             logger=LOGGER,
         )

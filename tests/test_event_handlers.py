@@ -39,7 +39,7 @@ def handler(mock_mqtt, mock_publisher, mock_wake_detector, mock_logger):
         wake_detector=mock_wake_detector,
         alert_topics=["alerts/fire", "alerts/intrusion"],
         intercom_topic="intercom/main",
-        playback_topic="pulse/test/telemetry/now_playing",
+        playback_topic="pulse/test/telemetry/playback_state",
         kiosk_availability_topic="homeassistant/device/test/availability",
         logger=mock_logger,
     )
@@ -70,7 +70,7 @@ class TestSubscribeAll:
             wake_detector=mock_wake_detector,
             alert_topics=[],
             intercom_topic=None,
-            playback_topic="pulse/test/telemetry/now_playing",
+            playback_topic="pulse/test/telemetry/playback_state",
             kiosk_availability_topic="homeassistant/device/test/availability",
             logger=mock_logger,
         )
@@ -81,11 +81,15 @@ class TestSubscribeAll:
 
 class TestNowPlaying:
     def test_active_playback(self, handler, mock_wake_detector):
-        handler.handle_now_playing_message("Artist - Song Title")
+        handler.handle_now_playing_message("playing")
         mock_wake_detector.set_remote_audio_active.assert_called_once_with(True)
 
     def test_idle_playback(self, handler, mock_wake_detector):
         handler.handle_now_playing_message("")
+        mock_wake_detector.set_remote_audio_active.assert_called_once_with(False)
+
+    def test_paused_does_not_mute_wake_word(self, handler, mock_wake_detector):
+        handler.handle_now_playing_message("paused")
         mock_wake_detector.set_remote_audio_active.assert_called_once_with(False)
 
     def test_whitespace_only_is_idle(self, handler, mock_wake_detector):
@@ -94,7 +98,7 @@ class TestNowPlaying:
 
     def test_state_change_logged(self, handler, mock_wake_detector, mock_logger):
         mock_wake_detector.set_remote_audio_active.return_value = True
-        handler.handle_now_playing_message("Song")
+        handler.handle_now_playing_message("playing")
         mock_logger.debug.assert_called()
 
 
