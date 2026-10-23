@@ -78,6 +78,8 @@ def _make_config(
 def _make_sources(weather=None, news=None, sports=None):
     sources = Mock()
     sources.weather = weather or AsyncMock()
+    # No NWS station unless a test supplies one: the Open-Meteo reading stands.
+    sources.weather.observed_temperature = AsyncMock(return_value=None)
     sources.news = news or AsyncMock()
     sources.sports = sports or AsyncMock()
     return sources
@@ -920,3 +922,39 @@ class TestMaybeAnswerTemperature:
         response = await svc.maybe_answer("what's the temperature tomorrow")
         assert "Tomorrow" in response.text
         assert len(response.card["days"]) == 2
+
+    async def test_station_reading_replaces_the_model(self):
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=57, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        sources = _make_sources(weather=weather)
+        sources.weather.observed_temperature = AsyncMock(return_value=49.3)
+        svc = _make_service(sources=sources)
+
+        response = await svc.maybe_answer("what is the temperature")
+        assert response.text == "Right now it's 49 degrees, with an expected high of 72 today."
+        assert response.card["current"]["temp"] == "49"
+        # The cached forecast is not mutated.
+        assert current.temperature == 57
+
+    async def test_station_reading_without_model_current(self):
+        weather = AsyncMock()
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=None))
+        sources = _make_sources(weather=weather)
+        sources.weather.observed_temperature = AsyncMock(return_value=49)
+        svc = _make_service(sources=sources)
+
+        response = await svc.maybe_answer("what is the temperature")
+        assert response.text.startswith("Right now it's 49 degrees")
+
+    async def test_full_forecast_uses_station_reading_too(self):
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=57, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        sources = _make_sources(weather=weather)
+        sources.weather.observed_temperature = AsyncMock(return_value=49)
+        svc = _make_service(sources=sources)
+
+        response = await svc.maybe_answer("what's the weather")
+        assert "around 49 degrees" in response.text
+        assert "57" not in response.text

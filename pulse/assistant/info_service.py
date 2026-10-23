@@ -23,12 +23,12 @@ import logging
 import math
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
 from .config import InfoConfig
-from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherForecast
+from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherCurrent, WeatherForecast
 
 STOP_WORDS = {
     "what",
@@ -196,8 +196,23 @@ class InfoService:
                 return alias
         return None
 
-    async def _handle_weather(self) -> tuple[str, str, dict[str, Any]] | None:
+    async def _forecast_with_observed_temperature(self) -> WeatherForecast | None:
+        """The forecast, with "right now" taken from the NWS station when there is one.
+
+        Open-Meteo's current temperature is model output for a grid cell and runs warm on
+        inversion mornings; the clock card shows the station reading, so the voice should too.
+        """
         forecast = await self.sources.weather.forecast()
+        if not forecast:
+            return None
+        observed = await self.sources.weather.observed_temperature(forecast.latitude, forecast.longitude)
+        if observed is None:
+            return forecast
+        current = forecast.current or WeatherCurrent(temperature=None, weather_code=None, windspeed=None, time=None)
+        return replace(forecast, current=replace(current, temperature=observed))
+
+    async def _handle_weather(self) -> tuple[str, str, dict[str, Any]] | None:
+        forecast = await self._forecast_with_observed_temperature()
         if not forecast or not forecast.days:
             return None
         units = self.config.weather.units
@@ -272,7 +287,7 @@ class InfoService:
         return spoken, display, card_payload
 
     async def _handle_temperature(self) -> tuple[str, str, dict[str, Any]] | None:
-        forecast = await self.sources.weather.forecast()
+        forecast = await self._forecast_with_observed_temperature()
         if not forecast:
             return None
         units = self.config.weather.units

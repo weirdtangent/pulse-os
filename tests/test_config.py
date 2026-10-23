@@ -530,6 +530,11 @@ class TestFromEnvClamping:
         cfg = _from_env({"PULSE_WEATHER_FORECAST_DAYS": "3"})
         assert cfg.info.weather.forecast_days == 3
 
+    def test_weather_uses_nws_for_a_us_location(self) -> None:
+        cfg = _from_env({"PULSE_WEATHER_ALERTS_CONTACT": "ops@example.com"})
+        assert cfg.info.weather.use_nws is True
+        assert cfg.info.weather.nws_contact == "ops@example.com"
+
     def test_news_max_articles_minimum_one(self) -> None:
         cfg = _from_env({"PULSE_NEWS_MAX_ARTICLES": "0"})
         assert cfg.info.news.max_articles == 1

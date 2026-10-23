@@ -16,6 +16,8 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     olc = None
 
+from pulse.outdoor_weather import DEFAULT_CONTACT, NWS_URL, parse_observation, temperature_unit
+
 from .config import InfoConfig, NewsConfig, SportsConfig, WeatherConfig
 
 LOGGER = logging.getLogger("pulse.info_sources")
@@ -70,11 +72,11 @@ async def _get_json(
     headers: dict[str, str] | None = None,
 ) -> dict | None:
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             response = await client.get(url, params=params, headers=headers)
             response.raise_for_status()
             return response.json()
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
         return None
 
 
@@ -155,6 +157,45 @@ class WeatherClient:
         self.what3words_api_key = what3words_api_key
         self._location_cache = TTLCache(ttl_seconds=3600)
         self._forecast_cache = TTLCache(ttl_seconds=600)
+        self._station_cache = TTLCache(ttl_seconds=86400)
+        self._observation_cache = TTLCache(ttl_seconds=600)
+
+    async def observed_temperature(self, latitude: float, longitude: float) -> float | None:
+        """The nearest NWS station's latest temperature, in the configured unit, or None.
+
+        Same source and parser as the clock card (pulse/outdoor_weather.py), so the spoken
+        "right now" matches the number on screen. None outside the US, when the station
+        sent nothing usable, or when NWS is down; callers fall back to Open-Meteo.
+        """
+        if not self.config.use_nws:
+            return None
+        point = f"{latitude:.4f},{longitude:.4f}"
+        cached = self._observation_cache.get(point)
+        if cached is not None:
+            return cached
+        headers = {"User-Agent": f"pulse-os ({self.config.nws_contact or DEFAULT_CONTACT})"}
+        station = self._station_cache.get(point)
+        if station is None:
+            station = await self._nearest_station(point, headers)
+            if not station:
+                return None
+            self._station_cache.set(point, station)
+        payload = await _get_json(f"{NWS_URL}/stations/{station}/observations/latest", headers=headers)
+        observed = parse_observation(payload, unit=temperature_unit(self.config.units))
+        if observed is not None:
+            self._observation_cache.set(point, observed)
+        return observed
+
+    async def _nearest_station(self, point: str, headers: dict[str, str]) -> str:
+        payload = await _get_json(f"{NWS_URL}/points/{point}", headers=headers)
+        stations_url = ((payload or {}).get("properties") or {}).get("observationStations")
+        if not isinstance(stations_url, str) or not stations_url.startswith(NWS_URL):
+            return ""
+        # NWS returns the grid's stations nearest first.
+        stations = await _get_json(stations_url, params={"limit": 1}, headers=headers)
+        features = (stations or {}).get("features") or []
+        props = (features[0].get("properties") or {}) if features and isinstance(features[0], dict) else {}
+        return str(props.get("stationIdentifier") or "")
 
     async def forecast(self) -> WeatherForecast | None:
         if not self.config.location:
