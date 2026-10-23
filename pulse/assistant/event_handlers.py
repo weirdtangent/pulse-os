@@ -101,8 +101,10 @@ class EventHandlerManager:
             )
 
     def handle_now_playing_message(self, payload: str) -> None:
-        normalized = payload.strip()
-        active = bool(normalized)
+        # The kiosk's playback_state telemetry: "playing", "paused" or "idle". Only real
+        # playback mutes the wake word; a paused track must not leave the assistant deaf.
+        normalized = payload.strip().lower()
+        active = normalized == "playing"
         changed = self.wake_detector.set_remote_audio_active(active)
         if changed:
             detail = normalized[:80] or "idle"
