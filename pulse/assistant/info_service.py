@@ -28,7 +28,7 @@ from datetime import datetime
 from typing import Any
 
 from .config import InfoConfig
-from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherCurrent, WeatherForecast
+from .info_sources import InfoSources, NewsHeadline, TeamSnapshot, WeatherCurrent, WeatherDay, WeatherForecast
 
 STOP_WORDS = {
     "what",
@@ -294,32 +294,28 @@ class InfoService:
         display_label = "°F" if units in {"imperial", "auto"} else "°C"
         current_temp = _format_temp(forecast.current.temperature) if forecast.current else None
         today = forecast.days[0] if forecast.days else None
-        high = _format_temp(today.temp_high) if today else None
-        # Compare the rounded values that get spoken: 65.6 vs 66.2 both say "66".
-        if current_temp and high and int(current_temp) == int(high):
-            spoken = f"Right now it's {current_temp} degrees, which is today's expected high."
-        elif current_temp and high and int(current_temp) > int(high):
-            # The station reading can beat the model's forecast high.
-            spoken = f"Right now it's {current_temp} degrees, already above today's expected high of {high}."
-        elif current_temp and high:
-            spoken = f"Right now it's {current_temp} degrees, with an expected high of {high} today."
-        elif current_temp:
-            spoken = f"Right now it's {current_temp} degrees."
-        elif high:
-            spoken = f"Today's expected high is {high} degrees."
+        tonight_low = _tonight_low(forecast.days, _local_hour())
+        if tonight_low is not None:
+            low = _format_temp(tonight_low)
+            spoken = _temperature_sentence(current_temp, low, "low", "tonight")
+            target_line = f"Low tonight: {low}{display_label}" if low else None
         else:
+            high = _format_temp(today.temp_high) if today else None
+            spoken = _temperature_sentence(current_temp, high, "high", "today")
+            target_line = f"High today: {high}{display_label}" if high else None
+        if not spoken:
             return None
         display_parts = []
         if current_temp:
             display_parts.append(f"Now: {current_temp}{display_label}")
-        if high:
-            display_parts.append(f"High today: {high}{display_label}")
+        if target_line:
+            display_parts.append(target_line)
         card_days: list[dict[str, Any]] = []
         if today:
             card_days.append(
                 {
                     "label": "Today",
-                    "high": high,
+                    "high": _format_temp(today.temp_high),
                     "low": _format_temp(today.temp_low),
                     "precip": int(today.precipitation_chance) if today.precipitation_chance is not None else None,
                     "icon": _weather_icon_key(today.weather_code),
@@ -420,6 +416,56 @@ class InfoService:
         spoken = " ".join(parts)
         display = "\n\n".join(parts)
         return spoken, display
+
+
+# After EVENING_HOUR (local) the day's high is behind us, so the temperature answer
+# looks ahead to the overnight low instead; before OVERNIGHT_END_HOUR it is still night.
+EVENING_HOUR = 17
+OVERNIGHT_END_HOUR = 5
+
+
+def _local_hour() -> int:
+    return datetime.now().astimezone().hour
+
+
+def _tonight_low(days: Sequence[WeatherDay], hour: int) -> float | None:
+    """Tonight's expected low, or None during the day.
+
+    Open-Meteo's daily minimum runs midnight to midnight, and the overnight low lands just
+    before dawn: in the evening that is TOMORROW's minimum, after midnight it is today's.
+    """
+    if hour >= EVENING_HOUR:
+        day = days[1] if len(days) > 1 else None
+    elif hour < OVERNIGHT_END_HOUR:
+        day = days[0] if days else None
+    else:
+        return None
+    if day is None or day.temp_low is None or math.isnan(day.temp_low):
+        return None
+    return day.temp_low
+
+
+def _temperature_sentence(current: str | None, target: str | None, kind: str, when: str) -> str | None:
+    """ "Right now it's 66 degrees, with an expected high of 71 today." and its edge cases.
+
+    `kind` is "high" or "low", `when` is "today" or "tonight". The rounded values that get
+    spoken are compared, so 65.6 vs 66.2 counts as reaching the high.
+    """
+    if current and target:
+        now, goal = int(current), int(target)
+        if now == goal:
+            return f"Right now it's {current} degrees, which is {when}'s expected {kind}."
+        # The current reading is the NWS station while the forecast is Open-Meteo's
+        # model, so it can already be past the forecast extreme.
+        if (kind == "high" and now > goal) or (kind == "low" and now < goal):
+            beyond = "above" if kind == "high" else "below"
+            return f"Right now it's {current} degrees, already {beyond} {when}'s expected {kind} of {target}."
+        return f"Right now it's {current} degrees, with an expected {kind} of {target} {when}."
+    if current:
+        return f"Right now it's {current} degrees."
+    if target:
+        return f"{when.capitalize()}'s expected {kind} is {target} degrees."
+    return None
 
 
 def _normalize_text(value: str) -> str:
