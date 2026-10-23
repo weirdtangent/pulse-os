@@ -854,3 +854,69 @@ class TestFormatTeamSnapshot:
         assert result is not None
         spoken, _ = result
         assert "couldn't find" in spoken.lower()
+
+
+# ---------------------------------------------------------------------------
+# InfoService.maybe_answer — temperature only
+# ---------------------------------------------------------------------------
+
+
+class TestMaybeAnswerTemperature:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "what is the temperature",
+            "what s the temp outside",
+            "how hot is it",
+            "how cold is it outside",
+            "how many degrees is it",
+        ],
+    )
+    def test_is_temperature_only(self, text):
+        assert _make_service()._is_temperature_only(text) is True
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "what s the weather",
+            "what s the temperature tomorrow",
+            "temperature forecast for the week",
+            "what s the high today",
+            "turn on the warm lights",
+            "i will attempt it",
+        ],
+    )
+    def test_not_temperature_only(self, text):
+        assert _make_service()._is_temperature_only(text) is False
+
+    async def test_current_and_high(self):
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=57.4, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("Hey Jarvis, what is the temperature?")
+        assert response is not None
+        assert response.category == "weather"
+        assert response.text == "Right now it's 57 degrees, with an expected high of 72 today."
+        assert "Tomorrow" not in response.text
+        assert len(response.card["days"]) == 1
+        assert response.card["current"]["temp"] == "57"
+
+    async def test_no_current_falls_back_to_high(self):
+        weather = AsyncMock()
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=None))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("what's the temperature")
+        assert response.text == "Today's expected high is 72 degrees."
+
+    async def test_forecast_question_still_gets_forecast(self):
+        weather = AsyncMock()
+        current = WeatherCurrent(temperature=57, weather_code=0, windspeed=0, time=None)
+        weather.forecast = AsyncMock(return_value=_make_forecast(current=current))
+        svc = _make_service(sources=_make_sources(weather=weather))
+
+        response = await svc.maybe_answer("what's the temperature tomorrow")
+        assert "Tomorrow" in response.text
+        assert len(response.card["days"]) == 2

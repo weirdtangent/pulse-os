@@ -5,6 +5,7 @@ Detects user intents for factual information queries and formats responses.
 
 Supported queries:
 - Weather: "What's the weather?", "Weather forecast" → Open-Meteo API
+- Temperature: "What's the temperature?" → just the current temp and today's high
 - News: "Top headlines", "Tech news", "Sports news" → NewsAPI
 - Sports: Team scores, standings, schedules → ESPN API
 
@@ -89,6 +90,30 @@ LEAGUE_ALIASES = {
 
 
 WEATHER_KEYWORDS = {"weather", "forecast", "temperature", "rain", "snow"}
+# "What's the temperature?" wants one number, not the multi-day forecast. Matched as whole
+# words: "temp" is a substring of "attempt". Any FORECAST_ONLY word ("tomorrow", "this
+# week", "rain") means the caller asked about more than right now, so the full forecast wins.
+TEMPERATURE_WORDS = {"temperature", "temp"}
+TEMPERATURE_PHRASES = ("how hot is it", "how cold is it", "how warm is it", "how many degrees")
+FORECAST_ONLY_WORDS = {
+    "weather",
+    "forecast",
+    "tomorrow",
+    "tonight",
+    "week",
+    "weekend",
+    "rain",
+    "snow",
+    "high",
+    "low",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+}
 NEWS_KEYWORDS = {"news", "headlines", "headline", "top stories"}
 SPORTS_KEYWORDS = {
     "sports",
@@ -128,6 +153,12 @@ class InfoService:
             return None
         simple = _normalize_text(normalized)
 
+        if self._is_temperature_only(simple):
+            result = await self._handle_temperature()
+            if result:
+                spoken, display, card = result
+                return InfoResponse("weather", spoken, display, card)
+
         if self._is_weather(simple):
             result = await self._handle_weather()
             if result:
@@ -149,6 +180,12 @@ class InfoService:
 
     def _is_weather(self, text: str) -> bool:
         return any(keyword in text for keyword in WEATHER_KEYWORDS)
+
+    def _is_temperature_only(self, text: str) -> bool:
+        words = set(text.split())
+        if words & FORECAST_ONLY_WORDS:
+            return False
+        return bool(words & TEMPERATURE_WORDS) or any(phrase in text for phrase in TEMPERATURE_PHRASES)
 
     def _is_news(self, text: str) -> bool:
         return any(keyword in text for keyword in NEWS_KEYWORDS)
@@ -233,6 +270,49 @@ class InfoService:
             "current": current_block,
         }
         return spoken, display, card_payload
+
+    async def _handle_temperature(self) -> tuple[str, str, dict[str, Any]] | None:
+        forecast = await self.sources.weather.forecast()
+        if not forecast:
+            return None
+        units = self.config.weather.units
+        display_label = "°F" if units in {"imperial", "auto"} else "°C"
+        current_temp = _format_temp(forecast.current.temperature) if forecast.current else None
+        today = forecast.days[0] if forecast.days else None
+        high = _format_temp(today.temp_high) if today else None
+        if current_temp and high:
+            spoken = f"Right now it's {current_temp} degrees, with an expected high of {high} today."
+        elif current_temp:
+            spoken = f"Right now it's {current_temp} degrees."
+        elif high:
+            spoken = f"Today's expected high is {high} degrees."
+        else:
+            return None
+        display_parts = []
+        if current_temp:
+            display_parts.append(f"Now: {current_temp}{display_label}")
+        if high:
+            display_parts.append(f"High today: {high}{display_label}")
+        card_days: list[dict[str, Any]] = []
+        if today:
+            card_days.append(
+                {
+                    "label": "Today",
+                    "high": high,
+                    "low": _format_temp(today.temp_low),
+                    "precip": int(today.precipitation_chance) if today.precipitation_chance is not None else None,
+                    "icon": _weather_icon_key(today.weather_code),
+                }
+            )
+        card_payload = {
+            "type": "weather",
+            "title": forecast.location_name or "Weather",
+            "subtitle": "Today",
+            "units": display_label,
+            "days": card_days,
+            "current": _format_current_weather_entry(forecast, display_label),
+        }
+        return spoken, "\n\n".join(display_parts), card_payload
 
     async def _handle_news(self, topic: str | None) -> tuple[str, str] | None:
         headlines = await self.sources.news.latest(topic)
