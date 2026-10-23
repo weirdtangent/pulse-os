@@ -230,6 +230,10 @@ class WeatherConfig:
     language: str
     forecast_days: int
     base_url: str
+    # The location is in the US, so "right now" can be a real NWS station reading
+    # instead of Open-Meteo's grid-cell model (see pulse/outdoor_weather.py).
+    use_nws: bool = False
+    nws_contact: str = ""
 
 
 @dataclass(frozen=True)
@@ -554,6 +558,8 @@ class AssistantConfig:
             language=weather_language,
             forecast_days=max(1, min(5, parse_int(source.get("PULSE_WEATHER_FORECAST_DAYS"), 3))),
             base_url=(source.get("PULSE_WEATHER_BASE_URL") or "https://api.open-meteo.com/v1/forecast").rstrip("/"),
+            use_nws=resolved_country == "us",
+            nws_contact=(source.get("PULSE_WEATHER_ALERTS_CONTACT") or "").strip(),
         )
         favorite_teams = tuple(team.strip() for team in split_csv(source.get("PULSE_SPORTS_FAVORITE_TEAMS")))
         default_leagues = tuple(

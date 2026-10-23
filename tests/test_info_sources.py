@@ -230,6 +230,65 @@ class TestNewsClient:
 # ---------------------------------------------------------------------------
 
 
+def _nws_observation(celsius: float, *, age_minutes: int = 20) -> dict:
+    from datetime import UTC, datetime, timedelta
+
+    stamp = (datetime.now(UTC) - timedelta(minutes=age_minutes)).isoformat()
+    return {"properties": {"timestamp": stamp, "temperature": {"unitCode": "wmoUnit:degC", "value": celsius}}}
+
+
+_NWS_POINT = {"properties": {"observationStations": "https://api.weather.gov/gridpoints/RNK/1,2/stations"}}
+_NWS_STATIONS = {"features": [{"properties": {"stationIdentifier": "KROA", "name": "Roanoke"}}]}
+
+
+class TestWeatherClientObservedTemperature:
+    async def test_disabled_outside_the_us(self):
+        client = WeatherClient(_weather_config(use_nws=False), what3words_api_key=None)
+        with patch("pulse.assistant.info_sources._get_json", new_callable=AsyncMock) as mock_get:
+            assert await client.observed_temperature(37.27, -79.94) is None
+        mock_get.assert_not_called()
+
+    @patch("pulse.assistant.info_sources._get_json", new_callable=AsyncMock)
+    async def test_station_reading_in_fahrenheit(self, mock_get):
+        mock_get.side_effect = [_NWS_POINT, _NWS_STATIONS, _nws_observation(10.0)]
+        client = WeatherClient(_weather_config(use_nws=True, units="imperial"), what3words_api_key=None)
+        assert await client.observed_temperature(37.27, -79.94) == pytest.approx(50.0)
+        assert mock_get.call_args_list[2].args[0] == "https://api.weather.gov/stations/KROA/observations/latest"
+        assert "pulse-os" in mock_get.call_args_list[2].kwargs["headers"]["User-Agent"]
+
+    @patch("pulse.assistant.info_sources._get_json", new_callable=AsyncMock)
+    async def test_station_reading_in_celsius(self, mock_get):
+        mock_get.side_effect = [_NWS_POINT, _NWS_STATIONS, _nws_observation(10.0)]
+        client = WeatherClient(_weather_config(use_nws=True, units="metric"), what3words_api_key=None)
+        assert await client.observed_temperature(37.27, -79.94) == pytest.approx(10.0)
+
+    @patch("pulse.assistant.info_sources._get_json", new_callable=AsyncMock)
+    async def test_reading_and_station_are_cached(self, mock_get):
+        mock_get.side_effect = [_NWS_POINT, _NWS_STATIONS, _nws_observation(10.0)]
+        client = WeatherClient(_weather_config(use_nws=True), what3words_api_key=None)
+        await client.observed_temperature(37.27, -79.94)
+        assert await client.observed_temperature(37.27, -79.94) == pytest.approx(50.0)
+        assert mock_get.call_count == 3
+        client._observation_cache = type(client._observation_cache)(ttl_seconds=600)
+        mock_get.side_effect = [_nws_observation(12.0)]
+        assert await client.observed_temperature(37.27, -79.94) == pytest.approx(53.6)
+        assert mock_get.call_count == 4  # station lookup not repeated
+
+    @patch("pulse.assistant.info_sources._get_json", new_callable=AsyncMock)
+    async def test_stale_observation_is_none(self, mock_get):
+        mock_get.side_effect = [_NWS_POINT, _NWS_STATIONS, _nws_observation(10.0, age_minutes=180)]
+        client = WeatherClient(_weather_config(use_nws=True), what3words_api_key=None)
+        assert await client.observed_temperature(37.27, -79.94) is None
+
+    @patch("pulse.assistant.info_sources._get_json", new_callable=AsyncMock)
+    async def test_nws_outage_is_none_and_lookup_retried(self, mock_get):
+        mock_get.side_effect = [None]
+        client = WeatherClient(_weather_config(use_nws=True), what3words_api_key=None)
+        assert await client.observed_temperature(37.27, -79.94) is None
+        mock_get.side_effect = [_NWS_POINT, _NWS_STATIONS, _nws_observation(10.0)]
+        assert await client.observed_temperature(37.27, -79.94) == pytest.approx(50.0)
+
+
 class TestWeatherClient:
     async def test_no_location_returns_none(self):
         client = WeatherClient(_weather_config(location=None), what3words_api_key=None)
