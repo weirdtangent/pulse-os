@@ -65,7 +65,7 @@ jobs:
 
       - name: Setup Python
         if: needs.changes.outputs.python == 'true'
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.13"
 
@@ -118,14 +118,14 @@ jobs:
 
       - name: Setup Python ${{ matrix.python-version }}
         if: needs.changes.outputs.python == 'true'
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
       - name: Setup uv
         if: needs.changes.outputs.python == 'true'
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
         with:
           version: "latest"
 
@@ -226,7 +226,7 @@ jobs:
 
       - name: Run semantic-release
         id: semrel
-        uses: cycjimmy/semantic-release-action@03595b5eaf44910cf239ff20904cc52d410f97d4  # v8.1.2
+        uses: cycjimmy/semantic-release-action@d9bf53a078bd2f86aaffaec796dbb3d28f1b6f34  # v8.1.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
