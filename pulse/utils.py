@@ -68,7 +68,8 @@ _US_STATES: dict[str, str] = {
     "WV": "West Virginia",
     "WI": "Wisconsin",
     "WY": "Wyoming",
-    "DC": "District of Columbia",
+    # Nobody says "District of Columbia" out loud.
+    "DC": "DC",
 }
 
 _STATE_ABBR_RE = re.compile(r"(?<=,\s)(" + "|".join(_US_STATES) + r")(?=[\s.,;:!?]|$)")
@@ -78,6 +79,7 @@ _CITY_STATE_COMMA_RE = re.compile(r"\b([A-Z][\w'.-]*),\s+(?=(?:" + "|".join(_US_
 
 def normalize_for_tts(text: str) -> str:
     """Expand abbreviations that TTS engines mispronounce and drop the pause in "City, State"."""
+    text = text.replace("District of Columbia", "DC")
     text = _STATE_ABBR_RE.sub(lambda m: _US_STATES[m.group()], text)
     return _CITY_STATE_COMMA_RE.sub(r"\1 ", text)
 

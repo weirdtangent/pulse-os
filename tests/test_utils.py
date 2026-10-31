@@ -24,8 +24,9 @@ class TestNormalizeForTts:
     def test_no_expansion_without_comma(self):
         assert normalize_for_tts("VA is a state") == "VA is a state"
 
-    def test_expands_dc(self):
-        assert normalize_for_tts("Washington, DC") == "Washington District of Columbia"
+    def test_dc_stays_dc(self):
+        assert normalize_for_tts("Washington, DC") == "Washington DC"
+        assert normalize_for_tts("Washington, District of Columbia") == "Washington DC"
 
     def test_leaves_plain_text_unchanged(self):
         text = "The weather is sunny and warm"
