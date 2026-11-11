@@ -79,7 +79,7 @@ openlocationcode==1.0.1
     # via pulse-os
 packaging==26.3
     # via pulse-os
-paho-mqtt==2.1.0
+paho-mqtt==2.2.0
     # via pulse-os
 psutil==7.2.2
     # via pulse-os
@@ -105,7 +105,7 @@ websocket==0.2.1
     # via pulse-os
 websockets==17.4
     # via pulse-os
-wyoming==1.10.2
+wyoming==1.11.0
     # via pulse-os
 x-wr-timezone==2.0.1
     # via recurring-ical-events
